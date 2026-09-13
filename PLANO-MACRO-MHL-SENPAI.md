@@ -1,7 +1,25 @@
 # Plano Macro — Senpai em MHL (Wiki, Work-Item, Discovery, Delivery)
 
-> Base de leitura: [docs/site/index.html](docs/site/index.html), [docs/site/Docs-Reference.dc.html](docs/site/Docs-Reference.dc.html), [docs/site/Docs-Servers.dc.html](docs/site/Docs-Servers.dc.html), [docs/site/Docs-Extensions.dc.html](docs/site/Docs-Extensions.dc.html), [docs/site/Docs-Specification.dc.html](docs/site/Docs-Specification.dc.html), [docs/wiki-llm.md](docs/wiki-llm.md) (padrão de referência para o workflow `Wiki`).
+> Base de leitura: [docs/site/index.html](docs/site/index.html), [docs/site/Docs-Reference.dc.html](docs/site/Docs-Reference.dc.html), [docs/site/Docs-Servers.dc.html](docs/site/Docs-Servers.dc.html), [docs/site/Docs-Extensions.dc.html](docs/site/Docs-Extensions.dc.html), [docs/site/Docs-Specification.dc.html](docs/site/Docs-Specification.dc.html), [docs/wiki-llm.md](docs/wiki-llm.md) (padrão de referência para o workflow `Wiki`), [docs/sample/](docs/sample/) (suíte de exemplos oficiais do próprio MHL — ver nota abaixo).
 > Este documento é um **plano macro**, organizado por fases para execução incremental — não é uma implementação. Cada fase deve virar um ciclo de trabalho próprio.
+
+> **`docs/sample/` como referência de uso da linguagem.** Diretório com a suíte de exemplos oficiais do MHL (`features/` — `agent`, `router`, `memory`, `prompt`, `pipeline`, `extension mcp`/`a2a`, `time`, `uuid`, `git`, `http`, `html`; `syntax/` — cada construção da gramática com um `.mh` mínimo e um `README.md` por pasta) na versão exata do runtime instalado (`1.4.0-beta.5`). Não faz parte do código do Senpai — está fora do controle de versão (`.gitignore`) porque é conteúdo de terceiros, não algo que o projeto produz — mas é a referência de primeira escolha para "qual é a sintaxe exata de X" antes de tentar por spike: mais confiável que as páginas `docs/site/*.dc.html` para comportamento exato, porque cada exemplo ali é código que roda de verdade contra o mesmo binário `mhl` usado neste projeto (a origem do diretório — como ele apareceu no projeto sem ter sido pedido — está registrada em [FASE0-ACHADOS.md §9](FASE0-ACHADOS.md#9-achado-crítico-de-segurança--claude--p-sem-flag-de-restrição-explora-e-escreve-fora-do-escopo-do-prompt)). Se este diretório não existir numa máquina nova, ele pode precisar ser regerado/localizado a partir da instalação do `mhl` antes de começar uma fase nova.
+
+## 0. Status do desenvolvimento
+
+> Atualizado ao final de cada ciclo de fase — não no meio de uma fase em andamento. "Concluído" aqui significa: código escrito, `mhl lint`/`mhl test` limpos, validado via `mhl run` (e `mhl serve mcp` quando aplicável), e commitado.
+
+| Fase | Status | Resumo |
+|---|---|---|
+| 0 — Fundamentos e spikes | 🟡 Parcial | Spikes de linguagem/runtime concluídos: suposições do plano validadas contra `mhl 1.4.0-beta.5` real e `claude`/`codex`/`devin` CLIs, 3 achados corrigiram decisões do plano (stdio→`--http` para `mhl_run_*`, path traversal em `memory` interpolado, schema estruturado ausente no Devin CLI). Detalhes em [FASE0-ACHADOS.md](FASE0-ACHADOS.md). **Pendente:** o spike do projeto Wails (`wails init`, `app.go`/`main.go`, `exec.Command` spawnando `mhl serve mcp` com pipes) ainda não foi feito — nenhum código Go/Wails existe no repo ainda. |
+| 1 — Workflow `WorkItem` | ✅ Concluída | `tool Paths` (isolamento C1, 17 testes) e `workflow WorkItem` (create/list/get/archive/usage) em `workflows/`. Validado via `mhl run` (ciclo completo + 2 ataques) e `mhl serve mcp`. Nota: `mhl test` cobre `Paths` diretamente; `create`/`list`/`get`/`archive`/`usage` do `WorkItem` em si foram validados via `mhl run` manual, não via bloco `test` — `test`/`describe` só exercitam `tool`s/expressões, não o motor de execução de um `workflow` inteiro com `step`/`goto` (ver [MHL-Melhorias.md #13](MHL-Melhorias.md)). |
+| 2 — Workflow `Wiki` | ⬜ Não iniciada | — |
+| 3 — Workflow `Discovery` | ⬜ Não iniciada | — |
+| 4 — Workflow `Delivery` | ⬜ Não iniciada | — |
+| 5 — Servir via MCP local | ⬜ Não iniciada | — |
+| 6 — Interface visual | ⬜ Não iniciada | — |
+| 7 — Empacotamento | ⬜ Não iniciada | — |
+| 8 — Hardening | ⬜ Não iniciada | — |
 
 ## 1. Objetivo
 
@@ -258,17 +276,17 @@ Sem código de implementação ainda — só o formato de entrada/saída de cada
 
 ## 5. Fases macro
 
-### Fase 0 — Fundamentos e spikes
-- Instalar o runtime `mhl` localmente e rodar os exemplos de `Docs-Servers` (`workflows/summarize.mh`, `approval.mh`) para validar o ciclo `mhl_run_start/status/resume` na máquina de desenvolvimento.
-- Validar como spike: `--state-dir` funciona em `mhl serve mcp <dir>` (stdio puro), ou só em `--http`? Isso decide se o modo "buddy" sobrevive a um restart do processo filho.
-- Agente de LLM: **local usa `claude` (Claude Code CLI) ou `codex` (Codex CLI); produção usa `devin` (Devin CLI)** — decisão fechada por C4 (§2.1), não mais em aberto qual usar. O que falta validar aqui: (1) se `command:`/`args:` de um `agent` aceitam `env(...)` em vez de string literal — todo exemplo oficial usa literal; (2) se os três CLIs de fato suportam `--json-schema`/saída estruturada com paridade suficiente para C3; (3) se o Devin CLI expõe uso de token no seu `--output-format json` (ou equivalente) — sem isso, C5 não tem o que extrair em produção. Os três achados definem se o mecanismo de troca por ambiente (§2.1/C4) é viável como desenhado ou precisa de plano B.
-- Setup inicial do projeto Wails (ver §6 — stack já definida): `wails init`, estrutura `app.go`/`main.go`, `wails.json`, e um spike mínimo de `exec.Command` no Go spawnando `mhl serve mcp <dir>` com pipes de stdin/stdout conectados, confirmando que dá para falar JSON-RPC por ali antes de integrar com o frontend.
+### Fase 0 — Fundamentos e spikes · 🟡 Parcial
+- ✅ Instalar o runtime `mhl` localmente e rodar os exemplos de `Docs-Servers` (`workflows/summarize.mh`, `approval.mh`) para validar o ciclo `mhl_run_start/status/resume` na máquina de desenvolvimento. *(validado via `Approval`, ciclo completo start→paused→resume→completed sobre `--http`.)*
+- ✅ Validar como spike: `--state-dir` funciona em `mhl serve mcp <dir>` (stdio puro), ou só em `--http`? *(resposta: só em `--http` — e mais que isso, o próprio `mhl_run_*` só existe em `--http`; achado crítico que corrigiu a Fase 5, ver FASE0-ACHADOS.md §2.)*
+- ✅ Agente de LLM: decisão C4 validada. *(1) `env()` em `command`/`args` **não funciona** — só literal (achado §1); (2) `--json-schema`/saída estruturada diverge por CLI — `claude` inline, `codex` via arquivo, **`devin` não tem nenhuma** (achado §4); (3) uso de token do `claude` confirmado no envelope de `--output-format json` (achado §5) — Devin/Codex ainda não inspecionados, fica para quando esses backends entrarem em uso real.*
+- ⬜ Setup inicial do projeto Wails (ver §6 — stack já definida): `wails init`, estrutura `app.go`/`main.go`, `wails.json`, e um spike mínimo de `exec.Command` no Go spawnando `mhl serve mcp <dir>` (ou, após o achado da Fase 0, `mhl serve mcp --http`) confirmando que dá para falar JSON-RPC por ali antes de integrar com o frontend. **Ainda não feito — nenhum código Go/Wails existe no repo.**
 
-### Fase 1 — Workflow `WorkItem`
-- Declarar `memory`/`tool` para criar, listar e ler `project.json` por `project_id`.
-- Implementar aqui o `tool Paths` (C1, §2.1) — validação de `project_id` + resolução de caminhos sob `projects/<project_id>/...` — já que é o primeiro workflow a existir e todos os outros (`Wiki`, `Discovery`, `Delivery`) vão importá-lo.
-- `mhl lint` + `mhl test` cobrindo criação/listagem **e** casos de `project_id` inválido/malicioso (`../`, caminho absoluto, vazio) rejeitados por `Paths`.
-- Rodar via `mhl run` isolado antes de plugar em `serve`.
+### Fase 1 — Workflow `WorkItem` · ✅ Concluída
+- ✅ Declarar `memory`/`tool` para criar, listar e ler `project.json` por `project_id`. *(decisão: sem `memory` interpolado — `tool Paths` + `fs`/`dir` diretos, por causa do achado de path traversal da Fase 0 §7; `memory` interpolado não sanitiza sozinho.)*
+- ✅ Implementar aqui o `tool Paths` (C1, §2.1) — validação de `project_id` + resolução de caminhos sob `projects/<project_id>/...`. *(`workflows/shared/paths.mh`, importado pelo `WorkItem`.)*
+- ✅ `mhl lint` + `mhl test` cobrindo criação/listagem **e** casos de `project_id` inválido/malicioso rejeitados por `Paths`. *(17 asserções em `paths.mh` cobrem os casos maliciosos; `create`/`list` do `WorkItem` em si foram cobertos via `mhl run` manual, não via bloco `test` — ver nota na tabela de status §0.)*
+- ✅ Rodar via `mhl run` isolado antes de plugar em `serve`. *(ciclo completo create→get→usage→archive + 2 ataques via `mhl run`; schema também validado via `mhl serve mcp` stdio.)*
 
 ### Fase 2 — Workflow `Wiki`
 - Usa `Paths` (Fase 1) para todo acesso a `raw/`/`wiki/` — nenhum caminho montado à mão.
