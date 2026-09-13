@@ -1,0 +1,23 @@
+{
+  "type": "object",
+  "additionalProperties": false,
+  "required": ["problema", "objetivos", "stakeholders"],
+  "properties": {
+    "problema": {
+      "type": "string",
+      "description": "Parágrafo(s) descrevendo o problema central que motiva esta oportunidade."
+    },
+    "objetivos": {
+      "type": "array",
+      "items": { "type": "string" },
+      "minItems": 1,
+      "description": "Objetivos mensuráveis desta oportunidade, um por item."
+    },
+    "stakeholders": {
+      "type": "array",
+      "items": { "type": "string" },
+      "minItems": 1,
+      "description": "Partes interessadas relevantes, uma por item (nome/papel + por que importa)."
+    }
+  }
+}

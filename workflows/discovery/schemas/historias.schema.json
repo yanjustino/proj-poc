@@ -1,0 +1,29 @@
+{
+  "type": "object",
+  "additionalProperties": false,
+  "required": ["historias"],
+  "properties": {
+    "historias": {
+      "type": "array",
+      "minItems": 1,
+      "description": "Histórias de usuário desta feature, uma por item.",
+      "items": {
+        "type": "object",
+        "additionalProperties": false,
+        "required": ["titulo", "como", "quero", "para", "criterios_aceite"],
+        "properties": {
+          "titulo": { "type": "string", "description": "Nome curto da história." },
+          "como": { "type": "string", "description": "O persona/papel do usuário (\"Como <persona>\")." },
+          "quero": { "type": "string", "description": "A ação desejada (\"quero <ação>\")." },
+          "para": { "type": "string", "description": "O benefício (\"para <benefício>\")." },
+          "criterios_aceite": {
+            "type": "array",
+            "items": { "type": "string" },
+            "minItems": 1,
+            "description": "Critérios de aceite, um por item."
+          }
+        }
+      }
+    }
+  }
+}

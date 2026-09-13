@@ -1,0 +1,22 @@
+{
+  "type": "object",
+  "additionalProperties": false,
+  "required": ["diagramas"],
+  "properties": {
+    "diagramas": {
+      "type": "array",
+      "minItems": 1,
+      "description": "Diagramas C4 relevantes para esta oportunidade (tipicamente ao menos um de Contexto), um por item.",
+      "items": {
+        "type": "object",
+        "additionalProperties": false,
+        "required": ["titulo", "descricao", "diagrama_mermaid"],
+        "properties": {
+          "titulo": { "type": "string", "description": "Título do diagrama (ex.: 'Contexto', 'Contêineres')." },
+          "descricao": { "type": "string", "description": "Parágrafo curto explicando o que este diagrama mostra." },
+          "diagrama_mermaid": { "type": "string", "description": "Diagrama em sintaxe Mermaid C4 (C4Context, C4Container, etc.)." }
+        }
+      }
+    }
+  }
+}

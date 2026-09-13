@@ -1,0 +1,22 @@
+// tool Context — unico ponto de leitura de contexto para gerar um artefato
+// (C2, PLANO-MACRO-MHL-SENPAI.md §2.1): Discovery/Delivery so podem ler
+// wiki/** e artifacts/** do mesmo project_id, nunca raw/, nunca outro
+// projeto. Nenhum step de artefato chama fs.read/dir.* solto pra montar o
+// prompt — sempre atraves daqui, do mesmo jeito que WikiContext e o unico
+// ponto de leitura de wiki/** para query/lint.
+
+import { Paths } from "paths.mh"
+import { WikiContext } from "wiki_context.mh"
+
+export tool Context {
+    wiki(project_id: string): string -> WikiContext.all_pages(project_id)
+
+    // Le um artefato predecessor ja gerado (ex. "requisitos.html"). Devolve
+    // string vazia se ainda nao existir — o step decide se isso e um
+    // problema (fail) ou um predecessor opcional.
+    artifact(project_id: string, relative: string): string -> {
+        var path = Paths.artifact(project_id, relative)
+        if (!fs.exists(path)) return ""
+        return fs.read(path)
+    }
+}

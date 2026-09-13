@@ -1,0 +1,21 @@
+{
+  "type": "object",
+  "additionalProperties": false,
+  "required": ["atributos"],
+  "properties": {
+    "atributos": {
+      "type": "array",
+      "minItems": 1,
+      "description": "Atributos de qualidade relevantes (desempenho, segurança, confiabilidade, usabilidade, etc.), um por categoria.",
+      "items": {
+        "type": "object",
+        "additionalProperties": false,
+        "required": ["categoria", "descricao"],
+        "properties": {
+          "categoria": { "type": "string", "description": "Nome da categoria (ex.: Desempenho, Segurança)." },
+          "descricao": { "type": "string", "description": "Requisito concreto e mensurável para esta categoria." }
+        }
+      }
+    }
+  }
+}

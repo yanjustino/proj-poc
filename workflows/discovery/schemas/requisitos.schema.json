@@ -1,0 +1,19 @@
+{
+  "type": "object",
+  "additionalProperties": false,
+  "required": ["funcionais", "nao_funcionais"],
+  "properties": {
+    "funcionais": {
+      "type": "array",
+      "items": { "type": "string" },
+      "minItems": 1,
+      "description": "Requisitos funcionais, um por item, cada um uma frase concreta e verificável."
+    },
+    "nao_funcionais": {
+      "type": "array",
+      "items": { "type": "string" },
+      "minItems": 1,
+      "description": "Requisitos não-funcionais, um por item."
+    }
+  }
+}

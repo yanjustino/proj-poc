@@ -1,0 +1,15 @@
+{
+  "type": "object",
+  "additionalProperties": false,
+  "required": ["descricao", "diagrama_mermaid"],
+  "properties": {
+    "descricao": {
+      "type": "string",
+      "description": "Parágrafo(s) descrevendo as entidades principais e como se relacionam."
+    },
+    "diagrama_mermaid": {
+      "type": "string",
+      "description": "Diagrama entidade-relacionamento em sintaxe Mermaid (erDiagram), com as entidades e relacionamentos principais."
+    }
+  }
+}

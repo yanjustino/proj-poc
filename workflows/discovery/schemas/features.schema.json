@@ -1,0 +1,27 @@
+{
+  "type": "object",
+  "additionalProperties": false,
+  "required": ["features"],
+  "properties": {
+    "features": {
+      "type": "array",
+      "minItems": 1,
+      "description": "Features do backlog desta oportunidade, uma por item.",
+      "items": {
+        "type": "object",
+        "additionalProperties": false,
+        "required": ["titulo", "descricao", "criterios_aceite"],
+        "properties": {
+          "titulo": { "type": "string", "description": "Nome curto da feature." },
+          "descricao": { "type": "string", "description": "O que esta feature entrega e por quê, em 1-2 parágrafos." },
+          "criterios_aceite": {
+            "type": "array",
+            "items": { "type": "string" },
+            "minItems": 1,
+            "description": "Critérios de aceite, um por item."
+          }
+        }
+      }
+    }
+  }
+}
