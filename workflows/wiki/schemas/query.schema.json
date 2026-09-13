@@ -1,0 +1,15 @@
+{
+  "type": "object",
+  "additionalProperties": false,
+  "required": ["answer_title", "answer_body"],
+  "properties": {
+    "answer_title": {
+      "type": "string",
+      "description": "Título curto para esta resposta, usado se ela for arquivada como página nova."
+    },
+    "answer_body": {
+      "type": "string",
+      "description": "Resposta completa em markdown, citando as páginas da wiki usadas."
+    }
+  }
+}

@@ -1,0 +1,31 @@
+{
+  "type": "object",
+  "additionalProperties": false,
+  "required": ["contradictions", "stale_claims", "orphan_pages", "missing_concepts", "notes"],
+  "properties": {
+    "contradictions": {
+      "type": "array",
+      "items": { "type": "string" },
+      "description": "Pares de páginas que se contradizem, com a contradição explicada."
+    },
+    "stale_claims": {
+      "type": "array",
+      "items": { "type": "string" },
+      "description": "Alegações que uma fonte mais nova provavelmente já superou."
+    },
+    "orphan_pages": {
+      "type": "array",
+      "items": { "type": "string" },
+      "description": "Páginas que parecem isoladas do resto da wiki (sem relação clara com outras páginas)."
+    },
+    "missing_concepts": {
+      "type": "array",
+      "items": { "type": "string" },
+      "description": "Conceitos citados repetidamente no texto das páginas mas que ainda não têm página própria."
+    },
+    "notes": {
+      "type": "string",
+      "description": "Observações gerais sobre a saúde da wiki, ou string vazia se não houver nada a acrescentar."
+    }
+  }
+}

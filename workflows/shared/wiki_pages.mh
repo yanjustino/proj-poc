@@ -1,0 +1,50 @@
+// tool WikiPages — grava as paginas de wiki/sources|entities|concepts/*.md.
+// A LLM devolve titulo/resumo/fatos via schema (C3); quem decide o nome do
+// arquivo (Slug), a formatacao da lista (Markdown.list) e onde/como escrever
+// e sempre este tool.
+//
+// v1 (deliberado): uma pagina de entidade/conceito acumula blocos de fatos
+// datados (append-only) em vez de reescrever uma lista unica deduplicada —
+// evita parsear markdown ja escrito pra fazer merge. O mesmo fato pode
+// aparecer em mais de um bloco ao longo do tempo; sintese/dedupe fica pra
+// uma fase futura do workflow Wiki (nao bloqueia o v1). Paginas de fonte, ao
+// contrario, sao escritas uma unica vez (uma fonte so e ingerida uma vez).
+
+import { Paths } from "paths.mh"
+import { Slug } from "slug.mh"
+import { Markdown } from "markdown.mh"
+
+export tool WikiPages {
+    write_source(project_id: string, slug: string, title: string, summary: string) ->
+        fs.write(Paths.wiki(project_id, "sources/" + slug + ".md"), "# " + title + "\n\n" + summary + "\n")
+
+    upsert_entity(project_id: string, title: string, facts: string[]) ->
+        self.upsert_fact_page(project_id, "entities", title, facts)
+
+    upsert_concept(project_id: string, title: string, facts: string[]) ->
+        self.upsert_fact_page(project_id, "concepts", title, facts)
+
+    upsert_fact_page(project_id: string, dir: string, title: string, facts: string[]) -> {
+        var slug = Slug.from_title(title)
+        var path = Paths.wiki(project_id, dir + "/" + slug + ".md")
+        if (!fs.exists(path)) fs.write(path, "# " + title + "\n\n")
+        var block = "## Fatos (" + time.format(time.now(), "yyyy-MM-dd") + ")\n\n" + Markdown.list(facts) + "\n\n"
+        fs.append(path, block)
+    }
+
+    write_answer(project_id: string, slug: string, title: string, body: string) ->
+        fs.write(Paths.wiki(project_id, "answers/" + slug + ".md"), "# " + title + "\n\n" + body + "\n")
+}
+
+// memory WikiLog — log.md, append-only (padrao docs/wiki-llm.md: prefixo
+// "## [YYYY-MM-DD] <acao> | <descricao>" torna o arquivo grep-avel). Nunca
+// formatado pela LLM (C3) — sempre time.format + os campos do schema.
+export memory WikiLog {
+    type: "append_log"
+    path: "projects/${project_id}/wiki/log.md"
+    path_guard: "no_traversal"
+}
+
+// Sem `test` aqui: todo metodo deste tool e I/O (fs.write/fs.append) sobre um
+// caminho real — cobertura fica pro `mhl run` de ponta a ponta do workflow
+// Wiki (mesmo padrao do WorkItem na Fase 1), nao um `test` fingindo I/O.

@@ -34,9 +34,13 @@ O bloco de operações nativas de `html` já tem `parse`, `get_element(s)`, `get
 
 > **Status:** corrigido — antes de cair no fallback "memory not found" para um método que colide com nome de método de `memory` (`set`/`get`/`append`/`remove`), o lint agora checa se o alvo já é uma variável local conhecida (`var`/`const`/parâmetro/`spawn`/`for-in`) e, se for, não emite achado nenhum (é um método de valor comum, resolvido em runtime). Implementado em `internal/lang/lint/checks.go` (`checkExprCallShape`); teste `TestLocalArrayAppendNotFlaggedAsMemory` em `lint_test.go`.
 
-## 6. Chamada de método-irmão dentro de um `tool` deveria funcionar sem qualificação — 🚧 Blocking
+## 6. Chamada de método-irmão dentro de um `tool` — ✅ Não era um gap: `self.` já resolve
 
-Dentro de `tool Paths { root(id) -> "projects/" + ensure_valid(id) }`, chamar `ensure_valid(id)` sem prefixo falha com `undefined variable "ensure_valid"` — é preciso escrever `Paths.ensure_valid(id)`, mesmo estando no mesmo bloco declarativo. Isso não está documentado nas páginas de referência lidas e é uma pequena superfície a mais de fricção/erro (o padrão em praticamente toda outra linguagem com namespaces de método — `this.foo()` ou simplesmente `foo()` dentro da própria classe/módulo — é não precisar do nome completo). Se for intencional (por exemplo, para manter o corpo do método sem "escopo implícito" nenhum), vale pelo menos documentar explicitamente na página de `tool`.
+Registrado inicialmente como bloqueio na Fase 1: dentro de `tool Paths { root(id) -> "projects/" + ensure_valid(id) }`, chamar `ensure_valid(id)` **sem nenhum prefixo** falha com `undefined variable "ensure_valid"`. Concluí, na hora, que só `Paths.ensure_valid(id)` (nome completo do tool) resolvia — e reportei isso como fricção da linguagem.
+
+**Correção (Fase 2):** isso estava incompleto — eu nunca tinha testado `self.ensure_valid(id)`. Verificado por spike: `self.<metodo>(...)` funciona perfeitamente para chamar um metodo-irmao do mesmo `tool`, tanto em corpo de expressao (`a(): string -> self.b()`) quanto em bloco (`var x = self.b()`). Ou seja, a linguagem **já tem** o equivalente a `this.foo()` de outras linguagens — só não é documentado nas páginas de referência lidas (nenhum exemplo oficial usa `self.`), o que foi exatamente por que essa forma não apareceu na primeira tentativa. Rebaixado de "🚧 Blocking" pra uma lacuna só de **documentação**: vale a pena os docs oficiais mostrarem `self.` explicitamente no exemplo de `tool` (Docs-Reference §09), já que é a forma idiomática e evita reescrever o nome do `tool` toda vez (mais seguro a refactor — renomear o `tool` não exige tocar every call site interno).
+
+**Ação nossa:** todo `tool` do Senpai passa a usar `self.<metodo>(...)` pra chamadas internas entre métodos-irmãos, não `NomeDoTool.<metodo>(...)` — mais limpo e mais resistente a rename (C7).
 
 ## 7. Escrita de campo de objeto via `.` (não só `[...]`) — 🚧 Blocking
 

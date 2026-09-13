@@ -1,0 +1,24 @@
+// tool RawExtract — le uma fonte de raw/ como texto plano para entrar num
+// prompt. MHL nao tem um native op de extracao de PDF; usamos `pdftotext`
+// (poppler) via cmd.exec — vendorizado por plataforma na Fase 7, junto do
+// binario `mhl` (mesma logica de C6). Sem pdftotext instalado, falha com uma
+// mensagem clara em vez de mandar bytes binarios pro prompt da LLM.
+//
+// v1 suporta .txt/.md (leitura direta) e .pdf (via pdftotext). Imagens e
+// outros formatos ficam fora do escopo desta fase — ver PLANO-MACRO-MHL-SENPAI.md
+// Fase 2.
+
+export tool RawExtract {
+    text(path: string): string -> {
+        var lower = path.to_lower()
+        if (lower.ends_with(".txt") || lower.ends_with(".md")) return fs.read(path)
+        if (lower.ends_with(".pdf")) return self.from_pdf(path)
+        fail("tipo de arquivo nao suportado no ingest desta versao: '" + path + "' (use .txt, .md ou .pdf)")
+    }
+
+    from_pdf(path: string): string -> {
+        var result = cmd.exec(["pdftotext", path, "-"], timeout: 30s)
+        if (result.exit_code != 0) fail("falha ao extrair texto de '" + path + "' via pdftotext: " + result.stderr)
+        return result.stdout
+    }
+}

@@ -1,0 +1,60 @@
+// tool Slug — deriva um slug de arquivo (letras minusculas, digitos, hifen) a
+// partir de um titulo em linguagem natural. E trabalho deterministico (C3):
+// a LLM devolve titulos livres, nunca o slug — Slug.from_title decide o nome
+// de arquivo, sempre igual para o mesmo titulo.
+
+export tool Slug {
+    from_title(title: string): string -> {
+        var lowered = Slug.strip_accents(title.to_lower())
+        var allowed = "abcdefghijklmnopqrstuvwxyz0123456789"
+        var slug = ""
+        var last_was_dash = false
+        for (var c in lowered.split("")) {
+            if (allowed.contains(c)) {
+                slug = slug + c
+                last_was_dash = false
+            } else if (!last_was_dash && !slug.is_empty()) {
+                slug = slug + "-"
+                last_was_dash = true
+            }
+        }
+        if (slug.ends_with("-")) slug = slug.substring(0, slug.size() - 1)
+        if (slug.is_empty()) return "pagina"
+        return slug
+    }
+
+    // Cobre os acentos comuns em portugues — nao e normalizacao Unicode
+    // completa (o MHL nao tem isso nativamente), so o bastante para nomes de
+    // arquivo legiveis a partir de titulos em pt-BR.
+    strip_accents(text: string): string ->
+        text
+            .replace("á", "a").replace("à", "a").replace("â", "a").replace("ã", "a").replace("ä", "a")
+            .replace("é", "e").replace("è", "e").replace("ê", "e").replace("ë", "e")
+            .replace("í", "i").replace("ì", "i").replace("î", "i").replace("ï", "i")
+            .replace("ó", "o").replace("ò", "o").replace("ô", "o").replace("õ", "o").replace("ö", "o")
+            .replace("ú", "u").replace("ù", "u").replace("û", "u").replace("ü", "u")
+            .replace("ç", "c").replace("ñ", "n")
+}
+
+test SlugSpec {
+    describe simple_title {
+        are_equal(Slug.from_title("Time de Pagamentos"), "time-de-pagamentos")
+    }
+
+    describe accented_title {
+        are_equal(Slug.from_title("Tokenização de Cartão"), "tokenizacao-de-cartao")
+    }
+
+    describe punctuation_collapses_to_single_dash {
+        are_equal(Slug.from_title("Checkout em uma etapa!!  (v2)"), "checkout-em-uma-etapa-v2")
+    }
+
+    describe leading_and_trailing_punctuation_is_trimmed {
+        are_equal(Slug.from_title("--Abandono de Carrinho--"), "abandono-de-carrinho")
+    }
+
+    describe empty_title_falls_back {
+        are_equal(Slug.from_title("...***"), "pagina")
+        are_equal(Slug.from_title(""), "pagina")
+    }
+}

@@ -1,0 +1,46 @@
+// tool ClaudeQuirks — mitigacoes para peculiaridades observadas do backend
+// `claude` especificamente (nao um comportamento do MHL nem dos outros
+// backends — ver FASE2-ACHADOS.md §3). Nome deixa explicito que e escopado
+// a um CLI, nao ao runtime.
+//
+// Achado: `claude --json-schema` as vezes vaza a propria tag de fechamento
+// do campo (ex. "</answer_body>", ocasionalmente seguido de "</invoke>") no
+// final de um campo de texto longo — reproduzido em chamadas reais de
+// `query`. E um vazamento do mecanismo interno do CLI pra gerar saida
+// estruturada, nao um erro de schema/parse (json.parse ja tinha sucesso
+// antes desta limpeza — o JSON e valido, so o CONTEUDO do campo vem sujo).
+//
+// strip_trailing_tag_leak e deterministico (C3): corta a string na primeira
+// ocorrencia do marcador de fechamento vazado, se houver. Seguro porque um
+// texto legitimo nunca contem "</nome_do_campo>" por acidente.
+
+export tool ClaudeQuirks {
+    strip_trailing_tag_leak(text: string, field_name: string): string -> {
+        var marker = "</" + field_name + ">"
+        if (!text.contains(marker)) return text
+        return text.split(marker)[0]
+    }
+}
+
+test ClaudeQuirksSpec {
+    describe strips_a_leaked_closing_tag_at_the_end {
+        are_equal(
+            ClaudeQuirks.strip_trailing_tag_leak("resposta real aqui.</answer_body>\n</invoke>\n", "answer_body"),
+            "resposta real aqui."
+        )
+    }
+
+    describe leaves_clean_text_untouched {
+        are_equal(
+            ClaudeQuirks.strip_trailing_tag_leak("resposta limpa, sem nenhum vazamento.", "answer_body"),
+            "resposta limpa, sem nenhum vazamento."
+        )
+    }
+
+    describe does_not_touch_a_different_fields_tag_name {
+        are_equal(
+            ClaudeQuirks.strip_trailing_tag_leak("texto com </outro_campo> no meio.", "answer_body"),
+            "texto com </outro_campo> no meio."
+        )
+    }
+}

@@ -1,0 +1,74 @@
+// tool WikiIndex — mantem wiki/index.md deterministicamente (C3: a LLM nunca
+// reescreve o indice, so devolve titulo/resumo/slug via schema; inserir,
+// ordenar e dedupe e sempre codigo). Renderiza o arquivo inteiro do zero a
+// cada upsert, a partir de um estado interno (`Paths.index_state_file`) —
+// evita ter que reler/parsear o markdown ja escrito (fragil sem regex).
+// Chamadas entre metodos-irmaos usam `self.` (MHL-Melhorias.md #6).
+
+import { Paths } from "paths.mh"
+
+export tool WikiIndex {
+    upsert_source(project_id: string, entry: {slug: string, title: string, summary: string}) ->
+        self.upsert(project_id, "sources", entry)
+
+    upsert_entity(project_id: string, entry: {slug: string, title: string, summary: string}) ->
+        self.upsert(project_id, "entities", entry)
+
+    upsert_concept(project_id: string, entry: {slug: string, title: string, summary: string}) ->
+        self.upsert(project_id, "concepts", entry)
+
+    upsert_answer(project_id: string, entry: {slug: string, title: string, summary: string}) ->
+        self.upsert(project_id, "answers", entry)
+
+    upsert(project_id: string, category: string, entry: {slug: string, title: string, summary: string}) -> {
+        var state = self.load(project_id)
+        var list = state.get(category, [])
+        list = list.filter((existing) -> existing.slug != entry.slug)
+        list += [entry]
+        list = list.sort_by((existing) -> existing.title)
+        state[category] = list
+        self.save(project_id, state)
+        self.render(project_id, state)
+    }
+
+    load(project_id: string): any -> {
+        var path = Paths.index_state_file(project_id)
+        if (!fs.exists(path)) return {sources: [], entities: [], concepts: [], answers: []}
+        return json.parse(fs.read(path))
+    }
+
+    save(project_id: string, state: any) ->
+        fs.write(Paths.index_state_file(project_id), json.stringify(state))
+
+    render(project_id: string, state: any) -> {
+        var body = "# Índice da Wiki\n\n"
+        body = body + self.render_section("Fontes", "sources", state.get("sources", []))
+        body = body + self.render_section("Entidades", "entities", state.get("entities", []))
+        body = body + self.render_section("Conceitos", "concepts", state.get("concepts", []))
+        body = body + self.render_section("Respostas arquivadas", "answers", state.get("answers", []))
+        fs.write(Paths.wiki(project_id, "index.md"), body)
+    }
+
+    render_section(title: string, dir: string, entries: any[]): string -> {
+        if (entries.is_empty()) return ""
+        var lines = "## " + title + "\n\n"
+        for (var entry in entries) {
+            lines = lines + "- [" + entry.title + "](" + dir + "/" + entry.slug + ".md) — " + entry.summary + "\n"
+        }
+        return lines + "\n"
+    }
+}
+
+test WikiIndexSpec {
+    describe render_section_lists_entries_alphabetically_pre_sorted {
+        var section = WikiIndex.render_section("Fontes", "sources", [
+            {slug: "a", title: "Ata", summary: "resumo a"},
+            {slug: "b", title: "Benchmark", summary: "resumo b"},
+        ])
+        are_equal(section, "## Fontes\n\n- [Ata](sources/a.md) — resumo a\n- [Benchmark](sources/b.md) — resumo b\n\n")
+    }
+
+    describe render_section_of_empty_list_is_empty_string {
+        are_equal(WikiIndex.render_section("Fontes", "sources", []), "")
+    }
+}

@@ -8,7 +8,9 @@
 // is_valid_id usa string.matches (regex, disponivel desde mhl 1.4.0-beta.6) — o padrao
 // ancorado ja rejeita "/", "\", ".." e qualquer caractere fora do conjunto permitido
 // sem checagens redundantes; antes disso exigia iterar split("") caractere a caractere
-// (ver FASE0-ACHADOS.md §10 / MHL-Melhorias.md #14).
+// (ver FASE0-ACHADOS.md §10 / MHL-Melhorias.md #14). Chamadas entre metodos-irmaos
+// usam `self.` (MHL-Melhorias.md #6) em vez de repetir "Paths." — mais resistente a
+// rename.
 
 export tool Paths {
     is_valid_id(project_id: string): bool -> {
@@ -18,7 +20,7 @@ export tool Paths {
     }
 
     ensure_valid(project_id: string): string -> {
-        if (!Paths.is_valid_id(project_id)) fail("project_id invalido ou potencialmente malicioso: '" + project_id + "'")
+        if (!self.is_valid_id(project_id)) fail("project_id invalido ou potencialmente malicioso: '" + project_id + "'")
         return project_id
     }
 
@@ -28,26 +30,32 @@ export tool Paths {
         return relative
     }
 
-    root(project_id: string): string -> "projects/" + Paths.ensure_valid(project_id)
+    root(project_id: string): string -> "projects/" + self.ensure_valid(project_id)
 
-    project_file(project_id: string): string -> Paths.root(project_id) + "/project.json"
+    project_file(project_id: string): string -> self.root(project_id) + "/project.json"
 
-    usage_file(project_id: string): string -> Paths.root(project_id) + "/usage.jsonl"
+    usage_file(project_id: string): string -> self.root(project_id) + "/usage.jsonl"
 
-    raw_dir(project_id: string): string -> Paths.root(project_id) + "/raw"
+    // Estado interno (nao-humano) que a WikiIndex usa pra renderizar
+    // wiki/index.md do zero a cada ingest — mantem wiki/ 100% markdown puro
+    // (nada de .json ali), como o padrao docs/wiki-llm.md espera. Ponto (.)
+    // inicial: convencao de "arquivo oculto/interno" em todo SO relevante (C6).
+    index_state_file(project_id: string): string -> self.root(project_id) + "/.index-state.json"
 
-    wiki_dir(project_id: string): string -> Paths.root(project_id) + "/wiki"
+    raw_dir(project_id: string): string -> self.root(project_id) + "/raw"
 
-    artifacts_dir(project_id: string): string -> Paths.root(project_id) + "/artifacts"
+    wiki_dir(project_id: string): string -> self.root(project_id) + "/wiki"
+
+    artifacts_dir(project_id: string): string -> self.root(project_id) + "/artifacts"
 
     raw(project_id: string, relative: string): string ->
-        Paths.raw_dir(project_id) + "/" + Paths.ensure_safe_relative(relative)
+        self.raw_dir(project_id) + "/" + self.ensure_safe_relative(relative)
 
     wiki(project_id: string, relative: string): string ->
-        Paths.wiki_dir(project_id) + "/" + Paths.ensure_safe_relative(relative)
+        self.wiki_dir(project_id) + "/" + self.ensure_safe_relative(relative)
 
     artifact(project_id: string, relative: string): string ->
-        Paths.artifacts_dir(project_id) + "/" + Paths.ensure_safe_relative(relative)
+        self.artifacts_dir(project_id) + "/" + self.ensure_safe_relative(relative)
 }
 
 test PathsSpec {
@@ -82,6 +90,7 @@ test PathsSpec {
         are_equal(Paths.raw("wi_1", "ata.pdf"), "projects/wi_1/raw/ata.pdf")
         are_equal(Paths.project_file("wi_1"), "projects/wi_1/project.json")
         are_equal(Paths.usage_file("wi_1"), "projects/wi_1/usage.jsonl")
+        are_equal(Paths.index_state_file("wi_1"), "projects/wi_1/.index-state.json")
     }
 
     describe relative_traversal_is_rejected_even_with_a_valid_project_id {
