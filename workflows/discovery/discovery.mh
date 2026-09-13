@@ -293,12 +293,19 @@ workflow Discovery {
         current_artifact = "features"
         var requisitos_content = Context.artifact(project_id, "requisitos.html")
         if (requisitos_content.is_empty()) fail("gere 'requisitos' antes de 'features'")
+
         var adr_content = Context.artifact_dir(project_id, "adr")
         if (adr_content.is_empty()) fail("gere 'adr' antes de 'features'")
+
+        // der e opcional: nem toda oportunidade tem um modelo de dados
+        // formal que valha a pena diagramar — features usa o conteudo
+        // quando existe, mas nao bloqueia na ausencia dele.
         var der_content = Context.artifact(project_id, "der.html")
-        if (der_content.is_empty()) fail("gere 'der' antes de 'features'")
+        if (der_content.is_empty()) der_content = "(não gerado para esta oportunidade)"
+
         var diagramas_content = Context.artifact_dir(project_id, "diagramas")
         if (diagramas_content.is_empty()) fail("gere 'diagramas' antes de 'features'")
+
         var raw = Writer.run(
             prompt: FeaturesInstruction(
                 schema_conventions: DiscoverySchema(),
