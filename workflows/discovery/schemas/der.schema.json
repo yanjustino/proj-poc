@@ -1,11 +1,17 @@
 {
   "type": "object",
   "additionalProperties": false,
-  "required": ["descricao", "diagrama_mermaid"],
+  "required": ["descricao", "fontes", "diagrama_mermaid"],
   "properties": {
     "descricao": {
       "type": "string",
       "description": "Parágrafo(s) descrevendo as entidades principais e como se relacionam."
+    },
+    "fontes": {
+      "type": "array",
+      "items": { "type": "string" },
+      "minItems": 1,
+      "description": "Referências que sustentam este modelo de dados."
     },
     "diagrama_mermaid": {
       "type": "string",

@@ -11,6 +11,11 @@ p{margin:0 0 10px}
 ul{margin:0;padding-left:20px}
 li{margin-bottom:6px}
 .meta{margin-top:36px;padding-top:12px;border-top:1px solid #e6e6e6;font-family:ui-monospace,monospace;font-size:11px;color:#9a9a9a}
+.cite{display:inline-block;font-family:ui-monospace,monospace;font-size:10px;padding:1px 6px;border-radius:3px;margin-left:2px;white-space:nowrap}
+.cite-fonte{background:#eef3ee;color:#2c7a4b}
+.cite-gap{background:#f6dedb;color:#a33c2e}
+.cite-inferencia{background:#eceef7;color:#39468a}
+p.fontes{margin:-6px 0 14px;line-height:2}
 </style>
 </head>
 <body>

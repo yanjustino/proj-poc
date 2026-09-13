@@ -5,15 +5,41 @@
   "properties": {
     "funcionais": {
       "type": "array",
-      "items": { "type": "string" },
+      "items": {
+        "type": "object",
+        "additionalProperties": false,
+        "required": ["texto", "fontes"],
+        "properties": {
+          "texto": { "type": "string" },
+          "fontes": {
+            "type": "array",
+            "items": { "type": "string" },
+            "minItems": 1,
+            "description": "Referências que sustentam este requisito."
+          }
+        }
+      },
       "minItems": 1,
-      "description": "Requisitos funcionais, um por item, cada um uma frase concreta e verificável."
+      "description": "Requisitos funcionais, um por item, cada um com suas fontes."
     },
     "nao_funcionais": {
       "type": "array",
-      "items": { "type": "string" },
+      "items": {
+        "type": "object",
+        "additionalProperties": false,
+        "required": ["texto", "fontes"],
+        "properties": {
+          "texto": { "type": "string" },
+          "fontes": {
+            "type": "array",
+            "items": { "type": "string" },
+            "minItems": 1,
+            "description": "Referências que sustentam este requisito."
+          }
+        }
+      },
       "minItems": 1,
-      "description": "Requisitos não-funcionais, um por item."
+      "description": "Requisitos não-funcionais, um por item, cada um com suas fontes."
     }
   }
 }

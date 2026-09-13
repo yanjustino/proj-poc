@@ -10,10 +10,16 @@
       "items": {
         "type": "object",
         "additionalProperties": false,
-        "required": ["titulo", "descricao", "diagrama_mermaid"],
+        "required": ["titulo", "descricao", "fontes", "diagrama_mermaid"],
         "properties": {
           "titulo": { "type": "string", "description": "Título do diagrama (ex.: 'Contexto', 'Contêineres')." },
           "descricao": { "type": "string", "description": "Parágrafo curto explicando o que este diagrama mostra." },
+          "fontes": {
+            "type": "array",
+            "items": { "type": "string" },
+            "minItems": 1,
+            "description": "Referências que sustentam este diagrama."
+          },
           "diagrama_mermaid": { "type": "string", "description": "Diagrama em sintaxe Mermaid C4 (C4Context, C4Container, etc.)." }
         }
       }

@@ -1,23 +1,55 @@
 {
   "type": "object",
   "additionalProperties": false,
-  "required": ["problema", "objetivos", "stakeholders"],
+  "required": ["problema", "problema_fontes", "objetivos", "stakeholders"],
   "properties": {
     "problema": {
       "type": "string",
       "description": "Parágrafo(s) descrevendo o problema central que motiva esta oportunidade."
     },
-    "objetivos": {
+    "problema_fontes": {
       "type": "array",
       "items": { "type": "string" },
       "minItems": 1,
-      "description": "Objetivos mensuráveis desta oportunidade, um por item."
+      "description": "Referências que sustentam o parágrafo 'problema' (ver regras de citação — página da wiki, artefato predecessor, 'gap' ou 'inferência')."
+    },
+    "objetivos": {
+      "type": "array",
+      "items": {
+        "type": "object",
+        "additionalProperties": false,
+        "required": ["texto", "fontes"],
+        "properties": {
+          "texto": { "type": "string" },
+          "fontes": {
+            "type": "array",
+            "items": { "type": "string" },
+            "minItems": 1,
+            "description": "Referências que sustentam este objetivo."
+          }
+        }
+      },
+      "minItems": 1,
+      "description": "Objetivos mensuráveis desta oportunidade, um por item, cada um com suas fontes."
     },
     "stakeholders": {
       "type": "array",
-      "items": { "type": "string" },
+      "items": {
+        "type": "object",
+        "additionalProperties": false,
+        "required": ["texto", "fontes"],
+        "properties": {
+          "texto": { "type": "string" },
+          "fontes": {
+            "type": "array",
+            "items": { "type": "string" },
+            "minItems": 1,
+            "description": "Referências que sustentam este stakeholder."
+          }
+        }
+      },
       "minItems": 1,
-      "description": "Partes interessadas relevantes, uma por item (nome/papel + por que importa)."
+      "description": "Partes interessadas relevantes, uma por item, cada uma com suas fontes."
     }
   }
 }

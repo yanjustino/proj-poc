@@ -10,12 +10,18 @@
       "items": {
         "type": "object",
         "additionalProperties": false,
-        "required": ["titulo", "contexto", "decisao", "consequencias"],
+        "required": ["titulo", "contexto", "decisao", "consequencias", "fontes"],
         "properties": {
           "titulo": { "type": "string", "description": "Título curto da decisão (ex.: 'Usar tokenização via PSP')." },
           "contexto": { "type": "string", "description": "O que motiva esta decisão — a situação/restrição que a força." },
           "decisao": { "type": "string", "description": "O que foi decidido, de forma direta." },
-          "consequencias": { "type": "string", "description": "Efeitos (positivos e negativos) de seguir esta decisão." }
+          "consequencias": { "type": "string", "description": "Efeitos (positivos e negativos) de seguir esta decisão." },
+          "fontes": {
+            "type": "array",
+            "items": { "type": "string" },
+            "minItems": 1,
+            "description": "Referências que sustentam esta decisão como um todo (contexto+decisão+consequências)."
+          }
         }
       }
     }

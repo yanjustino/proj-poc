@@ -23,7 +23,8 @@ export tool Context {
 
     // Mesma coisa, mas para um predecessor que e uma PASTA com varios
     // arquivos (ex. "adr", "diagramas") — concatena todos. Vazio se a pasta
-    // nao existir ou nao tiver nenhum arquivo ainda.
+    // nao existir ou nao tiver nenhum arquivo ainda. Cabecalho de cada item
+    // vira uma referencia curta relativa a artifacts/ (ex. "adr/ADR-001-x").
     artifact_dir(project_id: string, relative_dir: string): string ->
-        DirText.concat_all(Paths.artifact(project_id, relative_dir))
+        DirText.concat_all(Paths.artifact(project_id, relative_dir), Paths.artifacts_dir(project_id))
 }

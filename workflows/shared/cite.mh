@@ -1,0 +1,86 @@
+// tool Cite — renderiza a proveniencia de uma informacao (C3: a LLM so
+// julga QUAIS fontes sustentam cada alegacao, devolvendo isso via schema; a
+// formatacao do selo de citacao e sempre codigo). Toda informacao de um
+// artefato de Discovery/Delivery carrega uma ou mais referencias: o
+// identificador de uma pagina da wiki ou de um artefato predecessor (ex.
+// "entities/time-de-pagamentos", "requisitos"), ou um dos dois valores
+// especiais "gap" (a wiki nao tem essa informacao) e "inferência" (dedução
+// razoavel, sem citação direta). Sempre `fontes: string[]` (nunca uma fonte
+// singular) — uma alegacao pode legitimamente vir de mais de uma pagina.
+
+export tool Cite {
+    // Uma lista <ul> onde cada item carrega suas proprias fontes — usado
+    // quando cada item da lista e uma alegacao atomica e independente
+    // (objetivos, requisitos, criterios de aceite, fatos).
+    list(items: {texto: string, fontes: string[]}[]): string ->
+        "<ul>" + items.map((item) -> "<li>" + html.escape(item.texto) + " " + self.badges(item.fontes) + "</li>").join("") + "</ul>"
+
+    // Uma sequencia de <h2><p> com fontes por categoria — usado quando o
+    // schema devolve uma lista de {titulo, corpo, fontes} (ex. atributos de
+    // qualidade, uma secao por categoria).
+    sections(items: {titulo: string, corpo: string, fontes: string[]}[]): string ->
+        items.map((item) -> "<h2>" + html.escape(item.titulo) + "</h2><p>" + html.escape(item.corpo) + " " + self.badges(item.fontes) + "</p>").join("")
+
+    // Nota de fontes depois de um paragrafo/registro de prosa que sintetiza
+    // varias alegacoes ao mesmo tempo — usado para campos como "problema",
+    // "contexto"/"decisao"/"consequencias" de uma ADR, ou a descricao de um
+    // diagrama.
+    note(fontes: string[]): string ->
+        "<p class=\"fontes\">" + self.badges(fontes) + "</p>"
+
+    badges(fontes: string[]): string ->
+        fontes.map((f) -> self.badge(f)).join(" ")
+
+    badge(fonte: string): string -> {
+        var normalized = fonte.to_lower().trim()
+        if (normalized == "gap") return "<span class=\"cite cite-gap\">gap</span>"
+        if (normalized == "inferência" || normalized == "inferencia") return "<span class=\"cite cite-inferencia\">inferência</span>"
+        return "<span class=\"cite cite-fonte\">" + html.escape(fonte) + "</span>"
+    }
+}
+
+test CiteSpec {
+    describe badge_recognizes_gap_case_and_whitespace_insensitively {
+        are_equal(Cite.badge("gap"), "<span class=\"cite cite-gap\">gap</span>")
+        are_equal(Cite.badge("GAP"), "<span class=\"cite cite-gap\">gap</span>")
+        are_equal(Cite.badge("  gap  "), "<span class=\"cite cite-gap\">gap</span>")
+    }
+
+    describe badge_recognizes_inferencia_with_or_without_accent {
+        are_equal(Cite.badge("inferência"), "<span class=\"cite cite-inferencia\">inferência</span>")
+        are_equal(Cite.badge("inferencia"), "<span class=\"cite cite-inferencia\">inferência</span>")
+    }
+
+    describe badge_renders_a_real_reference_escaped {
+        are_equal(Cite.badge("entities/time-de-pagamentos"), "<span class=\"cite cite-fonte\">entities/time-de-pagamentos</span>")
+    }
+
+    describe badges_renders_one_badge_per_source_space_separated {
+        are_equal(
+            Cite.badges(["requisitos", "gap"]),
+            "<span class=\"cite cite-fonte\">requisitos</span> <span class=\"cite cite-gap\">gap</span>"
+        )
+    }
+
+    describe list_renders_text_and_badges_per_item {
+        are_equal(
+            Cite.list([{texto: "Reduzir abandono", fontes: ["concepts/abandono-de-carrinho"]}, {texto: "Meta sem dado", fontes: ["gap"]}]),
+            "<ul><li>Reduzir abandono <span class=\"cite cite-fonte\">concepts/abandono-de-carrinho</span></li>" +
+            "<li>Meta sem dado <span class=\"cite cite-gap\">gap</span></li></ul>"
+        )
+    }
+
+    describe list_item_with_multiple_sources_renders_multiple_badges {
+        are_equal(
+            Cite.list([{texto: "Requer tokenização", fontes: ["entities/time-de-pagamentos", "concepts/tokenizacao-de-cartao"]}]),
+            "<ul><li>Requer tokenização <span class=\"cite cite-fonte\">entities/time-de-pagamentos</span> <span class=\"cite cite-fonte\">concepts/tokenizacao-de-cartao</span></li></ul>"
+        )
+    }
+
+    describe note_renders_one_badge_per_source {
+        are_equal(
+            Cite.note(["requisitos", "gap"]),
+            "<p class=\"fontes\"><span class=\"cite cite-fonte\">requisitos</span> <span class=\"cite cite-gap\">gap</span></p>"
+        )
+    }
+}

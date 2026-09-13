@@ -10,15 +10,34 @@
       "items": {
         "type": "object",
         "additionalProperties": false,
-        "required": ["titulo", "descricao", "criterios_aceite"],
+        "required": ["titulo", "descricao", "fontes", "criterios_aceite"],
         "properties": {
           "titulo": { "type": "string", "description": "Nome curto da feature." },
           "descricao": { "type": "string", "description": "O que esta feature entrega e por quê, em 1-2 parágrafos." },
-          "criterios_aceite": {
+          "fontes": {
             "type": "array",
             "items": { "type": "string" },
             "minItems": 1,
-            "description": "Critérios de aceite, um por item."
+            "description": "Referências que sustentam esta feature."
+          },
+          "criterios_aceite": {
+            "type": "array",
+            "items": {
+              "type": "object",
+              "additionalProperties": false,
+              "required": ["texto", "fontes"],
+              "properties": {
+                "texto": { "type": "string" },
+                "fontes": {
+                  "type": "array",
+                  "items": { "type": "string" },
+                  "minItems": 1,
+                  "description": "Referências que sustentam este critério."
+                }
+              }
+            },
+            "minItems": 1,
+            "description": "Critérios de aceite, um por item, cada um com suas fontes."
           }
         }
       }

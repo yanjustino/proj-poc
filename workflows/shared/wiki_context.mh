@@ -14,11 +14,12 @@ import { DirText } from "dir_text.mh"
 
 export tool WikiContext {
     all_pages(project_id: string): string -> {
-        var content = "# index.md\n\n" + self.read_file_if_exists(Paths.wiki(project_id, "index.md"))
-        content = content + DirText.concat_all(Paths.wiki_dir(project_id) + "/sources")
-        content = content + DirText.concat_all(Paths.wiki_dir(project_id) + "/entities")
-        content = content + DirText.concat_all(Paths.wiki_dir(project_id) + "/concepts")
-        content = content + DirText.concat_all(Paths.wiki_dir(project_id) + "/answers")
+        var wiki_base = Paths.wiki_dir(project_id)
+        var content = "# index\n\n" + self.read_file_if_exists(Paths.wiki(project_id, "index.md"))
+        content = content + DirText.concat_all(wiki_base + "/sources", wiki_base)
+        content = content + DirText.concat_all(wiki_base + "/entities", wiki_base)
+        content = content + DirText.concat_all(wiki_base + "/concepts", wiki_base)
+        content = content + DirText.concat_all(wiki_base + "/answers", wiki_base)
         return content
     }
 

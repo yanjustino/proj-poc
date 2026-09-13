@@ -5,14 +5,20 @@
 //
 // C2: todo contexto vem de `tool Context` (wiki/** + artifacts/** do mesmo
 // project_id) — nenhum step le raw/ ou outro projeto. C3: a LLM so devolve
-// campos via schema; Html.list/Html.sections/ArtifactId decidem formatacao
-// e id, nunca a LLM. Schemas carregam via `prompt ... from` sem parametros
-// (FASE2-ACHADOS.md §2) — fs.read quebraria se o mhl rodasse de outro CWD.
+// campos via schema; Cite.list/Cite.sections/ArtifactId decidem formatacao,
+// selo de citacao e id, nunca a LLM. Schemas carregam via `prompt ... from`
+// sem parametros (FASE2-ACHADOS.md §2) — fs.read quebraria se o mhl rodasse
+// de outro CWD.
+//
+// Toda informacao devolvida pela LLM carrega uma `fonte`/`fontes` (pagina
+// da wiki, artefato predecessor, "gap" ou "inferência" — ver
+// schema.prompt.md e tool Cite) — nao existe campo de conteudo sem
+// proveniencia declarada.
 
 import { Paths } from "../shared/paths.mh"
 import { Writer } from "../shared/agents.mh"
 import { Context } from "../shared/context.mh"
-import { Html } from "../shared/html.mh"
+import { Cite } from "../shared/cite.mh"
 import { Slug } from "../shared/slug.mh"
 import { ArtifactId } from "../shared/artifact_id.mh"
 import { PageShell, ArtifactMeta } from "../shared/page_shell.mh"
@@ -38,14 +44,14 @@ prompt DiagramasSchemaFile() from "schemas/diagramas.schema.json"
 prompt FeaturesSchemaFile() from "schemas/features.schema.json"
 prompt HistoriasSchemaFile() from "schemas/historias.schema.json"
 
-prompt BriefBody(problema: string, objetivos_lista: string, stakeholders_lista: string) from "templates/brief_body.html"
+prompt BriefBody(problema: string, problema_fontes: string, objetivos_lista: string, stakeholders_lista: string) from "templates/brief_body.html"
 prompt AtributosBody(secoes: string) from "templates/atributos_body.html"
 prompt RequisitosBody(funcionais_lista: string, nao_funcionais_lista: string) from "templates/requisitos_body.html"
-prompt AdrBody(contexto: string, decisao: string, consequencias: string) from "templates/adr_body.html"
-prompt DerBody(descricao: string, diagrama_mermaid: string) from "templates/der_body.html"
-prompt DiagramaBody(descricao: string, diagrama_mermaid: string) from "templates/diagrama_body.html"
-prompt FeatureBody(descricao: string, criterios_lista: string) from "templates/feature_body.html"
-prompt HistoriaBody(como: string, quero: string, para: string, criterios_lista: string) from "templates/historia_body.html"
+prompt AdrBody(contexto: string, decisao: string, consequencias: string, fontes_nota: string) from "templates/adr_body.html"
+prompt DerBody(descricao: string, fontes_nota: string, diagrama_mermaid: string) from "templates/der_body.html"
+prompt DiagramaBody(descricao: string, fontes_nota: string, diagrama_mermaid: string) from "templates/diagrama_body.html"
+prompt FeatureBody(descricao: string, fontes_nota: string, criterios_lista: string) from "templates/feature_body.html"
+prompt HistoriaBody(como: string, quero: string, para: string, fontes_nota: string, criterios_lista: string) from "templates/historia_body.html"
 
 workflow Discovery {
     description: "Artefatos de nivel Oportunidade: brief, atributos, requisitos, adr, der, diagramas, features, historias."
@@ -113,8 +119,9 @@ workflow Discovery {
         var data = pending_data
         var body = BriefBody(
             problema: html.escape(data.problema),
-            objetivos_lista: Html.list(data.objetivos),
-            stakeholders_lista: Html.list(data.stakeholders)
+            problema_fontes: Cite.note(data.problema_fontes),
+            objetivos_lista: Cite.list(data.objetivos),
+            stakeholders_lista: Cite.list(data.stakeholders)
         )
         var rendered = PageShell(
             title: "Brief",
@@ -142,9 +149,9 @@ workflow Discovery {
         var data = pending_data
         var secoes_items = []
         for (var item in data.atributos) {
-            secoes_items += [{titulo: item.categoria, corpo: item.descricao}]
+            secoes_items += [{titulo: item.categoria, corpo: item.descricao, fontes: item.fontes}]
         }
-        var body = AtributosBody(secoes: Html.sections(secoes_items))
+        var body = AtributosBody(secoes: Cite.sections(secoes_items))
         var rendered = PageShell(
             title: "Atributos de Qualidade",
             body: body,
@@ -170,8 +177,8 @@ workflow Discovery {
     step RequisitosCommit {
         var data = pending_data
         var body = RequisitosBody(
-            funcionais_lista: Html.list(data.funcionais),
-            nao_funcionais_lista: Html.list(data.nao_funcionais)
+            funcionais_lista: Cite.list(data.funcionais),
+            nao_funcionais_lista: Cite.list(data.nao_funcionais)
         )
         var rendered = PageShell(
             title: "Requisitos",
@@ -207,7 +214,8 @@ workflow Discovery {
             var body = AdrBody(
                 contexto: html.escape(decision.contexto),
                 decisao: html.escape(decision.decisao),
-                consequencias: html.escape(decision.consequencias)
+                consequencias: html.escape(decision.consequencias),
+                fontes_nota: Cite.note(decision.fontes)
             )
             var rendered = PageShell(
                 title: html.escape(id + " — " + decision.titulo),
@@ -241,6 +249,7 @@ workflow Discovery {
         var data = pending_data
         var body = DerBody(
             descricao: html.escape(data.descricao),
+            fontes_nota: Cite.note(data.fontes),
             diagrama_mermaid: html.escape(data.diagrama_mermaid)
         )
         var rendered = PageShell(
@@ -275,6 +284,7 @@ workflow Discovery {
             var slug = Slug.from_title(diagrama.titulo)
             var body = DiagramaBody(
                 descricao: html.escape(diagrama.descricao),
+                fontes_nota: Cite.note(diagrama.fontes),
                 diagrama_mermaid: html.escape(diagrama.diagrama_mermaid)
             )
             var rendered = PageShell(
@@ -330,7 +340,8 @@ workflow Discovery {
             var folder = ArtifactId.folder_name(id, feature.titulo)
             var body = FeatureBody(
                 descricao: html.escape(feature.descricao),
-                criterios_lista: Html.list(feature.criterios_aceite)
+                fontes_nota: Cite.note(feature.fontes),
+                criterios_lista: Cite.list(feature.criterios_aceite)
             )
             var rendered = PageShell(
                 title: html.escape(id + " — " + feature.titulo),
@@ -373,7 +384,8 @@ workflow Discovery {
                 como: html.escape(historia.como),
                 quero: html.escape(historia.quero),
                 para: html.escape(historia.para),
-                criterios_lista: Html.list(historia.criterios_aceite)
+                fontes_nota: Cite.note(historia.fontes),
+                criterios_lista: Cite.list(historia.criterios_aceite)
             )
             var rendered = PageShell(
                 title: html.escape(id + " — " + historia.titulo),
