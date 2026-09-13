@@ -23,33 +23,23 @@ import { Slug } from "../shared/slug.mh"
 import { ArtifactId } from "../shared/artifact_id.mh"
 import { PageShell, ArtifactMeta } from "../shared/page_shell.mh"
 import { ClaudeQuirks } from "../shared/claude_quirks.mh"
+import {
+    ArtifactSchema,
+    BriefInstruction, AtributosInstruction, RequisitosInstruction, AdrInstruction, DerInstruction, DiagramasInstruction,
+    BriefSchemaFile, AtributosSchemaFile, RequisitosSchemaFile, AdrSchemaFile, DerSchemaFile, DiagramasSchemaFile,
+    BriefBody, AtributosBody, RequisitosBody, AdrBody, DerBody, DiagramaBody
+} from "../shared/artifacts_common.mh"
 
-prompt DiscoverySchema() from "schema.prompt.md"
-
-prompt BriefInstruction(schema_conventions: prompt, wiki_content: string) from "prompts/brief.prompt.md"
-prompt AtributosInstruction(schema_conventions: prompt, brief_content: string, wiki_content: string) from "prompts/atributos.prompt.md"
-prompt RequisitosInstruction(schema_conventions: prompt, brief_content: string, wiki_content: string) from "prompts/requisitos.prompt.md"
-prompt AdrInstruction(schema_conventions: prompt, requisitos_content: string, atributos_content: string, wiki_content: string) from "prompts/adr.prompt.md"
-prompt DerInstruction(schema_conventions: prompt, requisitos_content: string, atributos_content: string, wiki_content: string) from "prompts/der.prompt.md"
-prompt DiagramasInstruction(schema_conventions: prompt, requisitos_content: string, atributos_content: string, wiki_content: string) from "prompts/diagramas.prompt.md"
+// features/historias sao especificos de Discovery (Delivery nao os tem —
+// gera o detalhamento final de UMA feature/historia ja identificada, nao um
+// backlog inteiro) — por isso continuam declarados aqui, nao em
+// artifacts_common.mh.
 prompt FeaturesInstruction(schema_conventions: prompt, requisitos_content: string, adr_content: string, der_content: string, diagramas_content: string, wiki_content: string) from "prompts/features.prompt.md"
 prompt HistoriasInstruction(schema_conventions: prompt, feature_content: string, wiki_content: string) from "prompts/historias.prompt.md"
 
-prompt BriefSchemaFile() from "schemas/brief.schema.json"
-prompt AtributosSchemaFile() from "schemas/atributos.schema.json"
-prompt RequisitosSchemaFile() from "schemas/requisitos.schema.json"
-prompt AdrSchemaFile() from "schemas/adr.schema.json"
-prompt DerSchemaFile() from "schemas/der.schema.json"
-prompt DiagramasSchemaFile() from "schemas/diagramas.schema.json"
 prompt FeaturesSchemaFile() from "schemas/features.schema.json"
 prompt HistoriasSchemaFile() from "schemas/historias.schema.json"
 
-prompt BriefBody(problema: string, problema_fontes: string, objetivos_lista: string, stakeholders_lista: string) from "templates/brief_body.html"
-prompt AtributosBody(secoes: string) from "templates/atributos_body.html"
-prompt RequisitosBody(funcionais_lista: string, nao_funcionais_lista: string) from "templates/requisitos_body.html"
-prompt AdrBody(contexto: string, decisao: string, consequencias: string, fontes_nota: string) from "templates/adr_body.html"
-prompt DerBody(descricao: string, fontes_nota: string, diagrama_mermaid: string) from "templates/der_body.html"
-prompt DiagramaBody(descricao: string, fontes_nota: string, diagrama_mermaid: string) from "templates/diagrama_body.html"
 prompt FeatureBody(descricao: string, fontes_nota: string, criterios_lista: string) from "templates/feature_body.html"
 prompt HistoriaBody(como: string, quero: string, para: string, fontes_nota: string, criterios_lista: string) from "templates/historia_body.html"
 
@@ -108,7 +98,7 @@ workflow Discovery {
     step BriefGenerate {
         current_artifact = "brief"
         var raw = Writer.run(
-            prompt: BriefInstruction(schema_conventions: DiscoverySchema(), wiki_content: Context.wiki(project_id)),
+            prompt: BriefInstruction(schema_conventions: ArtifactSchema(), wiki_content: Context.wiki(project_id)),
             schema: BriefSchemaFile()
         )
         pending_data = json.parse(raw)
@@ -138,7 +128,7 @@ workflow Discovery {
         var brief_content = Context.artifact(project_id, "brief.html")
         if (brief_content.is_empty()) fail("gere 'brief' antes de 'atributos'")
         var raw = Writer.run(
-            prompt: AtributosInstruction(schema_conventions: DiscoverySchema(), brief_content: brief_content, wiki_content: Context.wiki(project_id)),
+            prompt: AtributosInstruction(schema_conventions: ArtifactSchema(), brief_content: brief_content, wiki_content: Context.wiki(project_id)),
             schema: AtributosSchemaFile()
         )
         pending_data = json.parse(raw)
@@ -167,7 +157,7 @@ workflow Discovery {
         var brief_content = Context.artifact(project_id, "brief.html")
         if (brief_content.is_empty()) fail("gere 'brief' antes de 'requisitos'")
         var raw = Writer.run(
-            prompt: RequisitosInstruction(schema_conventions: DiscoverySchema(), brief_content: brief_content, wiki_content: Context.wiki(project_id)),
+            prompt: RequisitosInstruction(schema_conventions: ArtifactSchema(), brief_content: brief_content, wiki_content: Context.wiki(project_id)),
             schema: RequisitosSchemaFile()
         )
         pending_data = json.parse(raw)
@@ -197,7 +187,7 @@ workflow Discovery {
         var atributos_content = Context.artifact(project_id, "atributos.html")
         if (atributos_content.is_empty()) fail("gere 'atributos' antes de 'adr'")
         var raw = Writer.run(
-            prompt: AdrInstruction(schema_conventions: DiscoverySchema(), requisitos_content: requisitos_content, atributos_content: atributos_content, wiki_content: Context.wiki(project_id)),
+            prompt: AdrInstruction(schema_conventions: ArtifactSchema(), requisitos_content: requisitos_content, atributos_content: atributos_content, wiki_content: Context.wiki(project_id)),
             schema: AdrSchemaFile()
         )
         pending_data = json.parse(raw)
@@ -236,7 +226,7 @@ workflow Discovery {
         var atributos_content = Context.artifact(project_id, "atributos.html")
         if (atributos_content.is_empty()) fail("gere 'atributos' antes de 'der'")
         var raw = Writer.run(
-            prompt: DerInstruction(schema_conventions: DiscoverySchema(), requisitos_content: requisitos_content, atributos_content: atributos_content, wiki_content: Context.wiki(project_id)),
+            prompt: DerInstruction(schema_conventions: ArtifactSchema(), requisitos_content: requisitos_content, atributos_content: atributos_content, wiki_content: Context.wiki(project_id)),
             schema: DerSchemaFile()
         )
         var data = json.parse(raw)
@@ -269,7 +259,7 @@ workflow Discovery {
         var atributos_content = Context.artifact(project_id, "atributos.html")
         if (atributos_content.is_empty()) fail("gere 'atributos' antes de 'diagramas'")
         var raw = Writer.run(
-            prompt: DiagramasInstruction(schema_conventions: DiscoverySchema(), requisitos_content: requisitos_content, atributos_content: atributos_content, wiki_content: Context.wiki(project_id)),
+            prompt: DiagramasInstruction(schema_conventions: ArtifactSchema(), requisitos_content: requisitos_content, atributos_content: atributos_content, wiki_content: Context.wiki(project_id)),
             schema: DiagramasSchemaFile()
         )
         pending_data = json.parse(raw)
@@ -318,7 +308,7 @@ workflow Discovery {
 
         var raw = Writer.run(
             prompt: FeaturesInstruction(
-                schema_conventions: DiscoverySchema(),
+                schema_conventions: ArtifactSchema(),
                 requisitos_content: requisitos_content,
                 adr_content: adr_content,
                 der_content: der_content,
@@ -362,7 +352,7 @@ workflow Discovery {
         var feature_dir = ArtifactId.find_feature_dir(project_id, feature_id)
         var feature_content = Context.artifact(project_id, "features/" + feature_dir + "/feature.html")
         var raw = Writer.run(
-            prompt: HistoriasInstruction(schema_conventions: DiscoverySchema(), feature_content: feature_content, wiki_content: Context.wiki(project_id)),
+            prompt: HistoriasInstruction(schema_conventions: ArtifactSchema(), feature_content: feature_content, wiki_content: Context.wiki(project_id)),
             schema: HistoriasSchemaFile()
         )
         var data = json.parse(raw)

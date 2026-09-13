@@ -1,0 +1,36 @@
+// artifacts_common.mh — schema/prompt/template dos 6 artefatos conceitualmente
+// iguais em qualquer nivel (Oportunidade, Feature ou Historia): brief,
+// atributos, requisitos, adr, der, diagramas. Fase 3 (Discovery) declarava
+// isso dentro de discovery.mh; extraido pra ca na Fase 4 porque Delivery
+// reaproveita exatamente a mesma coisa (C7 — nenhuma duplicacao de
+// schema/template/tool entre os 4 workflows) em vez de duplicar os 6 pares
+// de arquivo.
+//
+// So declaracoes aqui (prompt/schema-file/template-file) — nenhum `workflow`
+// neste arquivo, de proposito: um step *Generate/*Commit continua vivendo em
+// cada workflow que o usa (MHL nao tem como compartilhar corpo de step por
+// import), mas a parte cara — texto de instrucao, contrato de schema,
+// template de renderizacao — mora em um lugar so.
+
+export prompt ArtifactSchema() from "artifact_schema.prompt.md"
+
+export prompt BriefInstruction(schema_conventions: prompt, wiki_content: string) from "prompts/brief.prompt.md"
+export prompt AtributosInstruction(schema_conventions: prompt, brief_content: string, wiki_content: string) from "prompts/atributos.prompt.md"
+export prompt RequisitosInstruction(schema_conventions: prompt, brief_content: string, wiki_content: string) from "prompts/requisitos.prompt.md"
+export prompt AdrInstruction(schema_conventions: prompt, requisitos_content: string, atributos_content: string, wiki_content: string) from "prompts/adr.prompt.md"
+export prompt DerInstruction(schema_conventions: prompt, requisitos_content: string, atributos_content: string, wiki_content: string) from "prompts/der.prompt.md"
+export prompt DiagramasInstruction(schema_conventions: prompt, requisitos_content: string, atributos_content: string, wiki_content: string) from "prompts/diagramas.prompt.md"
+
+export prompt BriefSchemaFile() from "schemas/brief.schema.json"
+export prompt AtributosSchemaFile() from "schemas/atributos.schema.json"
+export prompt RequisitosSchemaFile() from "schemas/requisitos.schema.json"
+export prompt AdrSchemaFile() from "schemas/adr.schema.json"
+export prompt DerSchemaFile() from "schemas/der.schema.json"
+export prompt DiagramasSchemaFile() from "schemas/diagramas.schema.json"
+
+export prompt BriefBody(problema: string, problema_fontes: string, objetivos_lista: string, stakeholders_lista: string) from "templates/brief_body.html"
+export prompt AtributosBody(secoes: string) from "templates/atributos_body.html"
+export prompt RequisitosBody(funcionais_lista: string, nao_funcionais_lista: string) from "templates/requisitos_body.html"
+export prompt AdrBody(contexto: string, decisao: string, consequencias: string, fontes_nota: string) from "templates/adr_body.html"
+export prompt DerBody(descricao: string, fontes_nota: string, diagrama_mermaid: string) from "templates/der_body.html"
+export prompt DiagramaBody(descricao: string, fontes_nota: string, diagrama_mermaid: string) from "templates/diagrama_body.html"
