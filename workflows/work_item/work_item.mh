@@ -1,0 +1,141 @@
+// workflow WorkItem — ciclo de vida do projeto (ver PLANO-MACRO-MHL-SENPAI.md §4, Fase 1).
+// Cria/le/lista/arquiva project.json e agrega usage.jsonl. Nao conhece Wiki nem
+// artifacts (exceto o agregado de tokens em `usage`, que e so bookkeeping).
+//
+// Todo acesso a disco passa por `tool Paths` (C1) — nenhum step monta
+// "projects/" + project_id a mao. Deliberadamente NAO usamos `memory { type: "json" }`
+// aqui: um spike de Fase 0 mostrou que a interpolacao de `path:` em `memory` nao
+// sanitiza sozinha (".." escapa de verdade) — so `Paths.ensure_valid` garante isso,
+// entao usamos `fs`/`dir` diretos com caminhos vindos de `Paths`.
+//
+// `input` nao aceita valor default na gramatica do MHL (só `parameter` de tool/lambda
+// aceita) — por isso os 4 inputs abaixo sao todos obrigatorios; o chamador passa ""
+// para os que nao valem para a `action` escolhida (mesmo padrao do exemplo `Approval`
+// dos Docs-Servers, que sempre exige `approved` mesmo no start).
+
+import { Paths } from "../shared/paths.mh"
+
+workflow WorkItem {
+    description: "Ciclo de vida de um work-item do Senpai: create, list, get, archive, usage."
+
+    input action: string        // "create" | "list" | "get" | "archive" | "usage"
+    input name: string          // obrigatorio (valor) so para action:"create"; "" nas demais
+    input item_type: string     // "oportunidade" | "feature" | "historia"; so para action:"create"
+    input project_id: string    // obrigatorio (valor) para get/archive/usage; "" nas demais
+
+    var project = null
+    var projects = []
+    var usage = null
+    var error_message = ""
+
+    output: {
+        action: action,
+        project: project,
+        projects: projects,
+        usage: usage,
+        error: error_message,
+    }
+
+    step Dispatch {
+        if (action == "create") goto Create
+        if (action == "list") goto List
+        if (action == "get") goto Get
+        if (action == "archive") goto Archive
+        if (action == "usage") goto Usage
+        fail("acao desconhecida: '" + action + "' (use create | list | get | archive | usage)")
+    }
+
+    step Create {
+        if (name.is_empty()) fail("'name' e obrigatorio para action: \"create\"")
+        var valid_types = ["oportunidade", "feature", "historia"]
+        if (!valid_types.contains(item_type)) fail("'item_type' invalido: '" + item_type + "' (use oportunidade | feature | historia)")
+
+        var new_id = uuid.v7()
+        var level = if (item_type == "oportunidade") "discovery" else "delivery"
+
+        dir.create(Paths.root(new_id))
+        dir.create(Paths.raw_dir(new_id))
+        dir.create(Paths.wiki_dir(new_id))
+        dir.create(Paths.artifacts_dir(new_id))
+
+        var record = {
+            id: new_id,
+            name: name,
+            type: item_type,
+            level: level,
+            created_at: time.format(time.now(), "2006-01-02T15:04:05Z07:00"),
+            archived: false,
+        }
+        fs.write(Paths.project_file(new_id), json.stringify(record))
+        project = record
+        goto Done
+    }
+
+    step List {
+        projects = []
+        if (!dir.exists("projects")) goto Done
+        for (var entry in dir.list("projects")) {
+            if (dir.exists(entry)) {
+                var candidate_id = entry.replace("projects/", "")
+                if (Paths.is_valid_id(candidate_id) && fs.exists(Paths.project_file(candidate_id))) {
+                    projects += [json.parse(fs.read(Paths.project_file(candidate_id)))]
+                }
+            }
+        }
+        projects = projects.sort_by((p) -> p.created_at)
+        goto Done
+    }
+
+    step Get {
+        project_id = Paths.ensure_valid(project_id)
+        if (!fs.exists(Paths.project_file(project_id))) fail("work-item nao encontrado: '" + project_id + "'")
+        project = json.parse(fs.read(Paths.project_file(project_id)))
+        goto Done
+    }
+
+    step Archive {
+        project_id = Paths.ensure_valid(project_id)
+        if (!fs.exists(Paths.project_file(project_id))) fail("work-item nao encontrado: '" + project_id + "'")
+        var record = json.parse(fs.read(Paths.project_file(project_id)))
+        record["archived"] = true
+        fs.write(Paths.project_file(project_id), json.stringify(record))
+        project = record
+        goto Done
+    }
+
+    step Usage {
+        project_id = Paths.ensure_valid(project_id)
+        var total_in = 0
+        var total_out = 0
+        var by_artifact = []
+
+        if (fs.exists(Paths.usage_file(project_id))) {
+            // usage.jsonl e escrito por `memory { type: "jsonl" }.append(...)` (C5, Fase 2+),
+            // que grava cada linha como {value, ts} — `value` e o objeto passado ao append.
+            var lines = json.parse_lines(fs.read(Paths.usage_file(project_id)))
+            for (var line in lines) {
+                var entry = line.value
+                total_in = total_in + entry.tokens_in
+                total_out = total_out + entry.tokens_out
+                by_artifact += [{
+                    artifact: entry.artifact,
+                    tokens_in: entry.tokens_in,
+                    tokens_out: entry.tokens_out,
+                    at: line.ts,
+                }]
+            }
+        }
+
+        usage = {
+            total_tokens_in: total_in,
+            total_tokens_out: total_out,
+            by_artifact: by_artifact,
+        }
+        goto Done
+    }
+
+    step Done {
+        // ponto de convergencia unico — mantem `reached` enxuto para a UI
+        // (ex.: ["Dispatch","Create","Done"]), nunca os 5 branches inteiros.
+    }
+}

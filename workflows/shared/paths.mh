@@ -1,0 +1,98 @@
+// tool Paths — unico ponto que monta caminhos sob "projects/<project_id>/..."
+// Reforca a constraint C1 (isolamento de work-item, ver PLANO-MACRO-MHL-SENPAI.md §2.1):
+// nenhum outro step/tool deve concatenar "projects/" + project_id a mao. Um spike de
+// Fase 0 confirmou que interpolacao de string (inclusive dentro de `memory { path: }`)
+// NAO sanitiza sozinha — "../../etc/passwd" como project_id escapa de verdade do
+// diretorio pretendido — por isso toda funcao aqui valida antes de montar o caminho.
+
+export tool Paths {
+    is_valid_id(project_id: string): bool -> {
+        if (project_id.is_empty()) return false
+        if (project_id.size() > 128) return false
+        if (project_id.contains("..")) return false
+        if (project_id.contains("/")) return false
+        if (project_id.contains("\\")) return false
+
+        var allowed = "abcdefghijklmnopqrstuvwxyzABCDEFGHIJKLMNOPQRSTUVWXYZ0123456789-_"
+        for (var c in project_id.split("")) {
+            if (!allowed.contains(c)) return false
+        }
+        return true
+    }
+
+    ensure_valid(project_id: string): string -> {
+        if (!Paths.is_valid_id(project_id)) fail("project_id invalido ou potencialmente malicioso: '" + project_id + "'")
+        return project_id
+    }
+
+    ensure_safe_relative(relative: string): string -> {
+        if (relative.contains("..")) fail("caminho relativo invalido (contem '..'): '" + relative + "'")
+        if (relative.starts_with("/")) fail("caminho relativo nao pode ser absoluto: '" + relative + "'")
+        return relative
+    }
+
+    root(project_id: string): string -> "projects/" + Paths.ensure_valid(project_id)
+
+    project_file(project_id: string): string -> Paths.root(project_id) + "/project.json"
+
+    usage_file(project_id: string): string -> Paths.root(project_id) + "/usage.jsonl"
+
+    raw_dir(project_id: string): string -> Paths.root(project_id) + "/raw"
+
+    wiki_dir(project_id: string): string -> Paths.root(project_id) + "/wiki"
+
+    artifacts_dir(project_id: string): string -> Paths.root(project_id) + "/artifacts"
+
+    raw(project_id: string, relative: string): string ->
+        Paths.raw_dir(project_id) + "/" + Paths.ensure_safe_relative(relative)
+
+    wiki(project_id: string, relative: string): string ->
+        Paths.wiki_dir(project_id) + "/" + Paths.ensure_safe_relative(relative)
+
+    artifact(project_id: string, relative: string): string ->
+        Paths.artifacts_dir(project_id) + "/" + Paths.ensure_safe_relative(relative)
+}
+
+test PathsSpec {
+    describe valid_ids_are_accepted {
+        is_true(Paths.is_valid_id("wi_8f2a1c"))
+        is_true(Paths.is_valid_id("0198f2a1-aaaa-7000-8000-abcdefabcdef"))
+        is_true(Paths.is_valid_id("Checkout-Renovado_2026"))
+    }
+
+    describe malicious_or_malformed_ids_are_rejected {
+        is_false(Paths.is_valid_id(""))
+        is_false(Paths.is_valid_id("../etc/passwd"))
+        is_false(Paths.is_valid_id("/etc/passwd"))
+        is_false(Paths.is_valid_id("a/b"))
+        is_false(Paths.is_valid_id("a b"))
+        is_false(Paths.is_valid_id("wi;rm -rf"))
+        is_false(Paths.is_valid_id(".."))
+    }
+
+    describe ensure_valid_fails_hard_on_a_malicious_id {
+        try {
+            Paths.ensure_valid("../../../etc/passwd")
+            is_true(false)
+        } catch (err) {
+            is_true(true)
+        }
+    }
+
+    describe artifact_paths_stay_scoped_under_projects {
+        are_equal(Paths.artifact("wi_1", "brief.html"), "projects/wi_1/artifacts/brief.html")
+        are_equal(Paths.wiki("wi_1", "index.md"), "projects/wi_1/wiki/index.md")
+        are_equal(Paths.raw("wi_1", "ata.pdf"), "projects/wi_1/raw/ata.pdf")
+        are_equal(Paths.project_file("wi_1"), "projects/wi_1/project.json")
+        are_equal(Paths.usage_file("wi_1"), "projects/wi_1/usage.jsonl")
+    }
+
+    describe relative_traversal_is_rejected_even_with_a_valid_project_id {
+        try {
+            Paths.artifact("wi_1", "../../etc/passwd")
+            is_true(false)
+        } catch (err) {
+            is_true(true)
+        }
+    }
+}

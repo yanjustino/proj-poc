@@ -47,6 +47,14 @@ Isso fecha o desenho do `UsageParser` (C5, §3.4) para o backend `claude`: `afte
 - `--state-dir` só existe como flag de `mhl serve mcp --http` (`mhl serve mcp --help` não lista para stdio puro) — irrelevante agora que a Fase 5 já vai usar `--http` por causa do achado 2.
 - Não existe `html.escape` nativo — só `.replace()` em string — confirma que o `tool Html` da §3.4 precisa ser escrito à mão com `.replace()` encadeado.
 
+## 7. Achado crítico de segurança — `memory { path: "...${project_id}..." }` interpola sem sanitizar; path traversal funciona de verdade
+
+Testado: `memory Project { path: "projects/${project_id}/project.json" }`, chamado de dentro de uma `pipeline` com `input project_id: string`, resolve `${project_id}` contra o valor real do input — **isso por si só é bom** (confirma que a interpolação de `path:` enxerga variáveis de pipeline, não só `context.*`, viabilizando isolamento por projeto). O problema: com `project_id = "../../../../tmp/mhl_spike2_escaped"`, o arquivo foi gravado em `/private/tmp/mhl_spike2_escaped/project.json` — **fora de `projects/` por completo**. Nenhuma sanitização automática acontece na interpolação de `path:`.
+
+**Consequência direta para a Fase 1:** `tool Paths` não é "uma opção de design" — é a única coisa que impede um `project_id` malicioso de escapar. Decisão adotada: **não usar `memory { type: "json", path: "...${project_id}..." }` para `project.json`/`usage.jsonl`**, mesmo que funcione — usar exclusivamente `tool Paths` (que chama `fail(...)` num `project_id` inválido antes de montar qualquer caminho) seguido de `fs.read`/`fs.write`/`json.parse`/`json.stringify` diretos. Isso é estritamente mais seguro que confiar na conveniência do `memory` interpolado, e é exatamente o mecanismo que C1 (§2.1 do plano) já prescrevia — este spike só prova que era necessário, não opcional.
+
+Regra adotada em código (todo workflow que recebe `project_id` de fora): a primeira linha de qualquer step que o usa reatribui `project_id = Paths.ensure_valid(project_id)` — nunca usa o valor bruto do input diretamente em uma string interpolada ou chamada `fs`/`dir`.
+
 ## Consequência prática para as próximas fases
 
 - **Fase 5** muda de "stdio puro" para "`--http` em loopback" — atualizar §6.1/§6.2 do plano macro quando essa fase for escrita (nota, não bloqueio).
