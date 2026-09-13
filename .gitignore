@@ -2,3 +2,5 @@
 *.log
 spikes/
 .DS_Store
+projects/
+docs/sample/

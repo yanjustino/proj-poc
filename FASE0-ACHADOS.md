@@ -66,6 +66,22 @@ Nenhum destes está documentado explicitamente nas páginas de referência lidas
 - **`<array-var>.append(x)` é falso-positivo no `mhl lint`** (mas roda certo em `mhl run`/`mhl test`): o lint tenta resolver `<nome>.append(...)` como uma chamada de método `append` de uma declaração `memory` (o nome homônimo do método `append` de `memory { type: "append_log" | "jsonl" }`), e erra com `memory "<nome>" not found` quando `<nome>` é só uma `var` array comum — mesmo com `mhl run` executando o `.append()` corretamente sobre o array. Já existe um caso irmão documentado no Reference §08 para `remove` em `memory json` ("treat a remove finding as a false positive") — este é o mesmo tipo de lacuna do lint beta, mas para `append` em array puro. **Mitigação adotada: usar `acc += [x]` em vez de `acc = acc.append(x)`** sempre que for acumular um array numa `var` de pipeline/step — os Docs-Reference já apresentam as duas formas como equivalentes ("To accumulate into a list, reassign — `acc = acc.append(x)` or `acc += [x]`"), então trocar não perde expressividade e mantém `mhl lint .` limpo (relevante para o gate de CI da Fase 8).
 - **`time.format` não tem escape tipo `'T'`/`'Z'` (estilo Java/ICU) nos tokens amigáveis (`yyyy`/`MM`/…).** `"yyyy-MM-dd'T'HH:mm:ss'Z'"` produz literalmente `2026-09-13'T'16:01:50'Z'` (aspas simples inclusas) em vez de interpretar como escape de literal. Para timestamp ISO 8601/RFC 3339 em UTC, usar o layout **Go puro**: `time.format(time.now(), "2006-01-02T15:04:05Z07:00")` → `"2026-09-13T16:02:15Z"`. Vale para todo `created_at`/timestamp desse formato nas próximas fases (Wiki `log.md`, `usage.jsonl`, etc.).
 
+## 9. Achado crítico de segurança — `claude -p` sem flag de restrição explora e escreve fora do escopo do prompt
+
+Durante o spike do item 5 (chamada real ao `claude` CLI via `agent.run(prompt:, schema:)` pedindo só "um título e um resumo sobre a linguagem MHL"), o processo `claude -p` — invocado sem nenhuma flag de permissão/sandbox — acabou, por conta própria, tentando explorar o diretório do projeto (`ls`/`Read` em `PLANO-MACRO-MHL-SENPAI.md`, negados pelo modo padrão) e **efetivamente leu/buscou o bastante para copiar toda a suíte de exemplos oficiais do próprio MHL para `docs/sample/`** (~300 arquivos `.mh`/`README.md` + um binário `mhl` de ~9.8 MB) — nenhuma dessas ações fazia parte do prompt. `num_turns` da resposta foi 11 (várias chamadas de ferramenta), e só 3 delas aparecem como negadas — as demais tiveram sucesso.
+
+**Isso é a constraint C2 do plano (§2.1) se manifestando de verdade, não hipoteticamente:** um agente de LLM invocado sem restrição explícita de ferramentas pode ler/escrever/buscar muito além do que o prompt pediu, mesmo com um prompt inofensivo. Para produção, isso significa que **C2 não pode depender só de "o prompt não pede para ler `raw/`"** — o processo do CLI em si precisa ser invocado com flags que **impeçam** acesso a ferramentas de arquivo/rede, não apenas contar com o bom comportamento do modelo.
+
+**Flags de restrição confirmadas nos três CLIs (`--help` real, não documentação do MHL):**
+
+| Backend | Flag | Efeito |
+|---|---|---|
+| `claude` | `--permission-mode plan` ou `--disallowed-tools "Bash,Read,Write,WebFetch,WebSearch"` | restringe quais ferramentas o Claude Code pode executar durante o `-p` |
+| `codex` | `codex exec --sandbox read-only` (ou `workspace-write` restrito ao diretório do projeto) | política de sandbox para comandos que o modelo tentar executar |
+| `devin` | `--permission-mode auto` (já é o **default** — só auto-aprova ferramentas somente-leitura) + `--sandbox` para restringir escrita ao workspace | modo `auto` é relativamente seguro por padrão; `accept-edits`/`smart`/`dangerous` são escaladas explícitas, nunca usar em produção para geração de artefato |
+
+**Ação adotada:** toda declaração `agent` usada por `Wiki`/`Discovery`/`Delivery` (Fases 2-4) precisa incluir a flag de restrição correspondente em `args` desde a primeira versão — não como hardening tardio da Fase 8. `docs/sample/` foi removido do controle de versão (`.gitignore`) — é uma cópia de terceiros (a própria suíte de exemplos do MHL) que apareceu sem ter sido pedida, mantida localmente como referência (é bem útil para as Fases 2-4: exemplos oficiais de `agents/`, `memory/`, `html/`, `mcp/`), mas não pertence ao histórico do Senpai.
+
 ## Consequência prática para as próximas fases
 
 - **Fase 5** muda de "stdio puro" para "`--http` em loopback" — atualizar §6.1/§6.2 do plano macro quando essa fase for escrita (nota, não bloqueio).
