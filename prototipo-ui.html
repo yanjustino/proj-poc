@@ -1,0 +1,1023 @@
+<!DOCTYPE html>
+<html lang="pt-BR">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>Senpai</title>
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+<link rel="stylesheet" href="https://fonts.googleapis.com/css2?family=IBM+Plex+Sans:ital,wght@0,400;0,500;0,600;0,700;1,400&family=IBM+Plex+Mono:wght@400;500;600&display=swap">
+<style>
+  :root{
+    --bg: #f2f4f0;
+    --panel: #ffffff;
+    --panel-2: #eceee9;
+    --border: #d9dcd3;
+    --ink: #1d2320;
+    --ink-dim: #5b6259;
+    --ink-faint: #8a9088;
+    --accent: #a85a26;
+    --accent-ink: #ffffff;
+    --accent-soft: #f3e2d2;
+    --focus: #a85a26;
+
+    --st-pending-bg: #e7e8e3;
+    --st-pending-ink: #6c716a;
+    --st-working-bg: #dde8f6;
+    --st-working-ink: #2f5f9e;
+    --st-paused-bg: #f7ecc9;
+    --st-paused-ink: #8a6a10;
+    --st-completed-bg: #dcefdf;
+    --st-completed-ink: #2c7a4b;
+    --st-failed-bg: #f6dedb;
+    --st-failed-ink: #a33c2e;
+
+    --font-ui: 'IBM Plex Sans', -apple-system, BlinkMacSystemFont, 'Segoe UI', sans-serif;
+    --font-mono: 'IBM Plex Mono', ui-monospace, 'SFMono-Regular', Menlo, monospace;
+
+    --shadow-1: 0 1px 2px rgba(30,30,20,0.06);
+    --shadow-2: 0 8px 24px rgba(30,30,20,0.14);
+  }
+
+  @media (prefers-color-scheme: dark){
+    :root:not([data-theme="light"]){
+      --bg: #14181a;
+      --panel: #1b2023;
+      --panel-2: #20262a;
+      --border: #2c3336;
+      --ink: #e7e9e4;
+      --ink-dim: #a7ada4;
+      --ink-faint: #737a72;
+      --accent: #e0894b;
+      --accent-ink: #1a1200;
+      --accent-soft: #3a2c1c;
+      --focus: #e0894b;
+
+      --st-pending-bg: #262c2e;
+      --st-pending-ink: #9aa19a;
+      --st-working-bg: #1d2c3d;
+      --st-working-ink: #8bb6ea;
+      --st-paused-bg: #362c14;
+      --st-paused-ink: #e2bd63;
+      --st-completed-bg: #16302194;
+      --st-completed-ink: #7ed3a0;
+      --st-failed-bg: #3a1f1a;
+      --st-failed-ink: #e78b7a;
+
+      --shadow-1: 0 1px 2px rgba(0,0,0,0.3);
+      --shadow-2: 0 12px 28px rgba(0,0,0,0.45);
+    }
+  }
+  :root[data-theme="dark"]{
+    --bg: #14181a;
+    --panel: #1b2023;
+    --panel-2: #20262a;
+    --border: #2c3336;
+    --ink: #e7e9e4;
+    --ink-dim: #a7ada4;
+    --ink-faint: #737a72;
+    --accent: #e0894b;
+    --accent-ink: #1a1200;
+    --accent-soft: #3a2c1c;
+    --focus: #e0894b;
+
+    --st-pending-bg: #262c2e;
+    --st-pending-ink: #9aa19a;
+    --st-working-bg: #1d2c3d;
+    --st-working-ink: #8bb6ea;
+    --st-paused-bg: #362c14;
+    --st-paused-ink: #e2bd63;
+    --st-completed-bg: #16302194;
+    --st-completed-ink: #7ed3a0;
+    --st-failed-bg: #3a1f1a;
+    --st-failed-ink: #e78b7a;
+
+    --shadow-1: 0 1px 2px rgba(0,0,0,0.3);
+    --shadow-2: 0 12px 28px rgba(0,0,0,0.45);
+  }
+
+  *{ box-sizing: border-box; }
+  html{ color-scheme: light dark; }
+  body{
+    margin:0;
+    background: var(--bg);
+    color: var(--ink);
+    font-family: var(--font-ui);
+    font-size: 14px;
+    line-height: 1.45;
+    -webkit-font-smoothing: antialiased;
+  }
+  h1,h2,h3,h4{ text-wrap: balance; margin: 0; font-weight: 600; }
+  button{ font-family: inherit; font-size: inherit; }
+  ::selection{ background: var(--accent-soft); }
+  :focus-visible{ outline: 2px solid var(--focus); outline-offset: 2px; }
+
+  .mono{ font-family: var(--font-mono); font-variant-numeric: tabular-nums; }
+
+  /* ---------- shell ---------- */
+  .app{
+    display: grid;
+    grid-template-columns: 260px 1fr;
+    min-height: 100vh;
+  }
+
+  .sidebar{
+    background: var(--panel);
+    border-right: 1px solid var(--border);
+    display: flex;
+    flex-direction: column;
+    padding: 18px 14px;
+    gap: 18px;
+    min-width: 0;
+  }
+  .brand{
+    display:flex; align-items:center; gap:10px;
+    padding: 2px 4px 10px;
+    border-bottom: 1px solid var(--border);
+  }
+  .brand-mark{
+    width: 28px; height: 28px; border-radius: 7px;
+    background: var(--accent); color: var(--accent-ink);
+    display:flex; align-items:center; justify-content:center;
+    font-family: var(--font-mono); font-weight: 600; font-size: 13px;
+    flex: none;
+  }
+  .brand-text{ display:flex; flex-direction:column; line-height:1.15; }
+  .brand-text strong{ font-size: 15px; font-weight: 700; letter-spacing: 0.01em; }
+  .brand-text span{ font-size: 11px; color: var(--ink-faint); font-family: var(--font-mono); }
+
+  .btn{
+    appearance:none; border:1px solid var(--border); background: var(--panel-2);
+    color: var(--ink); border-radius: 8px; padding: 8px 12px;
+    font-weight: 500; cursor:pointer; display:inline-flex; align-items:center; gap:8px;
+    transition: background .12s ease, border-color .12s ease, transform .05s ease;
+  }
+  .btn:hover{ background: var(--border); }
+  .btn:active{ transform: translateY(1px); }
+  .btn-primary{
+    background: var(--accent); border-color: var(--accent); color: var(--accent-ink);
+  }
+  .btn-primary:hover{ filter: brightness(1.06); background: var(--accent); }
+  .btn-ghost{ background: transparent; border-color: transparent; }
+  .btn-ghost:hover{ background: var(--panel-2); }
+  .btn-sm{ padding: 5px 9px; font-size: 12.5px; border-radius: 6px; }
+  .btn-block{ width:100%; justify-content:center; }
+
+  .worklist{
+    list-style:none; margin:0; padding:0;
+    display:flex; flex-direction:column; gap:3px;
+    overflow-y:auto;
+  }
+  .worklist-item{
+    display:flex; flex-direction:column; gap:3px;
+    padding: 8px 10px; border-radius: 8px; cursor:pointer;
+    border: 1px solid transparent;
+  }
+  .worklist-item:hover{ background: var(--panel-2); }
+  .worklist-item[aria-current="true"]{
+    background: var(--accent-soft); border-color: var(--accent);
+  }
+  .worklist-top{ display:flex; align-items:center; justify-content:space-between; gap:6px; }
+  .worklist-name{ font-weight: 600; font-size: 13px; }
+  .worklist-meta{ font-size: 11.5px; color: var(--ink-dim); display:flex; align-items:center; gap:6px; }
+  .type-tag{
+    font-family: var(--font-mono); font-size: 10.5px; text-transform: uppercase; letter-spacing: .04em;
+    padding: 1px 6px; border-radius: 4px; background: var(--panel-2); color: var(--ink-dim);
+    border: 1px solid var(--border);
+  }
+
+  .sidebar-section-label{
+    font-size: 11px; text-transform: uppercase; letter-spacing: .06em; color: var(--ink-faint);
+    padding: 0 2px; margin-top: 4px;
+  }
+
+  .sidebar-footer{
+    margin-top: auto; padding-top: 12px; border-top: 1px solid var(--border);
+    display:flex; flex-direction:column; gap:4px;
+  }
+  .conn{
+    display:flex; align-items:center; gap:7px; font-family: var(--font-mono); font-size: 11.5px; color: var(--ink-dim);
+  }
+  .conn-dot{ width:7px; height:7px; border-radius:50%; background: var(--st-completed-ink); flex:none; }
+  .sidebar-footer .path{ font-family: var(--font-mono); font-size: 10.5px; color: var(--ink-faint); padding-left: 14px; margin-bottom: 6px; }
+  .agent-line{ font-family: var(--font-mono); font-size: 11px; color: var(--ink-faint); }
+  .agent-line b{ color: var(--ink-dim); font-weight: 600; }
+
+  /* ---------- main ---------- */
+  .main{ min-width: 0; display:flex; flex-direction:column; }
+
+  .workheader{
+    padding: 20px 28px 0;
+    display:flex; flex-direction:column; gap: 14px;
+    border-bottom: 1px solid var(--border);
+    background: var(--bg);
+  }
+  .workheader-top{ display:flex; align-items:flex-start; justify-content:space-between; gap: 16px; flex-wrap: wrap; }
+  .workheader-id{ display:flex; align-items:center; gap:10px; flex-wrap:wrap; }
+  .usage-stat{
+    display:flex; flex-direction:column; align-items:flex-end; gap:1px; padding: 2px 2px 0;
+  }
+  .usage-stat .label{ font-size: 10.5px; text-transform:uppercase; letter-spacing:.05em; color: var(--ink-faint); }
+  .usage-stat .value{ font-family: var(--font-mono); font-size: 17px; font-weight:600; color: var(--ink); }
+  .usage-stat .value span{ color: var(--ink-faint); font-weight:500; font-size: 12px; }
+  .art-tokens{ font-family: var(--font-mono); }
+  .workheader h1{ font-size: 21px; }
+  .badge{
+    font-size: 11.5px; font-weight: 600; padding: 3px 9px; border-radius: 100px;
+    border: 1px solid var(--border); color: var(--ink-dim); background: var(--panel);
+  }
+  .badge-level{ font-family: var(--font-mono); text-transform: uppercase; letter-spacing: .03em; font-size: 10.5px; }
+  .workheader-sub{ font-size: 12.5px; color: var(--ink-dim); }
+  .workheader-sub .mono{ color: var(--ink-faint); }
+
+  .tabs{ display:flex; gap: 4px; }
+  .tab{
+    appearance:none; background:none; border:none; cursor:pointer;
+    padding: 10px 4px 12px; font-weight: 500; color: var(--ink-dim);
+    border-bottom: 2px solid transparent; margin-right: 22px;
+  }
+  .tab:hover{ color: var(--ink); }
+  .tab[aria-selected="true"]{ color: var(--ink); border-bottom-color: var(--accent); font-weight: 600; }
+
+  .view{ display:none; padding: 22px 28px 36px; flex: 1; min-height: 0; }
+  .view[data-active="true"]{ display:flex; flex-direction:column; }
+
+  .section-label{
+    font-size: 11.5px; text-transform: uppercase; letter-spacing: .06em; color: var(--ink-faint);
+    margin-bottom: 10px; display:flex; align-items:center; gap:8px;
+  }
+  .section-label .count{ font-family: var(--font-mono); color: var(--ink-dim); }
+
+  /* ---------- fontes view ---------- */
+  .dropzone{
+    border: 1.5px dashed var(--border); border-radius: 12px; padding: 26px;
+    display:flex; flex-direction:column; align-items:center; gap:8px; text-align:center;
+    color: var(--ink-dim); margin-bottom: 22px; background: var(--panel);
+  }
+  .dropzone svg{ opacity:.55; }
+  .dropzone strong{ color: var(--ink); font-weight:600; }
+  .dropzone small{ font-size: 12px; }
+
+  .file-row{
+    display:flex; align-items:center; gap: 12px; padding: 11px 12px;
+    border: 1px solid var(--border); border-radius: 10px; background: var(--panel);
+    margin-bottom: 8px;
+  }
+  .file-icon{
+    width: 32px; height:32px; border-radius:7px; background: var(--panel-2); flex:none;
+    display:flex; align-items:center; justify-content:center; color: var(--ink-dim);
+    font-family: var(--font-mono); font-size: 10px; font-weight:600; text-transform: uppercase;
+  }
+  .file-main{ flex:1; min-width:0; }
+  .file-name{ font-weight:500; font-size: 13.5px; overflow:hidden; text-overflow:ellipsis; white-space:nowrap; }
+  .file-meta{ font-size: 11.5px; color: var(--ink-faint); font-family: var(--font-mono); }
+
+  /* ---------- wiki view ---------- */
+  .wiki-grid{ display:grid; grid-template-columns: repeat(3, 1fr); gap: 18px; margin-bottom: 24px; }
+  .wiki-card{
+    border: 1px solid var(--border); background: var(--panel); border-radius: 10px; padding: 8px;
+  }
+  .wiki-page{ padding: 9px 8px; border-radius: 7px; }
+  .wiki-page + .wiki-page{ border-top: 1px solid var(--border); }
+  .wiki-page-title{ font-weight: 600; font-size: 13px; margin-bottom: 2px; }
+  .wiki-page-sum{ font-size: 12px; color: var(--ink-dim); }
+
+  .log-strip{
+    border: 1px solid var(--border); border-radius: 10px; background: var(--panel-2);
+    padding: 12px 14px; display:flex; flex-direction:column; gap: 5px;
+  }
+  .log-line{ font-family: var(--font-mono); font-size: 12px; color: var(--ink-dim); }
+  .log-line b{ color: var(--ink); font-weight:600; }
+
+  .empty-state{
+    display:flex; flex-direction:column; align-items:center; text-align:center; gap: 10px;
+    color: var(--ink-dim); padding: 48px 20px; border: 1px dashed var(--border); border-radius: 12px;
+  }
+  .empty-state h3{ color: var(--ink); font-size: 15px; }
+  .empty-state p{ max-width: 46ch; font-size: 13px; margin:0; }
+
+  /* ---------- artefatos view ---------- */
+  .artefatos-grid{
+    display:grid; grid-template-columns: 380px 1fr; gap: 20px; flex:1; min-height: 0;
+  }
+  .artefatos-list{ display:flex; flex-direction:column; gap: 16px; overflow-y:auto; padding-right:4px; }
+  .artefato-group-title{ font-size: 11.5px; text-transform:uppercase; letter-spacing:.06em; color: var(--ink-faint); margin-bottom:8px; }
+
+  .art-row{
+    width:100%; text-align:left; display:flex; flex-direction:column; gap: 8px;
+    background: var(--panel); border: 1px solid var(--border); border-radius: 10px;
+    padding: 11px 13px; cursor:pointer; margin-bottom: 8px;
+  }
+  .art-row:hover{ border-color: var(--accent); }
+  .art-row[aria-selected="true"]{ border-color: var(--accent); box-shadow: 0 0 0 1px var(--accent); }
+  .art-row[disabled]{ cursor: not-allowed; opacity: .55; }
+  .art-row[disabled]:hover{ border-color: var(--border); }
+  .art-top{ display:flex; align-items:center; justify-content:space-between; gap: 10px; }
+  .art-name{ font-weight: 600; font-size: 13.5px; }
+  .art-sub{ font-size: 11.5px; color: var(--ink-faint); font-family: var(--font-mono); }
+
+  .chip{
+    display:inline-flex; align-items:center; gap:6px; font-size: 11px; font-weight:600;
+    padding: 3px 8px 3px 7px; border-radius: 100px; flex:none; white-space:nowrap;
+  }
+  .chip-dot{ width:6px; height:6px; border-radius:50%; }
+  .chip-pending{ background: var(--st-pending-bg); color: var(--st-pending-ink); }
+  .chip-pending .chip-dot{ background: var(--st-pending-ink); }
+  .chip-working{ background: var(--st-working-bg); color: var(--st-working-ink); }
+  .chip-working .chip-dot{ background: var(--st-working-ink); }
+  .chip-paused{ background: var(--st-paused-bg); color: var(--st-paused-ink); }
+  .chip-paused .chip-dot{ background: var(--st-paused-ink); }
+  .chip-completed{ background: var(--st-completed-bg); color: var(--st-completed-ink); }
+  .chip-completed .chip-dot{ background: var(--st-completed-ink); }
+  .chip-failed{ background: var(--st-failed-bg); color: var(--st-failed-ink); }
+  .chip-failed .chip-dot{ background: var(--st-failed-ink); }
+
+  @media (prefers-reduced-motion: no-preference){
+    .chip-working .chip-dot{ animation: pulse 1.4s ease-in-out infinite; }
+  }
+  @keyframes pulse{ 0%,100%{ opacity:1; } 50%{ opacity:.35; } }
+
+  .progress{ height: 5px; border-radius: 100px; background: var(--panel-2); overflow:hidden; }
+  .progress > span{
+    display:block; height:100%; background: var(--st-working-ink); border-radius: 100px;
+    width: 0%; transition: width .5s ease;
+  }
+  .art-step{ font-size: 11.5px; color: var(--ink-dim); display:flex; justify-content:space-between; }
+
+  .buddy-box{
+    background: var(--st-paused-bg); border: 1px solid var(--st-paused-ink);
+    border-radius: 8px; padding: 9px 10px; margin-top: 2px;
+  }
+  .buddy-box p{ margin: 0 0 8px; font-size: 12px; color: var(--st-paused-ink); }
+  .buddy-actions{ display:flex; gap:8px; }
+
+  /* ---------- preview pane ---------- */
+  .preview-pane{
+    display:flex; flex-direction:column; min-width:0; min-height:0;
+    border: 1px solid var(--border); border-radius: 12px; background: var(--panel); overflow:hidden;
+  }
+  .preview-head{
+    display:flex; align-items:center; justify-content:space-between; gap: 12px;
+    padding: 12px 16px; border-bottom: 1px solid var(--border); flex-wrap:wrap;
+  }
+  .preview-title{ display:flex; flex-direction:column; gap: 2px; min-width:0; }
+  .preview-title strong{ font-size: 14px; }
+  .preview-title span{ font-size: 11.5px; color: var(--ink-faint); font-family: var(--font-mono); overflow:hidden; text-overflow:ellipsis; white-space:nowrap; }
+  .seg{ display:flex; border: 1px solid var(--border); border-radius: 8px; overflow:hidden; flex:none; }
+  .seg button{
+    appearance:none; border:none; background: var(--panel); color: var(--ink-dim);
+    padding: 6px 11px; font-size:12px; font-weight:500; cursor:pointer; font-family: var(--font-ui);
+  }
+  .seg button + button{ border-left: 1px solid var(--border); }
+  .seg button[aria-pressed="true"]{ background: var(--panel-2); color: var(--ink); }
+
+  .preview-body{ flex:1; min-height: 0; position:relative; background: var(--panel-2); }
+  .preview-body iframe{ width:100%; height:100%; border:0; display:block; background:#fff; }
+  .preview-body pre{
+    margin:0; padding: 16px; height:100%; overflow:auto; font-family: var(--font-mono); font-size: 12px;
+    color: var(--ink-dim); white-space: pre-wrap; word-break: break-word; background: var(--panel);
+  }
+  .preview-empty{
+    position:absolute; inset:0; display:flex; flex-direction:column; align-items:center; justify-content:center;
+    gap:8px; color: var(--ink-faint); text-align:center; padding: 20px;
+  }
+
+  /* ---------- modal ---------- */
+  .modal-overlay{
+    position: fixed; inset:0; background: rgba(10,12,10,.42); backdrop-filter: blur(1px);
+    display:flex; align-items:center; justify-content:center; z-index: 50; padding: 16px;
+  }
+  .modal-overlay[hidden]{ display:none; }
+  .modal{
+    width: 420px; max-width: 100%; background: var(--panel); border: 1px solid var(--border);
+    border-radius: 14px; padding: 22px; box-shadow: var(--shadow-2);
+    display:flex; flex-direction:column; gap: 16px;
+  }
+  .modal h2{ font-size: 16px; }
+  .field{ display:flex; flex-direction:column; gap:6px; }
+  .field label{ font-size: 12.5px; font-weight:600; color: var(--ink-dim); }
+  .field input[type="text"]{
+    font: inherit; padding: 9px 11px; border-radius: 8px; border: 1px solid var(--border);
+    background: var(--bg); color: var(--ink);
+  }
+  .type-choices{ display:flex; flex-direction:column; gap:8px; }
+  .type-choice{
+    display:flex; align-items:flex-start; gap:10px; border:1px solid var(--border); border-radius:9px;
+    padding: 10px 11px; cursor:pointer;
+  }
+  .type-choice:has(input:checked){ border-color: var(--accent); background: var(--accent-soft); }
+  .type-choice input{ margin-top: 3px; accent-color: var(--accent); }
+  .type-choice-text strong{ display:block; font-size: 13px; }
+  .type-choice-text span{ font-size: 11.5px; color: var(--ink-dim); }
+  .modal-actions{ display:flex; justify-content:flex-end; gap:10px; margin-top: 4px; }
+
+  /* ---------- responsive ---------- */
+  @media (max-width: 860px){
+    .app{ grid-template-columns: 1fr; }
+    .sidebar{
+      flex-direction: row; align-items:center; overflow-x:auto; border-right:none; border-bottom: 1px solid var(--border);
+      padding: 10px 12px;
+    }
+    .brand{ border-bottom:none; padding: 0 12px 0 0; border-right: 1px solid var(--border); }
+    .worklist{ flex-direction: row; overflow-x:auto; }
+    .worklist-item{ min-width: 190px; }
+    .sidebar-footer{ display:none; }
+    .workheader, .view{ padding-left: 16px; padding-right: 16px; }
+    .artefatos-grid{ grid-template-columns: 1fr; }
+    .preview-pane{ min-height: 360px; }
+    .wiki-grid{ grid-template-columns: 1fr; }
+  }
+</style>
+</head>
+<body>
+
+<div class="app">
+  <aside class="sidebar">
+    <div class="brand">
+      <div class="brand-mark">S</div>
+      <div class="brand-text">
+        <strong>Senpai</strong>
+        <span>protocolo de refinamento</span>
+      </div>
+    </div>
+
+    <button class="btn btn-primary btn-block" id="btn-new-workitem">
+      <svg width="14" height="14" viewBox="0 0 16 16" fill="none"><path d="M8 3v10M3 8h10" stroke="currentColor" stroke-width="1.6" stroke-linecap="round"/></svg>
+      Novo work-item
+    </button>
+
+    <div>
+      <div class="sidebar-section-label">Work-items</div>
+      <ul class="worklist" id="worklist"></ul>
+    </div>
+
+    <div class="sidebar-footer">
+      <div class="conn"><span class="conn-dot"></span> mhl serve mcp · conectado</div>
+      <div class="path">stdio · workflows/</div>
+      <div class="agent-line">agente ativo: <b id="sf-agent">—</b> · local</div>
+    </div>
+  </aside>
+
+  <main class="main">
+    <div class="workheader">
+      <div class="workheader-top">
+        <div>
+          <div class="workheader-id">
+            <h1 id="wh-name">—</h1>
+            <span class="badge" id="wh-type">—</span>
+            <span class="badge badge-level" id="wh-level">—</span>
+          </div>
+          <div class="workheader-sub">criado em <span class="mono" id="wh-created">—</span> · <span class="mono" id="wh-id">—</span></div>
+        </div>
+        <div class="usage-stat" id="wh-usage" title="Soma de tokens de entrada + saída de todas as gerações concluídas deste work-item (WorkItem action:usage)">
+          <span class="label">Tokens usados</span>
+          <span class="value" id="wh-usage-value">—</span>
+        </div>
+      </div>
+      <div class="tabs" role="tablist">
+        <button class="tab" role="tab" data-tab="fontes">Fontes</button>
+        <button class="tab" role="tab" data-tab="wiki">Wiki</button>
+        <button class="tab" role="tab" data-tab="artefatos">Artefatos</button>
+      </div>
+    </div>
+
+    <section class="view" id="view-fontes" data-view="fontes"></section>
+    <section class="view" id="view-wiki" data-view="wiki"></section>
+    <section class="view" id="view-artefatos" data-view="artefatos">
+      <div class="artefatos-grid">
+        <div class="artefatos-list" id="artefatos-list"></div>
+        <div class="preview-pane" id="preview-pane">
+          <div class="preview-head">
+            <div class="preview-title">
+              <strong id="pv-title">—</strong>
+              <span id="pv-path" class="mono">—</span>
+            </div>
+            <div class="seg" id="pv-seg">
+              <button data-mode="rendered" aria-pressed="true">Renderizado</button>
+              <button data-mode="source" aria-pressed="false">Fonte</button>
+            </div>
+          </div>
+          <div class="preview-body" id="pv-body"></div>
+        </div>
+      </div>
+    </section>
+  </main>
+</div>
+
+<div class="modal-overlay" id="modal-overlay" hidden>
+  <div class="modal" role="dialog" aria-modal="true" aria-labelledby="modal-title">
+    <h2 id="modal-title">Novo work-item</h2>
+    <div class="field">
+      <label for="wi-name">Nome</label>
+      <input type="text" id="wi-name" placeholder="Ex.: Integração PIX">
+    </div>
+    <div class="field">
+      <label>Tipo</label>
+      <div class="type-choices">
+        <label class="type-choice">
+          <input type="radio" name="wi-type" value="oportunidade" checked>
+          <span class="type-choice-text"><strong>Oportunidade (Discovery)</strong><span>Exploração estratégica — pode se desdobrar num backlog de features e histórias.</span></span>
+        </label>
+        <label class="type-choice">
+          <input type="radio" name="wi-type" value="feature">
+          <span class="type-choice-text"><strong>Feature (Delivery standalone)</strong><span>Detalhamento técnico direto de uma feature, sem Oportunidade-mãe.</span></span>
+        </label>
+        <label class="type-choice">
+          <input type="radio" name="wi-type" value="historia">
+          <span class="type-choice-text"><strong>História (Delivery standalone)</strong><span>Uma história de usuário isolada, sem quebras.</span></span>
+        </label>
+      </div>
+    </div>
+    <div class="modal-actions">
+      <button class="btn btn-ghost" id="btn-cancel-modal">Cancelar</button>
+      <button class="btn btn-primary" id="btn-create-workitem">Criar work-item</button>
+    </div>
+  </div>
+</div>
+
+<script>
+(function(){
+
+  var DOC_STYLE = "body{margin:0;padding:40px 48px;font-family:Georgia,'Times New Roman',serif;color:#232323;background:#fff;line-height:1.6;max-width:680px}"+
+    "h1{font-family:-apple-system,'Segoe UI',sans-serif;font-size:22px;margin:0 0 4px}"+
+    ".kicker{font-family:ui-monospace,'IBM Plex Mono',monospace;font-size:11px;letter-spacing:.06em;text-transform:uppercase;color:#8a6a10;background:#f7ecc9;display:inline-block;padding:2px 8px;border-radius:100px;margin-bottom:10px}"+
+    "h2{font-family:-apple-system,'Segoe UI',sans-serif;font-size:13px;text-transform:uppercase;letter-spacing:.05em;color:#8a8a8a;margin:28px 0 8px;border-top:1px solid #e6e6e6;padding-top:16px}"+
+    "p{margin:0 0 10px}ul{margin:0;padding-left:20px}li{margin-bottom:6px}"+
+    ".meta{margin-top:36px;padding-top:12px;border-top:1px solid #e6e6e6;font-family:ui-monospace,'IBM Plex Mono',monospace;font-size:11px;color:#9a9a9a}";
+
+  function doc(title, kicker, bodyHtml, meta){
+    return "<style>"+DOC_STYLE+"</style><h1>"+title+"</h1>"+(kicker?'<div class="kicker">'+kicker+'</div>':'')+bodyHtml+'<div class="meta">'+meta+'</div>';
+  }
+
+  var briefHtml = doc("Brief — Checkout renovado", null,
+    "<p><strong>Problema.</strong> 34% dos carrinhos são abandonados na etapa de pagamento. A pesquisa com usuários (fev/2026) e a transcrição da entrevista com o time de Pagamentos apontam o mesmo gargalo: o formulário de cartão pede dados demais antes de mostrar o total com frete.</p>"+
+    "<h2>Objetivos</h2><ul><li>Reduzir abandono na etapa de pagamento em pelo menos 8 pontos percentuais.</li><li>Oferecer checkout em uma etapa para usuário logado.</li><li>Manter suporte a checkout convidado sem criar conta.</li></ul>"+
+    "<h2>Stakeholders</h2><ul><li>Time de Pagamentos — dono do gateway PSP</li><li>Time de Growth — métricas de conversão</li><li>Suporte — volume de chamados por falha de pagamento</li></ul>",
+    "gerado em 18/02/2026 19:42 · artifacts/brief.html · claude · 2.140 &rarr; 610 tokens");
+
+  var atributosHtml = doc("Atributos de Qualidade — Checkout renovado", null,
+    "<h2>Desempenho</h2><p>Tempo até o primeiro pagamento tentado abaixo de 2.5s em 4G, do clique em \"finalizar compra\".</p>"+
+    "<h2>Segurança</h2><p>Nenhum dado de cartão persistido fora do gateway PSP; tokenização obrigatória em todo fluxo novo.</p>"+
+    "<h2>Confiabilidade</h2><p>Falha do PSP não pode travar o carrinho — fallback com nova tentativa e mensagem clara.</p>",
+    "gerado em 18/02/2026 19:47 · artifacts/atributos.html · claude · 1.380 &rarr; 340 tokens");
+
+  var reqPartialHtml = doc("Requisitos — Checkout renovado", "gerando",
+    "<p>A LLM ainda está escrevendo este artefato. A pré-visualização fica disponível assim que o passo <em>Render</em> gravar o arquivo.</p>",
+    "iniciado há 14s · artifacts/requisitos.html (ainda não existe)");
+
+  var derBlockedHtml = doc("DER — Checkout renovado", "bloqueado",
+    "<p>Depende de <strong>Requisitos</strong>, que ainda está em geração. Discovery só lê a Wiki e artefatos já gerados — sem Requisitos prontos, o DER não tem o que ler.</p>",
+    "artifacts/der.html (ainda não existe)");
+
+  var adrBlockedHtml = derBlockedHtml.replace("DER", "ADR").replace("der.html","adr/");
+
+  var featuresBlockedHtml = doc("Feature List — Checkout renovado", "bloqueado",
+    "<p>Depende de <strong>Requisitos</strong>. Assim que Requisitos completar, este artefato libera.</p>",
+    "artifacts/features/ (ainda não existe)");
+
+  var historiasBlockedHtml = doc("Histórias — Checkout renovado", "bloqueado",
+    "<p>Depende de <strong>Features</strong>. Gerada uma feature por vez, com id sequencial (FT001, FT002…).</p>",
+    "artifacts/historias/ (ainda não existe)");
+
+  var diagramSvg = '<div style="display:flex;flex-direction:column;gap:18px;align-items:center;padding:8px 0 4px">'+
+    '<svg width="520" height="230" viewBox="0 0 520 230" xmlns="http://www.w3.org/2000/svg">'+
+      '<rect x="8" y="8" width="504" height="214" rx="10" fill="none" stroke="#d9dcd3" stroke-dasharray="4 4"/>'+
+      '<text x="20" y="26" font-family="IBM Plex Mono, monospace" font-size="10" fill="#8a9088">C4 · Contexto</text>'+
+      '<rect x="30" y="50" width="120" height="56" rx="8" fill="#dde8f6" stroke="#2f5f9e"/>'+
+      '<text x="90" y="74" font-family="-apple-system,sans-serif" font-size="12" fill="#1d2320" text-anchor="middle" font-weight="600">Usuário</text>'+
+      '<text x="90" y="90" font-family="-apple-system,sans-serif" font-size="10" fill="#5b6259" text-anchor="middle">pessoa</text>'+
+      '<rect x="200" y="42" width="150" height="70" rx="8" fill="#f3e2d2" stroke="#a85a26"/>'+
+      '<text x="275" y="70" font-family="-apple-system,sans-serif" font-size="12" fill="#1d2320" text-anchor="middle" font-weight="600">Checkout</text>'+
+      '<text x="275" y="86" font-family="-apple-system,sans-serif" font-size="10" fill="#5b6259" text-anchor="middle">sistema em foco</text>'+
+      '<rect x="390" y="50" width="110" height="56" rx="8" fill="#dcefdf" stroke="#2c7a4b"/>'+
+      '<text x="445" y="74" font-family="-apple-system,sans-serif" font-size="12" fill="#1d2320" text-anchor="middle" font-weight="600">Gateway PSP</text>'+
+      '<text x="445" y="90" font-family="-apple-system,sans-serif" font-size="10" fill="#5b6259" text-anchor="middle">sistema externo</text>'+
+      '<line x1="150" y1="78" x2="198" y2="76" stroke="#8a9088" stroke-width="1.4" marker-end="url(#arrow)"/>'+
+      '<line x1="350" y1="76" x2="388" y2="76" stroke="#8a9088" stroke-width="1.4" marker-end="url(#arrow)"/>'+
+      '<text x="174" y="68" font-family="IBM Plex Mono, monospace" font-size="9" fill="#5b6259" text-anchor="middle">inicia compra</text>'+
+      '<text x="369" y="68" font-family="IBM Plex Mono, monospace" font-size="9" fill="#5b6259" text-anchor="middle">tokeniza</text>'+
+      '<defs><marker id="arrow" markerWidth="8" markerHeight="8" refX="6" refY="3" orient="auto"><path d="M0,0 L6,3 L0,6 Z" fill="#8a9088"/></marker></defs>'+
+      '<rect x="60" y="150" width="150" height="56" rx="8" fill="#dde8f6" stroke="#2f5f9e"/>'+
+      '<text x="135" y="174" font-family="-apple-system,sans-serif" font-size="12" fill="#1d2320" text-anchor="middle" font-weight="600">App / Web</text>'+
+      '<text x="135" y="190" font-family="-apple-system,sans-serif" font-size="10" fill="#5b6259" text-anchor="middle">container</text>'+
+      '<rect x="300" y="150" width="150" height="56" rx="8" fill="#dde8f6" stroke="#2f5f9e"/>'+
+      '<text x="375" y="174" font-family="-apple-system,sans-serif" font-size="12" fill="#1d2320" text-anchor="middle" font-weight="600">Serviço de Pedidos</text>'+
+      '<text x="375" y="190" font-family="-apple-system,sans-serif" font-size="10" fill="#5b6259" text-anchor="middle">container</text>'+
+      '<line x1="210" y1="178" x2="298" y2="178" stroke="#8a9088" stroke-width="1.4" marker-end="url(#arrow)"/>'+
+    '</svg></div>';
+
+  var diagramasHtml = doc("Diagramas C4 — Checkout renovado", null,
+    "<p>Diagrama de contexto gerado a partir da Wiki + Requisitos. Sintaxe fonte em Mermaid C4, renderizada no momento da pré-visualização.</p>"+diagramSvg,
+    "aprovado e gravado em 19/02/2026 08:15 · artifacts/diagramas/contexto.html · claude · 1.050 &rarr; 290 tokens");
+
+  var diagramasMermaidSrc = "C4Context\n"+
+    "  title Contexto — Checkout renovado\n"+
+    "  Person(user, \"Usuário\")\n"+
+    "  System(checkout, \"Checkout\")\n"+
+    "  System_Ext(psp, \"Gateway PSP\")\n"+
+    "  Rel(user, checkout, \"inicia compra\")\n"+
+    "  Rel(checkout, psp, \"tokeniza cartão\")";
+
+  var pushBriefHtml = doc("Brief — Notificações push", null,
+    "<p><strong>Problema.</strong> Usuários que desativam notificações no primeiro dia raramente voltam a ativar; o opt-in atual pede permissão na abertura do app, sem contexto.</p>"+
+    "<h2>Objetivos</h2><ul><li>Opt-in gradual, pedido no momento certo (ex.: após o primeiro pedido).</li><li>Deep link direto para o pedido a partir da notificação.</li></ul>",
+    "gerado em 10/03/2026 11:02 · artifacts/brief.html · codex · 1.120 &rarr; 350 tokens");
+
+  var pushRequisitosHtml = doc("Requisitos — Notificações push", null,
+    "<h2>Funcionais</h2><ul><li>Prompt de opt-in exibido só após o primeiro pedido concluído.</li><li>Notificação de status de pedido com deep link.</li></ul>"+
+    "<h2>Não funcionais</h2><ul><li>Compatível com FCM (Android) e APNs (iOS).</li></ul>",
+    "gerado em 10/03/2026 11:19 · artifacts/requisitos.html · codex · 980 &rarr; 410 tokens");
+
+  var pushBlocked = function(name, path){
+    return doc(name+" — Notificações push", "bloqueado", "<p>Depende de Requisitos + ADR + DER, ainda não gerados para esta feature.</p>", path+" (ainda não existe)");
+  };
+
+  var pixEmptyNote = "Gere a Wiki antes de criar artefatos — Discovery/Delivery só leem <span class=\"mono\">wiki/</span> e artefatos já gerados, nunca <span class=\"mono\">raw/</span> diretamente.";
+
+  var workItems = {
+    checkout: {
+      name: "Checkout renovado",
+      type: "Oportunidade",
+      level: "Discovery",
+      created: "18/02/2026",
+      id: "wi_8f2a1c",
+      progress: "2/8",
+      agent: "claude",
+      sources: [
+        { name: "ata-kickoff.pdf", ext:"pdf", size:"2.1 MB", date:"18/02", ingested:true },
+        { name: "pesquisa-usuarios.pdf", ext:"pdf", size:"4.8 MB", date:"18/02", ingested:true },
+        { name: "transcricao-entrevista-pagamentos.txt", ext:"txt", size:"340 KB", date:"19/02", ingested:true },
+        { name: "print-fluxo-atual.png", ext:"png", size:"1.2 MB", date:"19/02", ingested:false }
+      ],
+      wiki: {
+        entities: [
+          { title:"Time de Pagamentos", sum:"Dono do gateway PSP e das regras de tokenização." },
+          { title:"Gateway PSP", sum:"Processa cartão; exige tokenização antes de qualquer persistência." },
+          { title:"Usuário Convidado", sum:"Compra sem criar conta — fluxo hoje mais longo que o logado." }
+        ],
+        concepts: [
+          { title:"Checkout em uma etapa", sum:"Endereço, frete e pagamento numa única tela para usuário logado." },
+          { title:"Abandono de carrinho", sum:"34% no passo de pagamento, segundo a pesquisa de fev/2026." },
+          { title:"Tokenização de cartão", sum:"Nenhum dado de cartão persiste fora do PSP." }
+        ],
+        sourcesPages: [
+          { title:"ata-kickoff.pdf", sum:"Decisão de escopo: manter checkout convidado no v1." },
+          { title:"pesquisa-usuarios.pdf", sum:"12 entrevistas; gargalo recorrente no formulário de cartão." },
+          { title:"transcricao-entrevista-pagamentos.txt", sum:"Time de Pagamentos confirma tokenização como bloqueio técnico." }
+        ],
+        log: [
+          "## [2026-02-19] ingest · transcricao-entrevista-pagamentos.txt",
+          "## [2026-02-19] ingest · print-fluxo-atual.png",
+          "## [2026-02-18] ingest · pesquisa-usuarios.pdf",
+          "## [2026-02-18] ingest · ata-kickoff.pdf"
+        ]
+      },
+      artifacts: [
+        { id:"brief", name:"Brief", status:"completed", updated:"há 6 min", path:"artifacts/brief.html", html: briefHtml, tokensIn:2140, tokensOut:610 },
+        { id:"atributos", name:"Atributos de Qualidade", status:"completed", updated:"há 6 min", path:"artifacts/atributos.html", html: atributosHtml, tokensIn:1380, tokensOut:340 },
+        { id:"requisitos", name:"Requisitos", status:"working", step:"Escrevendo (LLM)", stepIndex:2, stepTotal:4, path:"artifacts/requisitos.html", html: reqPartialHtml, tokensIn:1600, tokensOut:0 },
+        { id:"adr", name:"ADR", status:"pending", note:"depende de Requisitos", path:"artifacts/adr/", html: adrBlockedHtml },
+        { id:"der", name:"DER", status:"pending", note:"depende de Requisitos", path:"artifacts/der.html", html: derBlockedHtml },
+        { id:"diagramas", name:"Diagramas C4", status:"paused", reason:"Revisar diagrama de contexto antes de gravar", mermaid: diagramasMermaidSrc, path:"artifacts/diagramas/contexto.html", html: diagramasHtml, tokensIn:1050, tokensOut:290 },
+        { id:"features", name:"Features", status:"pending", note:"depende de Requisitos", path:"artifacts/features/", html: featuresBlockedHtml },
+        { id:"historias", name:"Histórias", status:"pending", note:"depende de Features", path:"artifacts/historias/", html: historiasBlockedHtml }
+      ],
+      defaultArtifact: "brief"
+    },
+
+    push: {
+      name: "Notificações push",
+      type: "Feature",
+      level: "Delivery · standalone",
+      created: "10/03/2026",
+      id: "wi_51d0e7",
+      progress: "2/6",
+      agent: "codex",
+      sources: [
+        { name:"spec-notificacoes.md", ext:"md", size:"18 KB", date:"10/03", ingested:true },
+        { name:"benchmark-concorrentes.pdf", ext:"pdf", size:"3.4 MB", date:"10/03", ingested:true }
+      ],
+      wiki: {
+        entities: [ { title:"Serviço de Push (FCM/APNs)", sum:"Provider único abstraindo Android e iOS." } ],
+        concepts: [
+          { title:"Opt-in gradual", sum:"Permissão pedida após o primeiro pedido, não na abertura do app." },
+          { title:"Deep link", sum:"Notificação leva direto à tela do pedido." }
+        ],
+        sourcesPages: [
+          { title:"spec-notificacoes.md", sum:"Especificação inicial do time de produto." },
+          { title:"benchmark-concorrentes.pdf", sum:"3 concorrentes usam opt-in gradual; taxa de ativação maior." }
+        ],
+        log: [
+          "## [2026-03-10] ingest · benchmark-concorrentes.pdf",
+          "## [2026-03-10] ingest · spec-notificacoes.md"
+        ]
+      },
+      artifacts: [
+        { id:"brief", name:"Brief", status:"completed", updated:"há 2 dias", path:"artifacts/brief.html", html: pushBriefHtml, tokensIn:1120, tokensOut:350 },
+        { id:"requisitos", name:"Requisitos", status:"completed", updated:"há 2 dias", path:"artifacts/requisitos.html", html: pushRequisitosHtml, tokensIn:980, tokensOut:410 },
+        { id:"adr", name:"ADR", status:"pending", note:"clique para gerar", path:"artifacts/adr/", html: pushBlocked("ADR","artifacts/adr/") },
+        { id:"der", name:"DER", status:"pending", note:"clique para gerar", path:"artifacts/der.html", html: pushBlocked("DER","artifacts/der.html") },
+        { id:"diagramas", name:"Diagramas C4", status:"pending", note:"clique para gerar", path:"artifacts/diagramas/", html: pushBlocked("Diagramas C4","artifacts/diagramas/") },
+        { id:"feature", name:"Detalhamento da Feature", status:"pending", note:"artefato final · arquivo único", path:"artifacts/feature.html", html: pushBlocked("Detalhamento da Feature","artifacts/feature.html") }
+      ],
+      defaultArtifact: "brief"
+    },
+
+    pix: {
+      name: "Integração PIX",
+      type: "Oportunidade",
+      level: "Discovery",
+      created: "hoje",
+      id: "wi_c02f19",
+      progress: "—",
+      sources: [],
+      wiki: null,
+      artifacts: [],
+      defaultArtifact: null
+    }
+  };
+
+  var order = ["checkout","push","pix"];
+  var activeId = "checkout";
+  var activeArtifact = {};
+  var previewMode = "rendered";
+  var reqTimer = null, reqElapsed = 14;
+
+  function el(html){
+    var t = document.createElement("template");
+    t.innerHTML = html.trim();
+    return t.content.firstElementChild;
+  }
+  function chip(status, extra){
+    var labels = { pending:"Pendente", working:"Gerando", paused:"Aguardando aprovação", completed:"Concluído", failed:"Falhou" };
+    return '<span class="chip chip-'+status+'"><span class="chip-dot"></span>'+labels[status]+(extra?(' · '+extra):'')+'</span>';
+  }
+  function formatTokens(n){
+    if (n >= 1000) return (n/1000).toFixed(1).replace(".0","")+"k";
+    return String(n);
+  }
+  function tokensTag(a){
+    if (typeof a.tokensIn !== "number") return "";
+    var out = a.tokensOut > 0 ? formatTokens(a.tokensOut) : "…";
+    return '<span class="mono art-tokens">'+formatTokens(a.tokensIn)+' &rarr; '+out+' tokens</span>';
+  }
+  function usageTotal(w){
+    var totalIn = 0, totalOut = 0;
+    (w.artifacts || []).forEach(function(a){
+      if (typeof a.tokensIn === "number") totalIn += a.tokensIn;
+      if (typeof a.tokensOut === "number") totalOut += a.tokensOut;
+    });
+    return { in: totalIn, out: totalOut };
+  }
+  function updateUsageStat(w){
+    var u = usageTotal(w);
+    var valueEl = document.getElementById("wh-usage-value");
+    if (!u.in && !u.out){ valueEl.innerHTML = '<span>ainda sem chamadas</span>'; }
+    else { valueEl.innerHTML = formatTokens(u.in)+' <span>&rarr;</span> '+formatTokens(u.out); }
+    document.getElementById("sf-agent").textContent = w.agent || "—";
+  }
+
+  function renderSidebar(){
+    var list = document.getElementById("worklist");
+    list.innerHTML = "";
+    order.forEach(function(key){
+      var w = workItems[key];
+      var item = el(
+        '<li class="worklist-item" role="button" tabindex="0" data-id="'+key+'" aria-current="'+(key===activeId)+'">'+
+          '<div class="worklist-top"><span class="worklist-name">'+w.name+'</span><span class="type-tag">'+w.type+'</span></div>'+
+          '<div class="worklist-meta"><span>'+w.level+'</span>'+(w.progress!=="—"?'<span class="mono">· '+w.progress+'</span>':'<span>· vazio</span>')+'</div>'+
+        '</li>'
+      );
+      item.addEventListener("click", function(){ selectWorkItem(key); });
+      list.appendChild(item);
+    });
+  }
+
+  function selectWorkItem(key){
+    activeId = key;
+    if (reqTimer){ clearInterval(reqTimer); reqTimer = null; }
+    var w = workItems[key];
+    activeArtifact[key] = activeArtifact[key] || w.defaultArtifact;
+    document.getElementById("wh-name").textContent = w.name;
+    document.getElementById("wh-type").textContent = w.type;
+    document.getElementById("wh-level").textContent = w.level;
+    document.getElementById("wh-created").textContent = w.created;
+    document.getElementById("wh-id").textContent = w.id;
+    updateUsageStat(w);
+    renderSidebar();
+    renderFontes();
+    renderWiki();
+    renderArtefatos();
+    if (w.id === workItems.checkout.id) startWorkingSimulation();
+  }
+
+  function renderFontes(){
+    var w = workItems[activeId];
+    var v = document.getElementById("view-fontes");
+    var html = '<div class="dropzone">'+
+      '<svg width="30" height="30" viewBox="0 0 24 24" fill="none"><path d="M12 16V4m0 0L7 9m5-5 5 5M5 20h14" stroke="currentColor" stroke-width="1.6" stroke-linecap="round" stroke-linejoin="round"/></svg>'+
+      '<strong>Arraste arquivos ou clique para enviar</strong>'+
+      '<small>PDF, TXT, MD, imagens — cada um vira uma fonte em <span class="mono">raw/</span></small>'+
+      '</div>';
+    if (!w.sources.length){
+      html += '<div class="empty-state"><h3>Nenhuma fonte enviada ainda</h3><p>Envie ao menos um arquivo para liberar o primeiro <span class="mono">Wiki ingest</span>.</p></div>';
+    } else {
+      html += '<div class="section-label">Enviadas <span class="count">'+w.sources.length+'</span></div>';
+      w.sources.forEach(function(s){
+        html += '<div class="file-row">'+
+          '<div class="file-icon">'+s.ext+'</div>'+
+          '<div class="file-main"><div class="file-name">'+s.name+'</div><div class="file-meta">'+s.size+' · enviado '+s.date+'</div></div>'+
+          chip(s.ingested?"completed":"pending", s.ingested?"ingerido":"ingerir") +
+        '</div>';
+      });
+    }
+    v.innerHTML = html;
+  }
+
+  function renderWiki(){
+    var w = workItems[activeId];
+    var v = document.getElementById("view-wiki");
+    if (!w.wiki){
+      v.innerHTML = '<div class="empty-state"><h3>A Wiki aparece aqui depois do primeiro ingest</h3><p>'+pixEmptyNote+'</p></div>';
+      return;
+    }
+    function group(title, pages){
+      var inner = pages.map(function(p){
+        return '<div class="wiki-page"><div class="wiki-page-title">'+p.title+'</div><div class="wiki-page-sum">'+p.sum+'</div></div>';
+      }).join("");
+      return '<div><div class="section-label">'+title+' <span class="count">'+pages.length+'</span></div><div class="wiki-card">'+inner+'</div></div>';
+    }
+    var html = '<div class="wiki-grid">'+
+      group("Entidades", w.wiki.entities)+
+      group("Conceitos", w.wiki.concepts)+
+      group("Fontes (síntese)", w.wiki.sourcesPages)+
+      '</div>'+
+      '<div class="section-label">log.md</div>'+
+      '<div class="log-strip">'+ w.wiki.log.map(function(l){ return '<div class="log-line">'+l+'</div>'; }).join("") +'</div>';
+    v.innerHTML = html;
+  }
+
+  function renderArtefatos(){
+    var w = workItems[activeId];
+    var listEl = document.getElementById("artefatos-list");
+    if (!w.artifacts.length){
+      listEl.innerHTML = '';
+      document.querySelector(".preview-pane").style.display = "none";
+      var wrap = document.getElementById("view-artefatos");
+      var existingEmpty = wrap.querySelector(".empty-state");
+      if (!existingEmpty){
+        var e = el('<div class="empty-state"><h3>Ainda não há artefatos</h3><p>'+pixEmptyNote+'</p></div>');
+        wrap.querySelector(".artefatos-grid").before(e);
+      }
+      wrap.querySelector(".artefatos-grid").style.display = "none";
+      return;
+    }
+    var wrap = document.getElementById("view-artefatos");
+    var existingEmpty = wrap.querySelector(".empty-state");
+    if (existingEmpty) existingEmpty.remove();
+    wrap.querySelector(".artefatos-grid").style.display = "grid";
+    document.querySelector(".preview-pane").style.display = "flex";
+
+    listEl.innerHTML = '<div class="artefato-group-title">Discovery</div>';
+    w.artifacts.forEach(function(a){
+      var row = el(buildRow(a));
+      row.addEventListener("click", function(){
+        if (a.status === "pending" && !w.wiki) return;
+        selectArtifact(a.id);
+      });
+      listEl.appendChild(row);
+    });
+    selectArtifact(activeArtifact[activeId] || w.artifacts[0].id);
+  }
+
+  function buildRow(a){
+    var w = workItems[activeId];
+    var selected = activeArtifact[activeId] === a.id;
+    var body = '<div class="art-top"><span class="art-name">'+a.name+'</span>'+chip(a.status)+'</div>'+
+      '<div class="art-sub">'+a.path+'</div>';
+    if (a.status === "working"){
+      var pct = Math.min(95, 25 + (reqElapsed*3));
+      body += '<div class="progress"><span style="width:'+pct+'%"></span></div>'+
+        '<div class="art-step"><span>'+a.step+' · passo '+a.stepIndex+'/'+a.stepTotal+'</span><span class="mono" id="req-timer">00:'+String(reqElapsed).padStart(2,"0")+'</span></div>'+
+        '<div class="art-step"><span>'+tokensTag(a)+'</span><span></span></div>';
+    } else if (a.status === "paused"){
+      body += '<div class="art-step"><span>'+tokensTag(a)+'</span><span>chamada já feita, aguardando gravação</span></div>'+
+        '<div class="buddy-box"><p>'+a.reason+'</p><div class="buddy-actions">'+
+        '<button class="btn btn-primary btn-sm" data-approve="'+a.id+'">Aprovar e continuar</button>'+
+        '<button class="btn btn-ghost btn-sm" data-reject="'+a.id+'">Rejeitar</button>'+
+        '</div></div>';
+    } else if (a.status === "completed"){
+      body += '<div class="art-step"><span>atualizado '+a.updated+'</span><span>'+tokensTag(a)+'</span></div>';
+    } else if (a.status === "pending" && a.note){
+      body += '<div class="art-step"><span>'+a.note+'</span><span></span></div>';
+    }
+    return '<div class="art-row" role="button" tabindex="0" aria-selected="'+selected+'" data-artifact="'+a.id+'">'+body+'</div>';
+  }
+
+  function selectArtifact(id){
+    activeArtifact[activeId] = id;
+    document.querySelectorAll(".art-row").forEach(function(r){
+      r.setAttribute("aria-selected", r.getAttribute("data-artifact") === id ? "true" : "false");
+    });
+    var w = workItems[activeId];
+    var a = w.artifacts.find(function(x){ return x.id === id; });
+    if (!a) return;
+    document.getElementById("pv-title").textContent = a.name;
+    document.getElementById("pv-path").textContent = a.path;
+    renderPreviewBody(a);
+  }
+
+  function renderPreviewBody(a){
+    var body = document.getElementById("pv-body");
+    if (previewMode === "source"){
+      body.innerHTML = '<pre>'+escapeHtml(a.html)+'</pre>';
+    } else {
+      body.innerHTML = '<iframe title="pré-visualização" sandbox=""></iframe>';
+      body.querySelector("iframe").srcdoc = a.html;
+    }
+  }
+
+  function escapeHtml(s){
+    return s.replace(/&/g,"&amp;").replace(/</g,"&lt;").replace(/>/g,"&gt;");
+  }
+
+  document.getElementById("pv-seg").addEventListener("click", function(e){
+    var btn = e.target.closest("button[data-mode]");
+    if (!btn) return;
+    previewMode = btn.getAttribute("data-mode");
+    document.querySelectorAll("#pv-seg button").forEach(function(b){ b.setAttribute("aria-pressed", b===btn ? "true":"false"); });
+    var w = workItems[activeId];
+    var a = w.artifacts.find(function(x){ return x.id === activeArtifact[activeId]; });
+    if (a) renderPreviewBody(a);
+  });
+
+  document.getElementById("artefatos-list").addEventListener("click", function(e){
+    var approve = e.target.closest("[data-approve]");
+    var reject = e.target.closest("[data-reject]");
+    if (approve){
+      e.stopPropagation();
+      approveArtifact(approve.getAttribute("data-approve"));
+    } else if (reject){
+      e.stopPropagation();
+    }
+  });
+
+  function approveArtifact(id){
+    var w = workItems[activeId];
+    var a = w.artifacts.find(function(x){ return x.id === id; });
+    if (!a) return;
+    a.status = "working";
+    a.step = "Gravando artefato"; a.stepIndex = 4; a.stepTotal = 4;
+    renderArtefatos();
+    selectArtifact(id);
+    setTimeout(function(){
+      a.status = "completed";
+      a.updated = "agora";
+      renderArtefatos();
+      selectArtifact(id);
+      updateUsageStat(w);
+    }, 1100);
+  }
+
+  function startWorkingSimulation(){
+    var w = workItems.checkout;
+    var a = w.artifacts.find(function(x){ return x.id === "requisitos"; });
+    if (!a || a.status !== "working") return;
+    reqTimer = setInterval(function(){
+      reqElapsed += 1;
+      a.tokensOut = Math.min(520, reqElapsed * 24);
+      var timerEl = document.getElementById("req-timer");
+      if (timerEl) timerEl.textContent = "00:"+String(reqElapsed).padStart(2,"0");
+      var bar = document.querySelector('.art-row[data-artifact="requisitos"] .progress > span');
+      if (bar){ var pct = Math.min(95, 25 + (reqElapsed*3)); bar.style.width = pct+"%"; }
+      var tokEl = document.querySelector('.art-row[data-artifact="requisitos"] .art-tokens');
+      if (tokEl) tokEl.innerHTML = formatTokens(a.tokensIn)+' &rarr; '+formatTokens(a.tokensOut)+' tokens';
+      if (activeId === "checkout") updateUsageStat(w);
+    }, 1000);
+  }
+
+  var tabs = document.querySelectorAll(".tab");
+  tabs.forEach(function(t){
+    t.addEventListener("click", function(){
+      tabs.forEach(function(x){ x.setAttribute("aria-selected","false"); });
+      t.setAttribute("aria-selected","true");
+      document.querySelectorAll(".view").forEach(function(v){ v.removeAttribute("data-active"); });
+      document.getElementById("view-"+t.getAttribute("data-tab")).setAttribute("data-active","true");
+    });
+  });
+  document.querySelector('.tab[data-tab="artefatos"]').setAttribute("aria-selected","true");
+  document.getElementById("view-artefatos").setAttribute("data-active","true");
+
+  var overlay = document.getElementById("modal-overlay");
+  document.getElementById("btn-new-workitem").addEventListener("click", function(){ overlay.hidden = false; });
+  document.getElementById("btn-cancel-modal").addEventListener("click", function(){ overlay.hidden = true; });
+  overlay.addEventListener("click", function(e){ if (e.target === overlay) overlay.hidden = true; });
+  document.getElementById("btn-create-workitem").addEventListener("click", function(){ overlay.hidden = true; });
+  document.addEventListener("keydown", function(e){ if (e.key === "Escape") overlay.hidden = true; });
+
+  renderSidebar();
+  selectWorkItem("checkout");
+})();
+</script>
+</body>
+</html>

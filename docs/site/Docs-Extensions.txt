@@ -1,0 +1,688 @@
+
+
+Extending MHL — Runtime extension guide
+
+MHL
+
+META-HARNESS LANGUAGE
+
+⌕
+
+/
+
+PT
+
+☼
+
+GitHub ↗
+
+DOCUMENTATION
+
+Reference
+
+Extensions
+
+Servers
+
+Specification
+
+← Back to home
+
+Source ↗
+
+Official extensions ↗
+
+MHL
+
+/
+
+Documentation
+
+/
+
+Extensions
+
+No section on this page matches that search.
+
+MHL · RUNTIME EXTENSIONS · API V1
+
+Add capabilities without recompiling the runtime.
+
+An external extension is a separate executable that MHL starts on demand and talks to over newline-delimited JSON-RPC. Build a CRM connector, database client, deployment tool, or any other capability in the language you prefer.
+
+External process
+ isolated from the runtime binary
+
+API v1
+ unstable while the contract evolves
+
+manifest
+
+describe the adapter
+
+JSON-RPC
+
+exchange messages
+
+permissions
+
+control access
+
+lock
+
+pin what runs
+
+BUILT IN VS. EXTERNAL
+
+MCP and A2A are built-in extension kinds documented in the 
+Language Reference
+. This page is for developers who want to add a new kind without changing MHL itself.
+
+01
+The extension model
+
+Stable shape
+
+MHL owns orchestration and policy. Your executable owns the capability. The host starts one process on first use, reuses it for the run, multiplexes requests by id, and shuts it down at the end.
+
+1 · PROGRAM
+
+extension crm Customer
+
+Properties and method arguments are evaluated by MHL.
+
+→
+
+2 · HOST
+
+validate · route · redact
+
+The runtime checks the manifest, lock, hash, and permissions.
+
+→
+
+3 · PROCESS
+
+stdin / stdout
+
+Your executable answers newline-delimited JSON-RPC messages.
+
+01
+
+One long-lived process
+
+The executable is not restarted for every method call. It remains alive for the current MHL run.
+
+02
+
+Request ids can interleave
+
+Replies may arrive out of order. Correlate every response with the unsigned request id assigned by the sender.
+
+03
+
+Policy stays in the host
+
+Locking, permissions, secret resolution, redaction, and lifecycle enforcement are runtime responsibilities.
+
+CORE / EXTENSION BOUNDARY
+
+A concrete storage extension architecture
+
+The same process contract lets infrastructure adapters evolve outside the runtime. In this deployment example, MHL keeps orchestration behind stable interfaces while pinned store extensions own the AWS integration.
+
+MHL core and external storage extension boundary
+
+The MHL runtime core contains storage, session, run registry, token verification, and metrics interfaces with built-in implementations. A host-side consumer connects these interfaces across an out-of-process JSON-RPC boundary to pinned DynamoDB and Redis extensions, which then reach AWS managed services under declared permissions.
+
+mhl runtime core — no infra dependencies
+
+engine/runtime
+
+checkpoints
+
+mcpserver
+
+sessions · run registry
+
+execsvc — reusable run core
+
+HOST INTERFACES
+
+StateStore · SessionStore · RunRegistry
+
+KVStore · TokenVerifier · MetricsSink
+
+built-in implementation
+
+disk + in-memory — single pod, zero config, default
+
+HOST-SIDE EXTENSION CONSUMER
+
+cli/serve binds an extension.Instance at server start
+
+extension boundary — pinned, out-of-process, JSON-RPC/stdio
+
+external extensions
+
+separate repos · .mhl/extensions.lock
+
+mhl-store-dynamodb (kind: store)
+
+mhl-store-redis (kind: store)
+
+AWS managed
+
+DynamoDB · ElastiCache (Redis)
+
+credentials via secret.resolve
+
+hosts via permissions.network
+
+bind at start
+
+extension path
+
+runtime / infrastructure
+
+The runtime remains infrastructure-neutral.
+ The host binds a pinned executable once, communicates over the existing JSON-RPC/stdio contract, and keeps credentials and network access under declared permissions.
+
+02
+Project layout
+
+Required
+
+Install an extension under the project’s 
+.mhl/extensions/<id>
+ directory. A user-wide copy may live under 
+~/.mhl/extensions/<id>
+, but the project-local copy wins.
+
+Copy
+
+my-project/
+├── main.mh
+└── .mhl/
+    ├── extensions.lock                 # explicit allow-list and hashes
+    └── extensions/
+        └── com.acme.crm/
+            ├── extension.mh            # manifest and declarations
+            └── bin/crm                 # executable
+
+TRUST BOUNDARY
+
+An extension found on disk but absent from 
+extensions.lock
+ does not load. There is no automatic download; vendor the executable and pin it deliberately.
+
+03
+Describe the capability
+
+Manifest
+
+Define the extension in 
+extension.mh
+, using MHL syntax. This file contains the manifest, properties, method signatures, and documentation. The manifest is read by 
+mhl lint
+, the LSP, and extension diagnostics without spawning the process.
+
+MINIMAL 
+extension.mh
+
+Copy
+
+extensible crm {
+    manifest: {
+        id: "com.acme.crm",
+        api_version: "1",
+        executable: "bin/crm"
+    }
+}
+
+The 
+extensible <kind>
+ declaration identifies the capability. Its 
+manifest
+ block requires 
+id
+, 
+api_version
+, and 
+executable
+. Add 
+version
+ for a versioned package and 
+permissions
+ to describe its access requirements.
+
+WITH TOOLING METADATA AND PERMISSIONS
+
+A 
+properties: { name: Type }
+ block describes configuration, and bare 
+name(params) -> ReturnType
+ signatures describe methods. A leading 
+/** ... **/
+ block documents the kind; a trailing 
+/// ...
+ documents a property or method through the end of the line. These documentation forms are recognized within the 
+extensible
+ declaration.
+
+Copy
+
+/**
+Fetch a customer by id from the Acme CRM.
+**/
+extensible crm {
+    manifest: {
+        id: "com.acme.crm",
+        version: "1.2.0",
+        api_version: "1",
+        executable: "bin/crm",
+        permissions: {
+            network: ["api.acme.com"],
+            secrets: ["env(\"CRM_TOKEN\")"]
+        }
+    }
+
+    properties: {
+        endpoint: string /// The Acme API base URL.
+    }
+
+    lookup(id: string) -> object /// Fetch a customer by id.
+}
+
+Use the declared kind in a workflow
+
+The 
+kind
+ connects an MHL declaration to your adapter. Properties and method signatures provide editor and lint metadata.
+
+extension crm Customer {
+    endpoint: env("CRM_URL")
+}
+
+MHL MANIFEST
+
+Ship 
+extension.mh
+ at the extension package root, including in release archives. Keep all declarations in this file. 
+mhl lint
+ and the LSP validate the 
+extensible
+ declaration's shape: exactly one 
+manifest
+ block and no duplicate property or method names.
+
+ONE PROPERTY PER LINE
+
+A trailing 
+/// ...
+ doc-comment runs to end of line, same as any comment — so a 
+properties: { ... }
+ block's closing 
+}
+ must be on its own line (or after a property with no trailing doc-comment). Written on the same line as the last documented property, the 
+}
+ is swallowed into the comment and parsing fails later, at the next declaration, with an unrelated-looking error.
+
+04
+Implement the wire protocol
+
+API v1
+
+Use one JSON object per line on stdout and stdin. There are no framing headers or batches. Lines larger than 8 MiB are rejected. Diagnostics belong on stderr, never in the JSON-RPC stream.
+
+MESSAGE SHAPES
+
+Direction
+
+Message
+
+Purpose
+
+Host → extension
+
+initialize
+
+Negotiate API version and identify the extension. Sent once, first.
+
+Host → extension
+
+call
+
+Invoke one operation with the evaluated declaration, positional args, and named args.
+
+Host → extension
+
+shutdown
+
+Notification at the end of the run. Flush and exit 0.
+
+Extension → host
+
+log
+
+Send a diagnostic notification; the host redacts and forwards it.
+
+Extension → host
+
+secret.resolve
+
+Request one allow-listed secret reference from the host.
+
+Initialize once
+
+{ "id": 1, "method": "initialize",
+  "params": { "api_version": "1", "host": "mhl", "host_version": "1.3.4-beta.3" } }
+
+{ "id": 1, "result": {
+  "api_version": "1",
+  "extension": { "id": "com.acme.crm", "version": "1.2.0" },
+  "declarations": []
+} }
+
+Handle calls and errors
+
+{ "id": 2, "method": "call", "params": {
+  "declaration": { "kind": "crm", "name": "Customer", "props": [] },
+  "operation": "lookup",
+  "args": ["123"], "named_args": {}
+} }
+
+{ "id": 2, "result": { "id": "123" } }
+{ "id": 2, "error": { "code": "not_found", "message": "..." } }
+
+SHUTDOWN
+
+After sending 
+{ "method": "shutdown" }
+, the host closes stdin and waits about three seconds before forcing termination. Flush output and exit cleanly.
+
+05
+Use host services safely
+
+Least privilege
+
+The extension process inherits no ambient environment beyond the host-provided extension variables and the manifest’s explicit 
+env
+ entries. Credentials are obtained only through 
+secret.resolve
+ and only when the manifest’s allow-list permits the exact reference.
+
+Resolve an approved secret
+
+{ "id": 7, "method": "secret.resolve",
+  "params": { "reference": "env(\"CRM_TOKEN\")" } }
+
+{ "id": 7, "result": "secret-value" }
+{ "id": 7, "error": {
+  "code": "denied", "message": "..."
+} }
+
+Emit a diagnostic
+
+{ "method": "log",
+  "params": { "message": "fetched 12 customers" } }
+
+The host captures stderr tails and errors after redaction. Never write protocol messages to stderr.
+
+!
+
+Assume extension code is privileged.
+
+Declare network hosts and secret references explicitly. Avoid logging tokens, validate all arguments, keep stdout protocol-only, and ship the executable with a reproducible hash.
+
+ENFORCEMENT
+
+Of the manifest’s 
+permissions
+, only 
+secrets
+ is 
+enforced
+ by the host today: 
+secret.resolve
+ is denied for any reference not on the allow-list. 
+network
+, 
+filesystem
+ and 
+subprocess
+ are 
+declarations, not a sandbox
+ — the extension runs as an ordinary child process with the host’s own privileges and can reach any host, path or subprocess the OS lets that user reach. They exist for review, for an external policy layer, and for a future OS-level sandbox; the host prints a one-time notice when a manifest declares them. Run an untrusted extension inside a container or as an unprivileged user, and apply network/filesystem policy there. CLI 
+agent
+s are a separate execution path and do not carry even these declarations.
+
+06
+Build, test, and install
+
+CLI workflow
+
+The CLI scaffolds the shape, exercises the protocol, captures declarations, and installs a pinned copy into a project — from a local directory, a git remote, or a published archive.
+
+mhl extension init ext/
+
+scaffold the extension project
+
+mhl extension test ext/
+
+handshake and probe declared methods
+
+mhl extension package ext/
+
+capture handshake declarations
+
+mhl extension install ext/
+
+copy, hash, and pin the adapter
+
+mhl extension install <url>[//subdir][#ref]
+
+clone a git remote, then copy, hash, and pin
+
+mhl extension install <url>.tar.gz[#sha256=hex]
+
+download an archive, verify, copy, hash, and pin
+
+mhl extension list
+
+show locked entries and resolution
+
+mhl extension doctor
+
+validate manifest, executable, API, and hash
+
+INSTALL FROM A REMOTE
+
+# git — clone at a ref, optionally a subdirectory of a monorepo
+mhl extension install https://github.com/acme/mhl-crm.git#v1.2.0
+mhl extension install git@github.com:acme/monorepo.git//ext/crm#main
+
+# archive — a .tar.gz / .zip published to a release (what `make release` emits)
+mhl extension install https://github.com/acme/mhl-crm/releases/download/v1.2.0/mhl-crm.tar.gz
+mhl extension install https://.../mhl-crm.tar.gz#sha256=<hex from SHA256SUMS>
+
+A single string. For git: 
+//subdir
+ selects a directory inside the repo, 
+#ref
+ is a branch, tag, or commit; needs 
+git
+ on 
+PATH
+. For an archive: the URL ends 
+.tar.gz
+ / 
+.tgz
+ / 
+.zip
+, an optional 
+#sha256=<hex>
+ is checked against the download before anything is extracted, and the manifest is taken from the archive root or its single top-level directory. Both then follow the same copy → hash → pin path as a local install — the executable is never run.
+
+LOCK ENTRY
+
+{
+  "extensions": {
+    "com.acme.crm": {
+      "version": "1.2.0",
+      "sha256": "<hex sha256 of bin/crm>",
+      "source": "git@github.com:acme/monorepo.git//ext/crm#main",
+      "commit": "4a7d1ed414474e4033ac29ccb8653d9b1278fa8c"
+    }
+  }
+}
+
+source
+ is set for any remote install (the git spec, or the archive URL including its 
+#sha256=
+); 
+commit
+ only for git. A local-directory install writes just 
+version
+ and 
+sha256
+, and an older lock without the extra fields still loads.
+
+MULTIPLE PLATFORMS
+
+One package can carry every platform's binary. Alongside the plain 
+executable
+, drop a file per platform named 
+<executable>-<goos>-<goarch>
+ (
+…​-windows-amd64.exe
+ on Windows) in the same directory — the 
+extension.mh
+ is unchanged, the plain name is just the stem. 
+mhl extension install
+ resolves the running host (the plain file if present, else the 
+-<goos>-<goarch>
+ one), 
+vendors only that binary
+, and the lock pins its 
+sha256
+; a host with no matching binary fails with the list of platforms the package does provide. A conventional package layout keeps a metadata-only tree (manifest + README, for lint / review) separate from a release build that adds the per-platform 
+bin/
+ and a 
+.tar.gz
+ plus 
+SHA256SUMS
+ — all pure-Go, 
+CGO_ENABLED=0
+.
+
+!
+
+OS/architecture support is the extension vendor's responsibility.
+
+The runtime never cross-compiles, downloads, or substitutes a binary — it only resolves and pins the one that matches the host it runs on. If your users run on 
+linux/arm64
+, 
+darwin/arm64
+, Windows, or anything else, ship a binary for each: 
+mhl extension install
+ on a platform you did not build for fails outright. Publish the target list with the extension so consumers know before they try.
+
+EVERY RUN
+
+The host re-hashes the executable and refuses to run it if the digest differs from the lock. Treat the lock as the project’s explicit trust decision.
+
+07
+Release checklist
+
+Before sharing
+
+An extension is ready to distribute when another developer can install it, inspect its permissions, and diagnose a failure without reading its implementation.
+
+✓
+
+Return the same 
+api_version
+ from 
+initialize
+ that the host requested.
+
+✓
+
+Keep stdout to newline-delimited JSON-RPC and send human diagnostics to stderr.
+
+✓
+
+Declare every supported 
+kind
+, property, method, and permission in 
+extension.mh
+.
+
+✓
+
+Handle out-of-order responses and preserve request ids in every reply.
+
+✓
+
+Test initialization, successful calls, structured errors, secret denial, and graceful shutdown.
+
+✓
+
+Build a reproducible executable, run 
+mhl extension doctor
+, and commit the lock entry.
+
+✓
+
+Build a binary for 
+every
+ OS/architecture your consumers run — the runtime will not cross-compile for them — and state the supported set in the extension's README.
+
+FULL CONTRACT
+
+For the exact message contract, see the 
+external extension protocol ↗
+. The source walkthrough and manifest examples are in 
+
+tests_e2e/extensions/README.md
+ ↗
+.
+
+← Previous
+
+Reference
+
+Next →
+
+Servers
+
+ON THIS PAGE
+
+Add capabilities without recompiling the runtime.
+
+The extension model
+
+Project layout
+
+Describe the capability
+
+Implement the wire protocol
+
+Use host services safely
+
+Build, test, and install
+
+Release checklist
+
+© 2026 MHL · 
+Created by Yan Justino
+
+Specification
+
+Extensions
+
+Servers
+
+GitHub ↗
+

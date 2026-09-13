@@ -1,0 +1,2843 @@
+
+
+MHL Language Specification
+
+MHL
+
+META-HARNESS LANGUAGE
+
+⌕
+
+/
+
+PT
+
+☼
+
+GitHub ↗
+
+MHL · Language Specification · Draft
+
+Meta-Harness Language
+
+Language and Standard Library Specification
+
+Document
+ MHL-SPEC
+
+Edition
+ Current runtime profile
+
+Status
+ Evolving / alpha
+
+Language
+ English
+
+DOCUMENTATION
+
+Reference
+
+Extensions
+
+Servers
+
+Specification
+
+← Back to home
+
+Source ↗
+
+MHL
+
+/
+
+Documentation
+
+/
+
+Specification
+
+No section on this page matches that search.
+
+Abstract
+
+Status and scope
+
+Meta-Harness Language (MHL) is a declarative language for defining controlled AI-assisted automation. A program declares agents, prompts, tools, memory stores, protocol extensions, and executable pipelines. The runtime owns sequencing, branching, retries, timeouts, persistence, concurrency, verification, and termination; an agent is a replaceable participant within that harness.
+
+This specification is intentionally ECMA-like: it separates lexical and syntactic grammar from runtime semantics, defines the standard callable surface, and uses normative terms. It is a self-contained reference, not a tutorial.
+
+Current profile
+
+Behavior implemented by the reference runtime
+
+Draft
+
+May evolve before the language contract is frozen
+
+READING PATH
+
+For a guided introduction, return to the 
+MHL overview
+. For copyable examples, use the 
+practical reference
+.
+
+1. Conformance
+
+A conforming implementation MUST parse valid source according to this specification, MUST reject malformed source, and MUST implement the observable semantics of expressions, statements, declarations, and standard-library operations. An implementation MAY provide additional extension kinds, CLI integrations, or host policies, but MUST NOT change the meaning of the core language in a conforming profile.
+
+The reference implementation is the 
+mhl
+ command-line runtime. The current profile is versioned independently from this document and can be queried with 
+mhl version
+. The profile is evolving; unsupported configuration is rejected rather than silently ignored where the runtime can validate it.
+
+Conformance boundary
+The language core is deterministic for a given input and external-operation result. Agent responses, files, network services, clocks, and extension processes are host effects; their values are observable inputs to the program.
+
+2. Terms and notation
+
+Term
+
+Meaning
+
+MUST / SHALL
+
+Normative requirement for a conforming implementation or program contract.
+
+MAY
+
+Permitted behavior that is not required.
+
+raises
+
+Produces an execution error. Unless caught, it aborts the current step and run and results in a non-zero CLI status.
+
+expression
+
+A construct that evaluates to a value.
+
+statement
+
+A construct that performs an action or controls execution.
+
+declaration
+
+A top-level named capability or executable unit.
+
+host effect
+
+Process, filesystem, network, clock, memory, or extension interaction performed by the runtime.
+
+Grammar productions use 
+::=
+ for definition, square brackets for an optional item, braces for repetition, and quoted text for literal tokens. The notation 
+T[]
+ means an array whose elements have type 
+T
+. A signature ending in 
+→ null
+ returns no useful value; 
+→ never
+ always raises.
+
+3. Lexical grammar
+
+Source files normally use the 
+.mh
+ extension. The lexer MUST ignore spaces, tabs, carriage returns, newlines, and comments beginning with 
+//
+ and continuing to the end of the line.
+
+Token
+
+Form
+
+Semantics
+
+Identifier
+
+[A-Za-z_][A-Za-z0-9_]*
+
+Names declarations, variables, fields, methods, and enum variants. Keywords are recognized by position.
+
+String
+
+Double quoted, with backslash escapes
+
+One string value. A string is not re-tokenized when its content happens to be an operator.
+
+Multiline string
+
+""" ... """
+
+String value with the delimiters removed and surrounding whitespace trimmed.
+
+Number
+
+[0-9]+
+ or 
+[0-9]+.[0-9]+
+
+A number represented by the runtime as a floating-point value. Scientific notation is not part of the grammar.
+
+Duration
+
+[0-9]+(ms|s|m|h|d)
+
+A contextual duration literal, for example 
+250ms
+, 
+30s
+, 
+2h
+, or 
+7d
+. The numeric part is integral.
+
+Operators
+
+== != < > <= >= + - * / % ! && || ?? +=
+
+Operator tokens. Multi-character operators take precedence over their prefixes.
+
+Punctuation
+
+-> . ?. ?.[ ] ( ) { } : , .. ^ =
+
+Separates grammar constructs and forms access, calls, slices, lambdas, and assignment.
+
+Malformed numeric text
+A digit run directly followed by letters that is not a duration, such as 
+10.0d
+, 
+1e5
+, or 
+5days
+, MUST be rejected as a malformed number.
+
+4. Syntactic grammar
+
+The following is a compact grammar. The complete behavior of each production is specified in the subsequent clauses.
+
+program        ::= declaration*
+declaration    ::= ["export"] (import | agent | router | prompt | memory | tool | extension
+                    | pipeline | workflow | type | enum | test)
+import         ::= "import" "{" import-item ("," import-item)* "}" "from" String
+import-item    ::= Identifier ["as" Identifier]
+type-alias     ::= "type" Identifier "=" type
+type           ::= Identifier array-suffix* | object-shape array-suffix*
+object-shape   ::= "{" [shape-field (","? shape-field)* ","?] "}"
+shape-field    ::= Identifier ":" type
+expression     ::= coalesce
+coalesce       ::= or-expression ("??" or-expression)*
+or-expression  ::= and-expression ("||" and-expression)*
+and-expression ::= equality ("&&" equality)*
+equality       ::= comparison (("==" | "!=") comparison)*
+comparison     ::= additive (("<" | ">" | "<=" | ">=") additive)*
+additive       ::= multiplicative (("+" | "-") multiplicative)*
+multiplicative ::= unary (("*" | "/" | "%") unary)*
+unary          ::= ["!" | "-"] postfix
+postfix        ::= primary trailer*
+trailer        ::= "." Identifier | "?." Identifier | "?." "[" expression "]"
+                 | call | "[" expression "]" | slice
+call           ::= "(" [argument ("," argument)*] ")"
+argument       ::= [Identifier ":"] expression
+slice          ::= "[" [slice-bound] ".." [slice-bound] "]"
+slice-bound    ::= ["^"] expression
+lambda         ::= "(" [parameter ("," parameter)*] ")" "->" (expression | block)
+if-expression  ::= "if" "(" expression ")" expression "else" expression
+match          ::= "match" expression "{" match-arm+ "}"
+match-arm      ::= ("_" | expression) "->" expression
+block          ::= "{" statement* "}"
+
+A declaration body is a sequence of properties and/or declaration-specific members. Object fields may be separated by commas, line breaks, or both. MHL does not require semicolons.
+
+5. Values and types
+
+5.1 Runtime values
+
+Kind
+
+Literal / example
+
+Rules
+
+string
+
+"hello"
+
+Text. String methods operate on the runtime string representation.
+
+number
+
+42
+, 
+0.25
+
+One numeric kind; arithmetic results are numbers.
+
+bool
+
+true
+, 
+false
+
+Logical conditions MUST be boolean; MHL has no truthiness conversion.
+
+null
+
+null
+
+Absence value. It is accepted at typed boundaries and is observable with 
+is_null
+.
+
+array
+
+[1, "two", false]
+
+Ordered, zero-based collection. Elements MAY have different runtime kinds.
+
+object
+
+{name: "MHL", year: 2026}
+
+String-keyed map. Keys may be identifiers or strings.
+
+enum
+
+Status.Ready
+
+Tagged value; it is not equal to the string 
+"Ready"
+.
+
+function
+
+(x) -> x + 1
+
+Closure created by a lambda expression.
+
+task
+
+result of 
+spawn
+
+Opaque asynchronous handle with the fields defined in §16.
+
+5.2 Declared type expressions
+
+Type annotations are accepted on pipeline inputs, prompt parameters, tool parameters, tool returns, and object-shape fields. The built-in vocabulary is 
+any
+, 
+string
+, 
+number
+, 
+bool
+, 
+array
+, and 
+object
+. The compatibility spellings 
+int
+, 
+integer
+, 
+float
+, and 
+boolean
+ resolve to 
+number
+ or 
+bool
+. Prompt parameters MAY use the pseudo-type 
+prompt
+.
+
+type Slug = string
+type Issue = {code: string, severity: string}
+type IssueList = Issue[]
+
+tool Reports {
+    add(slug: Slug, issues: IssueList): string[] -> issues.map((x) -> x.code)
+}
+
+An array suffix adds one nesting level: 
+string[][]
+. An object shape requires the named fields and their types, but permits extra fields. Aliases are purely syntactic names, MAY reference other aliases, and MUST NOT be cyclic, duplicated, unknown, or shadow a reserved built-in name. A value of 
+null
+ is assignable to any declared type. Other values are checked by exact runtime kind; there is no implicit number/string conversion.
+
+Duration boundary
+Duration tokens are consumed by operations and configuration fields that explicitly expect a duration, including time arithmetic, retry delays, cache TTLs, wait/step/group timeouts, and HTTP or command timeouts. A duration is not a general-purpose declared value type in the current profile.
+
+6. Expressions
+
+6.1 Evaluation and precedence
+
+Expressions are evaluated from lowest to highest precedence in this order:
+
+??
+ → 
+||
+ → 
+&&
+ → 
+== !=
+ → 
+< > <= >=
+ → 
++ -
+ → 
+* / %
+ → unary 
+! -
+ → member, optional member, call, index, and slice.
+
+Form
+
+Semantics
+
+Literal / identifier
+
+Produces the literal or resolves a value in the current scope. Unresolved identifiers raise.
+
+a + b
+
+Numeric addition, string concatenation, or array concatenation. Other combinations raise.
+
+a - b
+, 
+a * b
+, 
+a / b
+, 
+a % b
+
+Numeric arithmetic. Division by zero raises.
+
+a == b
+, 
+a != b
+
+Type-aware deep equality; arrays and objects are compared recursively and in order.
+
+a < b
+ etc.
+
+Numeric comparison. String ordering is provided by 
+time.compare
+, not these operators.
+
+!x
+, 
+-x
+
+Boolean negation or numeric negation. The operand kind is checked.
+
+a && b
+, 
+a || b
+
+Short-circuit boolean conjunction/disjunction. Both operands MUST be boolean when evaluated.
+
+a ?? b
+
+Returns 
+a
+ unless it is 
+null
+; evaluates 
+b
+ only for null.
+
+6.2 Access, indexing, calls, and interpolation
+
+var title = record.title
+var item = items[0]
+var last = items[^1..]
+var safe = record?.metadata?.owner ?? "unknown"
+var dynamic = record?.[field_name]
+var message = "${title}: ${items.size()} items"
+var next = Transform(value: 3)
+
+Plain member access requires an object field and raises when absent. Plain array indexing is zero-based and raises outside the array. Object indexing requires a string key. Slices use an inclusive lower bound and exclusive upper bound; omitted bounds mean the beginning or end, and 
+^n
+ counts from the end. Slice results are new arrays.
+
+Optional member access (
+?.name
+) and optional dynamic indexing (
+?.[expr]
+) yield 
+null
+ for null, non-object receivers, missing object fields, or out-of-range array indexes; the remainder of the trailer chain is skipped. Calls accept positional or named arguments. A named argument has the form 
+name: expression
+.
+
+String interpolation evaluates the expression between 
+${...}
+ in the current environment. It is available in ordinary strings, multiline strings, prompt bodies, agent argument values, log paths, and memory paths. Values are formatted as strings, with structured values represented as JSON-like text.
+
+6.3 Conditionals, lambdas, and match
+
+The expression form 
+if (condition) when_true else when_false
+ evaluates exactly one branch. A lambda has the form 
+(parameters) -> expression
+ or 
+(parameters) -> { statements }
+. Tool methods and lambdas bind positional parameters left-to-right; defaulted parameters MUST be trailing for these callables.
+
+var even = values.filter((n) -> n % 2 == 0)
+var label = if (ready) "ready" else "blocked"
+var decision = match status {
+    Status.Draft     -> "hold"
+    Status.Published -> "ship"
+    _                -> "skip"
+}
+
+match
+ evaluates its subject once, tries arms top-to-bottom, and selects the first pattern deeply equal to the subject. The underscore is a wildcard. For an enum or boolean subject, a match without a wildcard MUST be exhaustive under static analysis. A match with no matching arm raises at runtime.
+
+7. Statements
+
+Statements occur in pipeline steps, tool method blocks, lambda blocks, and test descriptions. An inline statement is permitted where a braced block would otherwise occur.
+
+Statement
+
+Form
+
+Behavior
+
+Variable
+
+var x = expression
+
+Creates or rebinds a step-local value.
+
+Constant
+
+const x = expression
+
+Creates a binding that cannot be the target of 
+=
+ or 
++=
+.
+
+Assignment
+
+target = expression
+
+Updates a variable, object field, or array element.
+
+Add-assignment
+
+target += expression
+
+Equivalent to 
+target = target + expression
+.
+
+Conditional
+
+if (condition) statement [else statement]
+
+Executes the selected body.
+
+While
+
+while (condition) statement
+
+Repeats while true; the implementation caps interpreter iterations at 10,000.
+
+For-in
+
+for (var item in array) statement
+
+Evaluates an array and visits each element in order.
+
+Try
+
+try { ... } catch (err) { ... } finally { ... }
+
+Catches raised errors and executes 
+finally
+ when present.
+
+Return
+
+return [expression]
+
+Exits the current tool method or callable block. In a step it returns from the step.
+
+Break
+
+break [expression]
+
+Stops the current pipeline run and, for a loop pipeline, stops further iterations. It is not a nearest-while/for exit.
+
+Pause
+
+pause([expression])
+
+Suspends the run at this step for a human-in-the-loop hand-off — neither a failure nor a completion. The checkpoint is kept; 
+mhl run --resume
+ (or the server's 
+run/resume
+) re-enters this step with any merged inputs. It is a control signal, so 
+try/catch
+ does not catch it, and it needs no checkpoint block.
+
+Goto
+
+goto StepName
+
+Transfers to a named step. Legal only in a 
+workflow
+.
+
+Expression
+
+call(...)
+ or any expression
+
+Evaluates for its side effect or discards its value.
+
+fail(...values)
+ raises an error whose message is the formatted, space-joined values. A non-zero process exit code, an HTTP non-2xx response, and a failed assertion are values or test outcomes according to their APIs; they do not automatically become language raises unless documented otherwise.
+
+8. Programs and modules
+
+A program is a sequence of top-level declarations. There is no implicit namespace object. A declaration marked 
+export
+ is eligible for import by another file.
+
+// shared.mh
+export prompt Greeting(name: string) { "Hello, ${name}!" }
+export tool Text {
+    upper(value: string): string -> value.to_upper()
+}
+
+// main.mh
+import {Greeting, Text as TextUtil} from "shared.mh"
+pipeline Welcome {
+    input name: string
+    step Say {
+        log(Greeting(name: name))
+        log(TextUtil.upper("ready"))
+    }
+}
+
+import
+ imports an explicit list of exported names, optionally assigning a local alias. Imports are resolved transitively and flattened into the current program namespace; there is no namespace-qualified import syntax. Duplicate names, missing files, non-exported names, and alias collisions are static errors.
+
+9. Declarations
+
+The declaration keywords are 
+agent
+, 
+router
+, 
+prompt
+, 
+memory
+, 
+tool
+, 
+extension
+, 
+pipeline
+, 
+workflow
+, 
+type
+, 
+enum
+, and 
+test
+. Names are unique within the flattened program namespace.
+
+9.1 Type aliases and enumerations
+
+type UserId = string
+type User = {id: UserId, active: bool}
+enum State { Draft, Ready, Complete }
+
+An enum declares a closed set of no-payload variants. Values are constructed only through qualified access such as 
+State.Ready
+. Enum values support equality, interpolation, JSON formatting, and exhaustive 
+match
+.
+
+9.2 Tool declarations
+
+tool Files {
+    read(path: string): string -> fs.read(path)
+    count(paths: string[]): number -> {
+        var n = 0
+        for (var path in paths) { if (path.ends_with(".go")) n += 1 }
+        return n
+    }
+}
+
+A tool is a named method namespace. A method has positional parameters, optional type annotations, optional defaults, and either an expression body or a statement block. A method invocation creates a fresh call environment containing its parameters and does not expose caller-local variables. A declared return type is checked after evaluation. A block without 
+return
+ yields 
+null
+.
+
+9.3 Prompt declarations
+
+prompt Review(file: string, language: string = "English") {
+    "Review ${file}. Write the findings in ${language}."
+}
+prompt External(file: string) from "review.prompt.md"
+
+A prompt is a named template. Prompt calls bind by parameter name, and missing parameters MUST have defaults or the call raises. Extra and unknown arguments raise. A default expression is evaluated in the caller scope for prompt calls; a prompt default MAY appear in any parameter position. An external Markdown body uses the same 
+${name}
+ interpolation syntax; write 
+\${name}
+ when a literal placeholder must remain.
+
+9.4 Extension declarations
+
+extension mcp Issues {
+    transport: "http"
+    url: "https://mcp.example.test"
+    headers: {"Authorization": "Bearer " + env("ISSUES_TOKEN")}
+}
+
+The generic form is 
+extension kind Name { properties }
+. The kind selects a built-in or installed adapter. Properties are evaluated and validated by the adapter, which also defines the callable methods.
+
+10. Standard library
+
+The standard library is available without an import. It consists of global functions, methods on values, declared-capability methods, and the native namespaces in §11. The signatures below use 
+any
+ for unconstrained values and 
+...
+ for variadic arguments.
+
+10.1 Global functions
+
+Signature
+
+Semantics
+
+log(...values: any) → null
+
+Writes one space-joined line to stdout. Strings are raw, numbers are formatted compactly, and structured values are rendered as JSON.
+
+fail(...values: any) → never
+
+Raises with the same formatting used by 
+log
+. Catchable with 
+try
+.
+
+pause(reason?: any) → never
+
+Suspends the run at this step for a human-in-the-loop hand-off (state 
+paused
+, resumable) rather than failing or completing. Not catchable with 
+try
+; re-entered on 
+--resume
+ / 
+run/resume
+ with merged inputs.
+
+env(name: string) → string
+
+Reads an operating-system environment variable. An unset variable returns the empty string. Sensitive names and values are registered for redaction.
+
+nameof(Name) → string
+
+Returns the name of a top-level declaration — 
+agent
+, 
+router
+, 
+memory
+, 
+tool
+, 
+prompt
+, 
+pipeline
+/
+workflow
+, 
+extension
+, 
+type
+, or 
+enum
+ — as a string. 
+Name
+ MUST be a bare identifier read directly from the call site, not an evaluated expression; it is validated to name an actual declaration, and an unresolved or non-identifier argument is a static error at 
+mhl lint
+ time and a runtime error otherwise.
+
+type_of(value: any) → string
+
+Returns 
+string
+, 
+number
+, 
+bool
+, 
+array
+, 
+object
+, 
+null
+, 
+enum
+, 
+function
+, or 
+task
+.
+
+is_string(value: any) → bool
+
+True exactly for strings.
+
+is_number(value: any) → bool
+
+True exactly for numbers.
+
+is_bool(value: any) → bool
+
+True exactly for booleans.
+
+is_array(value: any) → bool
+
+True exactly for arrays.
+
+is_object(value: any) → bool
+
+True exactly for objects.
+
+is_null(value: any) → bool
+
+True exactly for null.
+
+is_enum(value: any) → bool
+
+True exactly for enum values.
+
+10.2 Common value methods
+
+Receiver
+
+Signature
+
+Result
+
+string, array, object
+
+size() → number
+
+String byte length, array element count, or object entry count.
+
+string, array, object
+
+is_empty() → bool
+
+Equivalent to 
+size() == 0
+.
+
+any
+
+equals(other: any) → bool
+
+Type-aware deep equality. 
+deep_equal
+ is an alias.
+
+10.3 String methods
+
+Signature
+
+Semantics
+
+split(separator: string) → string[]
+
+Splits at every occurrence. An empty separator splits into individual runtime string units.
+
+replace(old: string, new: string) → string
+
+Replaces all occurrences.
+
+contains(sub: string) → bool
+
+Tests substring presence.
+
+starts_with(prefix: string) → bool
+
+Tests prefix.
+
+ends_with(suffix: string) → bool
+
+Tests suffix.
+
+trim() → string
+
+Removes leading and trailing whitespace.
+
+to_upper() → string
+
+Returns an upper-case string.
+
+to_lower() → string
+
+Returns a lower-case string.
+
+substring(start: number, end: number) → string
+
+Returns the half-open byte range 
+[start,end)
+; bounds MUST be integral and within 
+[0,size()]
+.
+
+remove(from: number, to: number) → string
+
+Returns the string with the half-open byte range 
+[from,to)
+ removed — the complement of 
+substring
+. Bounds MUST be integral and within 
+[0,size()]
+.
+
+remove_content(from: string, to: string) → string
+
+Returns the string with the first occurrence of 
+from
+, through the end of the first 
+to
+ found after it, removed — both markers included. Raises if either marker is not found.
+
+extract_content(from: string, to: string) → string
+
+Returns only the first occurrence of 
+from
+, through the end of the first 
+to
+ found after it — both markers included; the complement of 
+remove_content
+. Raises if either marker is not found.
+
+10.4 Array methods
+
+Signature
+
+Semantics
+
+get_index(index: number) → any
+
+Returns a zero-based element; out of range raises.
+
+index_of(value: any) → number
+
+First deep-equal index, or 
+-1
+.
+
+contains(value: any) → bool
+
+Deep-equal membership test.
+
+filter(predicate: (item: any) → bool) → any[]
+
+New array containing elements for which the predicate is true.
+
+find(predicate: (item: any) → bool) → any
+
+First matching element, or 
+null
+.
+
+sort_by(key: (item: any) → any) → any[]
+
+New array sorted ascending by a number or string key.
+
+map(transform: (item: any) → any) → any[]
+
+New array containing the transform result for each element.
+
+reduce(combine: (acc: any, item: any) → any, initial: any) → any
+
+Left-to-right fold from a required initial value.
+
+any(predicate: (item: any) → bool) → bool
+
+True if at least one element matches; false for empty arrays.
+
+all(predicate: (item: any) → bool) → bool
+
+True if every element matches; true for empty arrays.
+
+append(value: any) → any[]
+
+New array with one value appended; receiver is not mutated.
+
+join(separator: string) → string
+
+Joins formatted elements using the separator.
+
+unique() → any[]
+
+New array with deep-equal duplicates removed, retaining first-occurrence order.
+
+10.5 Object methods
+
+Signature
+
+Semantics
+
+keys() → string[]
+
+Returns keys in stable sorted order.
+
+values() → any[]
+
+Returns values in the same order as 
+keys()
+.
+
+get(key: string, default?: any) → any
+
+Returns a field or default/null without raising for a missing key.
+
+Immutability and mutation
+Collection transforms, concatenation, and slices return new arrays. Plain indexed assignment such as 
+items[0] = value
+ and object-field assignment mutate the addressed collection.
+
+11. Native operations
+
+Native namespaces are reserved and can be called from pipeline statements, tool methods, hooks, and other expression positions. They execute host effects and therefore MUST be treated as privileged operations.
+
+11.1 Command execution: 
+cmd
+
+Signature
+
+Semantics
+
+cmd.exec(command: string | string[], timeout?: duration) → {stdout: string, stderr: string, exit_code: number}
+
+A string is split on whitespace without shell quoting or expansion. An argv array passes every element verbatim. Non-zero exit is returned as 
+exit_code
+; launch failure or timeout raises.
+
+cmd.exec_all(commands: (string | string[])[], timeout?: duration) → object[]
+
+Runs commands concurrently, applies timeout per command, and returns results in input order. A launch failure raises; non-zero exits remain values.
+
+11.2 Filesystem: 
+fs
+
+Signature
+
+Semantics
+
+fs.read(path: string) → string
+
+Reads the entire file; unreadable paths raise.
+
+fs.exists(path: string) → bool
+
+False only for not-found; other stat errors raise.
+
+fs.write(path: string, content: string) → bool
+
+Creates parent directories, truncates, writes, and returns true.
+
+fs.append(path: string, content: string) → bool
+
+Creates parent directories and appends.
+
+fs.delete(path: string) → bool
+
+Removes a file or empty directory. Missing targets raise.
+
+fs.join(...segments: string) → string
+
+OS-appropriate cleaned path join. At least one segment is required.
+
+fs.list(dir: string) → string[]
+
+Lists immediate entries as joined paths; it is not recursive.
+
+11.3 Directories: 
+dir
+
+Signature
+
+Semantics
+
+dir.create(path: string) → bool
+
+Creates the directory and every missing parent with host-default directory permissions, and returns true. The operation is idempotent when the directory already exists. A conflicting file or another creation failure raises.
+
+dir.exists(path: string) → bool
+
+Returns true only when the path exists and is a directory. A missing path or an existing non-directory path returns false; other stat errors raise.
+
+dir.list(path: string) → string[]
+
+Returns immediate entries as paths joined to 
+path
+, sorted by filename. The operation is not recursive. A missing or non-directory path raises.
+
+dir.delete(path: string) → bool
+
+Removes an empty directory and returns true. A file, missing path, non-empty directory, or removal failure raises. The operation MUST NOT recursively delete contents.
+
+11.4 Git: 
+git
+
+Signature
+
+Semantics
+
+git.diff(target?: string, dir?: string) → string
+
+Runs 
+git [-C dir] diff [target]
+. Non-zero exit raises.
+
+git.add(paths: string[], dir?: string) → {stdout, stderr, exit_code}
+
+Stages paths with 
+git add -A --
+. At least one path is required; exit status is inspectable.
+
+git.commit(message: string, paths?: string[], dir?: string) → {stdout, stderr, exit_code}
+
+Passes the message as one argv element. A non-empty message is required.
+
+git.status(paths?: string[], dir?: string) → {stdout, stderr, exit_code}
+
+Runs short status. A non-zero exit is inspectable.
+
+git.rev_parse(ref: string, dir?: string) → string
+
+Returns a trimmed short ref; invalid refs raise.
+
+git.log(n: number, dir?: string) → string
+
+Returns 
+git log -n n --oneline
+; 
+n
+ MUST be positive.
+
+11.5 HTTP: 
+http
+
+The operations 
+http.get
+, 
+http.post
+, 
+http.put
+, 
+http.patch
+, 
+http.delete
+, 
+http.head
+, and 
+http.options
+ share the following surface. The URL may be the first positional argument or the named 
+url:
+ argument; all other options are named.
+
+Signature / option
+
+Semantics
+
+http.<verb>(url: string, ...) → {status: number, body: string, headers: {string: string}, ok: bool, json: any}
+
+Returns the response. 
+ok
+ is true for status 200–299. A transport failure raises; non-2xx status is a value unless 
+raise_for_status: true
+.
+
+headers: {string: string}
+
+Request headers. An explicit 
+Authorization
+ wins over 
+auth:
+; sensitive authorization/cookie values are redacted.
+
+query: {string: string}
+
+URL-encodes and merges query parameters with the URL's existing query.
+
+body: any
+
+JSON-encodes the value and sets 
+Content-Type: application/json
+.
+
+text: string
+
+Sends a raw body. It is mutually exclusive with 
+body
+ and 
+form
+.
+
+form: {string: string}
+
+Sends an 
+application/x-www-form-urlencoded
+ body.
+
+timeout: duration
+
+Overrides the 30-second default request timeout.
+
+follow_redirects: bool
+
+Defaults to true. False returns the redirect response.
+
+raise_for_status: bool
+
+Defaults to false. True raises on a non-2xx response.
+
+auth: {bearer: string} | {basic: {user: string, password: string}}
+
+Creates an Authorization header unless an explicit one already exists.
+
+tls: {cert: string, key: string, ca: string, insecure: bool}
+
+Configures PEM client certificates, an extra CA bundle, or development-only server verification bypass.
+
+proxy: string
+
+Uses an explicit HTTP, HTTPS, or SOCKS5 proxy; otherwise standard proxy environment variables are honored.
+
+http.download(url: string, path: string, ...) → {status: number, path: string, bytes: number, ok: bool, headers: {string: string}}
+
+Streams a GET response to an atomic file. A non-2xx response writes no file unless raised by 
+raise_for_status
+; it accepts the request options above except a request body.
+
+For JSON responses, 
+json
+ contains the parsed body when the response content type is JSON, otherwise null. Response headers with multiple values are joined with 
+", "
+.
+
+11.6 JSON: 
+json
+
+Signature
+
+Semantics
+
+json.parse(text: string) → any
+
+Parses one JSON document; invalid JSON raises.
+
+json.parse_lines(text: string) → any[]
+
+Parses one JSON value per non-empty line.
+
+json.stringify(value: any) → string
+
+Serializes a JSON-compatible value with stable object keys.
+
+11.7 Logging: 
+log
+
+Signature
+
+Semantics
+
+log.info(...values: any) → null
+
+Writes an 
+[INFO]
+ line.
+
+log.warn(...values: any) → null
+
+Writes a 
+[WARN]
+ line.
+
+log.error(...values: any) → null
+
+Writes an 
+[ERROR]
+ line; it does not raise or change exit status.
+
+11.8 Time: 
+time
+
+Signature
+
+Semantics
+
+time.now() → string
+
+Current instant as RFC3339 UTC.
+
+time.parse(text: string, layout?: string) → string
+
+Parses and normalizes to RFC3339 UTC; default input layout is RFC3339.
+
+time.format(value: string, layout?: string) → string
+
+Formats an RFC3339 value using a Go layout or tokens such as 
+dd/MM/yyyy
+.
+
+time.add(value: string, duration: duration) → string
+
+Adds a duration and returns RFC3339 UTC.
+
+time.diff(a: string, b: string) → number
+
+Returns seconds in 
+a - b
+.
+
+time.compare(a: string, b: string) → number
+
+Returns -1, 0, or 1 for temporal ordering.
+
+time.sleep(duration: duration) → null
+
+Blocks for 
+duration
+ (e.g. 
+500ms
+, 
+2s
+). Cancellation-aware — a run-level cancel or the step's 
+timeout
+ firing interrupts it and fails the step; a non-positive value is a no-op.
+
+11.9 Identifiers: 
+uuid
+
+Signature
+
+Semantics
+
+uuid.v4() → string
+
+Random (version 4) UUID as a canonical 36-character lower-case string. An entropy failure raises.
+
+uuid.v7() → string
+
+Time-ordered (version 7) UUID — a 48-bit millisecond timestamp followed by random bits — as a canonical 36-character lower-case string. Values sort in creation order. An entropy failure raises.
+
+11.10 HTML: 
+html
+
+Parses and queries HTML built on 
+golang.org/x/net/html
+. There is no separate "element" value type: every node is a plain object with the same four keys — 
+tag
+ (the lower-cased tag name, or 
+"#text"
+/
+"#fragment"
+), 
+attrs
+ (
+{string: string}
+), 
+text
+ (a text node's content, 
+""
+ otherwise), and 
+children
+ (an array of nodes) — the same "parsed structure as plain values" contract 
+json.parse
+ follows (§11.6).
+
+Signature
+
+Semantics
+
+html.parse(text: string) → object
+
+Parses 
+text
+ as an HTML 
+fragment
+ — as if inserted into a 
+<body>
+, never wrapped in an implicit 
+<html>
+/
+<head>
+/
+<body>
+. The root is always a synthetic 
+{tag: "#fragment", ...}
+ node, regardless of whether 
+text
+ parses to one top-level element or several. Comments never appear as a node; neither does a text node that is only whitespace between tags. The underlying HTML5 algorithm recovers from malformed markup rather than rejecting it, so this does not raise in practice.
+
+html.get_element(node: object, tag?: string, attrs?: {string: string}) → object | null
+
+The first node in 
+node
+'s subtree — 
+node
+ itself included — matching 
+tag
+ (when given) and every entry of 
+attrs
+ (when given), visited depth-first/pre-order. 
+null
+ when nothing matches. Every 
+attrs
+ key matches by exact string equality, 
+except
+
+class
+, which matches when every space-separated token of the given value is present among the node's own space-separated class tokens (in any order, alongside others) — mirroring how HTML/CSS itself treats 
+class
+ as a set, not an opaque string.
+
+html.get_elements(node: object, tag?: string, attrs?: {string: string}) → object[]
+
+Every node in 
+node
+'s subtree — 
+node
+ itself included — matching 
+tag
+/
+attrs
+, in the same depth-first/pre-order 
+get_element
+ searches. An empty array when nothing matches.
+
+html.get_element_by_id(node: object, id: string) → object | null
+
+Shorthand for 
+get_element(node, attrs: {id: id})
+.
+
+html.get_attribute(element: object, name: string, default?: any) → any
+
+The value of 
+element
+'s 
+attrs[name]
+, or 
+default
+ (
+null
+ when omitted) if absent. Never raises — not even when 
+element
+ is 
+null
+ (e.g. a 
+get_element
+ miss passed straight through) or otherwise not an element node.
+
+html.get_text(node: object) → string
+
+Concatenates the content of every 
+"#text"
+ descendant of 
+node
+ — 
+node
+ itself included, if it is one — in document order, with no separator inserted between sibling text runs (the DOM 
+textContent
+ equivalent).
+
+html.to_html(node: object) → string
+
+Serializes 
+node
+ back to an HTML string — the inverse of 
+html.parse
+. A 
+"#fragment"
+ node serializes each of its children in turn, since a fragment itself is not one real tag. Attribute order is not preserved across a parse→serialize round trip, since 
+attrs
+ is stored as an object keyed by name, not an ordered list.
+
+12. Agents and traffic control
+
+An agent declaration creates a callable single-shot backend. The call form is 
+Name.run(prompt: ...)
+; the prompt MUST be non-empty. An optional 
+schema:
+ argument is a string and is passed to backends that support structured output.
+
+12.1 CLI and Ollama profiles
+
+agent Reviewer {
+    engine: "cli/claude-code"
+    command: "claude"
+    args: ["-p", "${prompt}", "--output-format", "json"]
+    log: "logs/reviewer.${context.session_id}.log"
+}
+agent LocalModel {
+    engine: "ollama/qwen2.5-coder"
+    endpoint: "http://localhost:11434"
+    temperature: 0.1
+}
+
+If 
+engine
+ is absent or begins with 
+cli/
+, the runtime uses 
+command
+ and optional 
+args
+. Each array element is one process argument; 
+${prompt}
+ and 
+${schema}
+ placeholders are injected without shell splitting. If 
+engine
+ begins with 
+ollama/
+, the suffix is the model name and 
+endpoint
+ is required.
+
+12.2 Hooks, fallbacks, retry, cache, and rate limits
+
+Property
+
+Contract
+
+before
+
+A zero-parameter lambda. Its returned object contributes bindings to prompt and schema interpolation. It may call tools, extensions, agents, native operations, and memory.
+
+after
+
+A zero-parameter lambda with the final response bound as 
+result
+. A returned string replaces the response; no return passes it through.
+
+fallback
+
+Array of declared agent names or inline agent objects. Each is tried after the previous leg fails; a successful fallback still invokes the primary agent's 
+after
+ hook.
+
+retry
+
+{max_attempts, delay, retry_on, backoff}
+. The only backoff value currently supported is 
+"exponential"
+. Absent retry runs once.
+
+cache
+
+{ttl, storage, strategy}
+. Cache keys include engine, prompt, and schema. The only strategy currently supported is exact matching; 
+storage: "disk"
+ persists it.
+
+rate_limit
+
+{requests_per_minute, concurrency, on_exceeded}
+. Exceeded work queues; the supported value is 
+"queue"
+.
+
+trace
+
+When true, emits call/response trace lines. Sensitive values remain subject to redaction.
+
+description
+
+Optional string. Carries no runtime behavior for the agent itself; a 
+router
+'s decision cascade (§13) appends it after the agent's name in the decision prompt when declared.
+
+Agent errors are eligible for retry according to 
+retry_on
+, then fallbacks are attempted. A cache hit bypasses the external call and retry path. Agent log paths interpolate like strings and append raw CLI stdout; the log property is ignored for spawned calls, whose output is buffered and merged by the step.
+
+13. Routers
+
+A router declaration selects one of a fixed set of already-declared agents to handle a given prompt. The call form is 
+Name.delegate(prompt: ...)
+; the prompt MUST be non-empty. The chosen agent then runs with the same call arguments and its response is returned unchanged.
+
+13.1 Declaration and decision order
+
+agent Billing { command: "claude" args: ["-p", "${prompt}"] }
+agent Support { command: "claude" args: ["-p", "${prompt}"] }
+agent Judge { engine: "cli/claude-code" command: "claude" args: ["-p", "${prompt}"] }
+
+router Frontdesk {
+    agents: [Billing, Support]
+    select: (prompt) -> {
+        if (prompt.contains("invoice")) { return nameof(Billing) }
+        return null
+    }
+    decider: Judge
+}
+
+Resolution is hybrid: if 
+select
+ is declared, it is invoked first with the prompt bound as its one parameter. Its return is one of three shapes: 
+null
+ or absent (no decision, cascade below); a string naming an entry of 
+agents
+ (used directly, decision call skipped); or a string naming 
+no
+ entry of 
+agents
+ — always a runtime error, listing the value returned and the declared agent names, never treated the same as a 
+null
+ return. This distinction exists because a non-null, non-matching return is almost always a bug (a typo, a stale rename), not a deliberate "I couldn't decide" — silently cascading past it would risk masking that bug behind an unrelated decision-call answer. 
+nameof(Billing)
+ (§10.1) is RECOMMENDED over the string literal 
+"Billing"
+ for this return specifically: it is validated at 
+mhl lint
+ time, wherever the hook is written as an inline lambda literal.
+
+When 
+select
+ returns 
+null
+ (or is absent), the runtime falls back to a decision call through 
+decider
+, 
+if one is declared
+: 
+decider
+ names an ordinary, separately declared 
+agent
+ (or carries an inline 
+agent {...}
+ literal, resolved the same way an agent's own 
+fallback: [...]
+ entries are) — none of its 
+engine
+/
+command
+/
+args
+/
+endpoint
+/
+temperature
+/
+retry
+/
+cache
+/
+log
+/
+trace
+ configuration is duplicated onto the router itself. The runtime builds a decision prompt from the agent names — plus each agent's own optional 
+description
+ property (§12.2), appended after its name when declared — and the original prompt, and runs it through the decider exactly as it would any other 
+Name.run(...)
+ call. The decision response is matched against the declared names; no match is an error.
+
+The decision call is entirely optional. A router declares one only by declaring 
+decider
+. A router declaring no 
+decider
+ is a purely deterministic router: 
+select
+ alone MUST resolve every prompt it receives. If 
+select
+ returns 
+null
+ (or is absent) and no 
+decider
+ is declared, 
+.delegate()
+ fails with a dedicated error rather than attempting to run an unconfigured decider. A router declaring neither 
+select
+ nor 
+decider
+ can never resolve an agent and MUST be rejected as a static error.
+
+router Frontdesk {
+    agents: [Billing, Support]
+
+    // No decider declared: select alone decides.
+    select: (prompt) -> {
+        if (prompt.contains("invoice")) { return nameof(Billing) }
+        return nameof(Support)
+    }
+}
+
+13.2 Properties
+
+Property
+
+Contract
+
+agents
+
+Required array of declared agent names. Any name that does not resolve to a declared agent is a static error.
+
+select
+
+One-parameter lambda, 
+(prompt) -> ...
+. A returned string naming a declared agent resolves the call; 
+null
+ (or no return) cascades to the decision call, if one is configured; a non-null return naming no declared agent is always an error. Optional — but required, and MUST be exhaustive (never return 
+null
+), when the router declares no 
+decider
+. When written as an inline lambda literal, its body is statically checked by 
+mhl lint
+ the same way a pipeline step's statements are, including any 
+nameof(...)
+ call inside it.
+
+decider
+
+A declared agent name, or an inline 
+agent {...}
+ literal — the same two shapes as an 
+agent
+'s own 
+fallback: [...]
+ entries. The decision call runs through it via the agent's normal execution path (§12), so its own 
+engine
+/
+command
+/
+args
+/
+endpoint
+/
+temperature
+/
+retry
+/
+cache
+/
+log
+/
+trace
+/
+before
+/
+after
+ all apply. Optional — declaring no 
+decider
+ opts the router out of the LLM cascade entirely. A bare name that does not resolve to a declared agent is a static error.
+
+The chosen agent's own 
+retry
+, 
+cache
+, 
+rate_limit
+, 
+fallback
+, 
+before
+, and 
+after
+ all apply exactly as they would for a direct 
+Name.run(...)
+ call, since 
+delegate
+ ultimately runs that agent through the same execution path.
+
+14. Memory and state
+
+14.1 Named memory declarations
+
+memory Session {
+    type: "json"
+    path: ".mhl/session.json"
+}
+
+memory Audit {
+    type: "append_log"
+    path: ".mhl/audit.log"
+}
+
+memory Events {
+    type: "jsonl"
+    path: ".mhl/events.jsonl"
+}
+
+Session.set("attempt", 1)
+var attempt = Session.get("attempt", 0)
+Session.remove("attempt")
+Audit.append("pipeline started")
+Events.append({event: "started", at: time.now()})
+
+Type
+
+Required properties
+
+Methods
+
+kv
+
+store: "memory"
+
+set(key,value)
+, 
+get(key,default?)
+. Lives for one run.
+
+json
+
+path: string
+
+set(key,value)
+, 
+set(object)
+, 
+get(key,default?)
+, 
+remove(key)
+. Persists a JSON object.
+
+append_log
+
+path: string
+
+append(text)
+; one text line per call.
+
+jsonl
+
+path: string
+
+append(value)
+; writes 
+{value, ts}
+ as one JSON line.
+
+Memory signature
+
+Returns and behavior
+
+set(key: string, value: any) → any
+
+Stores and returns 
+value
+. JSON memory also accepts 
+set(values: object) → object
+ as a bulk form.
+
+get(key: string, default?: any) → any
+
+Returns the value or the supplied default; absent values otherwise yield null. JSON and KV keys support 
+::
+ navigation.
+
+remove(key: string) → bool
+
+Supported by JSON memory; removes a top-level or 
+::
+-nested key and reports whether it existed. 
+Current profile:
+ the interpreter implements it, but 
+mhl lint
+ does not yet list it among the JSON methods and reports it as an unknown method.
+
+append(text: string) → string
+
+Append-log operation. Writes one line and returns the text.
+
+append(value: any) → any
+
+JSONL operation. Writes 
+{value, ts}
+ and returns the original value.
+
+A declaration body separates its properties by line breaks, not commas — 
+type:
+ and 
+path:
+ are properties of the 
+memory
+ declaration, not fields of an object literal. Memory methods are positional. JSON memory keys MAY navigate nested objects or arrays with 
+::
+, for example 
+Session.get("config::retries", 3)
+. A missing key returns the default when supplied, otherwise null. Path-backed memory interpolates its path, so use 
+context.session_id
+ to isolate concurrent runs.
+
+14.2 Persistent pipeline variables
+
+loop pipeline Poll {
+    mem attempts = 0
+    mem status = "pending"
+    repeat: { stop_when: status == "done", max_iterations: 10 }
+    step Check {
+        attempts = attempts + 1
+        status = if (attempts >= 3) "done" else "pending"
+    }
+}
+
+mem name = expression
+ is get-or-initialize. Its initializer runs only when no value exists. A mem variable survives loop iterations and is visible to 
+repeat.stop_when
+. 
+name.reset()
+ deletes it. Pipeline-level 
+var
+ values are initialized once per ordinary run but reset between iterations of a loop pipeline.
+
+15. Extensions
+
+15.1 MCP client
+
+extension mcp Name { ... }
+ connects to a Model Context Protocol server over 
+stdio
+ or HTTP. The methods are:
+
+Signature
+
+Semantics
+
+Name.call(tool: string, arguments?: object) → any
+
+Issues 
+tools/call
+ and returns the decoded result. An input-required response raises because this client cannot elicit and resubmit input.
+
+Name.list_tools() → any
+
+Issues 
+tools/list
+.
+
+Name.discover() → any
+
+Issues 
+server/discover
+, or returns initialize identity for handshake-only servers.
+
+The protocol property accepts 
+auto
+ (default), 
+2026-07-28
+ stateless, 
+2025-11-25
+, or 
+2025-06-18
+ handshake mode. In auto mode the stateless attempt is tried first and protocol incompatibility may trigger handshake fallback. Stdio calls create a fresh process; HTTP calls are independent requests. Credentials in headers SHOULD be obtained through 
+env
+.
+
+15.2 A2A client
+
+extension a2a Name { url, headers, poll_interval?, poll_timeout? }
+ connects to a remote Agent2Agent endpoint.
+
+Signature
+
+Semantics
+
+Name.send(message: string, context?: string) → object
+
+Issues 
+message/send
+. A non-terminal task is polled with 
+tasks/get
+. Message results are normalized to 
+{kind, text, parts, message_id, context_id}
+; tasks include id, state, artifacts, history, and status.
+
+Name.agent_card() → object
+
+GETs 
+/.well-known/agent-card.json
+ from the endpoint origin.
+
+Name.get_task(id: string, history_length?: number) → object
+
+Issues 
+tasks/get
+.
+
+Name.cancel(id: string) → object
+
+Issues 
+tasks/cancel
+.
+
+Streaming, push notifications, and input-required task continuation are not implemented in the current client profile.
+
+15.3 External adapters
+
+An unknown extension kind resolves through an installed external adapter. The adapter is an executable described by a manifest, selected by a locked identifier and SHA-256 digest, and spoken to over newline-delimited JSON-RPC. The host sends 
+initialize
+, 
+call
+, and 
+shutdown
+; the adapter MAY send 
+log
+ and 
+secret.resolve
+ requests. Protocol messages belong on stdout; diagnostics belong on stderr.
+
+The manifest is 
+extension.json
+: 
+id
+, 
+api_version
+, 
+executable
+, and one or more 
+declarations
+ (
+kind
+, and optionally tooling metadata — 
+properties
+, 
+methods
+) are required; 
+permissions
+ gates secret and network access. 
+declarations
+ MAY instead live in a 
+declarations_file
+ sidecar — a JSON array/object, or the same shape in native mhl object/array syntax when the sidecar's extension is 
+.mh
+ — so tooling metadata can be regenerated without touching the manifest.
+
+{
+  "id": "com.acme.crm",
+  "api_version": "1",
+  "executable": "bin/crm",
+  "declarations": [{"kind": "crm", "methods": [{"name": "lookup"}]}]
+}
+
+An 
+extensible
+ declaration is a third, mhl-native manifest form: one 
+extension.mh
+ file folds the manifest and its declarations together, in place of 
+extension.json
+ and any sidecar. 
+manifest: { ... }
+ supplies the same fields as 
+extension.json
+'s top level; a 
+properties: { name: type }
+ block and bare 
+name(params) -> type
+ method signatures replace the JSON 
+declarations
+ array. A leading 
+/** ... **/
+ block documents the kind, and a trailing 
+/// ...
+ on a property or method line documents that entry — both read from the source text itself, not evaluated as expressions.
+
+/**
+Fetch a customer by id from the Acme CRM.
+**/
+extensible crm {
+    manifest: { id: "com.acme.crm", api_version: "1", executable: "bin/crm" }
+    properties: {
+        endpoint: string /// The Acme API base URL.
+    }
+    lookup(id: string) -> object /// Fetch a customer by id.
+}
+
+mhl extension
+ looks for 
+extension.json
+ first, then 
+extension.mh
+, in every directory it scans; the two forms are otherwise interchangeable — never both in the same directory. Use 
+mhl extension init
+, 
+test
+, 
+package
+, 
+install
+, 
+list
+, and 
+doctor
+ to create, probe, lock, and inspect adapters. See Docs-Extensions.dc.html for the full manifest schema and wire protocol.
+
+16. Pipelines and workflows
+
+A pipeline is the executable unit. Inputs are supplied by the CLI or a server adapter and are validated against their declared types. Pipeline-level variables are shared across steps; step-local variables are not visible to later steps or 
+repeat.stop_when
+.
+
+16.1 Ordered execution and checkpoints
+
+workflow Release {
+    input environment: string
+    var approved = false
+    description: "Validate and publish a release"
+    checkpoint: { enabled: true, strategy: "per_step", storage: "file", ttl: 7d }
+
+    step Validate timeout 2m {
+        var test = cmd.exec(["go", "test", "./..."], timeout: 90s)
+        if (test.exit_code != 0) fail(test.stderr)
+        approved = true
+    }
+    step Publish {
+        if (!approved) goto Validate
+        log.info("publishing to", environment)
+    }
+}
+
+A plain 
+pipeline
+ runs steps in declaration order and rejects 
+goto
+. A 
+workflow
+ has the same model but permits forward or backward jumps to its own named steps. A step timeout creates a deadline for blocking calls and fails the step when it expires. A checkpoint is saved after each completed step when per-step checkpointing is enabled; 
+mhl run ... --resume
+ re-enters after the last completed unit with a fresh timeout budget.
+
+Each checkpoint carries a digest of the pipeline it was written for — that pipeline's own declaration plus the shared declarations it may reference (agents, tools, prompts, memory, extensions, type aliases, enums, imports); positions, comments, sibling pipelines and 
+test
+ blocks are excluded — together with the runtime build version and a state-schema version. A 
+--resume
+ whose current digest differs MUST be refused rather than run stale variable state through changed control flow, unless the operator passes 
+--force
+ (mismatch becomes a warning). A newer state schema is refused regardless of 
+--force
+; a checkpoint predating the digest field resumes unconditionally.
+
+Execution is 
+at-least-once
+ per step. A checkpoint records inter-step progress, not the external effects a step produced: a step that fails (or a process that dies) after performing an effect but before its checkpoint is written re-runs that effect on 
+--resume
+; a 
+pause
+ re-enters its step; a failed 
+parallel
+ branch re-runs beside completed siblings. The runtime does not deduplicate external effects — a step that mutates an outside system MUST be made idempotent by the program (an idempotency key, check-then-act, or a prepare/apply split).
+
+Checkpoint state is JSON. A pipeline-scoped variable is checkpointable only if its value is JSON-representable — a string, number, bool, 
+null
+, or an array/object of those; resolved credentials are persisted as their reference and re-resolved on 
+--resume
+. A pipeline-scoped variable holding a value JSON cannot represent (a closure, an opaque handle) MUST fail the run at the next checkpoint rather than be silently persisted as an empty object.
+
+Explicit credential resolution MUST register the exact nonempty string independently of length, numeric/keyword appearance, or surrounding whitespace. Heuristic registration of ordinary environment reads remains separate. A whole secret value with an unambiguous reference is re-resolved on resume; embedded secrets and secrets without references are masked. Distinct references resolving to the same value in a runtime process MUST NOT silently overwrite provenance: the checkpoint records 
+env()
+-independent 
+ambiguous()
+ in its secret-reference placeholder, and resume MUST fail with an explicit ambiguity error. This ambiguity remains for the lifetime of the process. Registration is process-wide; even a short explicitly resolved secret masks matching text in other output from that process.
+
+16.2 Loop pipelines
+
+Prefix either form with 
+loop
+ and add 
+repeat: {stop_when, max_iterations}
+. A 
+max <N>
+ header clause — 
+loop workflow Refine max 3 { ... }
+ — is shorthand for 
+repeat: {max_iterations: N}
+ when a fixed iteration ceiling is the whole repeat policy; declaring both the clause and an explicit 
+repeat
+
+max_iterations
+ is a lint error and the 
+repeat
+ block wins. An iteration runs to completion before 
+stop_when
+ is evaluated. 
+break
+ wins over the stop condition and maximum. An error is not a soft stop: it aborts the run. A loop checkpoint records the next iteration and terminal reason (
+stop_when
+, 
+max_iterations
+, 
+break
+, or 
+pause
+); a 
+pause
+d loop is re-entered by 
+--resume
+, the others are not.
+
+16.3 Context
+
+pipeline Build {
+    checkpoint: {enabled: true, strategy: "per_step"}
+    context: {source: "latest", require: false}
+    step Report {
+        log(context.session_id, context.resumed)
+        if (context.vars.keys().contains("build")) log(context.vars["build"])
+    }
+}
+
+Every pipeline and workflow step MAY read the read-only object 
+context
+ = 
+{session_id, started_at, resumed, principal, vars}
+; no declaration is required for 
+session_id
+, 
+started_at
+, 
+resumed
+, or 
+principal
+. 
+principal
+ is the verified server caller identity when available (otherwise the empty string) and is not an authorization mechanism. The 
+context: {source, require}
+ block governs 
+vars
+ only — the previous completed run's final variable state. Without the block 
+vars
+ is the empty object; with it, 
+vars
+ stays empty until a run of that pipeline has completed once, so a program SHOULD guard with 
+context.vars.keys().contains(...)
+.
+
+16.4 Output projection
+
+workflow PublishRelease {
+    input environment: string
+    var artifact_url = ""
+    output: { url: artifact_url, environment: environment }
+    step Ship { artifact_url = "https://releases.example.com/" + environment }
+}
+
+The optional 
+output: {name: expr, ...}
+ block is a pipeline/workflow's result contract. When declared, a run returns 
+only
+ these keys — to a 
+mhl run
+ invocation and to every 
+mhl serve mcp
+ / 
+serve a2a
+ caller — each evaluated against the final variable state (keys MAY be renamed, computed, or omitted). Without the block, a run returns every non-internal 
+var
+. The projection does not affect what a later run's 
+context:
+ reads back, which is always the full final state. The value MUST be an object mapping; any other type aborts the run.
+
+The mapping is evaluated exactly once, when the run reaches a terminal state — a normal completion or a 
+break
+. A run suspended by 
+pause(...)
+ does 
+not
+ evaluate it (its expressions may read a 
+var
+ the run has not set yet): the suspension response carries the partial variable state instead, and the 
+--resume
+ / 
+run/resume
+ that completes the run evaluates the real projection. The mapping's result is not checkpointed, so a resumed run re-evaluates it. Mapping expressions observe the run's cancellation and deadline like a step body; side effects there are discouraged — they run once, are not persisted, and re-run on resume.
+
+16.5 Parallel groups and spawned agents
+
+pipeline Review {
+    input diff: string
+    input changed_files: string[]
+    spawn: {max_concurrency: 4}
+    var docs = ""
+    var issues = ""
+    step Analyze {
+        spawn code = Code.run(prompt: diff)
+        spawn security = Security.run(prompt: diff)
+        wait code, security timeout: 90s
+        log(code.result, security.result)
+
+        spawn reviews = Reviewer.run(prompt: "review ${file}") for file in changed_files
+        wait reviews timeout: 90s
+        for (var r in reviews) log(r.status, r.result)
+    }
+    parallel Gather timeout 2m {
+        step Docs { docs = DocsAgent.run(prompt: diff) }
+        step Issues { issues = IssuesAgent.run(prompt: diff) }
+    }
+}
+
+spawn
+ is valid directly inside a step and only accepts an 
+Agent.run(...)
+ call. It returns a task handle with 
+result
+, 
+ok
+, 
+error
+, 
+status
+, and 
+duration_ms
+. 
+wait names
+ waits for all and fails fast; 
+wait any names
+ returns on the first success; 
+wait N of names
+ returns after N successes. The optional 
+timeout:
+ bounds the wait, and 
+on_error: "collect"
+ keeps errors inspectable rather than failing the step. Unjoined handles are drained at step end and cannot outlive a checkpoint.
+
+A trailing 
+for <var> in <expr>
+ clause makes 
+spawn
+ a fan-out: 
+<expr>
+ is evaluated once and must be an array; the 
+Agent.run(...)
+ call is started once per element with 
+<var>
+ bound to that element while its argument expressions are evaluated, so each call may carry a distinct prompt. The bound name then holds an array of task handles in element order. It indexes and iterates as an ordinary array (
+xs[0].result
+, 
+for (var h in xs) …
+, 
+xs.size()
+), and a 
+wait
+ naming it — 
+wait xs
+, 
+wait any xs
+, 
+wait N of xs
+ — expands it to its elements. A non-array 
+<expr>
+ is a runtime error; an empty array yields an empty handle array on which a plain 
+wait
+ is a no-op. 
+max_concurrency
+ continues to bound the number of concurrent calls.
+
+A named 
+parallel
+ group is a barrier: all branches run concurrently and the pipeline advances only after all complete. A branch that fails does not cancel its siblings — the barrier still waits for every branch, then the run fails with the first branch error; on 
+--resume
+ the whole group re-runs, so branch steps MUST stay idempotent. Each branch receives a copy of shared pipeline variables; conflicting writes fail. Output is merged in declaration order. A group timeout cancels unfinished branches. 
+goto
+ cannot target or appear within a group, and 
+break
+ is not permitted in one.
+
+17. Tests
+
+A test declaration contains named 
+describe
+ blocks. Each description gets a fresh environment and supports the same statement grammar as a pipeline step. Assertion calls are recognized only inside descriptions.
+
+test TextExamples {
+    describe normalization {
+        are_equal(" Feature ".trim().to_lower(), "feature")
+        is_true([1, 2].contains(2))
+        is_false([1, 2].contains(3))
+    }
+    describe future_case {
+        incomplete("implementation pending")
+    }
+}
+
+Assertion
+
+Signature / pass condition
+
+are_equal
+
+are_equal(actual: any, expected: any)
+
+are_not_equal
+ / 
+not_equal
+
+are_not_equal(a: any, b: any)
+
+is_true
+, 
+is_false
+
+(value: bool)
+
+is_null
+, 
+not_null
+
+(value: any)
+
+greater_than
+, 
+less_than
+
+(a: number, b: number)
+
+greater_than_or_equal
+, 
+less_than_or_equal
+
+(a: number, b: number)
+
+includes
+
+includes(array: any[], value: any)
+
+incomplete
+
+incomplete(reason?: any)
+
+Equality is deep and structural. Wrong assertion arity or type is a hard error. A failed assertion marks the description as failed; 
+incomplete
+ marks it pending and does not count as a failure.
+
+18. CLI and serving
+
+18.1 Commands
+
+Command
+
+Purpose
+
+mhl init
+
+Creates a starter program without overwriting existing files.
+
+mhl run file.mh [--input key=value] [--resume [--force]] [--session id] [--format text|json] [--dry-run]
+
+Runs a pipeline/workflow with typed inputs and optional checkpoint resume. 
+--force
+ (with 
+--resume
+) resumes through a changed pipeline definition, warning instead of refusing. 
+--format json
+ emits one object — the result on success, or a typed error (
+kind
+, 
+step
+, 
+hint
+, and for bad inputs 
+missing
+/
+unknown
+) on failure — with the run's own output moved to a 
+log
+ field; the process still exits non-zero on failure. Registered secrets are masked recursively in 
+vars
+, both for legacy results and explicit 
+output:
+ projections; non-sensitive values and JSON types are preserved. Log and error text are also masked. 
+--dry-run
+ validates parse, imports, lint and the input contract — required inputs present, no undeclared keys, and each supplied value fitting its declared 
+input name: Type
+ (the same coercion a real run applies) — and prints the static step plan (order, parallel groups, checkpoint policy) without executing any step or calling any agent; it exits non-zero on a lint finding or an unsatisfied input contract, and cannot be combined with 
+--resume
+.
+
+mhl test file.mh|directory
+
+Runs test declarations and exits non-zero for failed assertions.
+
+mhl lint [directory|file]
+
+Checks syntax, imports, names, configuration, types, parameters, and control-flow legality.
+
+mhl lsp
+
+Starts the language server used by editor integrations.
+
+mhl serve mcp directory
+
+Exposes workflows as MCP tools over stdio.
+
+mhl serve mcp --http directory
+
+Exposes workflows over Streamable HTTP with synchronous tools and asynchronous 
+run/*
+.
+
+mhl serve a2a directory
+
+Exposes workflows as A2A skills over HTTP.
+
+mhl extension ...
+
+Initializes, tests, packages, installs, lists, and diagnoses external adapters.
+
+mhl version
+, 
+mhl --version
+, 
+mhl -v
+
+Prints the runtime version.
+
+For 
+--input
+, strings remain strings; declared numbers and booleans are coerced from command-line text; arrays and objects are parsed as JSON. Inputs not declared by the selected pipeline are rejected by server adapters and diagnosed by the CLI profile.
+
+18.2 Serving workflows
+
+mhl serve mcp
+ publishes one MCP tool per pipeline/workflow. Stdio uses newline-delimited JSON-RPC 2.0. HTTP defaults to 
+127.0.0.1:8711
+ and accepts one JSON-RPC message per 
+POST /mcp
+. The A2A server defaults to 
+127.0.0.1:8710
+ and publishes 
+/.well-known/agent-card.json
+.
+
+Async method
+
+Purpose
+
+run/start
+
+Starts a long workflow and returns a run id immediately.
+
+run/status
+
+Returns state, current step, reached steps, final variables, errors, and resumability.
+
+run/resume
+
+Continues a failed checkpointed workflow, optionally merging new arguments such as an approval.
+
+run/cancel
+
+Cancels an active run.
+
+run/list
+
+Lists runs owned by the current caller.
+
+run/logs
+
+Returns the run's retained step and 
+log()
+ output, incrementally via a 
+since
+ cursor.
+
+The 
+run/*
+ family is HTTP-only. Because a stock MCP client can call only 
+tools/call
+, the HTTP 
+tools/list
+ also publishes six control tools — 
+mhl_run_start
+, 
+mhl_run_status
+, 
+mhl_run_resume
+, 
+mhl_run_cancel
+, 
+mhl_run_list
+, 
+mhl_run_logs
+ — each a thin bridge onto the same-named method, returning the status object as 
+structuredContent
+. Read-only detail is served as MCP resources: 
+mhl://workflow/<name>
+ (a manifest projected from the loaded pipeline) and 
+mhl://workflow/<name>/source
+ on both transports, plus the owner-gated 
+mhl://run/<id>/logs
+ and 
+mhl://run/<id>/result
+ over HTTP.
+
+HTTP serving supports 
+--token
+, 
+--principal-header
+, 
+--state-dir
+, 
+--drain-timeout
+, and 
+--max-concurrent-runs
+. Operational endpoints include 
+/healthz
+, 
+/readyz
+, and 
+/metrics
+. Each run is owned by its caller — the 
+--principal-header
+ principal when one is configured, otherwise the 
+Mcp-Session-Id
+ — and 
+run/status
+, 
+run/resume
+, 
+run/cancel
+, 
+run/list
+, and 
+run/logs
+ act only for that owner.
+
+19. Security and operational semantics
+
+MHL programs can execute processes, modify files, access networks, call remote tools, and persist state. An implementation and operator SHOULD treat every 
+.mh
+ file as executable code.
+
+Credentials SHOULD be referenced with 
+env("NAME")
+ and MUST NOT be embedded in source, command arguments, or committed state.
+
+Arguments passed as argv arrays preserve boundaries and avoid accidental shell interpolation. Command strings SHOULD be reserved for deliberate shell-like behavior.
+
+Authorization, Cookie, bearer, basic-auth, and recognized secret values are registered and redacted as 
+[REDACTED]
+ in logs, diagnostics, and checkpoints.
+
+External adapters MUST be present in the extension lock and their executable digest MUST match before execution.
+
+Timeouts, retry limits, concurrency limits, and loop ceilings SHOULD be configured for every external or potentially unbounded operation.
+
+Checkpoint and memory paths SHOULD be scoped by session when concurrent runs must not share state.
+
+Server mode SHOULD bind to loopback unless a token and an appropriate network boundary are configured. A token is a shared trust-domain secret, not per-user authorization.
+
+Secrets and source control
+Do not commit API keys, tokens, resolved credentials, log files, cache contents, or checkpoint state. Review extension permissions and the capabilities available to a process before running untrusted automation.
+
+Annex A — Complete grammar summary
+
+This annex collects the declaration and statement productions omitted from the compact expression grammar.
+
+import         ::= "import" "{" import-item ("," import-item)* "}" "from" String
+import-item    ::= Identifier ["as" Identifier]
+enum           ::= "enum" Identifier "{" [Identifier (","? Identifier)* ","?] "}"
+agent          ::= "agent" Identifier "{" property* "}"
+router         ::= "router" Identifier "{" property* "}"
+prompt         ::= "prompt" Identifier "(" [parameter ("," parameter)*] ")"
+                   ("from" String | "{" expression "}")
+memory         ::= "memory" Identifier "{" property* "}"
+tool           ::= "tool" Identifier "{" tool-method* "}"
+tool-method    ::= Identifier "(" [parameter ("," parameter)*] ")"
+                   [":" type] "->" (expression | block)
+parameter      ::= Identifier [":" type] ["=" expression]
+extension      ::= "extension" Identifier Identifier "{" property* "}"
+extensible     ::= "extensible" Identifier "{" extensible-member* "}"
+extensible-member ::= "manifest" ":" object
+                   | "properties" ":" "{" extensible-property* "}"
+                   | extensible-method
+extensible-property ::= Identifier ":" type
+extensible-method ::= Identifier "(" [parameter ("," parameter)*] ")" "->" type
+pipeline       ::= ["loop"] ("pipeline" | "workflow") Identifier ["max" Number]
+                    "{" pipeline-member* "}"
+pipeline-member ::= input | const-declaration | var-declaration | mem-declaration
+                   | parallel | step | property
+input          ::= "input" Identifier ":" type
+step           ::= "step" Identifier ["timeout" duration] block
+parallel       ::= "parallel" Identifier ["timeout" duration] "{" step+ "}"
+repeat         ::= "repeat" ":" object
+context        ::= "context" ":" object
+const-declaration ::= "const" Identifier "=" expression
+var-declaration ::= "var" Identifier "=" expression
+mem-declaration ::= "mem" Identifier "=" expression
+assignment     ::= lvalue ("=" | "+=") expression
+lvalue         ::= Identifier trailer*
+spawn          ::= "spawn" Identifier "=" expression ["for" Identifier "in" expression]
+wait           ::= "wait" ["any" | Number "of"] Identifier ("," Identifier)* wait-option*
+wait-option    ::= ("timeout" | "on_error") ":" expression
+try-statement  ::= "try" block "catch" ["(" Identifier ")"] block ["finally" block]
+return         ::= "return" [expression]
+break          ::= "break" [expression]
+goto           ::= "goto" Identifier
+test           ::= "test" Identifier "{" describe* "}"
+describe       ::= "describe" Identifier block
+property       ::= Identifier ":" expression
+
+A declaration body (
+agent
+, 
+router
+, 
+memory
+, 
+extension
+, and the property members of a pipeline) is a sequence of 
+property
+ productions separated by line breaks. Commas separate the fields of an 
+object literal
+ — the value on the right of a property — never the properties of a declaration body itself.
+
+Implementations MAY expose richer diagnostic positions, syntax highlighting, completion, or generated schemas. Those facilities do not alter the source grammar.
+
+Annex B — Complete example
+
+The following program demonstrates declarations, a prompt, typed input, persistent loop state, tools, an agent, native operations, and self-verification.
+
+enum Outcome { Pending, Passed, Failed }
+type Finding = {code: string, severity: string}
+
+agent Reviewer {
+    engine: "cli/reviewer"
+    command: "reviewer"
+    args: ["--prompt", "${prompt}"]
+    retry: {max_attempts: 2, delay: 1s, backoff: "exponential"}
+    rate_limit: {requests_per_minute: 10, concurrency: 2}
+}
+
+prompt Audit(repo: string, diff: string) {
+    "Review ${repo}. Return JSON findings for this diff:\n${diff}"
+}
+
+tool Project {
+    diff(dir: string = "."): string -> git.diff(dir: dir)
+    verify(dir: string = ".") -> cmd.exec(["go", "test", "./..."], timeout: 2m)
+}
+
+loop workflow AuditLoop {
+    input repo: string
+    mem status = Outcome.Pending
+    mem attempts = 0
+    repeat: {stop_when: status == Outcome.Passed, max_iterations: 3}
+
+    step Inspect {
+        attempts = attempts + 1
+        var diff = Project.diff(repo)
+        var result = Reviewer.run(prompt: Audit(repo: repo, diff: diff))
+        fs.write("audit.json", result)
+        status = Outcome.Passed
+    }
+}
+
+test AuditExamples {
+    describe values {
+        are_equal(type_of(Outcome.Passed), "enum")
+        is_true([1, 2, 3].contains(2))
+    }
+}
+
+Run it with 
+mhl lint audit.mh
+, 
+mhl test audit.mh
+, and 
+mhl run audit.mh --input repo=.
+. The external 
+reviewer
+ executable must be available in the host environment.
+
+← Previous
+
+Servers
+
+Source →
+
+GitHub ↗
+
+ON THIS PAGE
+
+Status and scope
+
+Conformance
+
+Terms and notation
+
+Lexical grammar
+
+Syntactic grammar
+
+Values and types
+
+Expressions
+
+Statements
+
+Programs and modules
+
+Declarations
+
+Standard library
+
+Native operations
+
+Agents and traffic control
+
+Routers
+
+Memory and state
+
+Extensions
+
+Pipelines and workflows
+
+Tests
+
+CLI and serving
+
+Security and operational semantics
+
+Annex A — Complete grammar summary
+
+Annex B — Complete example
+
+© 2026 MHL · 
+Created by Yan Justino
+
+Specification
+
+Extensions
+
+Servers
+
+GitHub ↗
+
