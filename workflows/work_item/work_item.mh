@@ -5,23 +5,26 @@
 // Todo acesso a disco passa por `tool Paths` (C1) — nenhum step monta
 // "projects/" + project_id a mao. Deliberadamente NAO usamos `memory { type: "json" }`
 // aqui: um spike de Fase 0 mostrou que a interpolacao de `path:` em `memory` nao
-// sanitiza sozinha (".." escapa de verdade) — so `Paths.ensure_valid` garante isso,
-// entao usamos `fs`/`dir` diretos com caminhos vindos de `Paths`.
+// sanitiza sozinha (".." escapa de verdade) — so `Paths.ensure_valid` garante isso.
+// `memory { path_guard: "no_traversal" }` (mhl 1.4.0-beta.6+) fecha esse buraco
+// tambem para `memory`, mas nao substitui `Paths` aqui: `Paths` tambem monta caminhos
+// de `wiki/`/`artifacts/`/`raw/` que nunca passam por `memory` — um so mecanismo
+// (`Paths.ensure_valid`) e mais simples de auditar do que dois parcialmente sobrepostos.
 //
-// `input` nao aceita valor default na gramatica do MHL (só `parameter` de tool/lambda
-// aceita) — por isso os 4 inputs abaixo sao todos obrigatorios; o chamador passa ""
-// para os que nao valem para a `action` escolhida (mesmo padrao do exemplo `Approval`
-// dos Docs-Servers, que sempre exige `approved` mesmo no start).
+// `name`/`item_type`/`project_id` tem default "" (mhl 1.4.0-beta.6+ aceita `input x = expr`;
+// antes disso todo `input` era obrigatorio, entao o chamador tinha que passar "" nos 4
+// campos em toda chamada — ver FASE0-ACHADOS.md §0/§10). `action` continua sem default:
+// nao existe uma acao padrao sensata.
 
 import { Paths } from "../shared/paths.mh"
 
 workflow WorkItem {
     description: "Ciclo de vida de um work-item do Senpai: create, list, get, archive, usage."
 
-    input action: string        // "create" | "list" | "get" | "archive" | "usage"
-    input name: string          // obrigatorio (valor) so para action:"create"; "" nas demais
-    input item_type: string     // "oportunidade" | "feature" | "historia"; so para action:"create"
-    input project_id: string    // obrigatorio (valor) para get/archive/usage; "" nas demais
+    input action: string             // "create" | "list" | "get" | "archive" | "usage"
+    input name: string = ""          // obrigatorio (valor) so para action:"create"
+    input item_type: string = ""     // "oportunidade" | "feature" | "historia"; so para action:"create"
+    input project_id: string = ""    // obrigatorio (valor) para get/archive/usage
 
     var project = null
     var projects = []

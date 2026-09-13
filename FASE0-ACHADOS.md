@@ -1,5 +1,24 @@
 # Fase 0 — Achados dos spikes
 
+## 0. Revalidação — `mhl` atualizado de `1.4.0-beta.5` para `1.4.0-beta.6`
+
+O binário instalado mudou de versão entre a redação inicial deste documento e esta revisão (`~/.mhl/bin/mhl`, timestamp do binário: 13/09 14:59) — o mantenedor do MHL corrigiu, no runtime real, vários itens que este projeto reportou em [MHL-Melhorias.md](MHL-Melhorias.md). Cada "✅ Resolvido" marcado naquele arquivo foi **reverificado aqui por spike**, não aceito de olhos fechados — resultado:
+
+| Item (MHL-Melhorias.md) | Reverificado | Resultado |
+|---|---|---|
+| #1 — `env()` em `agent.command`/`args` | ✅ | `command: env("SENPAI_TEST_CMD")` roda de verdade agora — `mhl lint` limpo, `mhl run` executa. |
+| #3 — `memory { path_guard: "no_traversal" }` | ✅ | Um `project_id` com `../../../../tmp/x` é rejeitado com erro claro (`interpolated value "..." contains ".."`) antes de tocar o disco; um id benigno continua funcionando normal. |
+| #4 — `html.escape`/`html.attr_escape` nativos | ✅ | Ambos disponíveis e escapam `<`, `>`, `&`, `'`, `"` corretamente (verificado via round-trip). |
+| #5 — falso-positivo do lint em `.append()` | ✅ | `items.append(x)` numa `var` array simples não gera mais nenhum achado de lint. |
+| #8 — `input` com valor default | ✅ | `input name: string = ""` aceito; some do `required` do `inputSchema` e aparece como `"default": ""`; um valor passado pelo chamador continua vencendo o default. |
+| #9 — `enum` projetado no `inputSchema` | ✅ (schema) — ⚠️ **novo gap encontrado por trás dele** | O `inputSchema` de fato ganha `"enum": ["Create","List",...]`. Mas ao testar o caminho completo (chamar de fora com uma string e comparar contra a variante), achei que o valor **não é coagido** para o tipo enum de verdade — `type_of(action)` continua `"string"`, `action == ActionType.Create` é `false`, e `match` não bate em nenhuma variante. Reportado como **item novo #15** em MHL-Melhorias.md — não estava no relato original, é uma descoberta desta revisão. |
+| #14 — `string.matches(pattern)` | ✅ | Regex RE2, string inteira contra o padrão; confirmado com um caso válido e um inválido. |
+
+**Itens que continuam sem correção** (marcados `🚧 Blocking` no arquivo de melhorias, não reverificados aqui por não terem mudado): #2 (`mhl_run_*` só em `--http`), #6 (chamada a método-irmão de `tool` precisa de qualificação), #7 (escrita de campo via `[...]`, não `.`), #10 (sem escape de literal no layout amigável de `time.format`), #11 (contrato de `schema:` divergente entre `claude`/`codex`/`devin`), #12 (`--format json` pode emitir JSON inválido no campo `log`), #13 (não dá para testar um `workflow` inteiro via `test`/`describe`).
+
+**Consequência para o código já escrito (Fases 0-1):** ver §10 mais abaixo para o que isso muda em `tool Paths`/`workflow WorkItem`, e a seção "0. Status do desenvolvimento" do plano macro para o registro formal.
+
+
 > Valida (ou invalida) as suposições/assunções em aberto do [PLANO-MACRO-MHL-SENPAI.md](PLANO-MACRO-MHL-SENPAI.md) antes de escrever os workflows reais. `mhl 1.4.0-beta.5` instalado em `~/.mhl/bin/mhl`. Scripts de spike em `spikes/` (não fazem parte do produto — mantidos como referência).
 
 ## 1. `command:`/`args:` do `agent` **não aceitam `env(...)`** — só string literal
@@ -81,6 +100,15 @@ Durante o spike do item 5 (chamada real ao `claude` CLI via `agent.run(prompt:, 
 | `devin` | `--permission-mode auto` (já é o **default** — só auto-aprova ferramentas somente-leitura) + `--sandbox` para restringir escrita ao workspace | modo `auto` é relativamente seguro por padrão; `accept-edits`/`smart`/`dangerous` são escaladas explícitas, nunca usar em produção para geração de artefato |
 
 **Ação adotada:** toda declaração `agent` usada por `Wiki`/`Discovery`/`Delivery` (Fases 2-4) precisa incluir a flag de restrição correspondente em `args` desde a primeira versão — não como hardening tardio da Fase 8. `docs/sample/` foi removido do controle de versão (`.gitignore`) — é uma cópia de terceiros (a própria suíte de exemplos do MHL) que apareceu sem ter sido pedida, mantida localmente como referência (é bem útil para as Fases 2-4: exemplos oficiais de `agents/`, `memory/`, `html/`, `mcp/`), mas não pertence ao histórico do Senpai.
+
+## 10. Consequência da atualização `beta.6` para o código já escrito (`Paths`/`WorkItem`)
+
+Decisões tomadas ao revisar a Fase 0/1 depois da revalidação acima:
+
+- **`tool Paths.is_valid_id` simplificado com `string.matches`** (item #14 confirmado): a validação por `split("")` + laço de caractere-a-caractere vira uma linha, `project_id.matches("^[A-Za-z0-9_-]{1,128}$")` — o padrão âncorado já rejeita `/`, `\`, `..` e qualquer caractere fora do conjunto permitido sem checagens redundantes (um `.` sozinho, fora do conjunto permitido, já reprova a regex — não precisa mais de `contains("..")` em separado).
+- **`memory { path_guard: "no_traversal" }` (item #3) não substitui `tool Paths` — complementa.** `WorkItem`/`Paths` continuam usando `fs`/`dir` diretos (não `memory`) para `project.json`/`usage.jsonl`, porque `Paths` também constrói caminhos para `wiki/`/`artifacts/`/`raw/` que nunca passam por `memory` — um único mecanismo (`Paths.ensure_valid`) continua sendo mais simples de raciocinar/auditar do que dois mecanismos parcialmente sobrepostos. Registrado para a Fase 2 em diante: se algum `memory` novo interpolar `project_id` diretamente (ex. `Usage` em C5), declarar `path_guard: "no_traversal"` nele também — defesa em profundidade, não substituto de validar `project_id` antes com `Paths.ensure_valid`.
+- **`input name/project_id: string = ""` adotado no `WorkItem`** (item #8 confirmado): antes, os 4 inputs eram sempre obrigatórios em toda chamada (inclusive os irrelevantes pra ação escolhida) por causa de uma limitação da linguagem, não por design. Corrigida a limitação, o `WorkItem` passa a declarar default `""` em `name`/`project_id` (só `action` continua sem default — não existe uma ação padrão sensata). `item_type` também ganha default `""`, resolvendo para as ações que não são `create`. O `inputSchema` exposto via `tools/list` passa a refletir isso com precisão (`required: ["action"]` em vez dos 4 campos).
+- **`enum` para `action`/`item_type` — decisão: não adotar ainda.** Seria a aplicação direta de C7 ("considerar enum quando o valor for fechado") e do que o item #9 parecia liberar, mas a revalidação encontrou o gap do item #15 (coerção de `enum` externo não funciona) — adotar agora quebraria silenciosamente todo `match`/`==` contra as variantes. `action`/`item_type` continuam `string` simples, validados por `tool` (`Paths`-style, com `.contains(...)`/`.matches(...)` contra uma lista permitida). Revisitar quando o item #15 for corrigido.
 
 ## Consequência prática para as próximas fases
 

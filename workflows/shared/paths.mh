@@ -4,20 +4,17 @@
 // Fase 0 confirmou que interpolacao de string (inclusive dentro de `memory { path: }`)
 // NAO sanitiza sozinha — "../../etc/passwd" como project_id escapa de verdade do
 // diretorio pretendido — por isso toda funcao aqui valida antes de montar o caminho.
+//
+// is_valid_id usa string.matches (regex, disponivel desde mhl 1.4.0-beta.6) — o padrao
+// ancorado ja rejeita "/", "\", ".." e qualquer caractere fora do conjunto permitido
+// sem checagens redundantes; antes disso exigia iterar split("") caractere a caractere
+// (ver FASE0-ACHADOS.md §10 / MHL-Melhorias.md #14).
 
 export tool Paths {
     is_valid_id(project_id: string): bool -> {
         if (project_id.is_empty()) return false
         if (project_id.size() > 128) return false
-        if (project_id.contains("..")) return false
-        if (project_id.contains("/")) return false
-        if (project_id.contains("\\")) return false
-
-        var allowed = "abcdefghijklmnopqrstuvwxyzABCDEFGHIJKLMNOPQRSTUVWXYZ0123456789-_"
-        for (var c in project_id.split("")) {
-            if (!allowed.contains(c)) return false
-        }
-        return true
+        return project_id.matches("^[A-Za-z0-9_-]+$")
     }
 
     ensure_valid(project_id: string): string -> {
