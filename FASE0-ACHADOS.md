@@ -110,6 +110,25 @@ Decisões tomadas ao revisar a Fase 0/1 depois da revalidação acima:
 - **`input name/project_id: string = ""` adotado no `WorkItem`** (item #8 confirmado): antes, os 4 inputs eram sempre obrigatórios em toda chamada (inclusive os irrelevantes pra ação escolhida) por causa de uma limitação da linguagem, não por design. Corrigida a limitação, o `WorkItem` passa a declarar default `""` em `name`/`project_id` (só `action` continua sem default — não existe uma ação padrão sensata). `item_type` também ganha default `""`, resolvendo para as ações que não são `create`. O `inputSchema` exposto via `tools/list` passa a refletir isso com precisão (`required: ["action"]` em vez dos 4 campos).
 - **`enum` para `action`/`item_type` — decisão: não adotar ainda.** Seria a aplicação direta de C7 ("considerar enum quando o valor for fechado") e do que o item #9 parecia liberar, mas a revalidação encontrou o gap do item #15 (coerção de `enum` externo não funciona) — adotar agora quebraria silenciosamente todo `match`/`==` contra as variantes. `action`/`item_type` continuam `string` simples, validados por `tool` (`Paths`-style, com `.contains(...)`/`.matches(...)` contra uma lista permitida). Revisitar quando o item #15 for corrigido.
 
+## 11. Spike do shell Wails — `exec.Command` + MCP sobre HTTP a partir do Go, ponta a ponta
+
+Último item em aberto da Fase 0 (§6 do plano). `wails init -t vanilla` em `app/`; pacote `app/mhlbridge` spawna `mhl serve mcp --http --addr 127.0.0.1:<porta livre>` (já `--http`, não stdio — achado §2 desta fase), completa o handshake MCP (`initialize` → `Mcp-Session-Id`) e expõe `ToolsList`/`ToolsCall`. `App.PingMHL()` — um bound method do Wails — chama `tools/list` e um `WorkItem(action:"list")` real, e vira binding JS automático (`wailsjs/go/main/App.js`) consumido por um botão mínimo no frontend.
+
+**Validado:**
+- `go build`/`go vet`/`gofmt` limpos.
+- `wails build` produz um `.app` nativo (`darwin/arm64`) funcional — só a assinatura ad-hoc automática do Wails falhou (`codesign failed: ... resource fork, Finder information, or similar detritus not allowed`), por causa de um atributo estendido `com.apple.provenance` que este ambiente de desenvolvimento sandboxado adiciona a todo arquivo novo — **não é um problema do código nem do Wails**; resolvido manualmente com `xattr -cr app.app && codesign --force --deep -s - app.app` antes de rodar. Ambiente de desenvolvimento real (fora deste sandbox) não deve ter esse problema.
+- Rodando o `.app` assinado: loga `mhl bridge: ready, serving .../workflows`, e um `ps aux` confirma `mhl serve mcp --http --addr 127.0.0.1:<porta> .../workflows` rodando como processo filho de verdade.
+- Encerrar o app (`kill` no processo) aciona o handler de shutdown nativo do Wails ("Ctrl+C detected. Shutting down..."), que chama nosso `OnShutdown` → `mhlbridge.Client.Stop()` → nenhum processo `mhl serve` órfão depois (confirmado via `ps aux` antes/depois).
+- `app_test.go::TestPingMHLEndToEnd` automatiza o ciclo inteiro (`startup` real → `PingMHL()` real, contra o `mhl` e o `workflows/` reais, sem mocks → `shutdown` real) e passa — prova que o mecanismo funciona sem depender de clicar manualmente num botão.
+
+**Não verificado:** o clique do botão dentro de uma janela real e visível — este ambiente de execução não tem sessão gráfica interativa (sem display attachado ao processo). A cadeia de binding (JS → `window['go']['main']['App']['PingMHL']` → método Go → resultado) foi confirmada **mecanicamente** (o binding é gerado corretamente a partir da assinatura Go, e o mesmo método por trás dele foi exercitado de ponta a ponta via `go test`) mas não **visualmente**. Ficar de olho na Fase 6, quando a UI de verdade existir e puder ser aberta numa máquina com tela.
+
+**Decisões de design que saíram desse spike, não previstas em detalhe no plano original:**
+- O processo `mhl` filho recebe seu próprio grupo de processo (`setProcessGroup`, Unix via `Setpgid`, Windows via `CREATE_NEW_PROCESS_GROUP` — arquivos `_unix`/`_windows` com build tags, C6) para não ser atingido por um sinal endereçado só ao grupo do processo pai.
+- A porta é escolhida dinamicamente (`net.Listen("tcp", "127.0.0.1:0")`, depois liberada) em vez de fixa — evita colisão se o usuário já tiver algo na porta padrão do `mhl` (`8711`) ou abrir duas instâncias do Senpai.
+- `Client.Stop()` tenta um encerramento gracioso (`os.Interrupt`) antes de `Kill()` — no Windows, `Signal` não suporta isso para um processo arbitrário e cai direto para `Kill()`; aceitável para uma ferramenta local, documentado no código.
+- O caminho de `workflows/` usado no spike (`../workflows`, relativo ao diretório `app/`) é propositalmente provisório — a Fase 7 decide entre vendorizar/embutir esse diretório junto do executável (`go:embed` vs. pasta ao lado do binário, já previsto em §6.1) em vez de depender de uma estrutura de diretórios de desenvolvimento.
+
 ## Consequência prática para as próximas fases
 
 - **Fase 5** muda de "stdio puro" para "`--http` em loopback" — atualizar §6.1/§6.2 do plano macro quando essa fase for escrita (nota, não bloqueio).
