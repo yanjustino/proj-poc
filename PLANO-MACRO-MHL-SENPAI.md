@@ -274,6 +274,50 @@ Sem código de implementação ainda — só o formato de entrada/saída de cada
   - `standalone: true` → grava um único arquivo (`artifacts/feature.html`, com a feature e suas histórias juntas; ou `artifacts/historia.html`, sem quebras).
   - `standalone: false` → grava na pasta do próprio backlog (`artifacts/features/FT00N-slug/feature.html` / `artifacts/historias/FT00N/US00N-slug/historia.html`), reaproveitando o `FT00N`/`US00N` já atribuído por `Discovery` nesse mesmo projeto.
 
+### 4.1 Matriz de dependência entre artefatos
+
+Não existia como documento — vivia só espalhada em código (`if (predecessor_content.is_empty()) fail(...)` em cada step `*Generate`, ver `workflows/discovery/discovery.mh`). Extraída direto da implementação da Fase 3, não da memória:
+
+| Artefato | Depende de (além da Wiki, sempre lida) | Nível |
+|---|---|---|
+| `brief` | — (só Wiki) | Oportunidade |
+| `atributos` | `brief` | Oportunidade |
+| `requisitos` | `brief` | Oportunidade |
+| `adr` | `requisitos` | Oportunidade |
+| `der` | `requisitos` | Oportunidade |
+| `diagramas` | `requisitos` | Oportunidade |
+| `features` | `requisitos` | Oportunidade |
+| `historias` | `features` (a feature específica indicada por `feature_id`) | Feature (dentro da Oportunidade) |
+
+```mermaid
+flowchart LR
+    wiki[("Wiki")] --> brief
+    brief --> atributos
+    brief --> requisitos
+    requisitos --> adr
+    requisitos --> der
+    requisitos --> diagramas
+    requisitos --> features
+    features --> historias
+    wiki -.-> atributos
+    wiki -.-> requisitos
+    wiki -.-> adr
+    wiki -.-> der
+    wiki -.-> diagramas
+    wiki -.-> features
+    wiki -.-> historias
+```
+
+Duas coisas que uma leitura linear da lista de `artifact` (`"brief" | "atributos" | "requisitos" | ...`) esconde:
+
+- **`atributos` e `requisitos` são irmãos, não uma sequência.** Os dois dependem só de `brief` — gerar `atributos` não exige `requisitos` primeiro (nem vice-versa), mesmo a ordem textual do enum sugerindo isso.
+- **`adr`, `der`, `diagramas` e `features` são 4 ramos paralelos**, todos saindo de `requisitos` — nenhum deles depende dos outros três. `features` só se destaca por ser o único desses quatro que tem uma continuação (`historias`).
+- A Wiki é lida por **todo** artefato, sempre — a linha pontilhada no diagrama existe só pra não poluir visualmente repetindo `wiki -->` em cada nó; não é uma dependência "mais fraca".
+
+Mecanismo de reforço (já implementado, não é proposta): cada `step *Generate` chama `Context.artifact(project_id, "<predecessor>.html")` e falha com uma mensagem clara (`"gere '<predecessor>' antes de '<artifact>'"`) se vier vazio — nunca deixa um artefato gerar com um predecessor ausente silenciosamente. `historias` resolve `feature_id` → pasta real via `ArtifactId.find_feature_dir`, que falha se a feature não existir.
+
+**Ainda em aberto (Fase 4):** `Delivery` reaproveita a mesma cadeia intermediária (brief/requisitos/adr/der/diagramas) — a matriz acima vale igual lá; falta só decidir se o artefato final (`feature`/`historia`, `standalone: true`) depende também de `historias` já ter rodado em `Discovery` quando `standalone: false`, ou se `Delivery` pode gerar uma história "do zero" sem que `Discovery` tenha passado por ali.
+
 > Cada um viraria uma entrada em `tools/list` — a UI descobre os 4 workflows via `tools/list` e o schema via `resources/read` em `mhl://workflow/<nome>`, sem precisar hardcodar o contrato duas vezes.
 
 ## 5. Fases macro
