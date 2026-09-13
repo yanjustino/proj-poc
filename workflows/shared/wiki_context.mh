@@ -10,25 +10,16 @@
 // além disso (fora do escopo do v1, ja registrado no plano macro).
 
 import { Paths } from "paths.mh"
+import { DirText } from "dir_text.mh"
 
 export tool WikiContext {
     all_pages(project_id: string): string -> {
         var content = "# index.md\n\n" + self.read_file_if_exists(Paths.wiki(project_id, "index.md"))
-        content = content + self.read_subdir(project_id, "sources")
-        content = content + self.read_subdir(project_id, "entities")
-        content = content + self.read_subdir(project_id, "concepts")
-        content = content + self.read_subdir(project_id, "answers")
+        content = content + DirText.concat_all(Paths.wiki_dir(project_id) + "/sources")
+        content = content + DirText.concat_all(Paths.wiki_dir(project_id) + "/entities")
+        content = content + DirText.concat_all(Paths.wiki_dir(project_id) + "/concepts")
+        content = content + DirText.concat_all(Paths.wiki_dir(project_id) + "/answers")
         return content
-    }
-
-    read_subdir(project_id: string, subdir: string): string -> {
-        var full_dir = Paths.wiki_dir(project_id) + "/" + subdir
-        if (!dir.exists(full_dir)) return ""
-        var out = ""
-        for (var file_path in dir.list(full_dir)) {
-            out = out + "\n\n---\n\n# " + file_path + "\n\n" + fs.read(file_path)
-        }
-        return out
     }
 
     read_file_if_exists(path: string): string -> {

@@ -7,6 +7,7 @@
 
 import { Paths } from "paths.mh"
 import { WikiContext } from "wiki_context.mh"
+import { DirText } from "dir_text.mh"
 
 export tool Context {
     wiki(project_id: string): string -> WikiContext.all_pages(project_id)
@@ -19,4 +20,10 @@ export tool Context {
         if (!fs.exists(path)) return ""
         return fs.read(path)
     }
+
+    // Mesma coisa, mas para um predecessor que e uma PASTA com varios
+    // arquivos (ex. "adr", "diagramas") — concatena todos. Vazio se a pasta
+    // nao existir ou nao tiver nenhum arquivo ainda.
+    artifact_dir(project_id: string, relative_dir: string): string ->
+        DirText.concat_all(Paths.artifact(project_id, relative_dir))
 }

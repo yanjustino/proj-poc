@@ -23,10 +23,10 @@ prompt DiscoverySchema() from "schema.prompt.md"
 prompt BriefInstruction(schema_conventions: prompt, wiki_content: string) from "prompts/brief.prompt.md"
 prompt AtributosInstruction(schema_conventions: prompt, brief_content: string, wiki_content: string) from "prompts/atributos.prompt.md"
 prompt RequisitosInstruction(schema_conventions: prompt, brief_content: string, wiki_content: string) from "prompts/requisitos.prompt.md"
-prompt AdrInstruction(schema_conventions: prompt, requisitos_content: string, wiki_content: string) from "prompts/adr.prompt.md"
-prompt DerInstruction(schema_conventions: prompt, requisitos_content: string, wiki_content: string) from "prompts/der.prompt.md"
-prompt DiagramasInstruction(schema_conventions: prompt, requisitos_content: string, wiki_content: string) from "prompts/diagramas.prompt.md"
-prompt FeaturesInstruction(schema_conventions: prompt, requisitos_content: string, wiki_content: string) from "prompts/features.prompt.md"
+prompt AdrInstruction(schema_conventions: prompt, requisitos_content: string, atributos_content: string, wiki_content: string) from "prompts/adr.prompt.md"
+prompt DerInstruction(schema_conventions: prompt, requisitos_content: string, atributos_content: string, wiki_content: string) from "prompts/der.prompt.md"
+prompt DiagramasInstruction(schema_conventions: prompt, requisitos_content: string, atributos_content: string, wiki_content: string) from "prompts/diagramas.prompt.md"
+prompt FeaturesInstruction(schema_conventions: prompt, requisitos_content: string, adr_content: string, der_content: string, diagramas_content: string, wiki_content: string) from "prompts/features.prompt.md"
 prompt HistoriasInstruction(schema_conventions: prompt, feature_content: string, wiki_content: string) from "prompts/historias.prompt.md"
 
 prompt BriefSchemaFile() from "schemas/brief.schema.json"
@@ -187,8 +187,10 @@ workflow Discovery {
         current_artifact = "adr"
         var requisitos_content = Context.artifact(project_id, "requisitos.html")
         if (requisitos_content.is_empty()) fail("gere 'requisitos' antes de 'adr'")
+        var atributos_content = Context.artifact(project_id, "atributos.html")
+        if (atributos_content.is_empty()) fail("gere 'atributos' antes de 'adr'")
         var raw = Writer.run(
-            prompt: AdrInstruction(schema_conventions: DiscoverySchema(), requisitos_content: requisitos_content, wiki_content: Context.wiki(project_id)),
+            prompt: AdrInstruction(schema_conventions: DiscoverySchema(), requisitos_content: requisitos_content, atributos_content: atributos_content, wiki_content: Context.wiki(project_id)),
             schema: AdrSchemaFile()
         )
         pending_data = json.parse(raw)
@@ -223,8 +225,10 @@ workflow Discovery {
         current_artifact = "der"
         var requisitos_content = Context.artifact(project_id, "requisitos.html")
         if (requisitos_content.is_empty()) fail("gere 'requisitos' antes de 'der'")
+        var atributos_content = Context.artifact(project_id, "atributos.html")
+        if (atributos_content.is_empty()) fail("gere 'atributos' antes de 'der'")
         var raw = Writer.run(
-            prompt: DerInstruction(schema_conventions: DiscoverySchema(), requisitos_content: requisitos_content, wiki_content: Context.wiki(project_id)),
+            prompt: DerInstruction(schema_conventions: DiscoverySchema(), requisitos_content: requisitos_content, atributos_content: atributos_content, wiki_content: Context.wiki(project_id)),
             schema: DerSchemaFile()
         )
         var data = json.parse(raw)
@@ -253,8 +257,10 @@ workflow Discovery {
         current_artifact = "diagramas"
         var requisitos_content = Context.artifact(project_id, "requisitos.html")
         if (requisitos_content.is_empty()) fail("gere 'requisitos' antes de 'diagramas'")
+        var atributos_content = Context.artifact(project_id, "atributos.html")
+        if (atributos_content.is_empty()) fail("gere 'atributos' antes de 'diagramas'")
         var raw = Writer.run(
-            prompt: DiagramasInstruction(schema_conventions: DiscoverySchema(), requisitos_content: requisitos_content, wiki_content: Context.wiki(project_id)),
+            prompt: DiagramasInstruction(schema_conventions: DiscoverySchema(), requisitos_content: requisitos_content, atributos_content: atributos_content, wiki_content: Context.wiki(project_id)),
             schema: DiagramasSchemaFile()
         )
         pending_data = json.parse(raw)
@@ -287,8 +293,21 @@ workflow Discovery {
         current_artifact = "features"
         var requisitos_content = Context.artifact(project_id, "requisitos.html")
         if (requisitos_content.is_empty()) fail("gere 'requisitos' antes de 'features'")
+        var adr_content = Context.artifact_dir(project_id, "adr")
+        if (adr_content.is_empty()) fail("gere 'adr' antes de 'features'")
+        var der_content = Context.artifact(project_id, "der.html")
+        if (der_content.is_empty()) fail("gere 'der' antes de 'features'")
+        var diagramas_content = Context.artifact_dir(project_id, "diagramas")
+        if (diagramas_content.is_empty()) fail("gere 'diagramas' antes de 'features'")
         var raw = Writer.run(
-            prompt: FeaturesInstruction(schema_conventions: DiscoverySchema(), requisitos_content: requisitos_content, wiki_content: Context.wiki(project_id)),
+            prompt: FeaturesInstruction(
+                schema_conventions: DiscoverySchema(),
+                requisitos_content: requisitos_content,
+                adr_content: adr_content,
+                der_content: der_content,
+                diagramas_content: diagramas_content,
+                wiki_content: Context.wiki(project_id)
+            ),
             schema: FeaturesSchemaFile()
         )
         pending_data = json.parse(raw)

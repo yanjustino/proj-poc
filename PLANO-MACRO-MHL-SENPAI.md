@@ -14,7 +14,7 @@
 | 0 — Fundamentos e spikes | ✅ Concluída | Spikes de linguagem/runtime: suposições do plano validadas contra `mhl` real e `claude`/`codex`/`devin` CLIs, com 3 achados corrigindo decisões do plano (stdio→`--http` para `mhl_run_*`, path traversal em `memory` interpolado, schema estruturado ausente no Devin CLI) — depois revalidados contra `mhl 1.4.0-beta.6`, que corrigiu 7 desses achados (detalhes em [FASE0-ACHADOS.md](FASE0-ACHADOS.md)). Spike do projeto Wails: `wails init` (template vanilla+Vite) em `app/`, `mhlbridge` em Go faz `exec.Command` de `mhl serve mcp --http` em loopback + handshake MCP completo (`initialize`→`Mcp-Session-Id`→`tools/list`/`tools/call`); `PingMHL` exposto ao frontend via binding gerado; `wails build` produz um `.app` nativo funcional; teste automatizado (`app_test.go`) prova o ciclo completo `startup`→chamada real ao `WorkItem`→`shutdown` sem processo `mhl` órfão. |
 | 1 — Workflow `WorkItem` | ✅ Concluída | `tool Paths` (isolamento C1, 17 testes) e `workflow WorkItem` (create/list/get/archive/usage) em `workflows/`. Validado via `mhl run` (ciclo completo + 2 ataques) e `mhl serve mcp`. Nota: `mhl test` cobre `Paths` diretamente; `create`/`list`/`get`/`archive`/`usage` do `WorkItem` em si foram validados via `mhl run` manual, não via bloco `test` — `test`/`describe` só exercitam `tool`s/expressões, não o motor de execução de um `workflow` inteiro com `step`/`goto` (ver [MHL-Melhorias.md #13](MHL-Melhorias.md)). **Revisado após `mhl 1.4.0-beta.6`:** `Paths.is_valid_id` simplificado com `string.matches` (era iteração char-a-char); `name`/`item_type`/`project_id` ganharam default `""` (`inputSchema` agora só exige `action`) — ambos reverificados com o mesmo conjunto de testes/ataques, sem regressão. |
 | 2 — Workflow `Wiki` | ✅ Concluída | `agent Writer` (claude, `--disallowed-tools` testado de verdade — `--allowed-tools ""` NÃO bloqueia nada, achado crítico), hook `after` gravando em `Usage` (C5, validado ponta a ponta com `WorkItem action:usage`). `workflow Wiki` com `ingest`/`query`/`lint`, todos rodados de verdade contra o `claude` real (não simulado) sobre fontes de teste — `index.md`/`log.md`/páginas de entidade/conceito/fonte/resposta gerados corretamente. Modo Buddy (`pause`/`mhl run --resume`) testado de ponta a ponta no `ingest`: pausa sem gravar nada, resume não repete a chamada de LLM. Achado de arquitetura: `fs.read` resolve contra o CWD do processo, não contra o `.mh` declarante — schemas viram `prompt ... from` sem parâmetros, não `fs.read` (evita um bug de empacotamento que só apareceria na Fase 5/7). Achado de confiabilidade: `claude --json-schema` vaza a própria tag de fechamento em campos de texto longo — mitigado com `ClaudeQuirks.strip_trailing_tag_leak`, testado removendo o vazamento de verdade. Detalhes em [FASE2-ACHADOS.md](FASE2-ACHADOS.md). |
-| 3 — Workflow `Discovery` | ✅ Concluída | 8 artefatos (brief/atributos/requisitos/adr/der/diagramas/features/historias), todos testados com chamadas reais ao `claude` numa cadeia completa (WorkItem→Wiki ingest→brief→requisitos→features→historias, + adr/der/diagramas/atributos). `tool Context` (C2), `tool Html` (list/sections), `tool ArtifactId` (FT00N/US00N sequencial, contando via `dir.list` — sem estado próprio pra dessincronizar). Modo Buddy testado de novo (agora com um `Gate` único compartilhado por todos os 8 artefatos, não duplicado). Diagramas Mermaid (C4/ER) embutidos e escapados corretamente. `WorkItem action:usage` agregou corretamente as 10 chamadas da cadeia inteira. Nenhum achado crítico novo — a fase se beneficiou de tudo que a Fase 2 já tinha descoberto (`self.`, `prompt...from` para schemas, `--disallowed-tools`). |
+| 3 — Workflow `Discovery` | ✅ Concluída | 8 artefatos (brief/atributos/requisitos/adr/der/diagramas/features/historias), todos testados com chamadas reais ao `claude` numa cadeia completa (WorkItem→Wiki ingest→brief→requisitos→features→historias, + adr/der/diagramas/atributos). `tool Context` (C2), `tool Html` (list/sections), `tool ArtifactId` (FT00N/US00N sequencial, contando via `dir.list` — sem estado próprio pra dessincronizar). Modo Buddy testado de novo (agora com um `Gate` único compartilhado por todos os 8 artefatos, não duplicado). Diagramas Mermaid (C4/ER) embutidos e escapados corretamente. `WorkItem action:usage` agregou corretamente as 10 chamadas da cadeia inteira. **Revisão pós-entrega (matriz de dependência, ver §4.1):** `adr`/`der`/`diagramas` passaram a depender também de `atributos`, e `features` de `adr`+`der`+`diagramas` — não só `requisitos`. `tool Context` ganhou `artifact_dir(...)` (+ `tool DirText` compartilhado com `WikiContext`) pra ler pastas com múltiplos arquivos como predecessor. Revalidado de ponta a ponta com a cadeia nova, incluindo os novos `fail()` de dependência faltando. Achado operacional: 2 falhas transitórias reais do `claude` CLI em chamadas consecutivas motivaram adicionar `retry:` ao `agent Writer` (confirmado que `after`/`Usage` não duplicam tokens em retry). |
 | 4 — Workflow `Delivery` | ⬜ Não iniciada | — |
 | 5 — Servir via MCP local | ⬜ Não iniciada | — |
 | 6 — Interface visual | ⬜ Não iniciada | — |
@@ -276,17 +276,17 @@ Sem código de implementação ainda — só o formato de entrada/saída de cada
 
 ### 4.1 Matriz de dependência entre artefatos
 
-Não existia como documento — vivia só espalhada em código (`if (predecessor_content.is_empty()) fail(...)` em cada step `*Generate`, ver `workflows/discovery/discovery.mh`). Extraída direto da implementação da Fase 3, não da memória:
+Não existia como documento — vivia só espalhada em código (`if (predecessor_content.is_empty()) fail(...)` em cada step `*Generate`, ver `workflows/discovery/discovery.mh`). Extraída direto da implementação, não da memória. **Revisada após feedback de produto**: `adr`/`der`/`diagramas` passam a depender também de `atributos` (não só `requisitos`), e `features` passa a depender de `adr`+`der`+`diagramas` (não só `requisitos`) — a cadeia deixou de ter 4 ramos paralelos saindo de `requisitos` e virou majoritariamente linear.
 
 | Artefato | Depende de (além da Wiki, sempre lida) | Nível |
 |---|---|---|
 | `brief` | — (só Wiki) | Oportunidade |
 | `atributos` | `brief` | Oportunidade |
 | `requisitos` | `brief` | Oportunidade |
-| `adr` | `requisitos` | Oportunidade |
-| `der` | `requisitos` | Oportunidade |
-| `diagramas` | `requisitos` | Oportunidade |
-| `features` | `requisitos` | Oportunidade |
+| `adr` | `requisitos` + `atributos` | Oportunidade |
+| `der` | `requisitos` + `atributos` | Oportunidade |
+| `diagramas` | `requisitos` + `atributos` | Oportunidade |
+| `features` | `requisitos` + `adr` + `der` + `diagramas` | Oportunidade |
 | `historias` | `features` (a feature específica indicada por `feature_id`) | Feature (dentro da Oportunidade) |
 
 ```mermaid
@@ -297,7 +297,13 @@ flowchart LR
     requisitos --> adr
     requisitos --> der
     requisitos --> diagramas
+    atributos --> adr
+    atributos --> der
+    atributos --> diagramas
     requisitos --> features
+    adr --> features
+    der --> features
+    diagramas --> features
     features --> historias
     wiki -.-> atributos
     wiki -.-> requisitos
@@ -308,11 +314,15 @@ flowchart LR
     wiki -.-> historias
 ```
 
-Duas coisas que uma leitura linear da lista de `artifact` (`"brief" | "atributos" | "requisitos" | ...`) esconde:
+Duas coisas que uma leitura linear da lista de `artifact` (`"brief" | "atributos" | "requisitos" | ...`) ainda escondem, mesmo depois da revisão:
 
-- **`atributos` e `requisitos` são irmãos, não uma sequência.** Os dois dependem só de `brief` — gerar `atributos` não exige `requisitos` primeiro (nem vice-versa), mesmo a ordem textual do enum sugerindo isso.
-- **`adr`, `der`, `diagramas` e `features` são 4 ramos paralelos**, todos saindo de `requisitos` — nenhum deles depende dos outros três. `features` só se destaca por ser o único desses quatro que tem uma continuação (`historias`).
+- **`atributos` e `requisitos` continuam irmãos** — os dois dependem só de `brief`; gerar um não exige o outro primeiro, mesmo a ordem textual do enum sugerindo sequência.
+- **`adr`, `der` e `diagramas` continuam paralelos entre si** — nenhum dos três depende dos outros dois; os três só convergem depois, em `features`, que agora exige os três prontos (não só um).
 - A Wiki é lida por **todo** artefato, sempre — a linha pontilhada no diagrama existe só pra não poluir visualmente repetindo `wiki -->` em cada nó; não é uma dependência "mais fraca".
+
+**Mecanismo de reforço, atualizado:** como `adr`/`diagramas` gravam **pastas** (um arquivo por decisão/diagrama), não um único arquivo, `Context` ganhou `artifact_dir(project_id, relative_dir)` — concatena todo o conteúdo de uma pasta, igual `WikiContext` já fazia para `wiki/entities`/`wiki/concepts`. A lógica de concatenação virou um `tool DirText` compartilhado entre os dois, em vez de duplicada (Fase 3, revisão pós-Discovery).
+
+**Achado operacional desta revisão:** duas chamadas reais consecutivas (`der`, depois `diagramas`) falharam de forma transitória e tiveram sucesso no retry manual imediato, sem nenhuma mudança de prompt/schema entre as tentativas — sinal de instabilidade momentânea do lado do `claude` CLI, não um bug do Senpai. `agent Writer` ganhou `retry: { max_attempts: 3, delay: 2s, retry_on: [500, 503, "timeout", "rate_limit"] }` em resposta direta a isso — `after` roda só uma vez, sobre a resposta final bem-sucedida (Docs-Reference §05), então o retry não duplica tokens em `usage.jsonl` (confirmado: 9 chamadas bem-sucedidas na cadeia de teste, nenhuma entrada fantasma das 2 tentativas que falharam).
 
 Mecanismo de reforço (já implementado, não é proposta): cada `step *Generate` chama `Context.artifact(project_id, "<predecessor>.html")` e falha com uma mensagem clara (`"gere '<predecessor>' antes de '<artifact>'"`) se vier vazio — nunca deixa um artefato gerar com um predecessor ausente silenciosamente. `historias` resolve `feature_id` → pasta real via `ArtifactId.find_feature_dir`, que falha se a feature não existir.
 
@@ -358,6 +368,8 @@ Mecanismo de reforço (já implementado, não é proposta): cada `step *Generate
 - ✅ Gate `pause()` compartilhado — **um único step `Gate`** para os 8 artefatos (não um `pause()` duplicado por artefato), que despacha pro `Commit` certo depois de aprovado. Testado de ponta a ponta em `atributos`: pausa sem gravar, resume não refaz a chamada de LLM.
 - Testado com chamadas reais ao `claude` para os 8 artefatos (não simulado): `brief`, `requisitos`, `features` (4 features com id sequencial), `historias` (2 features, US reiniciando corretamente), `diagramas` (Mermaid C4, escapado), `der` (Mermaid ER), `atributos` (Modo Buddy), `adr` (4 decisões, id sequencial `ADR-00N`). `WorkItem action:usage` agregou corretamente as 10 chamadas (1 ingest + 9 Discovery) da cadeia inteira.
 - `ClaudeQuirks.strip_trailing_tag_leak` (achado da Fase 2) aplicado em `der.diagrama_mermaid` (o único campo solto na última posição de um schema de Discovery) como precaução — não reproduzido nas chamadas reais desta fase, mas a causa raiz nunca foi confirmada com o mantenedor do `claude`.
+- **Revisão pós-entrega, a pedido:** a cadeia original (`adr`/`der`/`diagramas`/`features` todos saindo só de `requisitos`, em paralelo) foi trocada por uma mais linear — `adr`/`der`/`diagramas` também exigem `atributos`; `features` exige os três (`adr`+`der`+`diagramas`), não só `requisitos`. Ver matriz revisada em §4.1. Consequências de implementação: `tool Context` ganhou `artifact_dir(project_id, relative_dir)` pra ler pastas com múltiplos arquivos (adr/diagramas) como predecessor — a lógica de concatenação foi extraída pra um `tool DirText` compartilhado com `WikiContext` (que fazia a mesma coisa para `wiki/entities`/`wiki/concepts`, só que duplicada), fechando uma duplicação que já existia desde a Fase 2. Toda a cadeia nova revalidada de ponta a ponta com chamadas reais, incluindo os `fail()` novos (`adr` sem `atributos`, `features` sem `adr`/`der`/`diagramas`, cada um testado isoladamente).
+- **Achado operacional desta revisão:** 2 chamadas reais consecutivas (`der`, `diagramas`) falharam de forma transitória e funcionaram no retry manual imediato, sem mudança nenhuma de prompt/schema — sinal de instabilidade momentânea do `claude` CLI. `agent Writer` ganhou `retry: { max_attempts: 3, delay: 2s, retry_on: [500, 503, "timeout", "rate_limit"] }`; confirmado que isso não duplica tokens em `usage.jsonl` (`after` só roda sobre a resposta final bem-sucedida).
 
 ### Fase 4 — Workflow `Delivery`
 - Reaproveita os mesmos `schema`s/`template`s/`tool`s de Discovery onde fizer sentido (brief, requisitos, adr, der, diagramas são conceitualmente iguais); diferencia o artefato final por `mode` (`feature` vs. `historia`) **e** por `standalone`.

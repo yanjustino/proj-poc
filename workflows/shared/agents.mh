@@ -31,6 +31,16 @@ export agent Writer {
         "--json-schema", "${schema}",
         "--disallowed-tools", "Bash,Read,Write,Edit,MultiEdit,NotebookEdit,WebFetch,WebSearch,Glob,Grep,Task"
     ]
+    // Adicionado apos observar, na Fase 3, duas falhas transitorias reais em
+    // chamadas consecutivas (sem relacao com o conteudo do prompt — a mesma
+    // chamada funcionou de primeira no retry manual). `after` so roda uma vez,
+    // sobre a resposta final bem-sucedida (Docs-Reference §05) — retry nao
+    // duplica a contagem de tokens em `Usage`.
+    retry: {
+        max_attempts: 3
+        delay: 2s
+        retry_on: [500, 503, "timeout", "rate_limit"]
+    }
     after: () -> {
         var usage = UsageParser.extract_claude(result)
         Usage.append({
