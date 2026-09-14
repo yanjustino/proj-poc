@@ -30,8 +30,15 @@ export tool ArtifactId {
     next_feature_id(project_id: string): string ->
         self.next_sequential(Paths.artifact(project_id, "features"), "FT")
 
-    next_historia_id(project_id: string, feature_dir: string): string ->
-        self.next_sequential(Paths.artifact(project_id, "historias/" + feature_dir), "US")
+    // feature_dir default "" = historias de uma feature standalone do
+    // Delivery (artifacts/historias/US00N-slug/, sem prefixo de feature —
+    // so existe uma feature implicita nesse projeto). Discovery passa o
+    // feature_dir de verdade pra numerar historias por feature dentro do
+    // backlog de uma Oportunidade.
+    next_historia_id(project_id: string, feature_dir: string = ""): string -> {
+        var historias_dir = if (feature_dir.is_empty()) "historias" else "historias/" + feature_dir
+        return self.next_sequential(Paths.artifact(project_id, historias_dir), "US")
+    }
 
     // ADRs seguem a convencao usual de Architecture Decision Records
     // ("ADR-001-titulo"), distinta de FT/US porque e um formato de terceiros
@@ -44,11 +51,12 @@ export tool ArtifactId {
 
     // Resolve "FT001" pro nome real da pasta ("FT001-nome-da-feature") —
     // quem pede historias de uma feature so sabe o id curto, nao o slug.
+    // Usado pelo Discovery (`historias` de uma feature especifica do backlog).
     find_feature_dir(project_id: string, feature_id: string): string -> {
-        var base = Paths.artifact(project_id, "features")
-        if (!dir.exists(base)) fail("nenhuma feature encontrada em artifacts/features/ (gere 'features' primeiro)")
-        for (var entry in dir.list(base)) {
-            var name = entry.replace(base + "/", "")
+        var base_dir = Paths.artifact(project_id, "features")
+        if (!dir.exists(base_dir)) fail("nenhuma feature encontrada em artifacts/features/ (gere 'features' primeiro)")
+        for (var entry in dir.list(base_dir)) {
+            var name = entry.replace(base_dir + "/", "")
             if (name.starts_with(feature_id + "-")) return name
         }
         fail("feature '" + feature_id + "' nao encontrada em artifacts/features/")

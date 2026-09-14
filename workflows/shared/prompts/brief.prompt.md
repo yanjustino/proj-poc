@@ -1,6 +1,6 @@
 ${schema_conventions}
 
-Com base no conteúdo da wiki abaixo, escreva o brief desta oportunidade: o problema central que a motiva, objetivos mensuráveis, e as partes interessadas relevantes.
+Com base no conteúdo da wiki abaixo, preencha integralmente o resumo estratégico: resumo executivo (3 a 5 frases), contexto de negócio, objetivos com resultados esperados, escopo, stakeholders e seus interesses, métricas, marcos, riscos/dependências e perguntas abertas. Datas só podem aparecer quando explicitamente sustentadas. Use arrays vazios quando uma seção opcional não tiver evidência; não invente itens para preencher espaço.
 
 ## Conteúdo da wiki
 

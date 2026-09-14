@@ -1,0 +1,35 @@
+// tool WorkflowsRoot — resolve o caminho da arvore workflows/ pra um
+// argumento que um SUBPROCESSO (nao o proprio mhl) precisa resolver sozinho:
+// o `--output-schema` do Codex e uma string crua passada no argv de `codex`,
+// que resolve caminho relativo contra a SUA PROPRIA CWD — herdada da CWD do
+// `mhl` que o spawnou, nunca do `.mh` que declarou a string (mesma classe de
+// achado que `fs.read` resolvendo contra CWD em vez do arquivo declarante,
+// FASE2-ACHADOS.md §2 — só que ali era o proprio mhl lendo o arquivo; aqui e
+// um processo filho recebendo um caminho pronto).
+//
+// Enquanto `mhl` roda com CWD = raiz do repo (uso manual via `mhl run`/
+// `mhl test`, como em toda fase ate aqui), o literal "workflows/..." resolve
+// certo por coincidencia. A Fase 5 descobriu que isso quebra de verdade
+// assim que a CWD de `mhl` for outra coisa — o bridge Go do app (Fase 5,
+// `app/mhlbridge.Start`) roda `mhl` com CWD = diretorio de dados do usuario
+// (gravavel, correto pra `projects/`; ver `tool Paths`), nao a raiz do repo
+// — achado real, reproduzido (nao hipotetico): ver FASE5-ACHADOS.md.
+//
+// SENPAI_WORKFLOWS_ROOT (setado pelo bridge Go ao spawnar `mhl`; ausente no
+// uso manual via CLI) resolve isso — quando presente, todo `*SchemaFile.get()`
+// monta `path:` a partir dele (absoluto, correto de qualquer CWD); quando
+// ausente, cai no literal "workflows/..." de sempre, preservando 100% do
+// comportamento ja validado nas Fases 2-4.
+export tool WorkflowsRoot {
+    resolve(relative: string): string -> {
+        var root = env("SENPAI_WORKFLOWS_ROOT")
+        if (root.is_empty()) return "workflows/" + relative
+        return root + "/" + relative
+    }
+}
+
+test WorkflowsRootSpec {
+    describe falls_back_to_the_relative_literal_when_the_env_var_is_unset {
+        are_equal(WorkflowsRoot.resolve("shared/schemas/brief.schema.json"), "workflows/shared/schemas/brief.schema.json")
+    }
+}

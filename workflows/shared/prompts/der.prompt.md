@@ -1,6 +1,6 @@
 ${schema_conventions}
 
-Com base no conteúdo da wiki, dos requisitos e dos atributos de qualidade abaixo, identifique as entidades de dados principais desta oportunidade e como se relacionam, e devolva um diagrama entidade-relacionamento em sintaxe Mermaid (`erDiagram`).
+Com base no conteúdo da wiki, dos requisitos e dos atributos de qualidade abaixo, preencha integralmente o DER. Classifique o modo como `greenfield`, `as-is` ou `evolucao`; produza Mermaid `erDiagram`; documente glossário de entidades, relacionamentos confirmados e inferidos separadamente, atributos e, no modo evolução, o delta do modelo. Inclua gaps e questões abertas. Use arrays vazios nas seções que não se aplicam e não invente tipos, cardinalidades ou atributos sem marcar a fonte como inferência/gap.
 
 ## Requisitos já gerados
 

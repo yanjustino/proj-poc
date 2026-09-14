@@ -1,6 +1,6 @@
 ${schema_conventions}
 
-Com base no conteúdo da wiki, dos requisitos, das decisões arquiteturais (ADRs), do modelo de dados (DER) e dos diagramas C4 abaixo, quebre esta oportunidade em features de backlog — cada uma com título, descrição do que entrega e por quê, e critérios de aceite verificáveis.
+Com base no conteúdo da wiki e nos artefatos abaixo, quebre a oportunidade em features e preencha para cada uma toda a estrutura de detalhamento: resumo, objetivo, personas, escopo, regras de negócio, interações com dados, critérios FAC, histórias propostas, dependências, gaps e questões abertas. Use arrays vazios para seções sem evidência; não invente conteúdo para completar o template.
 
 ## Requisitos já gerados
 

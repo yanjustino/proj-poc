@@ -1,0 +1,51 @@
+// Expõe conteúdo e caminho dos schemas usados pelo adapter do Writer.
+// `path:` passa por WorkflowsRoot (Fase 5) porque o Codex recebe esse valor
+// como argumento cru de subprocesso, resolvido contra a CWD de `mhl` — nunca
+// contra este arquivo (ver workflows_root.mh, FASE5-ACHADOS.md).
+
+import { WorkflowsRoot } from "../shared/workflows_root.mh"
+
+prompt IngestSchemaContent() from "schemas/ingest.schema.json"
+prompt QuerySchemaContent() from "schemas/query.schema.json"
+prompt LintSchemaContent() from "schemas/lint.schema.json"
+
+export tool IngestSchemaFile {
+    get(): {content: string, path: string} -> {
+        content: IngestSchemaContent(),
+        path: WorkflowsRoot.resolve("wiki/schemas/ingest.schema.json")
+    }
+}
+
+export tool QuerySchemaFile {
+    get(): {content: string, path: string} -> {
+        content: QuerySchemaContent(),
+        path: WorkflowsRoot.resolve("wiki/schemas/query.schema.json")
+    }
+}
+
+export tool LintSchemaFile {
+    get(): {content: string, path: string} -> {
+        content: LintSchemaContent(),
+        path: WorkflowsRoot.resolve("wiki/schemas/lint.schema.json")
+    }
+}
+
+test WikiSchemaFileSpec {
+    describe exposes_ingest_schema_content_and_codex_path {
+        var schema = IngestSchemaFile.get()
+        are_equal(json.parse(schema.content).type, "object")
+        are_equal(schema.path, "workflows/wiki/schemas/ingest.schema.json")
+    }
+
+    describe exposes_query_schema_content_and_codex_path {
+        var schema = QuerySchemaFile.get()
+        are_equal(json.parse(schema.content).type, "object")
+        are_equal(schema.path, "workflows/wiki/schemas/query.schema.json")
+    }
+
+    describe exposes_lint_schema_content_and_codex_path {
+        var schema = LintSchemaFile.get()
+        are_equal(json.parse(schema.content).type, "object")
+        are_equal(schema.path, "workflows/wiki/schemas/lint.schema.json")
+    }
+}

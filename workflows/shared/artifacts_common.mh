@@ -12,6 +12,8 @@
 // import), mas a parte cara — texto de instrucao, contrato de schema,
 // template de renderizacao — mora em um lugar so.
 
+import { WorkflowsRoot } from "workflows_root.mh"
+
 export prompt ArtifactSchema() from "artifact_schema.prompt.md"
 
 export prompt BriefInstruction(schema_conventions: prompt, wiki_content: string) from "prompts/brief.prompt.md"
@@ -21,16 +23,47 @@ export prompt AdrInstruction(schema_conventions: prompt, requisitos_content: str
 export prompt DerInstruction(schema_conventions: prompt, requisitos_content: string, atributos_content: string, wiki_content: string) from "prompts/der.prompt.md"
 export prompt DiagramasInstruction(schema_conventions: prompt, requisitos_content: string, atributos_content: string, wiki_content: string) from "prompts/diagramas.prompt.md"
 
-export prompt BriefSchemaFile() from "schemas/brief.schema.json"
-export prompt AtributosSchemaFile() from "schemas/atributos.schema.json"
-export prompt RequisitosSchemaFile() from "schemas/requisitos.schema.json"
-export prompt AdrSchemaFile() from "schemas/adr.schema.json"
-export prompt DerSchemaFile() from "schemas/der.schema.json"
-export prompt DiagramasSchemaFile() from "schemas/diagramas.schema.json"
+// Gera historias pra UMA feature — usado por Discovery (feature dentro do
+// backlog de uma Oportunidade) e por Delivery (a unica feature implicita de
+// um projeto standalone). `feature_content` e o feature.html de qualquer um
+// dos dois casos — a instrucao nao muda, so quem fornece o conteudo muda.
+export prompt HistoriasInstruction(schema_conventions: prompt, feature_content: string, wiki_content: string) from "prompts/historias.prompt.md"
 
-export prompt BriefBody(problema: string, problema_fontes: string, objetivos_lista: string, stakeholders_lista: string) from "templates/brief_body.html"
-export prompt AtributosBody(secoes: string) from "templates/atributos_body.html"
-export prompt RequisitosBody(funcionais_lista: string, nao_funcionais_lista: string) from "templates/requisitos_body.html"
+prompt HistoriasSchemaContent() from "schemas/historias.schema.json"
+prompt BriefSchemaContent() from "schemas/brief.schema.json"
+prompt AtributosSchemaContent() from "schemas/atributos.schema.json"
+prompt RequisitosSchemaContent() from "schemas/requisitos.schema.json"
+prompt AdrSchemaContent() from "schemas/adr.schema.json"
+prompt DerSchemaContent() from "schemas/der.schema.json"
+prompt DiagramasSchemaContent() from "schemas/diagramas.schema.json"
+
+export tool HistoriasSchemaFile { get(): {content: string, path: string} -> {content: HistoriasSchemaContent(), path: WorkflowsRoot.resolve("shared/schemas/historias.schema.json")} }
+export tool BriefSchemaFile { get(): {content: string, path: string} -> {content: BriefSchemaContent(), path: WorkflowsRoot.resolve("shared/schemas/brief.schema.json")} }
+export tool AtributosSchemaFile { get(): {content: string, path: string} -> {content: AtributosSchemaContent(), path: WorkflowsRoot.resolve("shared/schemas/atributos.schema.json")} }
+export tool RequisitosSchemaFile { get(): {content: string, path: string} -> {content: RequisitosSchemaContent(), path: WorkflowsRoot.resolve("shared/schemas/requisitos.schema.json")} }
+export tool AdrSchemaFile { get(): {content: string, path: string} -> {content: AdrSchemaContent(), path: WorkflowsRoot.resolve("shared/schemas/adr.schema.json")} }
+export tool DerSchemaFile { get(): {content: string, path: string} -> {content: DerSchemaContent(), path: WorkflowsRoot.resolve("shared/schemas/der.schema.json")} }
+export tool DiagramasSchemaFile { get(): {content: string, path: string} -> {content: DiagramasSchemaContent(), path: WorkflowsRoot.resolve("shared/schemas/diagramas.schema.json")} }
+
+export prompt BriefBody(resumo_executivo: string, resumo_fontes: string, contexto_negocio: string, contexto_fontes: string, objetivos_tabela: string, em_escopo_lista: string, fora_escopo_lista: string, stakeholders_tabela: string, metricas_tabela: string, marcos_tabela: string, riscos_tabela: string, perguntas_lista: string, fontes_nota: string) from "templates/brief_body.html"
+export prompt AtributosBody(contexto: string, contexto_fontes: string, requisitos_tabela: string, restricoes_tabela: string, compliance_tabela: string, exclusoes_lista: string, perguntas_lista: string, fontes_nota: string) from "templates/atributos_body.html"
+export prompt RequisitosBody(contexto: string, contexto_fontes: string, funcionais_tabela: string, integracoes_tabela: string, dados_tabela: string, negocio_tabela: string, regras_tabela: string, exclusoes_lista: string, gaps_lista: string, perguntas_lista: string, fontes_nota: string) from "templates/requisitos_body.html"
 export prompt AdrBody(contexto: string, decisao: string, consequencias: string, fontes_nota: string) from "templates/adr_body.html"
-export prompt DerBody(descricao: string, fontes_nota: string, diagrama_mermaid: string) from "templates/der_body.html"
-export prompt DiagramaBody(descricao: string, fontes_nota: string, diagrama_mermaid: string) from "templates/diagrama_body.html"
+export prompt DerBody(modo: string, contexto: string, contexto_fontes: string, diagrama_mermaid: string, entidades_tabela: string, confirmados_tabela: string, inferidos_tabela: string, atributos_tabela: string, delta_lista: string, gaps_lista: string, questoes_lista: string, fontes_nota: string) from "templates/der_body.html"
+export prompt DiagramaBody(diagram_type: string, hierarchy_level: string, descricao: string, descricao_fontes: string, fontes_nota: string, diagrama_mermaid: string) from "templates/diagrama_body.html"
+
+// FeatureBody/HistoriaBody sao o corpo de UM item de feature/historia — o
+// mesmo formato serve tanto pro item dentro do backlog do Discovery quanto
+// pro detalhamento final do Delivery (a diferenca entre os dois nunca esta
+// na FORMA renderizada, so em quais dados entram e onde o arquivo e gravado).
+export prompt FeatureBody(resumo: string, resumo_fontes: string, objetivo: string, objetivo_fontes: string, personas_tabela: string, em_escopo_lista: string, fora_escopo_lista: string, regras_lista: string, interacoes_lista: string, criterios_lista: string, historias_lista: string, dependencias_lista: string, dependencias_sistema_lista: string, gaps_lista: string, questoes_lista: string, fontes_nota: string) from "templates/feature_body.html"
+export prompt HistoriaBody(statement: string, statement_fontes: string, atributos_lista: string, contexto_negocio: string, contexto_fontes: string, criterios_lista: string, cenarios_gherkin: string, cenarios_fontes: string, regras_lista: string, dod_lista: string, dependencias_lista: string, fora_escopo_lista: string, exemplo_uso: string, exemplo_fontes: string, contratos_interface: string, contratos_fontes: string, questoes_lista: string, fontes_nota: string) from "templates/historia_body.html"
+
+test SchemaFileSpec {
+    describe exposes_schema_content_and_codex_file_path {
+        var schema_file = AtributosSchemaFile.get()
+        var parsed = json.parse(schema_file.content)
+        are_equal(parsed.type, "object")
+        are_equal(schema_file.path, "workflows/shared/schemas/atributos.schema.json")
+    }
+}

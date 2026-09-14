@@ -1,0 +1,147 @@
+// Casos de uso determinísticos do ciclo de vida de um work-item. Centraliza
+// política, persistência e leitura; o workflow mantém apenas a orquestração.
+
+import { Paths } from "../shared/paths.mh"
+
+export tool WorkItemActions {
+    create(name: string, item_type: string): any -> {
+        if (name.is_empty()) fail("'name' e obrigatorio para action: \"create\"")
+
+        var new_id = uuid.v7()
+        var record = {
+            id: new_id,
+            name: name,
+            type: item_type,
+            level: self.level_for(item_type),
+            created_at: time.format(time.now(), "2006-01-02T15:04:05Z07:00"),
+            archived: false
+        }
+
+        self.create_directories(new_id)
+        fs.write(Paths.project_file(new_id), json.stringify(record))
+        return record
+    }
+
+    list(): any[] -> {
+        var projects = []
+        if (!dir.exists("projects")) return projects
+
+        for (var entry in dir.list("projects")) {
+            if (dir.exists(entry)) {
+                var candidate_id = entry.replace("projects/", "")
+                if (Paths.is_valid_id(candidate_id) && fs.exists(Paths.project_file(candidate_id))) {
+                    projects += [json.parse(fs.read(Paths.project_file(candidate_id)))]
+                }
+            }
+        }
+
+        return projects.sort_by((project) -> project.created_at)
+    }
+
+    get(project_id: string): any -> {
+        var path = self.existing_project_file(project_id)
+        return json.parse(fs.read(path))
+    }
+
+    archive(project_id: string): any -> {
+        var path = self.existing_project_file(project_id)
+        var record = json.parse(fs.read(path))
+        record["archived"] = true
+        fs.write(path, json.stringify(record))
+        return record
+    }
+
+    usage(project_id: string): any -> {
+        project_id = Paths.ensure_valid(project_id)
+        var path = Paths.usage_file(project_id)
+        if (!fs.exists(path)) return self.summarize_usage([])
+        return self.summarize_usage(json.parse_lines(fs.read(path)))
+    }
+
+    level_for(item_type: string): string -> {
+        var valid_types = ["oportunidade", "feature", "historia"]
+        if (!valid_types.contains(item_type)) {
+            fail(
+                "'item_type' invalido: '" + item_type +
+                "' (use oportunidade | feature | historia)"
+            )
+        }
+        return if (item_type == "oportunidade") "discovery" else "delivery"
+    }
+
+    summarize_usage(lines: any[]): any -> {
+        var total_in = 0
+        var total_out = 0
+        var by_artifact = []
+
+        for (var line in lines) {
+            var entry = line.value
+            total_in = total_in + entry.tokens_in
+            total_out = total_out + entry.tokens_out
+            by_artifact += [{
+                artifact: entry.artifact,
+                tokens_in: entry.tokens_in,
+                tokens_out: entry.tokens_out,
+                at: line.ts
+            }]
+        }
+
+        return {
+            total_tokens_in: total_in,
+            total_tokens_out: total_out,
+            by_artifact: by_artifact
+        }
+    }
+
+    create_directories(project_id: string) -> {
+        dir.create(Paths.root(project_id))
+        dir.create(Paths.raw_dir(project_id))
+        dir.create(Paths.wiki_dir(project_id))
+        dir.create(Paths.artifacts_dir(project_id))
+    }
+
+    existing_project_file(project_id: string): string -> {
+        project_id = Paths.ensure_valid(project_id)
+        var path = Paths.project_file(project_id)
+        if (!fs.exists(path)) fail("work-item nao encontrado: '" + project_id + "'")
+        return path
+    }
+}
+
+test WorkItemActionsSpec {
+    describe maps_opportunities_to_discovery {
+        are_equal(WorkItemActions.level_for("oportunidade"), "discovery")
+    }
+
+    describe maps_delivery_item_types_to_delivery {
+        are_equal(WorkItemActions.level_for("feature"), "delivery")
+        are_equal(WorkItemActions.level_for("historia"), "delivery")
+    }
+
+    describe rejects_an_unknown_item_type {
+        try {
+            WorkItemActions.level_for("epico")
+            is_true(false)
+        } catch (err) {
+            is_true(true)
+        }
+    }
+
+    describe summarizes_usage_by_artifact {
+        var result = WorkItemActions.summarize_usage([
+            {value: {artifact: "brief", tokens_in: 10, tokens_out: 4}, ts: "t1"},
+            {value: {artifact: "der", tokens_in: 7, tokens_out: 3}, ts: "t2"}
+        ])
+        are_equal(result.total_tokens_in, 17)
+        are_equal(result.total_tokens_out, 7)
+        are_equal(result.by_artifact.size(), 2)
+        are_equal(result.by_artifact[1].artifact, "der")
+    }
+
+    describe summarizes_empty_usage {
+        var result = WorkItemActions.summarize_usage([])
+        are_equal(result.total_tokens_in, 0)
+        are_equal(result.total_tokens_out, 0)
+        are_equal(result.by_artifact, [])
+    }
+}

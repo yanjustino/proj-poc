@@ -1,29 +1,30 @@
-// agent Writer — backend de LLM usado por Wiki/Discovery/Delivery para gerar
-// conteudo (C4). Uma unica declaracao hoje porque so o `claude` CLI foi
-// validado ponta a ponta com `schema:` (FASE0-ACHADOS.md §4/§5) — trocar para
-// `codex`/`devin` em producao nao e so mudar `command:` (que agora aceita
-// `env(...)`, achado #1 do MHL-Melhorias.md): a FORMA de `args` diverge
-// estruturalmente entre os tres CLIs (schema inline vs. arquivo vs.
-// inexistente — MHL-Melhorias.md #11), entao produzir os agentes de
-// codex/devin fica para quando esses backends entrarem em uso real, nao
-// antes (§2.1/C4 do plano macro).
+// Backends de LLM e adapter Writer usados por Wiki/Discovery/Delivery.
+// Claude recebe o schema inline; Codex recebe o caminho por
+// `--output-schema`. Writer normaliza essa diferenca para os workflows.
 //
 // `--disallowed-tools` e a mitigacao obrigatoria de C2 (nenhum agente pode
 // ler/escrever fora do que o proprio prompt manda) — testada de verdade
 // (FASE2-ACHADOS.md §1): `--allowed-tools ""` NAO bloqueia nada, so a lista
 // explicita em `--disallowed-tools` bloqueia de verdade.
 //
-// O hook `after` (C5) roda para toda chamada deste agente: separa o
-// envelope de uso do conteudo de verdade e grava no ledger `Usage`. Steps que
-// chamam `Writer.run(...)` precisam ter, no escopo do pipeline, `var
-// tokens_in = 0`, `var tokens_out = 0` e `var current_artifact = "..."`
-// (rotulo do que esta sendo gerado) declarados ANTES da chamada — `after`
-// "ve as variaveis do step que chamou" (Docs-Reference §05), nao tem
-// parametros proprios.
+// Nenhum dos dois agentes declara `after`, de proposito: `after` so pode
+// devolver uma string (ou nada) — confirmado por spike, `after` devolvendo
+// `{content, tokens_in, tokens_out}` falha em runtime com "Codex.after must
+// return a string (or nothing), got object" — e so enxerga variaveis do
+// STEP de pipeline que fez a chamada, nao de um `tool` intermediario
+// (confirmado por outro spike: um `tool Caller { go() -> Agent.run(...) }`
+// chamado por um step faz `after` falhar com "undefined variable" ao tentar
+// atribuir numa var do step por efeito colateral). Como `Writer.generate`
+// (abaixo) e um `tool` — nao um step — chamando `.run()`, nenhuma das duas
+// tecnicas de `after` funciona aqui. Sem `after`, `.run()` devolve o stdout
+// cru do CLI (confirmado por spike); `Writer.generate` extrai uso (C5) e
+// normaliza o conteudo (`UsageParser`/`StructuredOutput`) explicitamente,
+// depois de receber essa string de volta — nenhum lugar mágico "ve" nada.
 
 import { Usage, UsageParser } from "usage.mh"
+import { StructuredOutput } from "structured_output.mh"
 
-export agent Writer {
+export agent Claude {
     command: "claude"
     args: [
         "-p", "${prompt}",
@@ -41,15 +42,139 @@ export agent Writer {
         delay: 2s
         retry_on: [500, 503, "timeout", "rate_limit"]
     }
-    after: () -> {
-        var usage = UsageParser.extract_claude(result)
+}
+
+// Codex herda o CWD do proprio `mhl` como seu "working root" (nao ha um
+// `cwd:`/`workdir:` proprio de `agent` no MHL) — e por padrao RECUSA rodar
+// fora de um repositorio git ("Not inside a trusted directory"), e o que
+// enxerga dali é tudo que `--sandbox read-only` deixa ler, nao só o que o
+// prompt pede (mesma classe de risco do achado FASE0-ACHADOS.md §9 pro
+// `claude` sem `--disallowed-tools`). Isso importa de verdade na Fase 5: o
+// bridge Go roda `mhl` com CWD = diretorio de dados do usuario, que contem
+// `projects/` de TODOS os work-items — sem isolar o `--cd` do Codex disso
+// separadamente, ele enxergaria (leitura, nao escrita) work-items alem do
+// que o prompt de uma chamada especifica pediu, furando C1/C2.
+//
+// `-C/--cd <DIR>` resolve isso — CWD do Codex, independente do CWD de
+// `mhl`. Resolvido por `tool CodexCwd` (nao um `env(...)` direto em `args:`)
+// porque `env(...)` usado DIRETO em `agent.command`/`args` e tratado como
+// referencia de credencial: falha fechado se a var nao existir (nada de
+// devolver "" como em qualquer outro lugar da linguagem) e o valor sai
+// redigido ([REDACTED]) de qualquer log/saida do mhl — confirmado por spike.
+// Um `tool` chamado a partir de `args:` (mesmo padrao de WorkflowsRoot,
+// workflows_root.mh) e uma expressao comum: `env(...)` ali devolve "" pra
+// var ausente, sem redaction — certo pra montar um fallback. Ausente
+// SENPAI_CODEX_CWD (uso manual via CLI, como em toda fase ate aqui), cai em
+// "." — mesmo comportamento de sempre (nenhuma regressao pro uso via
+// terminal); o bridge Go seta a var pra um diretorio de scratch dedicado,
+// sem nenhum dado de projeto dentro (app/mhlbridge.Start, FASE5-ACHADOS.md).
+tool CodexCwd {
+    resolve(): string -> {
+        var configured = env("SENPAI_CODEX_CWD")
+        if (configured.is_empty()) return "."
+        return configured
+    }
+}
+
+// Backend Codex. O caminho do schema e injetado pelo adapter Writer, pois o
+// CLI exige --output-schema <FILE> em vez do schema inline aceito pelo
+// Claude. --skip-git-repo-check e necessario porque CodexCwd.resolve() nao
+// e garantido ser um repositorio git (nem deveria precisar ser um, pra um
+// diretorio de dados de app comum).
+export agent Codex {
+    description: "Gera conteúdo estruturado com Codex em sandbox somente leitura."
+    command: "codex"
+    args: [
+        "exec",
+        "--sandbox", "read-only",
+        "--cd", CodexCwd.resolve(),
+        "--skip-git-repo-check",
+        "--ephemeral",
+        "--ignore-user-config",
+        "--ignore-rules",
+        "--color", "never",
+        "--json",
+        "--output-schema", "${schema}",
+        "${prompt}"
+    ]
+    retry: {
+        max_attempts: 3
+        delay: 2s
+        retry_on: [500, 503, "timeout", "rate_limit"]
+    }
+}
+
+// AgentSelector decide qual backend atende um prompt — hoje sempre Codex
+// (unico caminho validado ponta a ponta nesta fase); pronto pra crescer com
+// selecao por ambiente/prompt sem mudar a assinatura de Writer.generate.
+//
+// Deliberadamente NAO um `router` (Docs-Reference §"router"): um `router` so
+// expoe `.delegate(prompt:, schema:)` publicamente — `select` e um hook
+// interno, nunca um metodo chamavel de fora. Confirmado por spike isolado
+// (2 arquivos minimos, mesmo `.mh`, tool chamando `Router.select(...)`):
+// falha em runtime com `undefined variable "Router"`, mesmo sem nenhum
+// import — `select` so roda dentro do proprio `.delegate()`, nunca antes
+// dele. Isso importa aqui porque Claude e Codex exigem formas DIFERENTES do
+// schema pro mesmo argumento reservado `schema:` de `agent.run(...)`: Claude
+// quer o JSON inline (`--json-schema`, confirmado recusando um caminho de
+// arquivo com "not valid JSON"); Codex quer um caminho de arquivo real
+// (`--output-schema <FILE>`). `Writer.generate` precisa saber qual formato
+// montar ANTES de rodar o agente — e `router.delegate()` nao deixa consultar
+// essa decisao de fora. `tool AgentSelector` + `match` + `.run()` direto em
+// cada agente resolve isso sem esbarrar nesse limite.
+tool AgentSelector {
+    pick(prompt: string): string -> nameof(Codex)  // default; unico backend validado ponta a ponta nesta fase
+}
+
+// Adapter consumido pelos workflows. Ele absorve a diferenca de contrato do
+// Codex e mantem cada schema como {content, path}: Claude usa
+// `schema_file.content` (JSON inline); Codex usa `schema_file.path`
+// (caminho de arquivo).
+export tool Writer {
+    generate(prompt: string, schema_file: {content: string, path: string}, project_id: string, artifact: string): {content: string, tokens_in: number, tokens_out: number} -> {
+        var picked = AgentSelector.pick(prompt: prompt)
+        var raw = match picked {
+            nameof(Claude) -> Claude.run(prompt: prompt, schema: schema_file.content)
+            nameof(Codex) -> Codex.run(prompt: prompt, schema: schema_file.path)
+        }
+        var usage = match picked {
+            nameof(Claude) -> UsageParser.extract_claude(raw)
+            nameof(Codex) -> UsageParser.extract_codex(raw)
+        }
+
         Usage.append({
-            artifact: current_artifact,
+            artifact: artifact,
             tokens_in: usage.tokens_in,
             tokens_out: usage.tokens_out,
         })
-        tokens_in = usage.tokens_in
-        tokens_out = usage.tokens_out
-        return usage.content
+
+        return {
+            content: StructuredOutput.normalize_json(usage.content),
+            tokens_in: usage.tokens_in,
+            tokens_out: usage.tokens_out
+        }
+    }
+}
+
+agent MockCodexSchemaPath {
+    command: "echo"
+    args: ["exec", "--ignore-user-config", "--ignore-rules", "--output-schema", "${schema}", "${prompt}"]
+}
+
+tool MockWriter {
+    generate(prompt: string, schema_file: {content: string, path: string}, project_id: string, artifact: string): string -> {
+        return MockCodexSchemaPath.run(prompt: prompt, schema: schema_file.path)
+    }
+}
+
+test WriterAdapterSpec {
+    describe forwards_schema_path_as_a_distinct_codex_argument {
+        var result = MockWriter.generate(
+            prompt: "gere o brief",
+            schema_file: {content: "{\"type\":\"object\"}", path: "workflows/shared/schemas/brief.schema.json"},
+            project_id: "test-project",
+            artifact: "brief"
+        )
+        are_equal(result, "exec --ignore-user-config --ignore-rules --output-schema workflows/shared/schemas/brief.schema.json gere o brief")
     }
 }

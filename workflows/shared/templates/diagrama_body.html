@@ -1,5 +1,7 @@
-<p>${descricao}</p>
-${fontes_nota}
+<p><strong>Tipo:</strong> ${diagram_type} · <strong>Nível:</strong> ${hierarchy_level}</p>
+<p>${descricao}</p>${descricao_fontes}
+<h2>Diagrama</h2>
 <pre class="mermaid">${diagrama_mermaid}</pre>
+<h2>Fontes</h2>${fontes_nota}
 <script src="../assets/mermaid.min.js"></script>
 <script>mermaid.initialize({ startOnLoad: true });</script>

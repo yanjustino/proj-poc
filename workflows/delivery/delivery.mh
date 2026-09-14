@@ -1,55 +1,79 @@
-// Orquestra a geracao dos artefatos de oportunidade. Contexto, geracao,
-// apresentacao e persistencia permanecem em componentes especializados.
+// Gera artefatos para projetos Feature ou Historia standalone. Artefatos
+// comuns reutilizam os contratos de shared; feature/historia finais mantêm
+// contratos próprios. Requisitos são obrigatórios para o artefato final;
+// ADR, DER e diagramas são contextos opcionais.
 
 import { Paths } from "../shared/paths.mh"
 import { Writer } from "../shared/agents.mh"
 import { Context } from "../shared/context.mh"
-import { ArtifactBody } from "../shared/artifact_body.mh"
 import { Slug } from "../shared/slug.mh"
 import { ArtifactId } from "../shared/artifact_id.mh"
 import { PageShell, ArtifactMeta } from "../shared/page_shell.mh"
+import { ArtifactBody } from "../shared/artifact_body.mh"
 import { WorkflowsRoot } from "../shared/workflows_root.mh"
 import {
     ArtifactSchema,
-    BriefInstruction, AtributosInstruction, RequisitosInstruction, AdrInstruction, DerInstruction, DiagramasInstruction,
+    BriefInstruction, RequisitosInstruction, AdrInstruction, DerInstruction, DiagramasInstruction,
     HistoriasInstruction,
-    BriefSchemaFile, AtributosSchemaFile, RequisitosSchemaFile, AdrSchemaFile, DerSchemaFile, DiagramasSchemaFile,
+    BriefSchemaFile, RequisitosSchemaFile, AdrSchemaFile, DerSchemaFile, DiagramasSchemaFile,
     HistoriasSchemaFile
 } from "../shared/artifacts_common.mh"
 
-// O SCHEMA de features (o backlog inteiro, varios itens de uma vez) e
-// especifico de Discovery — Delivery nao gera um backlog, gera o
-// detalhamento final de UMA feature/historia ja identificada, com seu proprio
-// schema de item unico (workflows/delivery/). HistoriasInstruction/
-// HistoriasSchemaFile ja sao compartilhados (artifacts_common.mh) porque
-// "quebrar uma feature em historias" e a mesma operacao nos dois workflows.
-prompt FeaturesInstruction(
+// Delivery nao tem atributos de qualidade proprio — este texto fixo e o que
+// entra no lugar de `atributos_content` ao reaproveitar AdrInstruction/
+// DerInstruction/DiagramasInstruction do Discovery (C3: decisao deterministica,
+// nunca a LLM escolhendo se "tem ou nao" atributos).
+tool NoAtributos {
+    placeholder(): string ->
+        "(não se aplica neste nível — Delivery não gera atributos de qualidade; considere apenas requisitos e wiki)"
+}
+
+// Artefato final — especifico de Delivery, um item so por vez (nao um
+// backlog inteiro como o `features`/`historias` do Discovery).
+prompt FeatureInstruction(
     schema_conventions: prompt,
     requisitos_content: string,
     adr_content: string,
     der_content: string,
     diagramas_content: string,
     wiki_content: string
-) from "prompts/features.prompt.md"
+) from "prompts/feature.prompt.md"
 
-prompt FeaturesSchemaContent() from "schemas/features.schema.json"
-tool FeaturesSchemaFile {
+prompt HistoriaInstruction(
+    schema_conventions: prompt,
+    requisitos_content: string,
+    adr_content: string,
+    der_content: string,
+    diagramas_content: string,
+    wiki_content: string
+) from "prompts/historia.prompt.md"
+
+prompt FeatureSchemaContent() from "schemas/feature.schema.json"
+prompt HistoriaSchemaContent() from "schemas/historia.schema.json"
+tool FeatureSchemaFile {
     get(): {content: string, path: string} -> {
-        content: FeaturesSchemaContent(),
-        path: WorkflowsRoot.resolve("discovery/schemas/features.schema.json")
+        content: FeatureSchemaContent(),
+        path: WorkflowsRoot.resolve("delivery/schemas/feature.schema.json"),
     }
 }
 
-workflow Discovery {
-    description: "Artefatos de nivel Oportunidade: brief, atributos, requisitos, adr, der, diagramas, features, historias."
+tool HistoriaSchemaFile {
+    get(): {content: string, path: string} -> {
+        content: HistoriaSchemaContent(),
+        path: WorkflowsRoot.resolve("delivery/schemas/historia.schema.json"),
+    }
+}
+
+workflow Delivery {
+    description: "Gera brief, requisitos, ADR, DER, diagramas, detalhamento final e histórias para Feature ou Historia standalone."
 
     input project_id: string
-    input artifact: string        // brief | atributos | requisitos | adr | der | diagramas | features | historias
-    input feature_id: string = "" // obrigatorio (valor) so para artifact:"historias"
+    input mode: string        // "feature" | "historia"
+    input artifact: string    // brief | requisitos | adr | der | diagramas | feature | historia | historias
     input buddy: bool = false
     input approved: bool = false
 
-    var discovery_result = null
+    var delivery_result = null
     var tokens_in = 0
     var tokens_out = 0
     var current_artifact = ""
@@ -57,40 +81,45 @@ workflow Discovery {
 
     output: {
         artifact: artifact,
-        result: discovery_result,
+        result: delivery_result,
         tokens_in: tokens_in,
         tokens_out: tokens_out,
     }
 
     step Dispatch {
         project_id = Paths.ensure_valid(project_id)
+        if (mode != "feature" && mode != "historia") fail("mode invalido: '" + mode + "' (use feature | historia)")
+
         if (artifact == "brief") goto BriefGenerate
-        if (artifact == "atributos") goto AtributosGenerate
         if (artifact == "requisitos") goto RequisitosGenerate
         if (artifact == "adr") goto AdrGenerate
         if (artifact == "der") goto DerGenerate
         if (artifact == "diagramas") goto DiagramasGenerate
-        if (artifact == "features") goto FeaturesGenerate
-        if (artifact == "historias") goto HistoriasGenerate
+        if (artifact == "feature" || artifact == "historia") {
+            if (artifact != mode) fail("artifact '" + artifact + "' nao bate com mode '" + mode + "'")
+            goto FinalGenerate
+        }
+        if (artifact == "historias") {
+            if (mode != "feature") fail("'historias' so existe quando mode=\"feature\"")
+            goto HistoriasGenerate
+        }
+        var final_artifacts = mode + (if (mode == "feature") " | historias" else "")
         fail(
             "artefato desconhecido: '" + artifact +
-            "' (use brief | atributos | requisitos | adr | der | diagramas | features | historias)"
+            "' (use brief | requisitos | adr | der | diagramas | " + final_artifacts + ")"
         )
     }
 
-    // Gate e compartilhado por todo artefato — pausar (Modo Buddy) nunca
-    // custa uma nova chamada de LLM no resume, porque cada *Generate ja
-    // terminou e gravou o resultado em `pending_data` (pipeline-scoped)
-    // antes de chegar aqui.
+    // Gate compartilhado por todo artefato — mesma razao da Fase 3 (Modo
+    // Buddy nunca custa refazer a chamada de LLM no resume).
     step Gate {
         if (buddy && !approved) pause("revise o conteudo de '" + artifact + "' antes de gravar em artifacts/")
         if (artifact == "brief") goto BriefCommit
-        if (artifact == "atributos") goto AtributosCommit
         if (artifact == "requisitos") goto RequisitosCommit
         if (artifact == "adr") goto AdrCommit
         if (artifact == "der") goto DerCommit
         if (artifact == "diagramas") goto DiagramasCommit
-        if (artifact == "features") goto FeaturesCommit
+        if (artifact == "feature" || artifact == "historia") goto FinalCommit
         if (artifact == "historias") goto HistoriasCommit
         fail("invariante violado: artefato desconhecido chegou ao Gate")
     }
@@ -98,8 +127,13 @@ workflow Discovery {
     step BriefGenerate {
         current_artifact = "brief"
         var response = Writer.generate(
-            prompt: BriefInstruction(schema_conventions: ArtifactSchema(), wiki_content: Context.wiki(project_id)),
-            schema_file: BriefSchemaFile.get(), project_id: project_id, artifact: current_artifact
+            prompt: BriefInstruction(
+                schema_conventions: ArtifactSchema(),
+                wiki_content: Context.wiki(project_id)
+            ),
+            schema_file: BriefSchemaFile.get(),
+            project_id: project_id,
+            artifact: current_artifact
         )
         tokens_in = response.tokens_in
         tokens_out = response.tokens_out
@@ -117,45 +151,26 @@ workflow Discovery {
             meta: ArtifactMeta.line(time.format(time.now(), "yyyy-MM-dd HH:mm"), "artifacts/brief.html", tokens_in, tokens_out)
         )
         fs.write(Paths.artifact(project_id, "brief.html"), rendered)
-        discovery_result = {artifact: "brief", path: "artifacts/brief.html"}
+        delivery_result = {artifact: "brief", path: "artifacts/brief.html"}
         goto Done
     }
 
-    step AtributosGenerate {
-        current_artifact = "atributos"
-        var brief_content = Context.artifact(project_id, "brief.html")
-        if (brief_content.is_empty()) fail("gere 'brief' antes de 'atributos'")
-        var response = Writer.generate(
-            prompt: AtributosInstruction(schema_conventions: ArtifactSchema(), brief_content: brief_content, wiki_content: Context.wiki(project_id)),
-            schema_file: AtributosSchemaFile.get(), project_id: project_id, artifact: current_artifact
-        )
-        tokens_in = response.tokens_in
-        tokens_out = response.tokens_out
-        var raw = response.content
-        pending_data = json.parse(raw)
-        goto Gate
-    }
-
-    step AtributosCommit {
-        var data = pending_data
-        var body = ArtifactBody.atributos(data)
-        var rendered = PageShell(
-            title: "Atributos de Qualidade",
-            body: body,
-            meta: ArtifactMeta.line(time.format(time.now(), "yyyy-MM-dd HH:mm"), "artifacts/atributos.html", tokens_in, tokens_out)
-        )
-        fs.write(Paths.artifact(project_id, "atributos.html"), rendered)
-        discovery_result = {artifact: "atributos", path: "artifacts/atributos.html"}
-        goto Done
-    }
-
+    // brief e opcional em Delivery (SENPAI-REFINAMENTO-VISAO-GERAL.md): ao
+    // contrario do Discovery, 'requisitos' nao falha se 'brief' nao existir —
+    // so usa um texto fixo no lugar.
     step RequisitosGenerate {
         current_artifact = "requisitos"
         var brief_content = Context.artifact(project_id, "brief.html")
-        if (brief_content.is_empty()) fail("gere 'brief' antes de 'requisitos'")
+        if (brief_content.is_empty()) brief_content = "(não gerado para este projeto)"
         var response = Writer.generate(
-            prompt: RequisitosInstruction(schema_conventions: ArtifactSchema(), brief_content: brief_content, wiki_content: Context.wiki(project_id)),
-            schema_file: RequisitosSchemaFile.get(), project_id: project_id, artifact: current_artifact
+            prompt: RequisitosInstruction(
+                schema_conventions: ArtifactSchema(),
+                brief_content: brief_content,
+                wiki_content: Context.wiki(project_id)
+            ),
+            schema_file: RequisitosSchemaFile.get(),
+            project_id: project_id,
+            artifact: current_artifact
         )
         tokens_in = response.tokens_in
         tokens_out = response.tokens_out
@@ -173,7 +188,7 @@ workflow Discovery {
             meta: ArtifactMeta.line(time.format(time.now(), "yyyy-MM-dd HH:mm"), "artifacts/requisitos.html", tokens_in, tokens_out)
         )
         fs.write(Paths.artifact(project_id, "requisitos.html"), rendered)
-        discovery_result = {artifact: "requisitos", path: "artifacts/requisitos.html"}
+        delivery_result = {artifact: "requisitos", path: "artifacts/requisitos.html"}
         goto Done
     }
 
@@ -181,18 +196,14 @@ workflow Discovery {
         current_artifact = "adr"
         var requisitos_content = Context.artifact(project_id, "requisitos.html")
         if (requisitos_content.is_empty()) fail("gere 'requisitos' antes de 'adr'")
-        var atributos_content = Context.artifact(project_id, "atributos.html")
-        if (atributos_content.is_empty()) fail("gere 'atributos' antes de 'adr'")
         var response = Writer.generate(
             prompt: AdrInstruction(
                 schema_conventions: ArtifactSchema(),
                 requisitos_content: requisitos_content,
-                atributos_content: atributos_content,
+                atributos_content: NoAtributos.placeholder(),
                 wiki_content: Context.wiki(project_id)
             ),
-            schema_file: AdrSchemaFile.get(),
-            project_id: project_id,
-            artifact: current_artifact
+            schema_file: AdrSchemaFile.get(), project_id: project_id, artifact: current_artifact
         )
         tokens_in = response.tokens_in
         tokens_out = response.tokens_out
@@ -217,7 +228,7 @@ workflow Discovery {
             fs.write(Paths.artifact(project_id, "adr/" + folder + ".html"), rendered)
             written += [folder]
         }
-        discovery_result = {artifact: "adr", written: written}
+        delivery_result = {artifact: "adr", written: written}
         goto Done
     }
 
@@ -225,18 +236,14 @@ workflow Discovery {
         current_artifact = "der"
         var requisitos_content = Context.artifact(project_id, "requisitos.html")
         if (requisitos_content.is_empty()) fail("gere 'requisitos' antes de 'der'")
-        var atributos_content = Context.artifact(project_id, "atributos.html")
-        if (atributos_content.is_empty()) fail("gere 'atributos' antes de 'der'")
         var response = Writer.generate(
             prompt: DerInstruction(
                 schema_conventions: ArtifactSchema(),
                 requisitos_content: requisitos_content,
-                atributos_content: atributos_content,
+                atributos_content: NoAtributos.placeholder(),
                 wiki_content: Context.wiki(project_id)
             ),
-            schema_file: DerSchemaFile.get(),
-            project_id: project_id,
-            artifact: current_artifact
+            schema_file: DerSchemaFile.get(), project_id: project_id, artifact: current_artifact
         )
         tokens_in = response.tokens_in
         tokens_out = response.tokens_out
@@ -254,7 +261,7 @@ workflow Discovery {
             meta: ArtifactMeta.line(time.format(time.now(), "yyyy-MM-dd HH:mm"), "artifacts/der.html", tokens_in, tokens_out)
         )
         fs.write(Paths.artifact(project_id, "der.html"), rendered)
-        discovery_result = {artifact: "der", path: "artifacts/der.html"}
+        delivery_result = {artifact: "der", path: "artifacts/der.html"}
         goto Done
     }
 
@@ -262,18 +269,14 @@ workflow Discovery {
         current_artifact = "diagramas"
         var requisitos_content = Context.artifact(project_id, "requisitos.html")
         if (requisitos_content.is_empty()) fail("gere 'requisitos' antes de 'diagramas'")
-        var atributos_content = Context.artifact(project_id, "atributos.html")
-        if (atributos_content.is_empty()) fail("gere 'atributos' antes de 'diagramas'")
         var response = Writer.generate(
             prompt: DiagramasInstruction(
                 schema_conventions: ArtifactSchema(),
                 requisitos_content: requisitos_content,
-                atributos_content: atributos_content,
+                atributos_content: NoAtributos.placeholder(),
                 wiki_content: Context.wiki(project_id)
             ),
-            schema_file: DiagramasSchemaFile.get(),
-            project_id: project_id,
-            artifact: current_artifact
+            schema_file: DiagramasSchemaFile.get(), project_id: project_id, artifact: current_artifact
         )
         tokens_in = response.tokens_in
         tokens_out = response.tokens_out
@@ -297,37 +300,95 @@ workflow Discovery {
             fs.write(Paths.artifact(project_id, "diagramas/" + slug + ".html"), rendered)
             written += [slug]
         }
-        discovery_result = {artifact: "diagramas", written: written}
+        delivery_result = {artifact: "diagramas", written: written}
         goto Done
     }
 
-    step FeaturesGenerate {
-        current_artifact = "features"
+    // FinalGenerate/FinalCommit produzem o detalhamento final (feature ou
+    // historia) — unico artefato que nao existe em Discovery. So 'requisitos'
+    // e obrigatorio; adr/der/diagramas entram como contexto se existirem, mas
+    // nunca bloqueiam (sao "opcional" na sequencia do protocolo original).
+    step FinalGenerate {                                            
+        current_artifact = mode
         var requisitos_content = Context.artifact(project_id, "requisitos.html")
-        if (requisitos_content.is_empty()) fail("gere 'requisitos' antes de 'features'")
+        if (requisitos_content.is_empty()) fail("gere 'requisitos' antes de '" + mode + "'")
 
         var adr_content = Context.artifact_dir(project_id, "adr")
-        if (adr_content.is_empty()) fail("gere 'adr' antes de 'features'")
-
-        // der e opcional: nem toda oportunidade tem um modelo de dados
-        // formal que valha a pena diagramar — features usa o conteudo
-        // quando existe, mas nao bloqueia na ausencia dele.
+        if (adr_content.is_empty()) adr_content = "(não gerado para este projeto)"
         var der_content = Context.artifact(project_id, "der.html")
-        if (der_content.is_empty()) der_content = "(não gerado para esta oportunidade)"
-
+        if (der_content.is_empty()) der_content = "(não gerado para este projeto)"
         var diagramas_content = Context.artifact_dir(project_id, "diagramas")
-        if (diagramas_content.is_empty()) fail("gere 'diagramas' antes de 'features'")
+        if (diagramas_content.is_empty()) diagramas_content = "(não gerado para este projeto)"
 
+        var response = null
+        if (mode == "historia") {
+            response = Writer.generate(
+                prompt: HistoriaInstruction(
+                    schema_conventions: ArtifactSchema(),
+                    requisitos_content: requisitos_content,
+                    adr_content: adr_content,
+                    der_content: der_content,
+                    diagramas_content: diagramas_content,
+                    wiki_content: Context.wiki(project_id)
+                ),
+                schema_file: HistoriaSchemaFile.get(), project_id: project_id, artifact: current_artifact
+            )
+        } else {
+            response = Writer.generate(
+                prompt: FeatureInstruction(
+                    schema_conventions: ArtifactSchema(),
+                    requisitos_content: requisitos_content,
+                    adr_content: adr_content,
+                    der_content: der_content,
+                    diagramas_content: diagramas_content,
+                    wiki_content: Context.wiki(project_id)
+                ),
+                schema_file: FeatureSchemaFile.get(), project_id: project_id, artifact: current_artifact
+            )
+        }
+        tokens_in = response.tokens_in
+        tokens_out = response.tokens_out
+        var raw = response.content
+        pending_data = json.parse(raw)
+        goto Gate
+    }
+
+    step FinalCommit {
+        var data = pending_data
+        var project_data = json.parse(fs.read(Paths.project_file(project_id)))
+        var title = project_data.name
+        var out_path = mode + ".html"
+
+        var body = ""
+        if (mode == "historia") {
+            body = ArtifactBody.historia(data)
+        } else {
+            body = ArtifactBody.feature(data)
+        }
+
+        var rendered = PageShell(
+            title: html.escape(title),
+            body: body,
+            meta: ArtifactMeta.line(time.format(time.now(), "yyyy-MM-dd HH:mm"), "artifacts/" + out_path, tokens_in, tokens_out)
+        )
+        fs.write(Paths.artifact(project_id, out_path), rendered)
+        delivery_result = {artifact: mode, path: "artifacts/" + out_path}
+        goto Done
+    }
+
+    // Historias — so quando mode="feature": quebra a `feature` final (unica
+    // deste projeto) em historias de usuario. Reaproveita a MESMA instrucao/
+    // schema/template do `historias` de Discovery (artifacts_common.mh) — so
+    // muda de onde vem `feature_content` e onde e gravado (raiz de
+    // artifacts/historias/, sem prefixo de feature: so existe uma feature
+    // implicita neste projeto standalone).
+    step HistoriasGenerate {
+        current_artifact = "historias"
+        var feature_content = Context.artifact(project_id, "feature.html")
+        if (feature_content.is_empty()) fail("gere 'feature' antes de 'historias'")
         var response = Writer.generate(
-            prompt: FeaturesInstruction(
-                schema_conventions: ArtifactSchema(),
-                requisitos_content: requisitos_content,
-                adr_content: adr_content,
-                der_content: der_content,
-                diagramas_content: diagramas_content,
-                wiki_content: Context.wiki(project_id)
-            ),
-            schema_file: FeaturesSchemaFile.get(), project_id: project_id, artifact: current_artifact
+            prompt: HistoriasInstruction(schema_conventions: ArtifactSchema(), feature_content: feature_content, wiki_content: Context.wiki(project_id)),
+            schema_file: HistoriasSchemaFile.get(), project_id: project_id, artifact: current_artifact
         )
         tokens_in = response.tokens_in
         tokens_out = response.tokens_out
@@ -336,70 +397,25 @@ workflow Discovery {
         goto Gate
     }
 
-    step FeaturesCommit {
-        var data = pending_data
-        var written = []
-        dir.create(Paths.artifact(project_id, "features"))
-        for (var feature in data.features) {
-            var id = ArtifactId.next_feature_id(project_id)
-            var folder = ArtifactId.folder_name(id, feature.titulo)
-            var body = ArtifactBody.feature(feature)
-            var rendered = PageShell(
-                title: html.escape(id + " — " + feature.titulo),
-                body: body,
-                meta: ArtifactMeta.line(time.format(time.now(), "yyyy-MM-dd HH:mm"), "artifacts/features/" + folder + "/feature.html", tokens_in, tokens_out)
-            )
-            dir.create(Paths.artifact(project_id, "features/" + folder))
-            fs.write(Paths.artifact(project_id, "features/" + folder + "/feature.html"), rendered)
-            written += [folder]
-        }
-        discovery_result = {artifact: "features", written: written}
-        goto Done
-    }
-
-    step HistoriasGenerate {
-        if (feature_id.is_empty()) fail("'feature_id' e obrigatorio para artifact: \"historias\"")
-        current_artifact = "historias"
-        var feature_dir = ArtifactId.find_feature_dir(project_id, feature_id)
-        var feature_content = Context.artifact(project_id, "features/" + feature_dir + "/feature.html")
-        var response = Writer.generate(
-            prompt: HistoriasInstruction(schema_conventions: ArtifactSchema(), feature_content: feature_content, wiki_content: Context.wiki(project_id)),
-            schema_file: HistoriasSchemaFile.get(), project_id: project_id, artifact: current_artifact
-        )
-        tokens_in = response.tokens_in
-        tokens_out = response.tokens_out
-        var raw = response.content
-        var data = json.parse(raw)
-        data["feature_dir"] = feature_dir
-        pending_data = data
-        goto Gate
-    }
-
     step HistoriasCommit {
         var data = pending_data
-        var feature_dir = data.feature_dir
-        var historias_base = Paths.artifact(project_id, "historias/" + feature_dir)
+        var historias_base = Paths.artifact(project_id, "historias")
         dir.create(historias_base)
         var written = []
         for (var historia in data.historias) {
-            var id = ArtifactId.next_historia_id(project_id, feature_dir)
+            var id = ArtifactId.next_historia_id(project_id)
             var folder = ArtifactId.folder_name(id, historia.titulo)
             var body = ArtifactBody.historia(historia)
             var rendered = PageShell(
                 title: html.escape(id + " — " + historia.titulo),
                 body: body,
-                meta: ArtifactMeta.line(
-                    time.format(time.now(), "yyyy-MM-dd HH:mm"),
-                    "artifacts/historias/" + feature_dir + "/" + folder + "/historia.html",
-                    tokens_in,
-                    tokens_out
-                )
+                meta: ArtifactMeta.line(time.format(time.now(), "yyyy-MM-dd HH:mm"), "artifacts/historias/" + folder + "/historia.html", tokens_in, tokens_out)
             )
             dir.create(historias_base + "/" + folder)
             fs.write(historias_base + "/" + folder + "/historia.html", rendered)
             written += [folder]
         }
-        discovery_result = {artifact: "historias", feature_id: feature_id, written: written}
+        delivery_result = {artifact: "historias", written: written}
         goto Done
     }
 

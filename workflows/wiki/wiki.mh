@@ -1,37 +1,17 @@
-// workflow Wiki — ingestao, consulta e saneamento da wiki de um work-item
-// (padrao docs/wiki-llm.md; ver PLANO-MACRO-MHL-SENPAI.md §4, Fase 2).
-//
-// A LLM (agent Writer) nunca escreve arquivo final — so devolve campos via
-// `schema:` (C3). Todo passo que insere/ordena em wiki/index.md ou decide
-// nome de arquivo e slug e um `tool` deterministico (WikiIndex/WikiPages/Slug).
-//
-// C2: o agente roda sem ferramentas de arquivo (ver agents.mh) — ele nao
-// pode "abrir paginas por conta propria". Por isso `query`/`lint` leem TODO
-// o conteudo relevante de wiki/** antes da chamada (WikiContext) e passam
-// como texto no prompt, em vez de contar com o agente navegar sozinho.
-//
-// Schemas sao carregados via `prompt ... from` sem parametros, nao
-// `fs.read` — fs.read resolve contra o CWD do processo, nao contra este
-// arquivo, e quebraria assim que o mhl rodasse de um CWD diferente
-// (FASE2-ACHADOS.md §2).
+// Orquestra ingestao, consulta e saneamento da wiki. A LLM produz apenas
+// dados estruturados; componentes determinísticos cuidam de arquivos e índice.
 
 import { Paths } from "../shared/paths.mh"
 import { Writer } from "../shared/agents.mh"
 import { RawExtract } from "../shared/raw_extract.mh"
-import { Slug } from "../shared/slug.mh"
-import { WikiIndex } from "../shared/wiki_index.mh"
-import { WikiPages, WikiLog } from "../shared/wiki_pages.mh"
 import { WikiContext } from "../shared/wiki_context.mh"
-import { ClaudeQuirks } from "../shared/claude_quirks.mh"
+import { WikiActions } from "actions.mh"
+import { IngestSchemaFile, QuerySchemaFile, LintSchemaFile } from "schema_files.mh"
 
 prompt WikiSchema() from "schema.prompt.md"
 prompt IngestInstruction(schema_conventions: prompt, source_name: string, source_text: string) from "prompts/ingest.prompt.md"
 prompt QueryInstruction(schema_conventions: prompt, question: string, wiki_content: string) from "prompts/query.prompt.md"
 prompt LintInstruction(schema_conventions: prompt, wiki_content: string) from "prompts/lint.prompt.md"
-
-prompt IngestSchemaFile() from "schemas/ingest.schema.json"
-prompt QuerySchemaFile() from "schemas/query.schema.json"
-prompt LintSchemaFile() from "schemas/lint.schema.json"
 
 workflow Wiki {
     description: "Ingestao, consulta e saneamento da wiki de um work-item (padrao wiki-llm.md)."
@@ -74,7 +54,12 @@ workflow Wiki {
     step IngestGenerate {
         // v1: uma fonte por chamada (padrao docs/wiki-llm.md — "ingerir e
         // revisar uma de cada vez"). Lote/menos supervisao fica pra Fase 6.
-        if (raw_paths.size() != 1) fail("ingest processa uma fonte por vez nesta versao (v1) — recebido ${raw_paths.size()} caminho(s)")
+        if (raw_paths.size() != 1) {
+            fail(
+                "ingest processa uma fonte por vez nesta versao (v1) — recebido " +
+                raw_paths.size() + " caminho(s)"
+            )
+        }
         var source_name = raw_paths[0]
         var abs_path = Paths.raw(project_id, source_name)
         if (!fs.exists(abs_path)) fail("fonte nao encontrada em raw/: '" + source_name + "'")
@@ -82,44 +67,35 @@ workflow Wiki {
         var source_text = RawExtract.text(abs_path)
         current_artifact = "ingest:" + source_name
 
-        var raw = Writer.run(
-            prompt: IngestInstruction(schema_conventions: WikiSchema(), source_name: source_name, source_text: source_text),
-            schema: IngestSchemaFile()
+        var response = Writer.generate(
+            prompt: IngestInstruction(
+                schema_conventions: WikiSchema(),
+                source_name: source_name,
+                source_text: source_text
+            ),
+            schema_file: IngestSchemaFile.get(),
+            project_id: project_id,
+            artifact: current_artifact
         )
-        var data = json.parse(raw)
-        data["source_summary"] = ClaudeQuirks.strip_trailing_tag_leak(data.source_summary, "source_summary")
-        ingest_data = data
+        tokens_in = response.tokens_in
+        tokens_out = response.tokens_out
+        var raw = response.content
+        ingest_data = json.parse(raw)
         goto IngestGate
     }
 
     step IngestGate {
-        if (buddy && !approved) pause("revise o conteudo extraido de '" + ingest_data.source_title + "' antes de gravar na wiki")
+        if (buddy && !approved) {
+            pause(
+                "revise o conteudo extraido de '" + ingest_data.source_title +
+                "' antes de gravar na wiki"
+            )
+        }
         goto IngestCommit
     }
 
     step IngestCommit {
-        var data = ingest_data
-        var source_slug = Slug.from_title(data.source_title)
-        WikiPages.write_source(project_id, source_slug, data.source_title, data.source_summary)
-        WikiIndex.upsert_source(project_id, {slug: source_slug, title: data.source_title, summary: data.index_summary})
-
-        for (var entity in data.entities) {
-            WikiPages.upsert_entity(project_id, entity.title, entity.facts)
-            WikiIndex.upsert_entity(project_id, {slug: Slug.from_title(entity.title), title: entity.title, summary: entity.facts[0]})
-        }
-        for (var concept in data.concepts) {
-            WikiPages.upsert_concept(project_id, concept.title, concept.facts)
-            WikiIndex.upsert_concept(project_id, {slug: Slug.from_title(concept.title), title: concept.title, summary: concept.facts[0]})
-        }
-
-        WikiLog.append("## [" + time.format(time.now(), "yyyy-MM-dd") + "] ingest | " + data.source_title)
-
-        wiki_result = {
-            source_title: data.source_title,
-            source_slug: source_slug,
-            entities_touched: data.entities.size(),
-            concepts_touched: data.concepts.size(),
-        }
+        wiki_result = WikiActions.commit_ingest(project_id, ingest_data)
         goto Done
     }
 
@@ -128,20 +104,30 @@ workflow Wiki {
         current_artifact = "query"
         var wiki_content = WikiContext.all_pages(project_id)
 
-        var raw = Writer.run(
-            prompt: QueryInstruction(schema_conventions: WikiSchema(), question: question, wiki_content: wiki_content),
-            schema: QuerySchemaFile()
+        var response = Writer.generate(
+            prompt: QueryInstruction(
+                schema_conventions: WikiSchema(),
+                question: question,
+                wiki_content: wiki_content
+            ),
+            schema_file: QuerySchemaFile.get(),
+            project_id: project_id,
+            artifact: current_artifact
         )
+        tokens_in = response.tokens_in
+        tokens_out = response.tokens_out
+        var raw = response.content
         var data = json.parse(raw)
-        var answer_body = ClaudeQuirks.strip_trailing_tag_leak(data.answer_body, "answer_body")
+        var answer_body = data.answer_body
 
         var filed_as = null
         if (file_answer) {
-            var answer_slug = Slug.from_title(data.answer_title)
-            WikiPages.write_answer(project_id, answer_slug, data.answer_title, answer_body)
-            WikiIndex.upsert_answer(project_id, {slug: answer_slug, title: data.answer_title, summary: question})
-            WikiLog.append("## [" + time.format(time.now(), "yyyy-MM-dd") + "] query | " + data.answer_title)
-            filed_as = answer_slug
+            filed_as = WikiActions.file_answer(
+                project_id,
+                data.answer_title,
+                answer_body,
+                question
+            )
         }
 
         wiki_result = {
@@ -156,15 +142,21 @@ workflow Wiki {
         current_artifact = "lint"
         var wiki_content = WikiContext.all_pages(project_id)
 
-        var raw = Writer.run(
-            prompt: LintInstruction(schema_conventions: WikiSchema(), wiki_content: wiki_content),
-            schema: LintSchemaFile()
+        var response = Writer.generate(
+            prompt: LintInstruction(
+                schema_conventions: WikiSchema(),
+                wiki_content: wiki_content
+            ),
+            schema_file: LintSchemaFile.get(),
+            project_id: project_id,
+            artifact: current_artifact
         )
-        var data = json.parse(raw)
-        data["notes"] = ClaudeQuirks.strip_trailing_tag_leak(data.notes, "notes")
-        wiki_result = data
+        tokens_in = response.tokens_in
+        tokens_out = response.tokens_out
+        var raw = response.content
+        wiki_result = json.parse(raw)
 
-        WikiLog.append("## [" + time.format(time.now(), "yyyy-MM-dd") + "] lint | relatorio gerado")
+        WikiActions.record_lint(project_id)
         goto Done
     }
 

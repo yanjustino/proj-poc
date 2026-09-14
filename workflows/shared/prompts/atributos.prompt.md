@@ -1,6 +1,6 @@
 ${schema_conventions}
 
-Com base no conteúdo da wiki e do brief abaixo, liste os atributos de qualidade (não-funcionais) relevantes para esta oportunidade — desempenho, segurança, confiabilidade, usabilidade, e qualquer outra categoria que a wiki sugira ser importante. Cada categoria deve ter um requisito concreto e mensurável, não uma generalidade.
+Com base no conteúdo da wiki e do brief abaixo, preencha o artefato de atributos de qualidade e restrições: contexto, requisitos não-funcionais mensuráveis (NFR), restrições arquiteturais (AC), obrigações de compliance (CO), exclusões e perguntas abertas. IDs devem ser sequenciais por prefixo. Use arrays vazios quando não houver evidência e não invente metas, padrões ou órgãos reguladores.
 
 ## Brief já gerado
 

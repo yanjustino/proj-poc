@@ -1,0 +1,52 @@
+// Normaliza o contrato JSON devolvido por qualquer backend estruturado.
+// Remove marcadores de fechamento que vazem para o valor do próprio campo,
+// sem acoplar workflows ou regras de domínio ao agente escolhido.
+
+export tool StructuredOutput {
+    normalize_json(content: string): string ->
+        json.stringify(self.normalize_value(json.parse(content), ""))
+
+    normalize_value(value: any, field_name: string): any -> {
+        if (type_of(value) == "string") return self.normalize_string(value, field_name)
+
+        if (type_of(value) == "array") {
+            return value.map((item) -> self.normalize_value(item, field_name))
+        }
+
+        if (type_of(value) == "object") {
+            for (var key in value.keys()) {
+                value[key] = self.normalize_value(value[key], key)
+            }
+        }
+
+        return value
+    }
+
+    normalize_string(value: string, field_name: string): string -> {
+        if (field_name.is_empty()) return value
+        var marker = "</" + field_name + ">"
+        if (!value.contains(marker)) return value
+        return value.split(marker)[0]
+    }
+}
+
+test StructuredOutputSpec {
+    describe removes_a_transport_marker_from_a_nested_field {
+        var content = "{\"result\":{\"answer_body\":\"resposta</answer_body>\\n</invoke>\"}}"
+        var normalized = json.parse(StructuredOutput.normalize_json(content))
+        are_equal(normalized.result.answer_body, "resposta")
+    }
+
+    describe normalizes_objects_inside_arrays {
+        var content = "{\"items\":[{\"body\":\"primeiro</body>\"},{\"body\":\"segundo\"}]}"
+        var normalized = json.parse(StructuredOutput.normalize_json(content))
+        are_equal(normalized.items[0].body, "primeiro")
+        are_equal(normalized.items[1].body, "segundo")
+    }
+
+    describe preserves_unrelated_markup {
+        var content = "{\"answer_body\":\"texto com </outro_campo> legítimo\"}"
+        var normalized = json.parse(StructuredOutput.normalize_json(content))
+        are_equal(normalized.answer_body, "texto com </outro_campo> legítimo")
+    }
+}

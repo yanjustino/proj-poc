@@ -1,0 +1,79 @@
+// Casos de uso determinísticos de persistência da Wiki. O workflow decide
+// quando executá-los; esta tool concentra páginas, índice, slugs e auditoria.
+
+import { Slug } from "../shared/slug.mh"
+import { WikiIndex } from "../shared/wiki_index.mh"
+import { WikiPages, WikiLog } from "../shared/wiki_pages.mh"
+
+export tool WikiActions {
+    commit_ingest(project_id: string, data: any): {
+        source_title: string,
+        source_slug: string,
+        entities_touched: number,
+        concepts_touched: number
+    } -> {
+        var source_slug = Slug.from_title(data.source_title)
+        WikiPages.write_source(project_id, source_slug, data.source_title, data.source_summary)
+        WikiIndex.upsert_source(project_id, {
+            slug: source_slug,
+            title: data.source_title,
+            summary: data.index_summary
+        })
+
+        for (var entity in data.entities) {
+            var entity_slug = Slug.from_title(entity.title)
+            WikiPages.upsert_entity(project_id, entity.title, entity.facts)
+            WikiIndex.upsert_entity(project_id, {
+                slug: entity_slug,
+                title: entity.title,
+                summary: entity.facts[0]
+            })
+        }
+
+        for (var concept in data.concepts) {
+            var concept_slug = Slug.from_title(concept.title)
+            WikiPages.upsert_concept(project_id, concept.title, concept.facts)
+            WikiIndex.upsert_concept(project_id, {
+                slug: concept_slug,
+                title: concept.title,
+                summary: concept.facts[0]
+            })
+        }
+
+        self.log(project_id, "ingest", data.source_title)
+        return {
+            source_title: data.source_title,
+            source_slug: source_slug,
+            entities_touched: data.entities.size(),
+            concepts_touched: data.concepts.size()
+        }
+    }
+
+    file_answer(project_id: string, title: string, body: string, question: string): string -> {
+        var slug = Slug.from_title(title)
+        WikiPages.write_answer(project_id, slug, title, body)
+        WikiIndex.upsert_answer(project_id, {
+            slug: slug,
+            title: title,
+            summary: question
+        })
+        self.log(project_id, "query", title)
+        return slug
+    }
+
+    record_lint(project_id: string) -> self.log(project_id, "lint", "relatorio gerado")
+
+    // project_id precisa ser parametro aqui, nao so dos metodos chamadores
+    // (commit_ingest/file_answer/record_lint) — `self.<metodo>(...)` e uma
+    // chamada de metodo de verdade, com seu proprio escopo local; nao
+    // herda as vars do metodo que chamou (confirmado por spike ao caçar este
+    // bug — mesma classe de limite de escopo que derrubou o uso de `after`
+    // em workflows/shared/agents.mh, ver FASE5-ACHADOS.md). Sem isso,
+    // `WikiLog.append` (que interpola `${project_id}` no seu `path:`) falha
+    // com "undefined variable" — reproduzido de verdade em todo `ingest`.
+    log(project_id: string, action: string, description: string) ->
+        WikiLog.append(
+            "## [" + time.format(time.now(), "yyyy-MM-dd") + "] " +
+            action + " | " + description
+        )
+}

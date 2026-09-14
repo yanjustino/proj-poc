@@ -28,4 +28,34 @@ export tool UsageParser {
             content: envelope.result,
         }
     }
+
+    // `codex exec --json` emite JSONL. A resposta final vem no evento
+    // item.completed/agent_message e o consumo no turn.completed.
+    extract_codex(raw: string): {tokens_in: number, tokens_out: number, content: string} -> {
+        var tokens_in = 0
+        var tokens_out = 0
+        var content = ""
+        for (var event in json.parse_lines(raw)) {
+            if (event.type == "item.completed" && event.item.type == "agent_message") {
+                content = event.item.text
+            }
+            if (event.type == "turn.completed") {
+                tokens_in = event.usage.input_tokens
+                tokens_out = event.usage.output_tokens
+            }
+        }
+        return {tokens_in: tokens_in, tokens_out: tokens_out, content: content}
+    }
+}
+
+test UsageParserSpec {
+    describe extracts_codex_final_message_and_usage_from_jsonl {
+        var raw = "{\"type\":\"thread.started\",\"thread_id\":\"t1\"}\n" +
+            "{\"type\":\"item.completed\",\"item\":{\"id\":\"i1\",\"type\":\"agent_message\",\"text\":\"{\\\"ok\\\":true}\"}}\n" +
+            "{\"type\":\"turn.completed\",\"usage\":{\"input_tokens\":12,\"cached_input_tokens\":3,\"output_tokens\":7}}"
+        var parsed = UsageParser.extract_codex(raw)
+        are_equal(parsed.tokens_in, 12)
+        are_equal(parsed.tokens_out, 7)
+        are_equal(parsed.content, "{\"ok\":true}")
+    }
 }
