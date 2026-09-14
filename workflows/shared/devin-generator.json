@@ -1,0 +1,31 @@
+{
+  "theme_mode": "nocolor",
+  "notify": "never",
+  "permissions": {
+    "allow": [],
+    "ask": [],
+    "deny": [
+      "read",
+      "edit",
+      "grep",
+      "glob",
+      "exec",
+      "mcp__*",
+      "Fetch(*)"
+    ]
+  },
+  "read_config_from": {
+    "agents_standard": false,
+    "cursor": false,
+    "windsurf": false,
+    "claude": false
+  },
+  "version": 1,
+  "devin": {
+    "org_id": "org-1e48a90514964000862f3cbf7a8a87d0"
+  },
+  "shell": {
+    "setup_complete": true
+  },
+  "theme_mode": "dark"
+}

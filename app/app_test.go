@@ -149,7 +149,7 @@ func TestRunLifecycle_WorkItem(t *testing.T) {
 
 // TestModoBuddyPauseResume_WikiIngest exercises the one path Fase 5 exists
 // for that TestRunLifecycle_WorkItem's free workflow can't reach: a real
-// pause()/mhl_run_resume round trip, through the bridge, with a real `codex`
+// pause()/mhl_run_resume round trip, through the bridge, with a real `devin`
 // call in between (not simulated — same bar as every other phase). Costs a
 // small amount of real LLM usage; kept to one short source on a disposable
 // work-item.

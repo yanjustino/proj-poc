@@ -1,0 +1,26 @@
+{
+  "permissions": {
+    "allow": [
+      "Read(**)",
+      "Exec(git status)",
+      "Exec(git diff)",
+      "Exec(go test)",
+      "Exec(go vet)",
+      "Exec(npm run build)",
+      "Exec(mhl lint)",
+      "Exec(mhl test)"
+    ],
+    "deny": [
+      "Exec(rm)",
+      "Exec(sudo)",
+      "Write(**/.env*)"
+    ],
+    "ask": []
+  },
+  "read_config_from": {
+    "agents_standard": true,
+    "cursor": false,
+    "windsurf": false,
+    "claude": false
+  }
+}

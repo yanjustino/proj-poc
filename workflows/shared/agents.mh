@@ -23,6 +23,44 @@
 
 import { Usage, UsageParser } from "usage.mh"
 import { StructuredOutput } from "structured_output.mh"
+import { WorkflowsRoot } from "workflows_root.mh"
+
+// Backend usado no ambiente alvo. O Devin CLI nao oferece uma flag de
+// JSON Schema equivalente a `codex --output-schema`/`claude --json-schema`;
+// por isso o contrato e incluido no prompt e validado pelo passo seguinte.
+// A configuracao dedicada bloqueia todas as ferramentas do Devin: ele recebe
+// todo o contexto no prompt e so deve produzir dados, sem explorar o CWD do
+// mhl (que contem todos os work-items).
+tool DevinPrompt {
+    build(instruction: string, schema: string): string -> """
+${instruction}
+
+Responda somente com um objeto JSON valido, sem Markdown, comentarios ou texto adicional.
+O objeto deve obedecer exatamente a este JSON Schema:
+${schema}
+"""
+}
+
+tool DevinConfig {
+    path(): string -> WorkflowsRoot.resolve("shared/devin-generator.json")
+}
+
+export agent Devin {
+    description: "Gera conteudo estruturado com Devin CLI sem acesso a ferramentas."
+    command: "devin"
+    args: [
+        "--config", DevinConfig.path(),
+        "--model", env("SENPAI_DEVIN_MODEL", "swe-1-6-slow"),
+        "--respect-workspace-trust", "false",
+        "--permission-mode", "normal",
+        "--print", "${prompt}"
+    ]
+    retry: {
+        max_attempts: 3
+        delay: 2s
+        retry_on: [500, 503, "timeout", "rate_limit", "empty response"]
+    }
+}
 
 export agent Claude {
     command: "claude"
@@ -32,11 +70,7 @@ export agent Claude {
         "--json-schema", "${schema}",
         "--disallowed-tools", "Bash,Read,Write,Edit,MultiEdit,NotebookEdit,WebFetch,WebSearch,Glob,Grep,Task"
     ]
-    // Adicionado apos observar, na Fase 3, duas falhas transitorias reais em
-    // chamadas consecutivas (sem relacao com o conteudo do prompt — a mesma
-    // chamada funcionou de primeira no retry manual). `after` so roda uma vez,
-    // sobre a resposta final bem-sucedida (Docs-Reference §05) — retry nao
-    // duplica a contagem de tokens em `Usage`.
+
     retry: {
         max_attempts: 3
         delay: 2s
@@ -111,7 +145,7 @@ export agent Codex {
 // essa decisao de fora. `tool AgentSelector` + `match` + `.run()` direto em
 // cada agente resolve isso sem esbarrar nesse limite.
 tool AgentSelector {
-    pick(prompt: string): string -> nameof(Codex)  // default; unico backend validado ponta a ponta nesta fase
+    pick(prompt: string): string -> nameof(Devin)
 }
 
 // Adapter consumido pelos workflows. Ele absorve a diferenca de contrato do
@@ -122,10 +156,12 @@ export tool Writer {
     generate(prompt: string, schema_file: {content: string, path: string}, project_id: string, artifact: string): {content: string, tokens_in: number, tokens_out: number} -> {
         var picked = AgentSelector.pick(prompt: prompt)
         var raw = match picked {
+            nameof(Devin) -> Devin.run(prompt: DevinPrompt.build(instruction: prompt, schema: schema_file.content))
             nameof(Claude) -> Claude.run(prompt: prompt, schema: schema_file.content)
             nameof(Codex) -> Codex.run(prompt: prompt, schema: schema_file.path)
         }
         var usage = match picked {
+            nameof(Devin) -> UsageParser.extract_devin(raw)
             nameof(Claude) -> UsageParser.extract_claude(raw)
             nameof(Codex) -> UsageParser.extract_codex(raw)
         }
