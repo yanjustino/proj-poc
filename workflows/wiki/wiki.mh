@@ -55,10 +55,11 @@ workflow Wiki {
         // v1: uma fonte por chamada (padrao docs/wiki-llm.md — "ingerir e
         // revisar uma de cada vez"). Lote/menos supervisao fica pra Fase 6.
         if (raw_paths.size() != 1) {
-            fail(
-                "ingest processa uma fonte por vez nesta versao (v1) — recebido " +
-                raw_paths.size() + " caminho(s)"
-            )
+            // `+` nao coage number pra string (achado antigo, reintroduzido
+            // aqui numa refatoracao — ver a mesma classe de bug documentada
+            // no historico do projeto) — interpolacao `${...}` e a forma
+            // segura, nao `+` com um `number` de um dos lados.
+            fail("ingest processa uma fonte por vez nesta versao (v1) — recebido ${raw_paths.size()} caminho(s)")
         }
         var source_name = raw_paths[0]
         var abs_path = Paths.raw(project_id, source_name)
@@ -162,5 +163,49 @@ workflow Wiki {
 
     step Done {
         // ponto de convergencia unico — mantem `reached` enxuto (C7/Fase 1).
+    }
+}
+
+// WikiWorkflowSpec — mesmo padrao de work_item.mh :: WorkItemWorkflowSpec:
+// `Name.run(inputs:)` (mhl 1.4.0-beta.7+, MHL-Melhorias.md #13) testando o
+// workflow inteiro, escopado SO aos caminhos de falha rapida que nunca
+// chegam a chamar `Writer.generate` (sem custo de LLM) nem a escrever em
+// disco (`Name.run()` nao isola `fs`/`dir` num sandbox descartavel — ver
+// FASE5-ACHADOS.md e a nota equivalente em work_item.mh).
+test WikiWorkflowSpec {
+    describe rejects_an_unknown_action_before_touching_anything {
+        var run = Wiki.run(inputs: {project_id: "spec-test-project", action: "bogus"})
+        is_false(run.ok)
+        is_true(run.error.contains("acao desconhecida"))
+    }
+
+    describe rejects_an_invalid_project_id_before_touching_anything {
+        var run = Wiki.run(inputs: {project_id: "../../etc/passwd", action: "query", question: "oi"})
+        is_false(run.ok)
+        is_true(run.error.contains("project_id invalido"))
+    }
+
+    describe ingest_rejects_zero_raw_paths_before_reading_anything {
+        var run = Wiki.run(inputs: {project_id: "spec-test-project", action: "ingest", raw_paths: []})
+        is_false(run.ok)
+        is_true(run.error.contains("uma fonte por vez"))
+    }
+
+    describe ingest_rejects_more_than_one_raw_path_before_reading_anything {
+        var run = Wiki.run(inputs: {project_id: "spec-test-project", action: "ingest", raw_paths: ["a.md", "b.md"]})
+        is_false(run.ok)
+        is_true(run.error.contains("uma fonte por vez"))
+    }
+
+    describe ingest_of_a_source_that_does_not_exist_fails_without_calling_the_llm {
+        var run = Wiki.run(inputs: {project_id: "spec-test-project", action: "ingest", raw_paths: ["nao-existe.md"]})
+        is_false(run.ok)
+        is_true(run.error.contains("fonte nao encontrada"))
+    }
+
+    describe query_rejects_an_empty_question_before_calling_the_llm {
+        var run = Wiki.run(inputs: {project_id: "spec-test-project", action: "query", question: ""})
+        is_false(run.ok)
+        is_true(run.error.contains("'question' e obrigatorio"))
     }
 }

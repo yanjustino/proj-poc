@@ -56,38 +56,26 @@ export agent Claude {
 // que o prompt de uma chamada especifica pediu, furando C1/C2.
 //
 // `-C/--cd <DIR>` resolve isso — CWD do Codex, independente do CWD de
-// `mhl`. Resolvido por `tool CodexCwd` (nao um `env(...)` direto em `args:`)
-// porque `env(...)` usado DIRETO em `agent.command`/`args` e tratado como
-// referencia de credencial: falha fechado se a var nao existir (nada de
-// devolver "" como em qualquer outro lugar da linguagem) e o valor sai
-// redigido ([REDACTED]) de qualquer log/saida do mhl — confirmado por spike.
-// Um `tool` chamado a partir de `args:` (mesmo padrao de WorkflowsRoot,
-// workflows_root.mh) e uma expressao comum: `env(...)` ali devolve "" pra
-// var ausente, sem redaction — certo pra montar um fallback. Ausente
-// SENPAI_CODEX_CWD (uso manual via CLI, como em toda fase ate aqui), cai em
-// "." — mesmo comportamento de sempre (nenhuma regressao pro uso via
-// terminal); o bridge Go seta a var pra um diretorio de scratch dedicado,
-// sem nenhum dado de projeto dentro (app/mhlbridge.Start, FASE5-ACHADOS.md).
-tool CodexCwd {
-    resolve(): string -> {
-        var configured = env("SENPAI_CODEX_CWD")
-        if (configured.is_empty()) return "."
-        return configured
-    }
-}
-
-// Backend Codex. O caminho do schema e injetado pelo adapter Writer, pois o
-// CLI exige --output-schema <FILE> em vez do schema inline aceito pelo
-// Claude. --skip-git-repo-check e necessario porque CodexCwd.resolve() nao
-// e garantido ser um repositorio git (nem deveria precisar ser um, pra um
-// diretorio de dados de app comum).
+// `mhl`. `env("SENPAI_CODEX_CWD", ".")` — a forma de 2 argumentos, mhl
+// 1.4.0-beta.7+ — resolve isso direto em `args:`, sem precisar de um `tool`
+// indireto: ausente SENPAI_CODEX_CWD (uso manual via CLI, como em toda fase
+// ate aqui), cai em "." (mesmo comportamento de sempre — nenhuma regressao
+// pro uso via terminal); o bridge Go seta a var pra um diretorio de scratch
+// dedicado, sem nenhum dado de projeto dentro (app/mhlbridge.Start,
+// FASE5-ACHADOS.md). A forma de 1 argumento (`env("X")`) usada direto em
+// `agent.command`/`args` falha fechado se a var nao existir e sai redigida
+// ([REDACTED]) de qualquer log/saida do mhl (tratada como credencial) — a
+// forma de 2 argumentos e reconhecida pela propria aridade e nunca entra
+// nesse tratamento, em lugar nenhum da linguagem (MHL-Melhorias.md #18,
+// corrigido depois do achado original desta fase — a solucao via `tool
+// CodexCwd` que o achado documentava nao e mais necessaria).
 export agent Codex {
     description: "Gera conteúdo estruturado com Codex em sandbox somente leitura."
     command: "codex"
     args: [
         "exec",
         "--sandbox", "read-only",
-        "--cd", CodexCwd.resolve(),
+        "--cd", env("SENPAI_CODEX_CWD", "."),
         "--skip-git-repo-check",
         "--ephemeral",
         "--ignore-user-config",

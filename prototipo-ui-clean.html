@@ -1,0 +1,112 @@
+<!doctype html>
+<html lang="pt-BR">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width,initial-scale=1">
+<title>Senpai — Protótipo clean</title>
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+<link href="https://fonts.googleapis.com/css2?family=DM+Sans:wght@400;500;600;700&family=DM+Mono:wght@400;500&display=swap" rel="stylesheet">
+<style>
+:root{
+  --blue:#309fe6;--blue-deep:#177fc1;--blue-soft:#eaf6fd;--sky:#f1f8fc;
+  --ink:#153f5d;--muted:#7d9aae;--line:#e6eef3;--white:#fff;
+  --green:#36c98f;--amber:#f5ae49;--red:#f36f79;--purple:#7b82e8;
+  --shadow:0 20px 55px rgba(52,94,122,.14);--soft-shadow:0 7px 24px rgba(58,105,135,.08);
+  --sans:'DM Sans',sans-serif;--mono:'DM Mono',monospace;
+}
+*{box-sizing:border-box}html,body{margin:0;min-height:100%;font-family:var(--sans);color:var(--ink)}
+body{background:linear-gradient(140deg,#ddecf4 0%,#edf5f8 52%,#d7e8f1 100%);padding:44px;min-height:100vh}
+button,input{font:inherit}.shell{max-width:1440px;height:calc(100vh - 88px);min-height:680px;margin:auto;display:grid;grid-template-columns:64px 224px minmax(540px,1fr) 286px;background:#f5f9fc;border-radius:25px;box-shadow:var(--shadow);overflow:hidden}
+.rail{background:var(--blue);padding:20px 10px;display:flex;flex-direction:column;align-items:center;gap:17px;color:#fff}
+.logo{width:36px;height:36px;border-radius:11px;background:#fff;color:var(--blue);display:grid;place-items:center;font-weight:800;font-size:18px;margin-bottom:18px;box-shadow:0 7px 18px rgba(13,99,157,.2)}
+.rail-btn{width:38px;height:38px;border:0;border-radius:11px;background:transparent;color:#d9f1ff;display:grid;place-items:center;cursor:pointer}.rail-btn:hover,.rail-btn.active{background:rgba(255,255,255,.2);color:#fff}.rail-btn svg{width:18px;height:18px}.rail-spacer{flex:1}
+.nav{background:#fff;padding:25px 16px 18px;display:flex;flex-direction:column;min-width:0;border-right:1px solid #edf2f5}
+.nav h2{font-size:16px;margin:28px 3px 12px}.back{border:0;background:#f3f7fa;color:#84a0b2;width:28px;height:28px;border-radius:8px;cursor:pointer}.nav-section{font-size:10px;color:#9bb0be;text-transform:uppercase;letter-spacing:.11em;margin:18px 5px 8px;font-weight:700}
+.work{border:0;background:transparent;text-align:left;padding:10px 9px;border-radius:10px;color:#64869d;cursor:pointer;width:100%;display:flex;gap:10px;align-items:center}.work:hover{background:#f5f9fc}.work.active{background:#eaf6fd;color:#238fd2;font-weight:600}.work-icon{width:28px;height:28px;border-radius:9px;background:#f0f6fa;display:grid;place-items:center;flex:none}.work.active .work-icon{background:#fff}.work-copy{min-width:0}.work-copy strong{display:block;font-size:12px;white-space:nowrap;overflow:hidden;text-overflow:ellipsis}.work-copy span{font-size:9px;color:#9db2c0;font-family:var(--mono)}
+.nav-link{padding:8px 9px;color:#66879c;font-size:11px;display:flex;align-items:center;gap:9px;border:0;background:transparent;cursor:pointer}.nav-link:before{content:'';width:5px;height:5px;border-radius:50%;background:#bdd0db}.nav-card{margin-top:auto;background:linear-gradient(145deg,#edf8fe,#f7fbfd);border-radius:13px;padding:14px;text-align:center}.nav-card .orb{width:42px;height:42px;border-radius:14px;background:linear-gradient(145deg,#8fd5f8,#35a6e8);margin:-32px auto 8px;box-shadow:0 7px 13px rgba(48,159,230,.24)}.nav-card strong{font-size:11px}.nav-card p{font-size:9px;color:#8ca6b6;margin:4px 0 11px}.nav-card button,.create{border:0;background:var(--blue);color:#fff;border-radius:8px;padding:8px 11px;font-size:10px;font-weight:700;cursor:pointer}.create{width:100%;margin-top:14px;text-align:left;padding:10px 12px}
+.main{padding:20px 22px 26px;overflow:auto;min-width:0}.topbar{display:flex;align-items:center;gap:15px;margin-bottom:20px}.search{height:38px;background:#fff;border:1px solid transparent;border-radius:10px;flex:1;display:flex;align-items:center;padding:0 13px;gap:9px;box-shadow:0 3px 14px rgba(58,105,135,.04)}.search input{border:0;outline:0;width:100%;color:var(--ink);font-size:11px}.search input::placeholder{color:#aac0ce}.user{display:flex;align-items:center;gap:9px;font-size:11px;font-weight:600}.avatar{width:32px;height:32px;border-radius:50%;background:linear-gradient(145deg,#ffd4b8,#7fbde2);display:grid;place-items:center;color:#fff;font-weight:700}
+.eyebrow{font-size:10px;text-transform:uppercase;letter-spacing:.13em;color:#87a5b8;font-weight:700}.hero{display:flex;justify-content:space-between;gap:20px;align-items:flex-end;margin-bottom:18px}.hero h1{font-size:25px;letter-spacing:-.025em;margin:4px 0}.hero p{font-size:11px;color:#83a0b3;margin:0}.hero-actions{display:flex;gap:8px}.btn{border:0;border-radius:9px;padding:9px 12px;font-size:10px;font-weight:700;cursor:pointer}.btn.secondary{background:#fff;color:#5f8298}.btn.primary{background:var(--blue);color:#fff;box-shadow:0 6px 15px rgba(48,159,230,.23)}
+.summary{display:grid;grid-template-columns:repeat(3,1fr);gap:12px;margin-bottom:22px}.summary-card{background:#fff;padding:15px;border-radius:12px;display:flex;align-items:center;gap:11px;box-shadow:var(--soft-shadow)}.summary-icon{width:34px;height:34px;border-radius:10px;display:grid;place-items:center;font-size:14px}.summary-card:nth-child(1) .summary-icon{background:#e7f5fd;color:var(--blue)}.summary-card:nth-child(2) .summary-icon{background:#edf9f4;color:var(--green)}.summary-card:nth-child(3) .summary-icon{background:#fff6e7;color:var(--amber)}.summary-card b{display:block;font-size:16px}.summary-card span{font-size:9px;color:#91a9b8}.ring{margin-left:auto;width:30px;height:30px;border-radius:50%;display:grid;place-items:center;font:500 8px var(--mono);background:conic-gradient(var(--blue) 0 72%,#edf2f5 72%);position:relative}.ring:after{content:'';position:absolute;inset:4px;background:#fff;border-radius:50%}.ring i{z-index:1;font-style:normal}
+.section-head{display:flex;align-items:center;justify-content:space-between;margin:0 0 10px}.section-head h2{font-size:15px;margin:0}.section-head button{border:0;background:transparent;color:var(--blue);font-size:10px;font-weight:600;cursor:pointer}.quick{display:flex;gap:10px;margin-bottom:24px}.quick-item{width:58px;text-align:center;font-size:9px;color:#4f758e;cursor:pointer}.quick-icon{width:42px;height:42px;margin:0 auto 6px;border-radius:11px;background:#fff;display:grid;place-items:center;box-shadow:0 4px 13px rgba(64,104,128,.06);color:var(--blue);font-weight:700}.quick-item:nth-child(2) .quick-icon{color:var(--purple)}.quick-item:nth-child(3) .quick-icon{color:var(--amber)}.quick-item:nth-child(4) .quick-icon{color:var(--green)}
+.artifact-layout{display:grid;grid-template-columns:190px minmax(0,1fr);gap:12px;align-items:start}.artifact-list,.document{background:#fff;border-radius:13px;box-shadow:var(--soft-shadow)}.artifact-list{padding:7px}.artifact{width:100%;border:0;background:transparent;padding:11px 10px;text-align:left;border-radius:9px;cursor:pointer;color:#66879c}.artifact:hover{background:#f7fafc}.artifact.active{background:var(--blue-soft);color:#218fd2}.artifact-top{display:flex;justify-content:space-between;gap:5px;align-items:center}.artifact strong{font-size:11px}.artifact small{display:block;font:400 8px var(--mono);color:#9eb2bf;margin-top:3px}.status{width:7px;height:7px;border-radius:50%;background:#cad7df;flex:none}.status.done{background:var(--green)}.status.live{background:var(--blue);box-shadow:0 0 0 4px #dff2fd}.status.wait{background:var(--amber)}
+.document{min-height:380px;overflow:hidden}.doc-head{padding:18px 20px;border-bottom:1px solid var(--line);display:flex;justify-content:space-between;align-items:center}.doc-head span{font:400 8px var(--mono);color:#9cb0bd}.doc-tools{display:flex;gap:6px}.doc-tools button{border:0;background:#f3f7fa;color:#7895a8;width:27px;height:27px;border-radius:8px;cursor:pointer}.doc-body{padding:23px 26px 28px}.doc-kicker{font-size:9px;color:var(--blue);text-transform:uppercase;letter-spacing:.12em;font-weight:700}.doc-body h2{font-size:24px;line-height:1.18;letter-spacing:-.03em;margin:6px 0 10px;max-width:19ch}.doc-lead{font-size:12px;line-height:1.6;color:#66869a;max-width:64ch;margin:0 0 18px}.metrics{display:grid;grid-template-columns:repeat(3,1fr);gap:8px;margin-bottom:19px}.metric{background:#f5f9fc;border-radius:9px;padding:11px}.metric b{display:block;font-size:17px;color:#235574}.metric span{font-size:8px;color:#93aab8;text-transform:uppercase;letter-spacing:.04em}.doc-grid{display:grid;grid-template-columns:1.05fr .95fr;gap:20px}.doc-block h3{font-size:10px;text-transform:uppercase;letter-spacing:.1em;margin:0 0 9px;color:#7896a9}.doc-block ul{list-style:none;padding:0;margin:0}.doc-block li{font-size:10px;line-height:1.5;padding:7px 0 7px 16px;border-bottom:1px solid #edf2f5;position:relative}.doc-block li:before{content:'✓';position:absolute;left:0;color:var(--green);font-weight:700}.insight{background:#eaf6fd;border-left:3px solid var(--blue);border-radius:0 9px 9px 0;padding:12px;font-size:10px;line-height:1.5;color:#557b92}.insight b{display:block;color:#257cae;margin-bottom:3px}.hidden{display:none!important}
+.activity{background:#fff;padding:25px 16px;overflow:auto}.activity h2{font-size:16px;margin:0 0 20px}.tabs{display:flex;gap:15px;border-bottom:1px solid var(--line);margin-bottom:17px}.tabs button{border:0;background:transparent;padding:0 0 9px;font-size:9px;color:#97adba;cursor:pointer}.tabs button.active{color:var(--blue);border-bottom:2px solid var(--blue);font-weight:700}.timeline{position:relative;padding-left:13px}.timeline:before{content:'';position:absolute;top:5px;bottom:5px;left:3px;width:1px;background:#dce8ef}.event{position:relative;margin-bottom:19px}.event:before{content:'';position:absolute;width:7px;height:7px;border-radius:50%;background:var(--blue);left:-13px;top:3px;box-shadow:0 0 0 4px #e6f5fd}.event time{font:400 8px var(--mono);color:#91a9b8}.event p{font-size:10px;line-height:1.45;color:#63849a;margin:5px 0}.event b{color:#315e79}.thumbs{display:flex;gap:5px}.thumb{width:45px;height:38px;border-radius:7px;background:linear-gradient(145deg,#dcedf7,#8ac8ed);display:grid;place-items:center;font-size:13px}.thumb:nth-child(2){background:linear-gradient(145deg,#fff1d6,#f1b757)}.thumb:nth-child(3){background:linear-gradient(145deg,#eae9ff,#888ee6)}.source-pill{display:inline-flex;align-items:center;gap:5px;background:#f2f7fa;padding:6px 8px;border-radius:7px;color:#6d8ca0;font-size:8px}.source-pill:before{content:'↗';color:var(--blue)}
+@media(max-width:1120px){body{padding:18px}.shell{height:calc(100vh - 36px);grid-template-columns:58px 210px 1fr}.activity{display:none}.summary{grid-template-columns:1fr 1fr}.summary-card:last-child{display:none}}
+@media(max-width:760px){body{padding:0}.shell{height:auto;min-height:100vh;border-radius:0;grid-template-columns:52px 1fr}.nav{display:none}.main{padding:16px 13px}.artifact-layout{grid-template-columns:1fr}.artifact-list{display:flex;overflow:auto}.artifact{min-width:150px}.summary{grid-template-columns:1fr}.summary-card:last-child{display:flex}.quick{overflow:auto}.hero{align-items:flex-start}.hero-actions{display:none}.doc-grid{grid-template-columns:1fr}}
+</style>
+</head>
+<body>
+<div class="shell">
+  <aside class="rail">
+    <div class="logo">S</div>
+    <button class="rail-btn active" aria-label="Work-items"><svg viewBox="0 0 24 24" fill="none"><rect x="4" y="4" width="16" height="16" rx="4" stroke="currentColor" stroke-width="1.8"/><path d="M8 9h8M8 13h8M8 17h5" stroke="currentColor" stroke-width="1.8" stroke-linecap="round"/></svg></button>
+    <button class="rail-btn" aria-label="Equipe"><svg viewBox="0 0 24 24" fill="none"><circle cx="9" cy="9" r="3" stroke="currentColor" stroke-width="1.8"/><circle cx="17" cy="10" r="2" stroke="currentColor" stroke-width="1.8"/><path d="M4 19c.5-3 2.2-4.5 5-4.5s4.5 1.5 5 4.5M14 15c3-.7 5 .6 5.5 3" stroke="currentColor" stroke-width="1.8" stroke-linecap="round"/></svg></button>
+    <button class="rail-btn" aria-label="Mensagens"><svg viewBox="0 0 24 24" fill="none"><path d="M5 5h14v11H9l-4 3V5Z" stroke="currentColor" stroke-width="1.8" stroke-linejoin="round"/></svg></button>
+    <button class="rail-btn" aria-label="Configurações">⚙</button><div class="rail-spacer"></div><button class="rail-btn" aria-label="Ajuda">?</button>
+  </aside>
+  <aside class="nav">
+    <button class="back">‹</button><h2>Work-items</h2>
+    <div class="nav-section">Em andamento</div>
+    <button class="work active"><span class="work-icon">◈</span><span class="work-copy"><strong>Checkout renovado</strong><span>Discovery · 3/8</span></span></button>
+    <button class="work"><span class="work-icon">◇</span><span class="work-copy"><strong>Notificações push</strong><span>Delivery · 2/6</span></span></button>
+    <div class="nav-section">Recentes</div>
+    <button class="work"><span class="work-icon">◇</span><span class="work-copy"><strong>Integração PIX</strong><span>Discovery · vazio</span></span></button>
+    <div class="nav-section">Biblioteca</div><button class="nav-link">Compartilhados</button><button class="nav-link">Concluídos</button><button class="nav-link">Arquivados</button>
+    <div class="nav-card"><div class="orb"></div><strong>Agente conectado</strong><p>Claude está pronto para refinar</p><button>Ver atividade</button></div>
+    <button class="create">＋ Novo work-item</button>
+  </aside>
+  <main class="main">
+    <div class="topbar"><label class="search">⌕<input placeholder="Buscar artefato, fonte ou decisão..."></label><div class="user"><span>Olá, Yan</span><span class="avatar">Y</span></div></div>
+    <div class="hero"><div><div class="eyebrow">Oportunidade · Discovery</div><h1>Checkout renovado</h1><p>Atualizado há 6 minutos · wi_8f2a1c</p></div><div class="hero-actions"><button class="btn secondary">Compartilhar</button><button class="btn primary">Gerar próximo</button></div></div>
+    <div class="summary">
+      <div class="summary-card"><span class="summary-icon">▣</span><div><b>4</b><span>fontes processadas</span></div><span class="ring"><i>100%</i></span></div>
+      <div class="summary-card"><span class="summary-icon">✓</span><div><b>3 de 8</b><span>artefatos prontos</span></div><span class="ring" style="background:conic-gradient(var(--green) 0 38%,#edf2f5 38%)"><i>38%</i></span></div>
+      <div class="summary-card"><span class="summary-icon">↗</span><div><b>7,1k</b><span>tokens utilizados</span></div><span class="ring" style="background:conic-gradient(var(--amber) 0 56%,#edf2f5 56%)"><i>56%</i></span></div>
+    </div>
+    <div class="section-head"><h2>Acesso rápido</h2><button>Ver tudo</button></div>
+    <div class="quick"><div class="quick-item"><div class="quick-icon">▤</div>Fontes</div><div class="quick-item"><div class="quick-icon">◫</div>Wiki</div><div class="quick-item"><div class="quick-icon">◆</div>Decisões</div><div class="quick-item"><div class="quick-icon">↓</div>Exportar</div></div>
+    <div class="section-head"><h2>Artefatos</h2><button>Organizar</button></div>
+    <div class="artifact-layout">
+      <div class="artifact-list" id="artifactList">
+        <button class="artifact active" data-doc="brief"><span class="artifact-top"><strong>Brief</strong><i class="status done"></i></span><small>brief.html · agora</small></button>
+        <button class="artifact" data-doc="quality"><span class="artifact-top"><strong>Atributos de qualidade</strong><i class="status done"></i></span><small>atributos.html · 6 min</small></button>
+        <button class="artifact" data-doc="requirements"><span class="artifact-top"><strong>Requisitos</strong><i class="status live"></i></span><small>gerando · passo 2/4</small></button>
+        <button class="artifact" data-doc="diagram"><span class="artifact-top"><strong>Diagramas C4</strong><i class="status wait"></i></span><small>aguarda aprovação</small></button>
+        <button class="artifact"><span class="artifact-top"><strong>ADR</strong><i class="status"></i></span><small>depende de requisitos</small></button>
+      </div>
+      <article class="document">
+        <header class="doc-head"><span id="docPath">artifacts/brief.html</span><div class="doc-tools"><button title="Copiar">□</button><button title="Mais">•••</button></div></header>
+        <div class="doc-body" id="brief">
+          <div class="doc-kicker">Brief da oportunidade</div><h2>Menos atrito entre intenção e pagamento</h2>
+          <p class="doc-lead">O cliente chega ao pagamento pronto para concluir, mas encontra esforço e incerteza justamente no último passo. A oportunidade é tornar o custo previsível e a conclusão mais direta.</p>
+          <div class="metrics"><div class="metric"><b>34%</b><span>abandono atual</span></div><div class="metric"><b>−8 p.p.</b><span>resultado esperado</span></div><div class="metric"><b>12</b><span>entrevistas</span></div></div>
+          <div class="doc-grid"><div class="doc-block"><h3>O que precisa mudar</h3><ul><li>Total e frete visíveis antes do cartão</li><li>Uma etapa para clientes autenticados</li><li>Checkout convidado continua disponível</li></ul></div><div class="insight"><b>Principal evidência</b>9 de 12 participantes hesitaram ao não encontrar o custo total antes de informar o cartão.</div></div>
+        </div>
+        <div class="doc-body hidden" id="quality"><div class="doc-kicker">Guardrails do produto</div><h2>Qualidade que pode ser comprovada</h2><p class="doc-lead">Os atributos abaixo transformam expectativas vagas em limites verificáveis para produto, arquitetura e operação.</p><div class="metrics"><div class="metric"><b>≤2,5s</b><span>tentativa em 4G</span></div><div class="metric"><b>0</b><span>PAN persistido</span></div><div class="metric"><b>99,9%</b><span>carrinho recuperável</span></div></div><div class="doc-grid"><div class="doc-block"><h3>Critérios</h3><ul><li>Tokenização exclusivamente no PSP</li><li>Retry não perde endereço nem frete</li><li>p95 monitorado por dispositivo</li></ul></div><div class="insight"><b>Decisão de arquitetura</b>A indisponibilidade do PSP degrada o pagamento, nunca a integridade do carrinho.</div></div></div>
+        <div class="doc-body hidden" id="requirements"><div class="doc-kicker">Geração em andamento · 62%</div><h2>Requisitos do novo checkout</h2><p class="doc-lead">O agente está cruzando a Wiki com o Brief e os Atributos de Qualidade.</p><div class="metrics"><div class="metric"><b>8</b><span>funcionais</span></div><div class="metric"><b>5</b><span>não funcionais</span></div><div class="metric"><b>3</b><span>dúvidas abertas</span></div></div><div class="insight"><b>Passo atual</b>Normalizando critérios de aceite e rastreando cada requisito até sua fonte.</div></div>
+        <div class="doc-body hidden" id="diagram"><div class="doc-kicker">Revisão necessária</div><h2>Contexto do checkout</h2><p class="doc-lead">O diagrama está pronto para revisão antes de ser gravado no workspace.</p><div style="display:flex;gap:16px;align-items:center;justify-content:center;padding:28px 0"><div class="metric">Usuário</div><b style="color:#91a9b8">→</b><div class="metric" style="background:#eaf6fd">Checkout</div><b style="color:#91a9b8">→</b><div class="metric">PSP</div></div><button class="btn primary">Aprovar e continuar</button></div>
+      </article>
+    </div>
+  </main>
+  <aside class="activity"><h2>Atividade</h2><div class="tabs"><button class="active">Recentes</button><button>Decisões</button><button>Detalhes</button></div><div class="timeline">
+    <div class="event"><time>1 minuto atrás</time><p><b>Requisitos</b> chegou a 62% da geração.</p><span class="source-pill">3 fontes consultadas</span></div>
+    <div class="event"><time>13:34</time><p><b>Yan</b> aprovou o Brief da oportunidade.</p><div class="thumbs"><div class="thumb">▤</div><div class="thumb">✓</div></div></div>
+    <div class="event"><time>11:03</time><p><b>Claude</b> encontrou uma divergência sobre checkout convidado.</p><span class="source-pill">Ver evidência</span></div>
+    <div class="event"><time>09:51</time><p>Wiki atualizada com <b>3 entidades</b> e <b>3 conceitos</b>.</p></div>
+    <div class="event"><time>Ontem</time><p>4 fontes adicionadas ao work-item.</p><div class="thumbs"><div class="thumb">PDF</div><div class="thumb">TXT</div><div class="thumb">PNG</div></div></div>
+  </div></aside>
+</div>
+<script>
+document.getElementById('artifactList').addEventListener('click',function(e){
+  var button=e.target.closest('[data-doc]');if(!button)return;
+  document.querySelectorAll('.artifact').forEach(function(x){x.classList.remove('active')});button.classList.add('active');
+  document.querySelectorAll('.doc-body').forEach(function(x){x.classList.add('hidden')});
+  document.getElementById(button.dataset.doc).classList.remove('hidden');
+  var paths={brief:'artifacts/brief.html',quality:'artifacts/atributos.html',requirements:'artifacts/requisitos.html',diagram:'artifacts/diagramas/contexto.html'};
+  document.getElementById('docPath').textContent=paths[button.dataset.doc];
+});
+document.querySelectorAll('.tabs button').forEach(function(button){button.addEventListener('click',function(){document.querySelectorAll('.tabs button').forEach(function(x){x.classList.remove('active')});button.classList.add('active')})});
+</script>
+</body>
+</html>
