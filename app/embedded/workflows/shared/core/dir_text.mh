@@ -1,0 +1,24 @@
+// tool DirText — concatena todo o conteudo de texto de um diretorio, um
+// arquivo apos o outro, com um separador + cabecalho de proveniencia. Usado
+// por WikiContext (wiki/entities, wiki/concepts, ...) e por Context
+// (artifacts/adr, artifacts/diagramas) sempre que o "predecessor" de um
+// artefato e uma pasta com varios itens, nao um unico arquivo — evita
+// duplicar o mesmo laco fs.read em dois tools (C7).
+//
+// `base_dir` e removido do cabecalho de cada arquivo, virando uma referencia
+// curta e estavel (ex. "entities/time-de-pagamentos", "adr/ADR-001-titulo")
+// em vez do caminho inteiro do disco — e essa referencia que a LLM cita
+// quando ancora uma informacao do artefato numa fonte (ver Cite, tool
+// compartilhado de citacao).
+
+export tool DirText {
+    concat_all(dir_path: string, base_dir: string): string -> {
+        if (!dir.exists(dir_path)) return ""
+        var out = ""
+        for (var file_path in dir.list(dir_path)) {
+            var label = file_path.replace(base_dir + "/", "").replace(".md", "").replace(".html", "")
+            out = out + "\n\n---\n\n# " + label + "\n\n" + fs.read(file_path)
+        }
+        return out
+    }
+}

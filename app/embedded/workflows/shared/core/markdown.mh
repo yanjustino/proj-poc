@@ -1,0 +1,22 @@
+// tool Markdown — formatacao deterministica de listas em Markdown (C3: a LLM
+// devolve os itens via `schema:` como array de verdade; quem decide como uma
+// lista vira texto e um `tool`, nunca a LLM).
+
+export tool Markdown {
+    list(items: string[]): string ->
+        items.map((item) -> "- " + item).join("\n")
+}
+
+test MarkdownSpec {
+    describe list_renders_one_bullet_per_item {
+        are_equal(Markdown.list(["a", "b", "c"]), "- a\n- b\n- c")
+    }
+
+    describe list_of_one_item {
+        are_equal(Markdown.list(["only"]), "- only")
+    }
+
+    describe empty_list_is_empty_string {
+        are_equal(Markdown.list([]), "")
+    }
+}

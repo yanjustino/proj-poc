@@ -1,0 +1,37 @@
+// tool Html — a unica formatacao de HTML que fica em codigo, nunca em texto
+// livre da LLM (C3): converter uma lista de strings ja escapadas em
+// <ul><li>. O escaping em si e nativo (html.escape/html.attr_escape, mhl
+// 1.4.0-beta.6+) — este tool so cobre a composicao estrutural que o runtime
+// nao tem pronta.
+
+export tool Html {
+    list(items: string[]): string ->
+        "<ul>" + items.map((item) -> "<li>" + html.escape(item) + "</li>").join("") + "</ul>"
+
+    // Uma sequencia de <h2>titulo</h2><p>corpo</p> — usado quando o schema
+    // devolve uma lista de {titulo, corpo} em vez de uma lista de strings
+    // simples (ex. atributos de qualidade: uma secao por categoria).
+    sections(items: {titulo: string, corpo: string}[]): string ->
+        items.map((item) -> "<h2>" + html.escape(item.titulo) + "</h2><p>" + html.escape(item.corpo) + "</p>").join("")
+}
+
+test HtmlSpec {
+    describe list_wraps_each_item_and_escapes_it {
+        are_equal(Html.list(["a", "b"]), "<ul><li>a</li><li>b</li></ul>")
+    }
+
+    describe list_escapes_html_special_characters {
+        are_equal(Html.list(["<script>alert(1)</script>"]), "<ul><li>&lt;script&gt;alert(1)&lt;/script&gt;</li></ul>")
+    }
+
+    describe empty_list_is_empty_ul {
+        are_equal(Html.list([]), "<ul></ul>")
+    }
+
+    describe sections_renders_a_heading_and_paragraph_per_item {
+        are_equal(
+            Html.sections([{titulo: "Desempenho", corpo: "Rápido."}, {titulo: "Segurança", corpo: "Seguro & confiável."}]),
+            "<h2>Desempenho</h2><p>Rápido.</p><h2>Segurança</h2><p>Seguro &amp; confiável.</p>"
+        )
+    }
+}

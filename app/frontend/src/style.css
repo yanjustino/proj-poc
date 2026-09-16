@@ -1,26 +1,314 @@
-html {
-    background-color: rgba(27, 38, 54, 1);
-    text-align: center;
-    color: white;
-}
+@import url('https://fonts.googleapis.com/css2?family=DM+Sans:wght@400;500;600;700&family=DM+Mono:wght@400;500&family=Source+Serif+4:opsz,wght@8..60,400;8..60,600;8..60,700&display=swap');
 
-body {
-    margin: 0;
-    color: white;
-    font-family: "Nunito", -apple-system, BlinkMacSystemFont, "Segoe UI", "Roboto",
-    "Oxygen", "Ubuntu", "Cantarell", "Fira Sans", "Droid Sans", "Helvetica Neue",
-    sans-serif;
+:root {
+  /* Light, warm-neutral palette (paper/off-white), inspired by the
+     reference screenshot — most surfaces stay close to white, separated by
+     hairline borders rather than strong color blocks; a single muted blue
+     carries every interactive/active accent. */
+  --bg-0: #faf9f6;
+  --surface: #ffffff;
+  --surface-2: #f2f0ea;
+  --surface-3: #e9e6dd;
+  --ink: #21201c;
+  --muted: #85837a;
+  --line: #e7e4da;
+  --blue: #2f6690;
+  --blue-deep: #24506f;
+  --blue-soft: #eaf1f6;
+  --green: #2f9e6f;
+  --amber: #c98a2e;
+  --red: #c65a5a;
+  --purple: #6f74c9;
+  --shadow: 0 1px 2px rgba(30, 28, 20, .04), 0 16px 40px rgba(30, 28, 20, .09);
+  --soft-shadow: 0 1px 2px rgba(30, 28, 20, .04), 0 4px 14px rgba(30, 28, 20, .05);
+  --sans: 'DM Sans', sans-serif;
+  --serif: 'Source Serif 4', Georgia, serif;
+  --mono: 'DM Mono', monospace;
+  /* Radius/control-height scale — see docs/design-system-senpai.html §04.
+     Small: list items and compact chrome icons. Medium: buttons, fields,
+     cards. Large: reserved for the one genuinely floating panel in this app
+     (.pane-fullscreen) — every other panel sits flush against the shell's
+     own edges and deliberately stays unrounded (see .reading-pane below). */
+  --radius-sm: 6px;
+  --radius-md: 8px;
+  --radius-lg: 12px;
+  --control-sm: 30px;
+  --control-md: 36px;
+  --control-lg: 42px;
 }
+* { box-sizing: border-box; }
+html, body { margin: 0; min-height: 100%; font-family: var(--sans); color: var(--ink); font-size: 14px; }
+body { background: var(--bg-0); padding: 0; min-height: 100vh; }
+button, input, textarea, select { font: inherit; }
+button { cursor: pointer; }
+.icon { display: block; flex: none; }
 
-@font-face {
-    font-family: "Nunito";
-    font-style: normal;
-    font-weight: 400;
-    src: local(""),
-    url("assets/fonts/nunito-v16-latin-regular.woff2") format("woff2");
+/* Slim, translucent scrollbars everywhere (WKWebView is WebKit, so the
+   -webkit- pseudo-elements apply) — the reference's scrollbars are barely
+   visible until you actually scroll; the platform default is much heavier. */
+::-webkit-scrollbar { width: 8px; height: 8px; }
+::-webkit-scrollbar-track { background: transparent; }
+::-webkit-scrollbar-thumb { background: rgba(33, 32, 28, .16); border-radius: 8px; }
+::-webkit-scrollbar-thumb:hover { background: rgba(33, 32, 28, .28); }
+
+/* Columns scale proportionally with the window (~20/39/41%, matching the
+   reference screenshot's ratio) instead of holding a fixed pixel width —
+   each minmax() floor only takes over once the window is small enough that
+   the percentage share would drop below a usable minimum, per the user's
+   "só fica fixa quando a tela chega num tamanho mínimo". */
+.shell { height: 100vh; display: grid; grid-template-columns: minmax(210px, 20%) minmax(320px, 39%) minmax(380px, 41%); background: var(--bg-0); overflow: hidden; }
+
+/* The reading pane reuses .document's header/body/shadow (see markup in
+   shell.js: class="document reading-pane") — these two rules are the only
+   things specific to it being a persistent, full-height shell column
+   rather than a one-off panel a tab renders inline. */
+.reading-pane { border-radius: 0; border-left: 1px solid var(--line); border-right: 1px solid var(--line); height: 100%; min-height: 0; }
+.reading-pane .doc-body { height: 100%; }
+
+/* overflow: hidden here (not auto) on purpose — .nav-list is the one child
+   that scrolls internally (flex:1; overflow:auto below), so the status
+   panel at the bottom stays pinned in view instead of scrolling away with
+   a long work-item list. */
+.sidebar { background: var(--surface); padding: 0 14px 16px; display: flex; flex-direction: column; min-width: 0; border-right: 1px solid var(--line); overflow: hidden; }
+/* Stands in for the top padding a hidden-inset title bar used to need
+   (traffic lights float over the content instead of a separate title
+   strip): tall enough to clear them with room to spare before the brand
+   row, and marked as a Wails drag region (--wails-draggable: drag is the
+   framework's default CSS hook — see also .sidebar-top below) so clicking
+   near the traffic lights actually moves the window, which nothing in the
+   webview did before this existed. */
+.drag-strip { height: 54px; flex: none; --wails-draggable: drag; }
+.sidebar-top { display: flex; align-items: center; justify-content: space-between; margin-bottom: 16px; --wails-draggable: drag; }
+.brand { display: flex; align-items: center; gap: 8px; }
+.brand-mark { width: 26px; height: 26px; background: var(--ink); color: var(--surface); display: grid; place-items: center; font-weight: 700; font-size: 13px; }
+.brand-name { font-weight: 700; font-size: 13px; color: var(--ink); }
+.sidebar-top-actions { display: flex; align-items: center; gap: 2px; --wails-draggable: no-drag; }
+.icon-btn { width: 28px; height: 28px; border: 0; border-radius: var(--radius-sm); background: transparent; color: var(--muted); display: grid; place-items: center; }
+.icon-btn:hover { background: var(--surface-2); color: var(--ink); }
+
+.nav-search { height: var(--control-md); border-radius: var(--radius-md); background: var(--surface-2); display: flex; align-items: center; padding: 0 10px; gap: 7px; margin-bottom: 6px; color: var(--muted); font-size: 12px; }
+.nav-search:focus-within { box-shadow: 0 0 0 3px var(--blue-soft); }
+.nav-search input { border: 0; outline: 0; background: transparent; width: 100%; font-size: 12px; color: var(--ink); }
+.nav-search input::placeholder { color: var(--muted); }
+.nav-section { font-size: 10px; color: var(--muted); text-transform: uppercase; letter-spacing: .11em; margin: 14px 5px 6px; font-weight: 700; }
+.work { border: 0; border-radius: var(--radius-sm); background: transparent; text-align: left; padding: 8px 7px; color: #55534b; width: 100%; display: flex; gap: 9px; align-items: center; }
+.work:hover { background: var(--surface-2); }
+.work.active { background: var(--blue-soft); color: var(--blue-deep); font-weight: 600; }
+.work-icon { width: 24px; height: 24px; background: transparent; display: grid; place-items: center; flex: none; color: var(--muted); }
+.work.active .work-icon { color: var(--blue-deep); }
+.work-copy { min-width: 0; }
+.work-copy strong { display: block; font-size: 13px; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; color: var(--ink); font-weight: 500; }
+.work-copy span { font-size: 10px; color: var(--muted); font-family: var(--mono); }
+.empty-nav { font-size: 11px; color: var(--muted); padding: 8px 7px; }
+.nav-list { flex: 1 1 auto; overflow: auto; min-height: 0; }
+
+.sidebar-status { flex: none; margin-top: 10px; padding-top: 10px; padding-left: 7px; border-top: 1px solid var(--line); display: flex; align-items: center; gap: 8px; font-size: 11px; color: var(--muted); font-family: var(--mono); }
+.sidebar-status-copy { min-width: 0; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+.sidebar-status-copy b { color: var(--ink); font-weight: 600; font-family: var(--sans); }
+.sidebar-status-reconnect { flex: none; white-space: nowrap; }
+
+.main { padding: 22px 26px 26px; overflow: auto; min-width: 0; }
+.center { display: grid; place-items: center; height: 100%; color: var(--muted); font-size: 13px; }
+
+.hero { display: flex; justify-content: space-between; gap: 20px; align-items: flex-end; margin-bottom: 16px; }
+.eyebrow { font-size: 10px; text-transform: uppercase; letter-spacing: .13em; color: var(--muted); font-weight: 700; }
+.hero h1 { font-size: 28px; letter-spacing: -.02em; margin: 4px 0; color: var(--ink); font-family: var(--serif); font-weight: 600; }
+.hero p { font-size: 12px; color: var(--muted); margin: 0; }
+
+.summary { display: grid; grid-template-columns: repeat(3, 1fr); gap: 12px; margin-bottom: 18px; }
+.summary-card { background: var(--surface); border: 1px solid var(--line); border-radius: var(--radius-md); padding: 14px; display: flex; align-items: center; gap: 11px; box-shadow: var(--soft-shadow); }
+.summary-icon { width: 32px; height: 32px; display: grid; place-items: center; background: var(--surface-2); color: var(--blue-deep); border-radius: var(--radius-sm); flex: none; }
+.summary-card b { display: block; font-size: 18px; color: var(--ink); }
+.summary-card span { font-size: 10px; color: var(--muted); }
+.ring { margin-left: auto; width: 28px; height: 28px; border-radius: 50%; display: grid; place-items: center; font: 500 8px var(--mono); position: relative; flex: none; }
+.ring:after { content: ''; position: absolute; inset: 4px; background: var(--surface); border-radius: 50%; }
+.ring i { z-index: 1; font-style: normal; color: var(--ink); }
+
+.tabs { display: flex; gap: 4px; border-bottom: 1px solid var(--line); margin-bottom: 18px; }
+.tab-btn { border: 0; background: transparent; padding: 9px 14px; font-size: 12px; font-weight: 600; color: var(--muted); border-bottom: 2px solid transparent; }
+.tab-btn.active { color: var(--blue-deep); border-bottom-color: var(--blue); }
+
+/* Artefatos — a single-column list now; the actual content lives in the
+   shared reading pane (reading-pane.js), not inline next to this list. */
+.artifact-list, .document { background: var(--surface); border: 1px solid var(--line); border-radius: var(--radius-md); box-shadow: var(--soft-shadow); }
+.artifact-list { padding: 7px; }
+.artifact-group-label {
+  font-size: 11px;
+  text-transform: uppercase;
+  letter-spacing: .09em;
+  color: var(--ink);
+  font-weight: 700;
+  margin: 18px 6px 8px;
+  padding-top: 14px;
+  border-top: 1px solid var(--line);
 }
+.artifact-group-label:first-child { margin-top: 4px; padding-top: 0; border-top: 0; }
+.artifact-item { display: flex; align-items: center; gap: 6px; }
+.artifact-item .artifact-generate-btn { flex: none; }
+.artifact { width: 100%; border: 0; border-radius: var(--radius-sm); background: transparent; padding: 10px; text-align: left; color: #55534b; display: block; flex: 1; min-width: 0; }
+.artifact:hover { background: var(--surface-2); }
+.artifact.active { background: var(--blue-soft); color: var(--blue-deep); }
+.artifact:disabled { opacity: .5; cursor: not-allowed; }
+.artifact-top { display: flex; justify-content: space-between; gap: 5px; align-items: center; }
+.artifact strong { font-size: 12px; }
+.artifact small { display: block; font: 400 9px var(--mono); color: var(--muted); margin-top: 3px; }
+/* One dot component for every place a run/connection's state shows as a
+   colored dot — tab-artefatos.js's artifact list, run-tracker.js's tracker,
+   shell.js's MCP status panel. Was two parallel systems (.status-dot here,
+   .run-dot-<state> in run-tracker.js) with the same 4 colors under
+   different names; consolidated per docs/design-system-senpai.html §09,
+   which also names this class ".dot" — kept ".status-dot" instead since
+   that was already this app's own naming and the DOM already used it in
+   more places. Modifier classes come from status.js's dotClass(). */
+.status-dot { width: 8px; height: 8px; border-radius: 50%; background: #d8d5ca; flex: none; }
+.status-dot.done { background: var(--green); }
+.status-dot.working, .status-dot.queued { background: var(--blue); box-shadow: 0 0 0 4px var(--blue-soft); }
+.status-dot.paused { background: var(--amber); }
+.status-dot.failed { background: var(--red); }
 
-#app {
-    height: 100vh;
-    text-align: center;
+.document { min-height: 420px; overflow: hidden; display: flex; flex-direction: column; position: relative; }
+.doc-head { padding: 10px 14px; border-bottom: 1px solid var(--line); display: flex; justify-content: space-between; align-items: center; gap: 12px; background: var(--surface); }
+.doc-head-title { display: flex; align-items: baseline; gap: 7px; min-width: 0; }
+.doc-title { font-size: 13px; font-weight: 600; color: var(--ink); white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
+.doc-type { font-size: 10px; color: var(--muted); text-transform: uppercase; letter-spacing: .04em; flex: none; }
+
+/* Reading pane toolbar — every button in it is the shared .button family
+   now (tertiary/small for tools like "Ver fonte"/expand, primary/small for
+   the header action like "Gerar"), see reading-pane.js. */
+.doc-tools { display: flex; align-items: center; gap: 6px; flex: none; }
+.doc-body { padding: 20px 24px; flex: 1; overflow: auto; }
+.doc-empty { color: var(--muted); font-size: 13px; padding: 30px; text-align: center; }
+.doc-frame { width: 100%; height: 100%; min-height: 380px; border: 0; background: #fff; }
+.doc-source { white-space: pre-wrap; font-family: var(--mono); font-size: 11px; color: var(--muted); background: var(--surface-2); padding: 12px; }
+.doc-subhead { font-size: 11px; font-weight: 700; text-transform: uppercase; letter-spacing: .07em; color: var(--muted); margin: 18px 0 8px; }
+.doc-index { list-style: none; margin: 0; padding: 0; }
+.doc-index-item { display: block; width: 100%; text-align: left; border: 0; border-radius: var(--radius-sm); border-bottom: 1px solid var(--line); background: transparent; padding: 12px 4px; font-size: 13px; color: #55534b; }
+.doc-index-item:hover { background: var(--surface-2); color: var(--ink); }
+
+/* Document skeleton — shown in the reading pane's body while a generated
+   artifact's HTML is being fetched from disk (renderPreview et al.), so the
+   pane reads as "a document is loading" rather than a bare gray line of
+   text. A cream ground behind a centered white "page" card, standing in for
+   the artifact's own layout before it arrives. */
+.doc-loading { position: relative; display: flex; align-items: center; justify-content: center; background: var(--surface-2); padding: 32px; }
+.doc-loading-card { width: 100%; max-width: 460px; background: var(--surface); border-radius: var(--radius-md); box-shadow: var(--soft-shadow); padding: 28px 30px; }
+.doc-skel { height: 10px; border-radius: 5px; background: var(--surface-3); margin-bottom: 14px; animation: doc-skel-pulse 1.4s ease-in-out infinite; }
+.doc-skel-title { height: 16px; width: 60%; margin-bottom: 22px; }
+.doc-skel-accent { background: var(--blue-soft); width: 30% !important; }
+.doc-skel-rule { height: 1px; background: var(--line); margin: 18px 0; }
+.doc-skel:last-child { margin-bottom: 0; }
+@keyframes doc-skel-pulse { 0%, 100% { opacity: .55; } 50% { opacity: 1; } }
+.doc-loading-label { position: absolute; right: 18px; bottom: 18px; font-size: 11px; font-weight: 600; color: var(--muted); background: var(--surface); padding: 6px 12px; border-radius: var(--radius-md); box-shadow: var(--soft-shadow); }
+
+/* Expand-to-fullscreen reading mode — a focused CSS overlay over the shared
+   reading pane (reading-pane.js), not OS-level fullscreen, so it behaves
+   the same regardless of window state. */
+.pane-fullscreen { position: fixed !important; inset: 20px; z-index: 200; border-radius: var(--radius-lg); overflow: hidden; box-shadow: var(--shadow); }
+
+/* Run tracker */
+.run-tracker { display: flex; align-items: center; gap: 8px; flex-wrap: wrap; font-size: 11px; color: var(--muted); margin-top: 6px; }
+.run-tokens { font-family: var(--mono); color: var(--muted); }
+.run-error { color: var(--red); }
+.run-reason { color: var(--muted); }
+.run-feedback { flex-basis: 100%; display: flex; gap: 6px; align-items: flex-start; margin-top: 4px; }
+.run-feedback-input { flex: 1; min-height: 56px; resize: vertical; border: 1px solid var(--line); border-radius: var(--radius-md); background: var(--surface); color: var(--ink); padding: 8px 10px; font-size: 12px; font-family: var(--sans); outline: none; }
+.run-feedback-input:focus { border-color: var(--blue); box-shadow: 0 0 0 3px var(--blue-soft); }
+.run-feedback-submit { flex: none; align-self: flex-end; }
+label.check { display: inline-flex; align-items: center; gap: 6px; font-size: 11px; color: var(--muted); }
+label.check input { accent-color: var(--blue); width: 15px; height: 15px; }
+
+/* One button family for the whole app — replaces the old .btn/.pill-btn/
+   .doc-action split (docs/design-system-senpai.html §05/§11: those three
+   were the same control with three different resting looks and no shared
+   size scale). Role picks the color (primary/secondary/tertiary/danger),
+   size picks the height (small/default/large = --control-sm/md/lg); radius
+   stays --radius-md across every variant and size. */
+.button {
+  height: var(--control-md); border-radius: var(--radius-md); border: 1px solid transparent;
+  padding: 0 14px; display: inline-flex; align-items: center; justify-content: center; gap: 7px;
+  font-size: 12px; font-weight: 600; white-space: nowrap;
+  transition: background .15s, color .15s, border-color .15s;
+}
+.button.primary { background: var(--ink); color: var(--surface); }
+.button.primary:hover { background: var(--blue-deep); }
+.button.secondary { background: var(--surface); border-color: var(--line); color: var(--ink); box-shadow: var(--soft-shadow); }
+.button.secondary:hover { background: var(--surface-2); }
+.button.tertiary { background: var(--surface-2); color: #55534b; }
+.button.tertiary:hover { background: var(--surface-3); color: var(--ink); }
+.button.danger { background: var(--red); color: var(--surface); }
+.button.danger:hover { background: #a23b2e; }
+.button.small { height: var(--control-sm); padding: 0 10px; font-size: 11px; }
+.button.large { height: var(--control-lg); padding: 0 18px; font-size: 13px; }
+.button.icon-only { width: var(--control-md); padding: 0; }
+.button.small.icon-only { width: var(--control-sm); }
+.button.large.icon-only { width: var(--control-lg); }
+.button:disabled { opacity: .5; cursor: not-allowed; box-shadow: none; }
+
+/* Fontes */
+.upload-row { display: flex; align-items: center; justify-content: flex-end; gap: 10px; margin-bottom: 14px; }
+.upload-actions { display: flex; align-items: center; gap: 8px; flex: none; }
+.source-list { display: flex; flex-direction: column; gap: 10px; }
+.source-item { background: var(--surface); border: 1px solid var(--line); border-radius: var(--radius-md); padding: 12px 14px; box-shadow: var(--soft-shadow); }
+.source-item strong { font-size: 12px; color: var(--ink); }
+.source-row { display: flex; align-items: center; justify-content: space-between; gap: 10px; }
+.source-name { display: inline-flex; align-items: center; gap: 7px; min-width: 0; color: var(--muted); }
+.source-name strong { overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+.source-status { display: inline-flex; align-items: center; gap: 5px; font-size: 11px; font-weight: 600; flex: none; }
+.source-status-done { color: var(--green); }
+
+/* Wiki — tree/ask/lint controls only now; the page itself renders in the
+   shared reading pane. .wiki-doc stays as a class (applied to the reading
+   pane's body, see reading-pane.js) purely for its typography rules below. */
+.wiki-tree { background: var(--surface); border: 1px solid var(--line); border-radius: var(--radius-md); box-shadow: var(--soft-shadow); padding: 7px; }
+.wiki-tree button { display: block; width: 100%; text-align: left; border: 0; border-radius: var(--radius-sm); background: transparent; padding: 10px; font-size: 12px; color: #55534b; }
+.wiki-tree button:hover { background: var(--surface-2); }
+.wiki-tree button.active { background: var(--blue-soft); color: var(--blue-deep); }
+
+/* The reading pane itself: serif body copy, mirroring the reference's
+   document-viewer typography — everything else in the app (chrome, nav,
+   buttons) stays on the sans-serif family. */
+.wiki-doc { padding: 22px 26px; min-height: 300px; position: relative; overflow: auto; font-family: var(--serif); }
+.wiki-doc :is(h1, h2, h3) { color: var(--ink); font-family: var(--serif); font-weight: 600; }
+.wiki-doc h1 { font-size: 23px; }
+.wiki-doc h2 { font-size: 17px; margin-top: 22px; }
+.wiki-doc h3 { font-size: 14px; }
+.wiki-doc p, .wiki-doc li { font-size: 14px; line-height: 1.7; color: #33322c; }
+.wiki-doc a { color: var(--blue-deep); }
+.wiki-doc strong { font-weight: 700; color: var(--ink); }
+.wiki-doc table { border-collapse: collapse; width: 100%; margin: 14px 0; font-family: var(--sans); font-size: 12px; }
+.wiki-doc th, .wiki-doc td { border: 1px solid var(--line); padding: 7px 10px; text-align: left; vertical-align: top; }
+.wiki-doc th { background: var(--surface-2); font-weight: 700; color: var(--ink); }
+
+.wiki-ask { display: flex; gap: 8px; }
+[data-tree-tabs] { margin-top: 14px; }
+/* height: --control-md (not the 42px form-field default from §06) so this
+   row's input matches its default-size "Perguntar" button beside it — an
+   inline ask bar, not a stacked labeled form. */
+.wiki-ask input { flex: 1; height: var(--control-md); border: 1px solid var(--line); border-radius: var(--radius-md); background: var(--surface); color: var(--ink); padding: 0 11px; font-size: 12px; outline: none; }
+.wiki-ask input:focus { border-color: var(--blue); box-shadow: 0 0 0 3px var(--blue-soft); }
+.wiki-answer { margin-top: 12px; background: var(--blue-soft); border-left: 3px solid var(--blue); padding: 12px; font-size: 12px; color: var(--ink); font-family: var(--serif); }
+.wiki-lint-report { margin-top: 14px; }
+.wiki-lint-report pre { background: var(--surface-2); color: #55534b; padding: 12px; font-size: 11px; overflow: auto; max-height: 260px; }
+
+/* Cite badges (mirror the ones templates already render inside artifacts) */
+.cite { display: inline-block; font-family: var(--mono); font-size: 10px; padding: 1px 6px; margin-left: 2px; }
+.cite-fonte { background: #e6f4ec; color: #1f7a4d; }
+.cite-gap { background: #fbe8e6; color: #a23b2e; }
+.cite-inferencia { background: #eceffa; color: #3c4a97; }
+
+/* New work-item modal */
+.modal-backdrop { position: fixed; inset: 0; background: rgba(33, 32, 28, .35); display: grid; place-items: center; z-index: 10; }
+.modal { background: var(--surface); border: 1px solid var(--line); border-radius: var(--radius-md); padding: 22px; width: 340px; box-shadow: var(--shadow); }
+.modal h2 { font-size: 16px; margin: 0 0 14px; color: var(--ink); }
+.modal label { display: block; font-size: 10px; color: var(--muted); margin: 12px 0 5px; text-transform: uppercase; letter-spacing: .06em; }
+.modal input, .modal select { width: 100%; min-height: var(--control-lg); border: 1px solid var(--line); border-radius: var(--radius-md); background: var(--surface); color: var(--ink); padding: 9px 11px; font-size: 13px; outline: none; }
+.modal input:focus, .modal select:focus { border-color: var(--blue); box-shadow: 0 0 0 3px var(--blue-soft); }
+.modal-actions { display: flex; justify-content: flex-end; gap: 8px; margin-top: 18px; }
+.modal-error { color: var(--red); font-size: 11px; margin-top: 8px; }
+
+@media (max-width: 900px) {
+  .shell { grid-template-columns: 1fr; }
+  .sidebar { display: none; }
+  .reading-pane { display: none; }
+  .summary { grid-template-columns: 1fr; }
 }

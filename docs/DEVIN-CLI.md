@@ -39,10 +39,10 @@ confiaveis, `--respect-workspace-trust false`.
 
 ## Integracao MHL
 
-`workflows/shared/agents.mh` chama:
+`workflows/shared/agents/agents.mh` chama:
 
 ```text
-devin --config <workflows>/shared/devin-generator.json \
+devin --config <workflows>/shared/agents/devin-generator.json \
   --model <modelo> --respect-workspace-trust false \
   --permission-mode normal --print <prompt>
 ```

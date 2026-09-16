@@ -1,0 +1,55 @@
+{
+  "type": "object",
+  "additionalProperties": false,
+  "required": ["source_title", "source_summary", "index_summary", "entities", "concepts"],
+  "properties": {
+    "source_title": {
+      "type": "string",
+      "description": "Título curto e descritivo para esta fonte."
+    },
+    "source_summary": {
+      "type": "string",
+      "description": "Síntese completa da fonte em markdown (pode ter múltiplos parágrafos)."
+    },
+    "index_summary": {
+      "type": "string",
+      "description": "Resumo de exatamente 1 linha desta fonte, para o índice da wiki."
+    },
+    "entities": {
+      "type": "array",
+      "description": "Entidades novas ou com fatos novos nesta fonte. Lista vazia se nenhuma.",
+      "items": {
+        "type": "object",
+        "additionalProperties": false,
+        "required": ["title", "facts"],
+        "properties": {
+          "title": { "type": "string" },
+          "facts": {
+            "type": "array",
+            "items": { "type": "string" },
+            "minItems": 1,
+            "description": "Fatos novos sobre esta entidade, um por item. Nunca vazio — se não há fato novo, não inclua a entidade."
+          }
+        }
+      }
+    },
+    "concepts": {
+      "type": "array",
+      "description": "Conceitos novos ou com fatos novos nesta fonte. Lista vazia se nenhum.",
+      "items": {
+        "type": "object",
+        "additionalProperties": false,
+        "required": ["title", "facts"],
+        "properties": {
+          "title": { "type": "string" },
+          "facts": {
+            "type": "array",
+            "items": { "type": "string" },
+            "minItems": 1,
+            "description": "Fatos novos sobre este conceito, um por item. Nunca vazio — se não há fato novo, não inclua o conceito."
+          }
+        }
+      }
+    }
+  }
+}

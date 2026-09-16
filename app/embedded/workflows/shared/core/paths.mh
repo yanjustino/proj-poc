@@ -1,0 +1,104 @@
+// tool Paths — unico ponto que monta caminhos sob "projects/<project_id>/..."
+// Reforca a constraint C1 (isolamento de work-item, ver PLANO-MACRO-MHL-SENPAI.md §2.1):
+// nenhum outro step/tool deve concatenar "projects/" + project_id a mao. Um spike de
+// Fase 0 confirmou que interpolacao de string (inclusive dentro de `memory { path: }`)
+// NAO sanitiza sozinha — "../../etc/passwd" como project_id escapa de verdade do
+// diretorio pretendido — por isso toda funcao aqui valida antes de montar o caminho.
+//
+// is_valid_id usa string.matches (regex, disponivel desde mhl 1.4.0-beta.6) — o padrao
+// ancorado ja rejeita "/", "\", ".." e qualquer caractere fora do conjunto permitido
+// sem checagens redundantes; antes disso exigia iterar split("") caractere a caractere
+// (ver FASE0-ACHADOS.md §10 / MHL-Melhorias.md #14). Chamadas entre metodos-irmaos
+// usam `self.` (MHL-Melhorias.md #6) em vez de repetir "Paths." — mais resistente a
+// rename.
+
+export tool Paths {
+    is_valid_id(project_id: string): bool -> {
+        if (project_id.is_empty()) return false
+        if (project_id.size() > 128) return false
+        return project_id.matches("^[A-Za-z0-9_-]+$")
+    }
+
+    ensure_valid(project_id: string): string -> {
+        if (!self.is_valid_id(project_id)) fail("project_id invalido ou potencialmente malicioso: '" + project_id + "'")
+        return project_id
+    }
+
+    ensure_safe_relative(relative: string): string -> {
+        if (relative.contains("..")) fail("caminho relativo invalido (contem '..'): '" + relative + "'")
+        if (relative.starts_with("/")) fail("caminho relativo nao pode ser absoluto: '" + relative + "'")
+        return relative
+    }
+
+    root(project_id: string): string -> "projects/" + self.ensure_valid(project_id)
+
+    project_file(project_id: string): string -> self.root(project_id) + "/project.json"
+
+    usage_file(project_id: string): string -> self.root(project_id) + "/usage.jsonl"
+
+    // Estado interno (nao-humano) que a WikiIndex usa pra renderizar
+    // wiki/index.md do zero a cada ingest — mantem wiki/ 100% markdown puro
+    // (nada de .json ali), como o padrao docs/wiki-llm.md espera. Ponto (.)
+    // inicial: convencao de "arquivo oculto/interno" em todo SO relevante (C6).
+    index_state_file(project_id: string): string -> self.root(project_id) + "/.index-state.json"
+
+    raw_dir(project_id: string): string -> self.root(project_id) + "/raw"
+
+    wiki_dir(project_id: string): string -> self.root(project_id) + "/wiki"
+
+    artifacts_dir(project_id: string): string -> self.root(project_id) + "/artifacts"
+
+    raw(project_id: string, relative: string): string ->
+        self.raw_dir(project_id) + "/" + self.ensure_safe_relative(relative)
+
+    wiki(project_id: string, relative: string): string ->
+        self.wiki_dir(project_id) + "/" + self.ensure_safe_relative(relative)
+
+    artifact(project_id: string, relative: string): string ->
+        self.artifacts_dir(project_id) + "/" + self.ensure_safe_relative(relative)
+}
+
+test PathsSpec {
+    describe valid_ids_are_accepted {
+        is_true(Paths.is_valid_id("wi_8f2a1c"))
+        is_true(Paths.is_valid_id("0198f2a1-aaaa-7000-8000-abcdefabcdef"))
+        is_true(Paths.is_valid_id("Checkout-Renovado_2026"))
+    }
+
+    describe malicious_or_malformed_ids_are_rejected {
+        is_false(Paths.is_valid_id(""))
+        is_false(Paths.is_valid_id("../etc/passwd"))
+        is_false(Paths.is_valid_id("/etc/passwd"))
+        is_false(Paths.is_valid_id("a/b"))
+        is_false(Paths.is_valid_id("a b"))
+        is_false(Paths.is_valid_id("wi;rm -rf"))
+        is_false(Paths.is_valid_id(".."))
+    }
+
+    describe ensure_valid_fails_hard_on_a_malicious_id {
+        try {
+            Paths.ensure_valid("../../../etc/passwd")
+            is_true(false)
+        } catch (err) {
+            is_true(true)
+        }
+    }
+
+    describe artifact_paths_stay_scoped_under_projects {
+        are_equal(Paths.artifact("wi_1", "brief.html"), "projects/wi_1/artifacts/brief.html")
+        are_equal(Paths.wiki("wi_1", "index.md"), "projects/wi_1/wiki/index.md")
+        are_equal(Paths.raw("wi_1", "ata.pdf"), "projects/wi_1/raw/ata.pdf")
+        are_equal(Paths.project_file("wi_1"), "projects/wi_1/project.json")
+        are_equal(Paths.usage_file("wi_1"), "projects/wi_1/usage.jsonl")
+        are_equal(Paths.index_state_file("wi_1"), "projects/wi_1/.index-state.json")
+    }
+
+    describe relative_traversal_is_rejected_even_with_a_valid_project_id {
+        try {
+            Paths.artifact("wi_1", "../../etc/passwd")
+            is_true(false)
+        } catch (err) {
+            is_true(true)
+        }
+    }
+}

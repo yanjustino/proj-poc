@@ -1,0 +1,119 @@
+// Renderiza o HTML de pre-visualizacao de um artefato PAUSADO (Modo Buddy),
+// com os mesmos templates ArtifactBody/PageShell que os *Commit steps de
+// Discovery/Delivery usam pro artefato final — mas sem nenhum efeito
+// colateral: nunca grava em disco, nunca chama ArtifactId.next_*_id (o
+// contador de sequencia so pode ser consumido no Commit de verdade, depois
+// de aprovado — chamar duas vezes, ou chamar pra um rascunho que acaba
+// rejeitado, deixaria buracos na numeracao real). Um artefato de colecao
+// (adr/diagramas/features/historias) junta o corpo de cada item pendente
+// numa unica pagina de preview, sem id/pasta real atribuidos ainda.
+//
+// Sincrono de proposito (sem chamada de LLM): 'data' e o vars.pending_data
+// que um run pausado ja devolve pronto (confirmado por spike contra
+// `mhl serve mcp --http` — mhl_run_status expoe todas as vars do workflow
+// assim que pausa, nao so o `output:` declarado). O frontend chama isso uma
+// vez, sob demanda, so quando o usuario esta olhando pra um artefato
+// pausado (reading-pane.js/tab-artefatos.js).
+
+import { ArtifactBody } from "../shared/artifacts/artifact_body.mh"
+import { PageShell } from "../shared/artifacts/page_shell.mh"
+
+workflow ArtifactPreview {
+    description: "Renderiza o rascunho de um artefato pausado (Modo Buddy) para pre-visualizacao, sem gravar nada em disco."
+
+    input artifact: string // brief | atributos | requisitos | der | feature | historia | adr | diagramas | features | historias
+    input data: any
+
+    var preview_html = ""
+
+    output: {
+        preview_html: preview_html,
+    }
+
+    step Dispatch {
+        if (artifact == "brief") goto Brief
+        if (artifact == "atributos") goto Atributos
+        if (artifact == "requisitos") goto Requisitos
+        if (artifact == "der") goto Der
+        if (artifact == "feature") goto Feature
+        if (artifact == "historia") goto Historia
+        if (artifact == "adr") goto Adr
+        if (artifact == "diagramas") goto Diagramas
+        if (artifact == "features") goto Features
+        if (artifact == "historias") goto Historias
+        fail(
+            "artefato desconhecido para preview: '" + artifact +
+            "' (use brief | atributos | requisitos | der | feature | historia | adr | diagramas | features | historias)"
+        )
+    }
+
+    step Brief {
+        preview_html = PageShell(title: "Brief", body: ArtifactBody.brief(data), meta: "Rascunho — ainda não gravado")
+        goto Done
+    }
+
+    step Atributos {
+        preview_html = PageShell(title: "Atributos de qualidade", body: ArtifactBody.atributos(data), meta: "Rascunho — ainda não gravado")
+        goto Done
+    }
+
+    step Requisitos {
+        preview_html = PageShell(title: "Requisitos", body: ArtifactBody.requisitos(data), meta: "Rascunho — ainda não gravado")
+        goto Done
+    }
+
+    step Der {
+        preview_html = PageShell(title: "DER", body: ArtifactBody.der(data), meta: "Rascunho — ainda não gravado")
+        goto Done
+    }
+
+    step Feature {
+        preview_html = PageShell(title: "Detalhamento da feature", body: ArtifactBody.feature(data), meta: "Rascunho — ainda não gravado")
+        goto Done
+    }
+
+    step Historia {
+        preview_html = PageShell(title: "Detalhamento da história", body: ArtifactBody.historia(data), meta: "Rascunho — ainda não gravado")
+        goto Done
+    }
+
+    step Adr {
+        var body = ""
+        for (var decision in data.decisions) {
+            body = body + "<h2>" + html.escape(decision.titulo) + "</h2>" + ArtifactBody.adr(decision)
+        }
+        preview_html = PageShell(title: "ADRs", body: body, meta: "Rascunho — ainda não gravado")
+        goto Done
+    }
+
+    step Diagramas {
+        var body = ""
+        for (var diagrama in data.diagramas) {
+            body = body + "<h2>" + html.escape(diagrama.titulo) + "</h2>" + ArtifactBody.diagrama(diagrama)
+        }
+        preview_html = PageShell(title: "Diagramas C4", body: body, meta: "Rascunho — ainda não gravado")
+        goto Done
+    }
+
+    step Features {
+        var body = ""
+        for (var feature in data.features) {
+            body = body + "<h2>" + html.escape(feature.titulo) + "</h2>" + ArtifactBody.feature(feature)
+        }
+        preview_html = PageShell(title: "Features", body: body, meta: "Rascunho — ainda não gravado")
+        goto Done
+    }
+
+    step Historias {
+        var body = ""
+        for (var historia in data.historias) {
+            body = body + "<h2>" + html.escape(historia.titulo) + "</h2>" + ArtifactBody.historia(historia)
+        }
+        preview_html = PageShell(title: "Histórias", body: body, meta: "Rascunho — ainda não gravado")
+        goto Done
+    }
+
+    step Done {
+        // ponto de convergencia unico — mesmo padrao de Discovery/Delivery/WorkItem.
+    }
+}

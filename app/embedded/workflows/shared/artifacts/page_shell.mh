@@ -1,0 +1,17 @@
+// prompt PageShell — chrome HTML compartilhado por todo artefato de
+// Discovery/Delivery (titulo + corpo + rodape de metadados). Existe pra
+// nenhum dos 8+ templates de artefato duplicar a mesma folha de estilo —
+// cada um so declara o CORPO (`prompt ...Body(...) from "templates/x.html"`)
+// e compoe aqui, mesmo padrao de composicao de `prompt` que Role()/Review()
+// usam nos Docs-Reference §07.
+//
+// ArtifactMeta.line monta a linha de rodape ("gerado em ... · agente ·
+// tokens") — sempre codigo, nunca a LLM (C3): data/hora e contagem de token
+// sao exatamente o tipo de coisa que essa constraint proibe delegar.
+
+export prompt PageShell(title: string, body: prompt, meta: string) from "page_shell.prompt.md"
+
+export tool ArtifactMeta {
+    line(generated_at: string, path: string, tokens_in: number, tokens_out: number): string ->
+        "gerado em ${generated_at} · ${path} · claude · ${tokens_in} → ${tokens_out} tokens"
+}

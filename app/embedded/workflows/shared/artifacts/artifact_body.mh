@@ -1,0 +1,130 @@
+// Adaptador de apresentacao compartilhado. Centraliza escaping, citacoes e
+// composicao dos templates; os workflows ficam restritos a orquestracao e I/O.
+
+import { Cite } from "cite.mh"
+import { ArtifactHtml } from "artifact_html.mh"
+import {
+    BriefBody, AtributosBody, RequisitosBody, AdrBody, DerBody, DiagramaBody,
+    FeatureBody, HistoriaBody
+} from "artifacts_common.mh"
+
+export tool ArtifactBody {
+    brief(data: any): string -> BriefBody(
+        resumo_executivo: html.escape(data.resumo_executivo),
+        resumo_fontes: Cite.note(data.resumo_fontes),
+        contexto_negocio: html.escape(data.contexto_negocio),
+        contexto_fontes: Cite.note(data.contexto_fontes),
+        objetivos_tabela: ArtifactHtml.objectives(data.objetivos),
+        em_escopo_lista: Cite.list(data.em_escopo),
+        fora_escopo_lista: Cite.list(data.fora_escopo),
+        stakeholders_tabela: ArtifactHtml.stakeholders(data.stakeholders),
+        metricas_tabela: ArtifactHtml.metrics(data.metricas_sucesso),
+        marcos_tabela: ArtifactHtml.milestones(data.cronograma_marcos),
+        riscos_tabela: ArtifactHtml.risks(data.riscos_dependencias),
+        perguntas_lista: Cite.list(data.perguntas_abertas),
+        fontes_nota: Cite.note(data.fontes)
+    )
+
+    atributos(data: any): string -> AtributosBody(
+        contexto: html.escape(data.contexto),
+        contexto_fontes: Cite.note(data.contexto_fontes),
+        requisitos_tabela: ArtifactHtml.classified_rows(data.requisitos_nao_funcionais),
+        restricoes_tabela: ArtifactHtml.architectural_constraints(data.restricoes_arquiteturais),
+        compliance_tabela: ArtifactHtml.compliance(data.compliance),
+        exclusoes_lista: Cite.list(data.exclusoes),
+        perguntas_lista: Cite.list(data.perguntas_abertas),
+        fontes_nota: Cite.note(data.fontes)
+    )
+
+    requisitos(data: any): string -> RequisitosBody(
+        contexto: html.escape(data.contexto),
+        contexto_fontes: Cite.note(data.contexto_fontes),
+        funcionais_tabela: ArtifactHtml.requirements(data.funcionais),
+        integracoes_tabela: ArtifactHtml.integrations(data.integracoes),
+        dados_tabela: ArtifactHtml.data_requirements(data.dados),
+        negocio_tabela: ArtifactHtml.business_requirements(data.negocio),
+        regras_tabela: ArtifactHtml.business_rules(data.regras_negocio),
+        exclusoes_lista: Cite.list(data.exclusoes),
+        gaps_lista: Cite.list(data.gaps),
+        perguntas_lista: Cite.list(data.perguntas_abertas),
+        fontes_nota: Cite.note(data.fontes)
+    )
+
+    adr(data: any): string -> AdrBody(
+        contexto: html.escape(data.contexto),
+        decisao: html.escape(data.decisao),
+        consequencias: html.escape(data.consequencias),
+        fontes_nota: Cite.note(data.fontes)
+    )
+
+    der(data: any): string -> DerBody(
+        modo: html.escape(data.modo),
+        contexto: html.escape(data.contexto),
+        contexto_fontes: Cite.note(data.contexto_fontes),
+        diagrama_mermaid: html.escape(data.diagrama_mermaid),
+        entidades_tabela: ArtifactHtml.entity_rows(data.entidades),
+        confirmados_tabela: ArtifactHtml.relation_rows(data.relacionamentos_confirmados),
+        inferidos_tabela: ArtifactHtml.relation_rows(data.relacionamentos_inferidos),
+        atributos_tabela: ArtifactHtml.attribute_rows(data.atributos),
+        delta_lista: Cite.list(data.delta_modelo),
+        gaps_lista: Cite.list(data.gaps),
+        questoes_lista: Cite.list(data.questoes_abertas),
+        fontes_nota: Cite.note(data.fontes)
+    )
+
+    diagrama(data: any): string -> DiagramaBody(
+        diagram_type: html.escape(data.diagram_type),
+        hierarchy_level: html.escape(data.hierarchy_level),
+        descricao: html.escape(data.descricao),
+        descricao_fontes: Cite.note(data.descricao_fontes),
+        fontes_nota: Cite.note(data.fontes),
+        diagrama_mermaid: html.escape(data.diagrama_mermaid)
+    )
+
+    feature(data: any): string -> FeatureBody(
+        resumo: html.escape(data.resumo),
+        resumo_fontes: Cite.note(data.resumo_fontes),
+        objetivo: html.escape(data.objetivo),
+        objetivo_fontes: Cite.note(data.objetivo_fontes),
+        personas_tabela: ArtifactHtml.feature_personas(data.personas),
+        em_escopo_lista: Cite.list(data.em_escopo),
+        fora_escopo_lista: Cite.list(data.fora_escopo),
+        regras_lista: Cite.list(data.regras_negocio),
+        interacoes_lista: Cite.list(data.interacoes_entidades_dados),
+        criterios_lista: Cite.list(data.criterios_aceite),
+        historias_lista: Cite.list(data.historias_propostas),
+        dependencias_lista: Cite.list(data.dependencias_integridade),
+        dependencias_sistema_lista: Cite.list(data.dependencias_sistema),
+        gaps_lista: Cite.list(data.gaps),
+        questoes_lista: Cite.list(data.questoes_abertas),
+        fontes_nota: Cite.note(data.fontes)
+    )
+
+    historia(data: any): string -> HistoriaBody(
+        statement: ArtifactHtml.story_statement(data.como, data.quero, data.para),
+        statement_fontes: Cite.note(data.fontes),
+        atributos_lista: ArtifactHtml.story_attributes(
+            data.work_item_type,
+            data.story_type,
+            data.subclassification,
+            data.nature,
+            data.specialty,
+            data.fontes
+        ),
+        contexto_negocio: html.escape(data.contexto_negocio),
+        contexto_fontes: Cite.note(data.contexto_fontes),
+        criterios_lista: Cite.list(data.criterios_aceite),
+        cenarios_gherkin: html.escape(data.cenarios_gherkin),
+        cenarios_fontes: Cite.note(data.cenarios_fontes),
+        regras_lista: Cite.list(data.regras_negocio),
+        dod_lista: Cite.list(data.definition_of_done),
+        dependencias_lista: Cite.list(data.dependencias_impedimentos),
+        fora_escopo_lista: Cite.list(data.fora_escopo),
+        exemplo_uso: html.escape(data.exemplo_uso),
+        exemplo_fontes: Cite.note(data.exemplo_fontes),
+        contratos_interface: html.escape(data.contratos_interface),
+        contratos_fontes: Cite.note(data.contratos_fontes),
+        questoes_lista: Cite.list(data.questoes_abertas),
+        fontes_nota: Cite.note(data.fontes)
+    )
+}

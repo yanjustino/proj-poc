@@ -1,33 +1,26 @@
 import './style.css';
-import './app.css';
+import { LogFrontendError } from '../wailsjs/go/main/App';
+import { mountShell } from './views/shell.js';
 
-import logo from './assets/images/logo-universal.png';
-import {PingMHL} from '../wailsjs/go/main/App';
+// Forward every uncaught error/rejection into the Go process's own log
+// (App.LogFrontendError) — a packaged production build has no reachable
+// devtools console by default, so this is the only way a bug like "the
+// work-item list silently stays empty" leaves any trace to debug from.
+function reportError(label, err) {
+  const detail = err && err.stack ? err.stack : String(err);
+  console.error(label, err);
+  LogFrontendError(`${label}: ${detail}`).catch(() => {});
+}
 
-// Fase 0 spike only: proves the Go shell can spawn `mhl serve mcp --http`,
-// talk MCP to it, and surface the result through a bound method to the
-// frontend. Fase 6 replaces this with the real UI (work-item list, wiki,
-// artifact generation/progress).
-document.querySelector('#app').innerHTML = `
-    <img id="logo" class="logo">
-      <div class="result" id="result">Clique para testar a ponte com o mhl 👇</div>
-      <div class="input-box" id="input">
-        <button class="btn" onclick="pingMHL()">Ping MHL</button>
-      </div>
-    </div>
-`;
-document.getElementById('logo').src = logo;
+window.addEventListener('error', (event) => {
+  reportError('uncaught error', event.error ?? event.message);
+});
+window.addEventListener('unhandledrejection', (event) => {
+  reportError('unhandled rejection', event.reason);
+});
 
-let resultElement = document.getElementById("result");
-
-window.pingMHL = function () {
-    resultElement.innerText = "chamando mhl...";
-    PingMHL()
-        .then((result) => {
-            resultElement.innerText = result;
-        })
-        .catch((err) => {
-            resultElement.innerText = "erro: " + err;
-            console.error(err);
-        });
-};
+mountShell(document.getElementById('app')).catch((err) => {
+  reportError('mountShell failed', err);
+  document.getElementById('app').innerHTML =
+    `<div style="padding:40px;font-family:sans-serif;color:#a23b2e;background:#faf9f6;min-height:100vh">Falha ao iniciar a interface: ${String(err)}</div>`;
+});

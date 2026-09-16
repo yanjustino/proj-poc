@@ -1,0 +1,50 @@
+{
+    "version": "2.0.0",
+    "tasks": [
+        {
+            "label": "build frontend",
+            "type": "shell",
+            "command": "npm run build",
+            "options": {
+                "cwd": "${workspaceFolder}/app/frontend"
+            },
+            "problemMatcher": []
+        },
+        {
+            // Builds the real .app bundle (not a bare `go build` binary) in
+            // debug mode and re-signs it. A raw unbundled binary has no
+            // NSBundle identity, which makes macOS silently no-op native
+            // sheets (NSOpenPanel via beginSheetModalForWindow) instead of
+            // showing them — e.g. "+ Adicionar fontes" looked completely
+            // broken (resolved instantly with an empty selection, no error)
+            // when run that way.
+            //
+            // `wails build`'s own ad-hoc codesign step is flaky here: macOS
+            // (Spotlight/LaunchServices) tags the freshly written bundle
+            // with xattrs (com.apple.provenance etc.) that codesign then
+            // rejects ("resource fork ... not allowed") — happens even with
+            // -clean once the bundle has been `open`ed before. `xattr -cr`
+            // + a manual ad-hoc re-sign after the fact papers over it
+            // unconditionally (the `;` lets this run even when wails
+            // build's own signing step already failed).
+            //
+            // `rm -rf` the previous bundle before building (not just relying
+            // on `wails build -clean`, which cleans its own intermediate
+            // artifacts, not the output bundle itself): if `wails build`
+            // then fails for a real reason (a compile error — e.g. an .mh
+            // syntax error the vendored mhl can't parse), there is no old
+            // .app left for `xattr`/`codesign` to silently re-sign and hand
+            // to the debugger — they fail on the missing path instead, the
+            // task exits non-zero (last command in the chain), and VS Code
+            // aborts the launch instead of quietly debugging yesterday's
+            // stale build.
+            "label": "build app bundle (debug)",
+            "type": "shell",
+            "command": "rm -rf build/bin/senpai-app.app; CGO_LDFLAGS=\"-framework UniformTypeIdentifiers\" /Users/yanjustino/go/bin/wails build -debug -clean; xattr -cr build/bin/senpai-app.app && codesign --force --deep -s - build/bin/senpai-app.app",
+            "options": {
+                "cwd": "${workspaceFolder}/app"
+            },
+            "problemMatcher": ["$go"]
+        }
+    ]
+}

@@ -34,6 +34,12 @@ type Client struct {
 	http      *http.Client
 	nextID    atomic.Int64
 	stderr    *bytes.Buffer
+
+	// serverName/serverVersion come from the initialize handshake's
+	// serverInfo — captured once in initialize() and never re-fetched, since
+	// mhl's version can't change mid-process.
+	serverName    string
+	serverVersion string
 }
 
 // rpcRequest/rpcResponse are the bare JSON-RPC 2.0 envelope mhl speaks.
@@ -79,7 +85,7 @@ type rpcError struct {
 // Pass "" only for a spike/test that doesn't care where `projects/` ends up.
 //
 // codexCwdDir, when non-empty, is exported as SENPAI_CODEX_CWD — the Codex
-// backend agent (workflows/shared/agents.mh, tool CodexCwd) passes it to
+// backend agent (workflows/shared/agents/agents.mh, tool CodexCwd) passes it to
 // `codex exec --cd`, its OWN working root, independent of dataDir/cmd.Dir
 // above. Without this, Codex would inherit mhl's CWD (dataDir) as its
 // workspace and — sandboxed to read-only, but still able to read — could
@@ -105,7 +111,7 @@ func Start(ctx context.Context, mhlPath, workflowsDir, stateDir, dataDir, codexC
 	cmd.Dir = dataDir
 	env := append(os.Environ(),
 		// SENPAI_WORKFLOWS_ROOT: lets workflow-side code (tool WorkflowsRoot,
-		// workflows/shared/workflows_root.mh) build an absolute path for
+		// workflows/shared/core/workflows_root.mh) build an absolute path for
 		// anything a CHILD process of mhl (Codex, via --output-schema) needs
 		// to resolve itself — that child inherits mhl's CWD (cmd.Dir, above,
 		// now a writable per-user data dir, not workflowsDir), so a bare
@@ -116,7 +122,7 @@ func Start(ctx context.Context, mhlPath, workflowsDir, stateDir, dataDir, codexC
 	if codexCwdDir != "" {
 		env = append(env, "SENPAI_CODEX_CWD="+codexCwdDir)
 	}
-	cmd.Env = env
+	cmd.Env = enrichedEnv(ctx, env)
 	var stderr bytes.Buffer
 	cmd.Stderr = &stderr
 	cmd.Stdout = io.Discard
@@ -187,7 +193,7 @@ func (c *Client) initialize(ctx context.Context) error {
 		"protocolVersion": "2025-06-18",
 		"capabilities":    map[string]any{},
 	}
-	_, header, err := c.postRPC(ctx, "initialize", params, false)
+	result, header, err := c.postRPC(ctx, "initialize", params, false)
 	if err != nil {
 		return err
 	}
@@ -196,7 +202,40 @@ func (c *Client) initialize(ctx context.Context) error {
 		return fmt.Errorf("server did not return Mcp-Session-Id")
 	}
 	c.sessionID = sid
+
+	// Best-effort: a missing/malformed serverInfo shouldn't fail the whole
+	// handshake, it just leaves the name/version blank for Info() to report.
+	var initResult struct {
+		ServerInfo struct {
+			Name    string `json:"name"`
+			Version string `json:"version"`
+		} `json:"serverInfo"`
+	}
+	if err := json.Unmarshal(result, &initResult); err == nil {
+		c.serverName = initResult.ServerInfo.Name
+		c.serverVersion = initResult.ServerInfo.Version
+	}
 	return nil
+}
+
+// Info reports the mhl server's identity (from the initialize handshake) and
+// whether it's answering /healthz right now — a live probe, not just "did
+// Start() succeed at some point in the past". This matters because the mhl
+// child process can die mid-session (see WatchRun's doc comment in app.go
+// for a real crash this project already hit) without this Client itself
+// ever hearing about it — there's no persistent connection to notice a
+// dropped process, only individual RPCs that would start failing one by
+// one. Cheap on purpose (a loopback GET, ~ms), safe to call on every render
+// of a status indicator.
+func (c *Client) Info(ctx context.Context) (name, version string, healthy bool) {
+	req, err := http.NewRequestWithContext(ctx, http.MethodGet, c.baseURL+"/healthz", nil)
+	if err == nil {
+		if resp, err := c.http.Do(req); err == nil {
+			resp.Body.Close()
+			healthy = resp.StatusCode == http.StatusOK
+		}
+	}
+	return c.serverName, c.serverVersion, healthy
 }
 
 // ToolsList calls the standard MCP tools/list method.
@@ -264,6 +303,16 @@ type RunStatus struct {
 	Vars      json.RawMessage `json:"vars,omitempty"`
 	Error     string          `json:"error,omitempty"`
 	Resumable bool            `json:"resumable,omitempty"`
+
+	// Reason is the message passed to pause() (Docs-Servers §06) — e.g.
+	// "revise o conteudo de 'brief' antes de gravar em artifacts/". Was
+	// missing from this struct entirely until now: json.Unmarshal into a
+	// typed struct silently drops any field the struct doesn't declare, so
+	// every "paused" status this Client ever decoded had mhl's own reason
+	// text thrown away before the frontend could ever see it — confirmed by
+	// a live spike against `mhl serve mcp --http` (mhl_run_status really
+	// does return "reason" alongside "state":"paused").
+	Reason string `json:"reason,omitempty"`
 }
 
 // Terminal reports whether this state is one PollRunStatus stops on: the run

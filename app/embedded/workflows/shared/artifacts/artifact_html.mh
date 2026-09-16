@@ -1,0 +1,102 @@
+// Renderizacao deterministica das estruturas tabulares dos artefatos.
+// Todo texto originado da LLM e escapado aqui; fontes continuam usando Cite.
+
+import { Cite } from "cite.mh"
+
+export tool ArtifactHtml {
+    sourced_list(items: {texto: string, fontes: string[]}[]): string -> Cite.list(items)
+
+    objectives(items: {objetivo: string, resultado_esperado: string, fontes: string[]}[]): string ->
+        "<table><thead><tr><th>#</th><th>Objetivo</th><th>Resultado esperado</th><th>Fontes</th></tr></thead><tbody>" +
+        items.map((x) -> "<tr><td>•</td><td>" + html.escape(x.objetivo) + "</td><td>" + html.escape(x.resultado_esperado) + "</td><td>" + Cite.badges(x.fontes) + "</td></tr>").join("") + "</tbody></table>"
+
+    stakeholders(items: {stakeholder: string, papel_interesse: string, fontes: string[]}[]): string ->
+        "<table><thead><tr><th>Stakeholder</th><th>Papel / Interesse</th><th>Fontes</th></tr></thead><tbody>" +
+        items.map((x) -> "<tr><td>" + html.escape(x.stakeholder) + "</td><td>" + html.escape(x.papel_interesse) + "</td><td>" + Cite.badges(x.fontes) + "</td></tr>").join("") + "</tbody></table>"
+
+    metrics(items: {metrica: string, meta: string, fontes: string[]}[]): string ->
+        "<table><thead><tr><th>Métrica</th><th>Meta</th><th>Fontes</th></tr></thead><tbody>" +
+        items.map((x) -> "<tr><td>" + html.escape(x.metrica) + "</td><td>" + html.escape(x.meta) + "</td><td>" + Cite.badges(x.fontes) + "</td></tr>").join("") + "</tbody></table>"
+
+    milestones(items: {marco: string, data_alvo: string, notas: string, fontes: string[]}[]): string ->
+        "<table><thead><tr><th>Marco</th><th>Data alvo</th><th>Notas</th><th>Fontes</th></tr></thead><tbody>" +
+        items.map((x) -> "<tr><td>" + html.escape(x.marco) + "</td><td>" + html.escape(x.data_alvo) + "</td><td>" + html.escape(x.notas) + "</td><td>" + Cite.badges(x.fontes) + "</td></tr>").join("") + "</tbody></table>"
+
+    risks(items: {risco_dependencia: string, probabilidade: string, impacto: string, mitigacao: string, fontes: string[]}[]): string ->
+        "<table><thead><tr><th>Risco / Dependência</th><th>Probabilidade</th><th>Impacto</th><th>Mitigação</th><th>Fontes</th></tr></thead><tbody>" +
+        items.map((x) -> "<tr><td>" + html.escape(x.risco_dependencia) + "</td><td>" + html.escape(x.probabilidade) + "</td><td>" + html.escape(x.impacto) + "</td><td>" + html.escape(x.mitigacao) + "</td><td>" + Cite.badges(x.fontes) + "</td></tr>").join("") + "</tbody></table>"
+
+    requirements(items: {id: string, titulo: string, descricao: string, criterios_aceitacao: string, prioridade: string, fontes: string[]}[]): string ->
+        "<table><thead><tr><th>ID</th><th>Título</th><th>Descrição</th><th>Critérios de aceitação</th><th>Prioridade</th><th>Fontes</th></tr></thead><tbody>" +
+        items.map((x) -> "<tr><td>" + html.escape(x.id) + "</td><td>" + html.escape(x.titulo) + "</td><td>" + html.escape(x.descricao) + "</td><td>" + html.escape(x.criterios_aceitacao) + "</td><td>" + html.escape(x.prioridade) + "</td><td>" + Cite.badges(x.fontes) + "</td></tr>").join("") + "</tbody></table>"
+
+    integrations(items: {id: string, sistema_origem: string, sistema_destino: string, interacao: string, fontes: string[]}[]): string ->
+        "<table><thead><tr><th>ID</th><th>Sistema de origem</th><th>Sistema de destino</th><th>Interação</th><th>Fontes</th></tr></thead><tbody>" + items.map((x) -> "<tr><td>" + html.escape(x.id) + "</td><td>" + html.escape(x.sistema_origem) + "</td><td>" + html.escape(x.sistema_destino) + "</td><td>" + html.escape(x.interacao) + "</td><td>" + Cite.badges(x.fontes) + "</td></tr>").join("") + "</tbody></table>"
+
+    data_requirements(items: {id: string, elemento_dado: string, formato: string, volume_frequencia: string, fontes: string[]}[]): string ->
+        "<table><thead><tr><th>ID</th><th>Elemento de dado</th><th>Formato</th><th>Volume / Frequência</th><th>Fontes</th></tr></thead><tbody>" + items.map((x) -> "<tr><td>" + html.escape(x.id) + "</td><td>" + html.escape(x.elemento_dado) + "</td><td>" + html.escape(x.formato) + "</td><td>" + html.escape(x.volume_frequencia) + "</td><td>" + Cite.badges(x.fontes) + "</td></tr>").join("") + "</tbody></table>"
+
+    business_requirements(items: {id: string, titulo: string, capacidade: string, justificativa_negocio: string, prioridade: string, fontes: string[]}[]): string ->
+        "<table><thead><tr><th>ID</th><th>Título</th><th>Capacidade</th><th>Justificativa de negócio</th><th>Prioridade</th><th>Fontes</th></tr></thead><tbody>" + items.map((x) -> "<tr><td>" + html.escape(x.id) + "</td><td>" + html.escape(x.titulo) + "</td><td>" + html.escape(x.capacidade) + "</td><td>" + html.escape(x.justificativa_negocio) + "</td><td>" + html.escape(x.prioridade) + "</td><td>" + Cite.badges(x.fontes) + "</td></tr>").join("") + "</tbody></table>"
+
+    business_rules(items: {id: string, regra: string, impacto: string, fontes: string[]}[]): string ->
+        "<table><thead><tr><th>ID</th><th>Regra</th><th>Impacto</th><th>Fontes</th></tr></thead><tbody>" + items.map((x) -> "<tr><td>" + html.escape(x.id) + "</td><td>" + html.escape(x.regra) + "</td><td>" + html.escape(x.impacto) + "</td><td>" + Cite.badges(x.fontes) + "</td></tr>").join("") + "</tbody></table>"
+
+    architectural_constraints(items: {id: string, restricao: string, justificativa: string, fontes: string[]}[]): string ->
+        "<table><thead><tr><th>ID</th><th>Restrição</th><th>Justificativa</th><th>Fontes</th></tr></thead><tbody>" + items.map((x) -> "<tr><td>" + html.escape(x.id) + "</td><td>" + html.escape(x.restricao) + "</td><td>" + html.escape(x.justificativa) + "</td><td>" + Cite.badges(x.fontes) + "</td></tr>").join("") + "</tbody></table>"
+
+    compliance(items: {id: string, obrigacao: string, orgao_padrao: string, fontes: string[]}[]): string ->
+        "<table><thead><tr><th>ID</th><th>Obrigação</th><th>Órgão regulador / Padrão</th><th>Fontes</th></tr></thead><tbody>" + items.map((x) -> "<tr><td>" + html.escape(x.id) + "</td><td>" + html.escape(x.obrigacao) + "</td><td>" + html.escape(x.orgao_padrao) + "</td><td>" + Cite.badges(x.fontes) + "</td></tr>").join("") + "</tbody></table>"
+
+    simple_rows(items: {id: string, titulo: string, descricao: string, fontes: string[]}[]): string ->
+        "<table><thead><tr><th>ID</th><th>Título</th><th>Descrição</th><th>Fontes</th></tr></thead><tbody>" +
+        items.map((x) -> "<tr><td>" + html.escape(x.id) + "</td><td>" + html.escape(x.titulo) + "</td><td>" + html.escape(x.descricao) + "</td><td>" + Cite.badges(x.fontes) + "</td></tr>").join("") + "</tbody></table>"
+
+    classified_rows(items: {id: string, categoria: string, requisito: string, prioridade: string, fontes: string[]}[]): string ->
+        "<table><thead><tr><th>ID</th><th>Categoria</th><th>Requisito</th><th>Prioridade</th><th>Fontes</th></tr></thead><tbody>" +
+        items.map((x) -> "<tr><td>" + html.escape(x.id) + "</td><td>" + html.escape(x.categoria) + "</td><td>" + html.escape(x.requisito) + "</td><td>" + html.escape(x.prioridade) + "</td><td>" + Cite.badges(x.fontes) + "</td></tr>").join("") + "</tbody></table>"
+
+    entity_rows(items: {entidade: string, descricao: string, fontes: string[]}[]): string ->
+        "<table><thead><tr><th>Entidade</th><th>Descrição</th><th>Fontes</th></tr></thead><tbody>" +
+        items.map((x) -> "<tr><td>" + html.escape(x.entidade) + "</td><td>" + html.escape(x.descricao) + "</td><td>" + Cite.badges(x.fontes) + "</td></tr>").join("") + "</tbody></table>"
+
+    relation_rows(items: {relacionamento: string, cardinalidade: string, detalhe: string, fontes: string[]}[]): string ->
+        "<table><thead><tr><th>Relacionamento</th><th>Cardinalidade</th><th>Rótulo / Evidência</th><th>Fontes</th></tr></thead><tbody>" +
+        items.map((x) -> "<tr><td>" + html.escape(x.relacionamento) + "</td><td>" + html.escape(x.cardinalidade) + "</td><td>" + html.escape(x.detalhe) + "</td><td>" + Cite.badges(x.fontes) + "</td></tr>").join("") + "</tbody></table>"
+
+    attribute_rows(items: {entidade: string, atributo: string, tipo: string, descricao: string, regras_negocio: string, fontes: string[]}[]): string ->
+        "<table><thead><tr><th>Entidade</th><th>Atributo</th><th>Tipo</th><th>Descrição</th><th>Regras de negócio</th><th>Fontes</th></tr></thead><tbody>" +
+        items.map((x) -> "<tr><td>" + html.escape(x.entidade) + "</td><td>" + html.escape(x.atributo) + "</td><td>" + html.escape(x.tipo) + "</td><td>" + html.escape(x.descricao) + "</td><td>" + html.escape(x.regras_negocio) + "</td><td>" + Cite.badges(x.fontes) + "</td></tr>").join("") + "</tbody></table>"
+
+    feature_personas(items: {persona: string, papel: string, interacao: string, fontes: string[]}[]): string ->
+        "<table><thead><tr><th>Persona</th><th>Papel</th><th>Interação</th><th>Fontes</th></tr></thead><tbody>" +
+        items.map((x) -> "<tr><td>" + html.escape(x.persona) + "</td><td>" + html.escape(x.papel) + "</td><td>" + html.escape(x.interacao) + "</td><td>" + Cite.badges(x.fontes) + "</td></tr>").join("") + "</tbody></table>"
+
+    story_statement(como: string, quero: string, para: string): string ->
+        "<blockquote><strong>Como</strong> " + html.escape(como) + ", <strong>quero</strong> " + html.escape(quero) + ", <strong>para</strong> " + html.escape(para) + ".</blockquote>"
+
+    story_attributes(work_item_type: string, story_type: string, subclassification: string, nature: string, specialty: string, fontes: string[]): string ->
+        Cite.list([
+            {texto: "Tipo de item: " + work_item_type, fontes: fontes},
+            {texto: "Tipo de história: " + story_type, fontes: fontes},
+            {texto: "Subclassificação: " + subclassification, fontes: fontes},
+            {texto: "Natureza: " + nature, fontes: fontes},
+            {texto: "Especialidade: " + specialty, fontes: fontes},
+        ])
+}
+
+test ArtifactHtmlSpec {
+    describe story_statement_escapes_all_llm_fields {
+        are_equal(
+            ArtifactHtml.story_statement("<Admin>", "usar & revisar", "evitar \"falhas\""),
+            "<blockquote><strong>Como</strong> &lt;Admin&gt;, <strong>quero</strong> usar &amp; revisar, <strong>para</strong> evitar &#34;falhas&#34;.</blockquote>"
+        )
+    }
+
+    describe requirements_renders_columns_sources_and_escaped_values {
+        are_equal(
+            ArtifactHtml.requirements([{id: "FR-001", titulo: "Criar <pedido>", descricao: "Aceitar & validar", criterios_aceitacao: "Pedido persistido", prioridade: "Must", fontes: ["sources/ata"]}]),
+            "<table><thead><tr><th>ID</th><th>Título</th><th>Descrição</th><th>Critérios de aceitação</th><th>Prioridade</th><th>Fontes</th></tr></thead><tbody><tr><td>FR-001</td><td>Criar &lt;pedido&gt;</td><td>Aceitar &amp; validar</td><td>Pedido persistido</td><td>Must</td><td><span class=\"cite cite-fonte\">sources/ata</span></td></tr></tbody></table>"
+        )
+    }
+}

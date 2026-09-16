@@ -15,9 +15,15 @@ import (
 // newTestApp starts the real mhl bridge (no mocks — see the Fase 0 test this
 // replaces/extends) and swaps in a recording emit func, since the real one
 // (runtime.EventsEmit) hard-crashes outside an actual running Wails app —
-// see the doc comment on App.emit.
+// see the doc comment on App.emit. SENPAI_APPDATA_DIR is pinned to a fresh
+// t.TempDir() so every test's work-items/state/embedded-binary-extraction
+// land in an isolated, auto-cleaned directory — never the real
+// <UserConfigDir>/senpai a packaged app uses (see senpaiBaseDir's doc
+// comment for the incident this fixed: real "Fase5/6/7 ..." test fixtures
+// were showing up in the actual app's work-item list).
 func newTestApp(t *testing.T) (*App, *eventRecorder) {
 	t.Helper()
+	t.Setenv("SENPAI_APPDATA_DIR", t.TempDir())
 	app := NewApp()
 	app.startup(context.Background())
 	if app.mhl == nil {
@@ -52,6 +58,22 @@ func (r *eventRecorder) snapshot() []recordedEvent {
 	out := make([]recordedEvent, len(r.events))
 	copy(out, r.events)
 	return out
+}
+
+// TestIsReady_FalseBeforeStartupTrueAfter is a regression guard for the
+// real startup race this binding exists to fix: Wails doesn't guarantee
+// OnStartup finishes before the frontend's own JS starts running, so the
+// frontend polls IsReady() (see frontend/src/api.js's waitUntilReady)
+// before its first real call instead of assuming the bridge is already up.
+func TestIsReady_FalseBeforeStartupTrueAfter(t *testing.T) {
+	app := NewApp()
+	if app.IsReady() {
+		t.Fatal("expected IsReady() to be false before startup() runs")
+	}
+	app, _ = newTestApp(t)
+	if !app.IsReady() {
+		t.Fatal("expected IsReady() to be true once newTestApp's startup() has returned")
+	}
 }
 
 // TestListWorkflowsAndManifest proves tools/list and resources/read both
