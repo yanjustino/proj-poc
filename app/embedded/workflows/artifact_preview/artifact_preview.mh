@@ -21,7 +21,7 @@ import { PageShell } from "../shared/artifacts/page_shell.mh"
 workflow ArtifactPreview {
     description: "Renderiza o rascunho de um artefato pausado (Modo Buddy) para pre-visualizacao, sem gravar nada em disco."
 
-    input artifact: string // brief | atributos | requisitos | der | feature | historia | adr | diagramas | features | historias
+    input artifact: string // brief | atributos | requisitos | der | feature | historia | decisao | diagrama | adr | diagramas | features | historias
     input data: any
 
     var preview_html = ""
@@ -37,13 +37,15 @@ workflow ArtifactPreview {
         if (artifact == "der") goto Der
         if (artifact == "feature") goto Feature
         if (artifact == "historia") goto Historia
+        if (artifact == "decisao") goto Decisao
+        if (artifact == "diagrama") goto Diagrama
         if (artifact == "adr") goto Adr
         if (artifact == "diagramas") goto Diagramas
         if (artifact == "features") goto Features
         if (artifact == "historias") goto Historias
         fail(
             "artefato desconhecido para preview: '" + artifact +
-            "' (use brief | atributos | requisitos | der | feature | historia | adr | diagramas | features | historias)"
+            "' (use brief | atributos | requisitos | der | feature | historia | decisao | diagrama | adr | diagramas | features | historias)"
         )
     }
 
@@ -77,6 +79,28 @@ workflow ArtifactPreview {
         goto Done
     }
 
+    // Decisao/Diagrama render ONE item of a collection artifact (adr/
+    // diagramas) as its own standalone page — same ArtifactBody as the item's
+    // eventual real file, just without an id/folder assigned yet. The
+    // frontend (tab-artefatos.js's appendPausedPreview) calls these once per
+    // pending item instead of the whole-collection Adr/Diagramas steps below,
+    // so a paused batch reviews as N separate documents, not one page with
+    // every item run together — see the same split already used for
+    // Feature/Historia above (Delivery's own single-item artifacts).
+    step Decisao {
+        preview_html = PageShell(title: html.escape(data.titulo), body: ArtifactBody.adr(data), meta: "Rascunho — ainda não gravado")
+        goto Done
+    }
+
+    step Diagrama {
+        preview_html = PageShell(title: html.escape(data.titulo), body: ArtifactBody.diagrama(data), meta: "Rascunho — ainda não gravado")
+        goto Done
+    }
+
+    // Adr/Diagramas/Features/Historias below join every pending item into one
+    // page — kept as tab-artefatos.js's fallback for when `data` doesn't have
+    // the expected array (so preview still shows *something*), but the normal
+    // path is the per-item steps above (Decisao/Diagrama) and Feature/Historia.
     step Adr {
         var body = ""
         for (var decision in data.decisions) {
@@ -115,5 +139,52 @@ workflow ArtifactPreview {
 
     step Done {
         // ponto de convergencia unico — mesmo padrao de Discovery/Delivery/WorkItem.
+    }
+}
+
+test ArtifactPreviewSpec {
+    describe diagrama_item_renders_standalone_with_its_own_title {
+        var run = ArtifactPreview.run(inputs: {
+            artifact: "diagrama",
+            data: {
+                titulo: "Contexto do Checkout",
+                diagram_type: "C4 Contexto",
+                hierarchy_level: "1",
+                descricao: "Descricao de teste",
+                descricao_fontes: [],
+                fontes: [],
+                diagrama_mermaid: "graph TD; A-->B;"
+            }
+        })
+        is_true(run.ok)
+        is_true(run.vars.preview_html.contains("Contexto do Checkout"))
+    }
+
+    describe decisao_item_renders_standalone_with_its_own_title {
+        var run = ArtifactPreview.run(inputs: {
+            artifact: "decisao",
+            data: {titulo: "Usar Postgres", contexto: "ctx", decisao: "dec", consequencias: "cons", fontes: []}
+        })
+        is_true(run.ok)
+        is_true(run.vars.preview_html.contains("Usar Postgres"))
+    }
+
+    describe diagramas_collection_fallback_still_concatenates_when_called_directly {
+        var run = ArtifactPreview.run(inputs: {
+            artifact: "diagramas",
+            data: {diagramas: [
+                {titulo: "A", diagram_type: "C4", hierarchy_level: "1", descricao: "d", descricao_fontes: [], fontes: [], diagrama_mermaid: "graph TD;"},
+                {titulo: "B", diagram_type: "C4", hierarchy_level: "1", descricao: "d", descricao_fontes: [], fontes: [], diagrama_mermaid: "graph TD;"}
+            ]}
+        })
+        is_true(run.ok)
+        is_true(run.vars.preview_html.contains("A"))
+        is_true(run.vars.preview_html.contains("B"))
+    }
+
+    describe unknown_artifact_fails_before_touching_anything {
+        var run = ArtifactPreview.run(inputs: {artifact: "bogus", data: {}})
+        is_false(run.ok)
+        is_true(run.error.contains("artefato desconhecido para preview"))
     }
 }

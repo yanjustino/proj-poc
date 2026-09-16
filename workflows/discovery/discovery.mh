@@ -78,21 +78,35 @@ workflow Discovery {
         tokens_out: tokens_out,
     }
 
+    route CommitRouter(artifact: string) {
+        "brief"      -> BriefCommit
+        "atributos"  -> AtributosCommit
+        "requisitos" -> RequisitosCommit
+        "adr"        -> AdrCommit
+        "der"        -> DerCommit
+        "diagramas"  -> DiagramasCommit
+        "features"   -> FeaturesCommit
+        "historias"  -> HistoriasCommit
+        _ -> fail("invariante violado: artefato desconhecido chegou ao Gate")
+    }
+
+    route GenerateRouter(artifact: string) {
+        "brief"      -> BriefGenerate
+        "atributos"  -> AtributosGenerate
+        "requisitos" -> RequisitosGenerate
+        "der"        -> DerGenerate
+        "adr"        -> AdrGenerate
+        "diagramas"  -> DiagramasGenerate
+        "features"   -> FeaturesGenerate
+        "historias"  -> HistoriasGenerate    
+        _ -> fail("artefato desconhecido: '" + artifact +
+                "' (use brief | atributos | requisitos | adr | der | diagramas | features | historias)"
+        )  
+    }
+
     step Dispatch {
         project_id = Paths.ensure_valid(project_id)
-
-        if (artifact == "brief") goto nameof(BriefGenerate)
-        if (artifact == "atributos") goto nameof(AtributosGenerate)
-        if (artifact == "requisitos") goto nameof(RequisitosGenerate)
-        if (artifact == "adr") goto nameof(AdrGenerate)
-        if (artifact == "der") goto nameof(DerGenerate)
-        if (artifact == "diagramas") goto nameof(DiagramasGenerate)
-        if (artifact == "features") goto nameof(FeaturesGenerate)
-        if (artifact == "historias") goto nameof(HistoriasGenerate)
-        fail(
-            "artefato desconhecido: '" + artifact +
-            "' (use brief | atributos | requisitos | adr | der | diagramas | features | historias)"
-        )
+        goto GenerateRouter(artifact)
     }
 
     // Gate e compartilhado por todo artefato — pausar (Modo Buddy) nunca
@@ -117,27 +131,15 @@ workflow Discovery {
             if (!feedback.is_empty() && !feedback_consumed) {
                 feedback_consumed = true
                 pending_feedback = feedback
-                if (artifact == "brief") goto BriefGenerate
-                if (artifact == "atributos") goto AtributosGenerate
-                if (artifact == "requisitos") goto RequisitosGenerate
-                if (artifact == "adr") goto AdrGenerate
-                if (artifact == "der") goto DerGenerate
-                if (artifact == "diagramas") goto DiagramasGenerate
-                if (artifact == "features") goto FeaturesGenerate
-                if (artifact == "historias") goto HistoriasGenerate
+
+                goto GenerateRouter(artifact)
             }
+
             feedback_consumed = false
             pause("revise o conteudo de '" + artifact + "' antes de gravar em artifacts/")
         }
-        if (artifact == "brief") goto BriefCommit
-        if (artifact == "atributos") goto AtributosCommit
-        if (artifact == "requisitos") goto RequisitosCommit
-        if (artifact == "adr") goto AdrCommit
-        if (artifact == "der") goto DerCommit
-        if (artifact == "diagramas") goto DiagramasCommit
-        if (artifact == "features") goto FeaturesCommit
-        if (artifact == "historias") goto HistoriasCommit
-        fail("invariante violado: artefato desconhecido chegou ao Gate")
+
+        goto CommitRouter(artifact)
     }
 
     step BriefGenerate {

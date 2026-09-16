@@ -23,6 +23,22 @@ function labelFor(name) {
   return LABELS[name] || name;
 }
 
+// PENDING_COLLECTION maps a collection artifact's row key to where its
+// pending items live in vars.pending_data (`dataKey`, matching each
+// *Generate step's json.parse shape in discovery.mh/delivery.mh — 'adr'
+// alone parses to `data.decisions`, everything else matches its own row
+// key) and which singular ArtifactPreview artifact renders one item
+// standalone (workflows/artifact_preview/artifact_preview.mh's
+// Decisao/Diagrama/Feature/Historia steps). Used by appendPausedPreview to
+// show a paused batch as N separate documents instead of one concatenated
+// page — see that function's comment.
+const PENDING_COLLECTION = {
+  adr: { dataKey: 'decisions', itemArtifact: 'decisao' },
+  diagramas: { dataKey: 'diagramas', itemArtifact: 'diagrama' },
+  features: { dataKey: 'features', itemArtifact: 'feature' },
+  historias: { dataKey: 'historias', itemArtifact: 'historia' },
+};
+
 // itemTitleFromFilename turns a generated file's own basename into a display
 // title — "ADR-001-delegar-o-processamento-de-cartoes-ao-payfast.html"
 // becomes "ADR-001 — delegar o processamento de cartões ao payfast" (an id
@@ -342,6 +358,28 @@ export async function renderArtefatosTab(container, project, { onChanged }) {
   // if the call fails for any reason — still readable, never worse than
   // before this existed.
   //
+  // A collection artifact (adr/diagramas/features/historias — see
+  // PENDING_COLLECTION) renders one ArtifactPreview call PER pending item
+  // instead of a single call over the whole batch: reviewing 6 ADRs or 4
+  // features run together on one page (one scroll, one set of headings that
+  // all look the same) made Modo Buddy's whole point — read the draft
+  // before it's written — harder than reading the real, already-split
+  // files after Commit. Each item becomes its own titled, bordered,
+  // auto-sized frame (reading-pane.js's buildDocFrame autoHeight) stacked in
+  // the pane, so a paused batch previews exactly like the finished one will
+  // once approved and split into real per-item rows. Falls back to the old
+  // single whole-batch call if `data` doesn't have the expected array
+  // (still correct, just concatenated, exactly like before this existed).
+  //
+  // Each item's call is handled independently (its own try/catch, not a
+  // shared Promise.all-then-bail) — one item failing (a slow/stuck run, a
+  // shape ArtifactBody didn't expect) must not blank out the N-1 items that
+  // rendered fine and dump the whole batch back to raw JSON; it shows an
+  // inline error in just that item's slot instead. Verified against a real
+  // paused run where exactly this happened: 2 of 3 histórias previewed
+  // successfully and one call hung, and the all-or-nothing version was
+  // silently discarding the two good ones.
+  //
   // Fire-and-forget from the caller on purpose (renderDetail() doesn't
   // await this) — the guards below (`active`, `selectedKey`, and the
   // tracker identity check) are what keep a slow response from painting a
@@ -353,7 +391,41 @@ export async function renderArtefatosTab(container, project, { onChanged }) {
     loading.textContent = 'Carregando pré-visualização…';
     body.appendChild(loading);
 
+    const stillCurrent = () => active && selectedKey === row.key && trackers.get(row.key) === tracker;
     const data = tracker.status && tracker.status.vars && tracker.status.vars.pending_data;
+    const collection = PENDING_COLLECTION[row.entry.artifact];
+    const items = collection && data ? data[collection.dataKey] : null;
+
+    if (Array.isArray(items) && items.length > 0) {
+      const results = await Promise.all(
+        items.map((item) =>
+          artifactPreview(collection.itemArtifact, item)
+            .then((html) => ({ ok: true, html }))
+            .catch((err) => ({ ok: false, error: err }))
+        )
+      );
+      if (!stillCurrent()) return;
+      loading.remove();
+      results.forEach((result, i) => {
+        const wrap = document.createElement('div');
+        wrap.className = 'doc-pending-item';
+        const title = document.createElement('div');
+        title.className = 'doc-pending-item-title';
+        title.textContent = items[i].titulo || `Item ${i + 1}`;
+        wrap.appendChild(title);
+        if (result.ok) {
+          wrap.appendChild(buildDocFrame(result.html, { mermaid: hasMermaidDiagram(result.html), inlineMermaid, autoHeight: true }));
+        } else {
+          const err = document.createElement('p');
+          err.className = 'doc-empty';
+          err.textContent = `Não foi possível pré-visualizar este item: ${result.error}`;
+          wrap.appendChild(err);
+        }
+        body.appendChild(wrap);
+      });
+      return;
+    }
+
     let html = null;
     if (data != null) {
       try {
@@ -363,7 +435,7 @@ export async function renderArtefatosTab(container, project, { onChanged }) {
       }
     }
 
-    if (!active || selectedKey !== row.key || trackers.get(row.key) !== tracker) return;
+    if (!stillCurrent()) return;
     loading.remove();
     if (html) {
       body.appendChild(buildDocFrame(html, { mermaid: hasMermaidDiagram(html), inlineMermaid }));

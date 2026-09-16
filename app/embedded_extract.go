@@ -104,6 +104,7 @@ func extractVendoredWorkflows() (string, error) {
 	if err != nil {
 		return "", fmt.Errorf("resolve vendored workflows dir: %w", err)
 	}
+	wanted := make(map[string]bool)
 	err = fs.WalkDir(vendoredWorkflowsFS, vendoredWorkflowsRoot, func(path string, d fs.DirEntry, walkErr error) error {
 		if walkErr != nil {
 			return walkErr
@@ -116,6 +117,7 @@ func extractVendoredWorkflows() (string, error) {
 			return nil
 		}
 		target := filepath.Join(root, filepath.FromSlash(rel))
+		wanted[target] = true
 		if d.IsDir() {
 			return os.MkdirAll(target, 0o755)
 		}
@@ -128,8 +130,45 @@ func extractVendoredWorkflows() (string, error) {
 	if err != nil {
 		return "", fmt.Errorf("extract vendored workflows: %w", err)
 	}
+	if err := removeStale(root, wanted); err != nil {
+		return "", fmt.Errorf("clean stale vendored workflows: %w", err)
+	}
 	log.Printf("mhl bridge: usando workflows vendorizados (embutidos) em %s", root)
 	return root, nil
+}
+
+// removeStale deletes anything under root that extractVendoredWorkflows did
+// not just write or visit — e.g. a .mh file left behind by an earlier
+// version of workflows/ after a later version moved or renamed it (this bit
+// us for real: workflows/shared/*.mh moved into core/, agents/, artifacts/,
+// wiki/ subdirectories, but nothing ever deleted the old flat copies from a
+// prior extraction, so mhl loaded both the stale and the current file and
+// hung on the resulting duplicate tool/workflow names — see
+// FASE0/5-ACHADOS or git blame around this comment for the incident).
+// extractIfChanged only ever adds or updates, so without this pass `root`
+// only grows across workflows/ reorganizations, never shrinks.
+func removeStale(root string, wanted map[string]bool) error {
+	var stale []string
+	err := filepath.WalkDir(root, func(path string, d fs.DirEntry, walkErr error) error {
+		if walkErr != nil || path == root || wanted[path] {
+			return walkErr
+		}
+		stale = append(stale, path)
+		if d.IsDir() {
+			return filepath.SkipDir
+		}
+		return nil
+	})
+	if err != nil {
+		return err
+	}
+	for _, path := range stale {
+		if err := os.RemoveAll(path); err != nil {
+			return err
+		}
+		log.Printf("mhl bridge: removendo arquivo obsoleto do workflows vendorizado: %s", path)
+	}
+	return nil
 }
 
 // ensureArtifactMermaidAsset writes the vendored mermaid bundle to

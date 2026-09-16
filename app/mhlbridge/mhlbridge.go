@@ -22,6 +22,9 @@ import (
 	"net/http"
 	"os"
 	"os/exec"
+	"path/filepath"
+	"strconv"
+	"strings"
 	"sync/atomic"
 	"time"
 )
@@ -34,6 +37,9 @@ type Client struct {
 	http      *http.Client
 	nextID    atomic.Int64
 	stderr    *bytes.Buffer
+	// pidFile, when non-empty, is removed by terminate() on a clean Stop() —
+	// see killStaleOrphan's comment for what it's for.
+	pidFile string
 
 	// serverName/serverVersion come from the initialize handshake's
 	// serverInfo — captured once in initialize() and never re-fetched, since
@@ -97,6 +103,23 @@ type rpcError struct {
 // "." (Codex sees dataDir/cmd.Dir like before this existed — fine for a
 // spike/test, not for the packaged app).
 func Start(ctx context.Context, mhlPath, workflowsDir, stateDir, dataDir, codexCwdDir string) (*Client, error) {
+	// A previous mhl child can still be running here — not from another
+	// live instance (each Start() picks its own fresh port below), but from
+	// THIS app's own last run ending abruptly: a killed debug session, a
+	// force-quit, a crash. Stop() (see terminate()) handles a clean
+	// shutdown fine; what it can't handle is the process never getting a
+	// chance to run Stop() at all. setProcessGroup below puts mhl in its
+	// own process group specifically so a signal aimed at the app doesn't
+	// also hit it — which is exactly what leaves it orphaned when the app
+	// dies without calling Stop() first. killStaleOrphan is the other half:
+	// clean up whatever the *previous* Start() left behind, every time a
+	// new one begins.
+	var pidFile string
+	if stateDir != "" {
+		pidFile = pidFilePath(stateDir)
+		killStaleOrphan(pidFile)
+	}
+
 	addr, err := freeLoopbackAddr()
 	if err != nil {
 		return nil, fmt.Errorf("mhlbridge: pick free port: %w", err)
@@ -134,11 +157,18 @@ func Start(ctx context.Context, mhlPath, workflowsDir, stateDir, dataDir, codexC
 	if err := cmd.Start(); err != nil {
 		return nil, fmt.Errorf("mhlbridge: start mhl: %w", err)
 	}
+	if pidFile != "" {
+		// Best-effort: a failed write here just means the *next* Start()
+		// won't find anything to reap for *this* run if it also dies
+		// abruptly — not fatal to this run itself.
+		_ = os.WriteFile(pidFile, []byte(strconv.Itoa(cmd.Process.Pid)), 0o644)
+	}
 
 	c := &Client{
 		cmd:     cmd,
 		baseURL: "http://" + addr,
 		http:    &http.Client{Timeout: 30 * time.Second},
+		pidFile: pidFile,
 		stderr:  &stderr,
 	}
 
@@ -516,6 +546,12 @@ func (c *Client) killQuietly() {
 }
 
 func (c *Client) terminate() error {
+	// A clean stop means killStaleOrphan has nothing to do next run —
+	// remove the record now rather than leaving it for the next Start() to
+	// find (and redundantly, harmlessly, try to kill an already-gone pid).
+	if c.pidFile != "" {
+		_ = os.Remove(c.pidFile)
+	}
 	if c.cmd.Process == nil {
 		return nil
 	}
@@ -534,4 +570,52 @@ func (c *Client) terminate() error {
 	case <-time.After(3 * time.Second):
 		return c.cmd.Process.Kill()
 	}
+}
+
+// pidFilePath is where Start() records the mhl child's pid across runs —
+// stateDir is already a stable, writable, per-user directory (unlike a
+// fresh temp dir per run), which is exactly what this needs: the *next*
+// process, possibly minutes or days later, has to be able to find it.
+func pidFilePath(stateDir string) string {
+	return filepath.Join(stateDir, "mhl.pid")
+}
+
+// killStaleOrphan best-effort terminates whatever process pidFile points
+// at, then removes it — cleanup for a *previous* Start() that never got to
+// call Stop() (see Start()'s own comment for why that happens). It always
+// consumes (removes) the file, even on failure: a pid file pointing at
+// nothing useful — missing, unparsable, already-dead — isn't worth
+// re-attempting on every future Start() either.
+//
+// No identity check beyond "is this pid alive" (no cmdline/name
+// verification) — this repo's state dir is per-user and Senpai-only, so
+// the only way this kills the wrong thing is the OS reusing the exact pid
+// in the narrow window between that mhl exiting and this Start() running,
+// which is astronomically unlikely for a local dev tool (same risk
+// tradeoff terminate() already accepts for Windows above).
+func killStaleOrphan(pidFile string) {
+	data, err := os.ReadFile(pidFile)
+	if err != nil {
+		return // nothing recorded — first run ever, or a clean Stop() already cleared it
+	}
+	_ = os.Remove(pidFile)
+
+	pid, err := strconv.Atoi(strings.TrimSpace(string(data)))
+	if err != nil || pid <= 0 {
+		return
+	}
+	proc, err := os.FindProcess(pid)
+	if err != nil {
+		return
+	}
+	if proc.Signal(os.Interrupt) != nil {
+		_ = proc.Kill() // either already gone, or Windows (Signal unsupported there — see terminate())
+		return
+	}
+	// No *exec.Cmd for a re-attached pid, so there's no Wait() to block on
+	// here the way terminate() does for its own child — a short grace
+	// window covers "it exited from the interrupt" before the force-kill,
+	// without holding up this Start() for long if it didn't.
+	time.Sleep(500 * time.Millisecond)
+	_ = proc.Kill()
 }

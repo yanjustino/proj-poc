@@ -141,12 +141,33 @@ function widenReadingWidth(html) {
 // preview via tab-artefatos.js/ArtifactPreview) — pulled out so both get
 // the same wide-reading-pane override and mermaid handling instead of two
 // copies that could drift.
-export function buildDocFrame(rawHtml, { mermaid, inlineMermaid } = {}) {
+//
+// autoHeight: false (default) fills the pane (height:100%, own internal
+// scroll) — right for the normal one-frame-per-pane case. true instead
+// sizes the frame to its own content and lets the PANE scroll, for
+// tab-artefatos.js's paused-collection preview, which stacks one frame per
+// pending item (diagrama/feature/historia/decisão) — several height:100%
+// frames in a row would each fight for the whole pane instead of reading as
+// a list of documents. Sized via a `load` listener rather than CSS because
+// iframe content height isn't a CSS-computable property of the frame
+// itself; `allow-same-origin` (set unconditionally below) is what makes
+// contentDocument reachable from here despite the sandbox.
+export function buildDocFrame(rawHtml, { mermaid, inlineMermaid, autoHeight } = {}) {
   const widened = widenReadingWidth(rawHtml);
   const iframe = document.createElement('iframe');
-  iframe.className = 'doc-frame';
+  iframe.className = autoHeight ? 'doc-frame doc-frame-auto' : 'doc-frame';
   iframe.setAttribute('sandbox', mermaid ? 'allow-scripts allow-same-origin' : 'allow-same-origin');
   iframe.srcdoc = mermaid ? inlineMermaid(widened) : widened;
+  if (autoHeight) {
+    iframe.addEventListener('load', () => {
+      try {
+        iframe.style.height = iframe.contentDocument.documentElement.scrollHeight + 'px';
+      } catch {
+        // Same-origin access failed for some reason — the CSS min-height
+        // fallback (style.css's .doc-frame-auto) still leaves it readable.
+      }
+    });
+  }
   return iframe;
 }
 

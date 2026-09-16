@@ -13,9 +13,16 @@ The `mhl` runtime binary, one per supported platform. **Comes from outside
 this repo** — a real `mhl` release build for that platform, not something
 `go build`/`npm` produces here. To add or refresh one:
 
-1. Get (or build) the `mhl` binary for that exact `GOOS`/`GOARCH`.
-2. Copy it to `bin/mhl-<goos>-<goarch>` (add `.exe` on Windows).
-3. `chmod 755` it (harmless on Windows, required on macOS/Linux).
+1. Get (or build) the `mhl` binaries — `./build.sh release` in the
+   `mhl-runtime` source tree produces `dist/<goos>-<goarch>/mhl[.exe]` for
+   all supported platforms in one go.
+2. Copy (or `rsync -a`) that `dist/` tree to `dist/` at this repo's root
+   (next to `workflows/`) — `./sync.sh` reads from there by default (pass a
+   different path as its one argument to read from somewhere else).
+3. Run `./sync.sh` (from this directory). It copies each platform's binary
+   to `bin/mhl-<goos>-<goarch>` (`.exe` on Windows), `chmod 755`s it, and
+   prints its sha256 — skipping any platform whose `dist/` copy is missing
+   (with a warning) rather than clobbering a working binary with nothing.
 4. Rebuild — `app/embedded_mhl_<goos>_<goarch>.go` already has the matching
    `//go:embed` directive for the 4 platforms the plan targets
    (`darwin/arm64`, `linux/amd64`, `windows/amd64`; `darwin/amd64` has no
