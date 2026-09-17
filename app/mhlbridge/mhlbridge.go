@@ -25,9 +25,43 @@ import (
 	"path/filepath"
 	"strconv"
 	"strings"
+	"sync"
 	"sync/atomic"
 	"time"
 )
+
+// maxConcurrentRuns caps how many mhl_run_start executions run at once —
+// passed as --max-concurrent-runs (default 0 = unlimited, if we didn't set
+// it). This bounds actual step execution (mcpserver's own launch()/
+// tryAcquireSlot — a real queue past the limit, not a rejection), a
+// reasonable general safety net against unbounded resource use if this app
+// ever fires many genuinely-heavy runs at once.
+//
+// What it does NOT fix, measured rather than assumed: several concurrent
+// sessions of the SAME pipeline (tab-artefatos.js's appendPausedPreview
+// firing one ArtifactPreview call per pending item — several ADRs/
+// histórias/diagramas/features at once) crashing mhl's own HTTP handler
+// ("decode response: EOF", a "404 Not Found" polling status, the server
+// failing before any body — see appendPausedPreview's own comment). Tried
+// this flag as the fix first; an isolated repro (N concurrent
+// ArtifactPreview sessions against a bare `mhl serve`, no Senpai UI
+// involved) still failed 2/8 at 4 and got WORSE — 4/8 — at 1. That rules out
+// "too many executing at once" as the cause: this flag only gates
+// execution, and the failures happen earlier, in request/session handling
+// triggered the instant several requests for the same pipeline arrive
+// together, independent of the execution cap. The actual fix for that is
+// appendPausedPreview never sending more than one such request at a time —
+// this constant stays for the execution-concurrency case it does bound
+// correctly, but don't reach for it to fix a same-pipeline concurrency
+// crash; that needs to not happen at the call site instead.
+//
+// This is a global cap on the whole mhl process, not scoped to one
+// pipeline — every mhl_run_start (including quick ones like WorkItem
+// action:list) competes for the same slots. 4 is a deliberate middle
+// ground: some headroom for legitimately concurrent work without letting
+// one heavy batch starve ordinary navigation (a list refresh alongside a
+// generation in flight).
+const maxConcurrentRuns = 4
 
 // Client owns the mhl child process and the MCP session opened against it.
 type Client struct {
@@ -40,6 +74,15 @@ type Client struct {
 	// pidFile, when non-empty, is removed by terminate() on a clean Stop() —
 	// see killStaleOrphan's comment for what it's for.
 	pidFile string
+
+	// rpcMu serializes every JSON-RPC round trip on this session — see
+	// postRPC's own comment for the measured reason this exists: mhl itself
+	// isn't safe against several concurrent requests carrying the same
+	// Mcp-Session-Id, and this Client hands out exactly one session for its
+	// entire lifetime (every caller — run polling, a preview batch, a usage
+	// lookup — shares it), so without this, any two callers racing here is
+	// a live crash risk, not a hypothetical one.
+	rpcMu sync.Mutex
 
 	// serverName/serverVersion come from the initialize handshake's
 	// serverInfo — captured once in initialize() and never re-fetched, since
@@ -102,7 +145,13 @@ type rpcError struct {
 // itself — the caller owns creating an empty one). Pass "" to fall back to
 // "." (Codex sees dataDir/cmd.Dir like before this existed — fine for a
 // spike/test, not for the packaged app).
-func Start(ctx context.Context, mhlPath, workflowsDir, stateDir, dataDir, codexCwdDir string) (*Client, error) {
+// agent, when non-empty, is exported as SENPAI_AGENT — the LLM backend
+// workflows/shared/agents/agents.mh's AgentSelector picks (env("SENPAI_AGENT",
+// "codex")), overriding its own "codex" default. Pass "" to leave that
+// default alone. Read fresh by every AgentSelector.pick() call but only
+// ever set here, at spawn time — changing it takes a fresh mhl process
+// (App.SetAgent's job: save the new value, then call ReconnectMCP).
+func Start(ctx context.Context, mhlPath, workflowsDir, stateDir, dataDir, codexCwdDir, agent string) (*Client, error) {
 	// A previous mhl child can still be running here — not from another
 	// live instance (each Start() picks its own fresh port below), but from
 	// THIS app's own last run ending abruptly: a killed debug session, a
@@ -125,7 +174,7 @@ func Start(ctx context.Context, mhlPath, workflowsDir, stateDir, dataDir, codexC
 		return nil, fmt.Errorf("mhlbridge: pick free port: %w", err)
 	}
 
-	args := []string{"serve", "mcp", "--http", "--addr", addr}
+	args := []string{"serve", "mcp", "--http", "--addr", addr, "--max-concurrent-runs", strconv.Itoa(maxConcurrentRuns)}
 	if stateDir != "" {
 		args = append(args, "--state-dir", stateDir)
 	}
@@ -144,6 +193,9 @@ func Start(ctx context.Context, mhlPath, workflowsDir, stateDir, dataDir, codexC
 	)
 	if codexCwdDir != "" {
 		env = append(env, "SENPAI_CODEX_CWD="+codexCwdDir)
+	}
+	if agent != "" {
+		env = append(env, "SENPAI_AGENT="+agent)
 	}
 	cmd.Env = enrichedEnv(ctx, env)
 	var stderr bytes.Buffer
@@ -482,7 +534,24 @@ func (c *Client) PollRunStatus(ctx context.Context, runID string, interval time.
 	}
 }
 
+// postRPC serializes on rpcMu for the whole round trip (request out through
+// response fully read), not just the send — measured, not theoretical: mhl
+// itself isn't safe against several requests in flight at once under the
+// SAME Mcp-Session-Id. An isolated repro (N concurrent ArtifactPreview
+// calls against a bare `mhl serve`, no Senpai UI involved) failed 9/40
+// times sharing one session — "decode response: EOF", a "404 Not Found"
+// polling status — and 0/40 times giving each concurrent call its OWN
+// session instead; going per-call-session isn't practical here (this
+// Client hands out exactly one session for its whole lifetime, reused by
+// every caller — run polling, a preview batch, a usage lookup), so this
+// Client-side mutex is what actually gets every caller the same guarantee:
+// never two requests in flight on this session at once. Held for the full
+// call, not just enqueueing it, because the crash is in mhl handling two
+// requests concurrently, not in this process sending them close together.
 func (c *Client) postRPC(ctx context.Context, method string, params any, withSession bool) (json.RawMessage, http.Header, error) {
+	c.rpcMu.Lock()
+	defer c.rpcMu.Unlock()
+
 	reqBody := rpcRequest{
 		JSONRPC: "2.0",
 		ID:      c.nextID.Add(1),

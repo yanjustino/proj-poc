@@ -1,0 +1,434 @@
+<!doctype html>
+<html lang="pt-BR">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover">
+<title>Sessão MCP sob Concorrência</title>
+<link rel="stylesheet" href="https://fonts.googleapis.com/css2?family=IBM+Plex+Sans:wght@400;500;600;700&family=IBM+Plex+Mono:wght@400;500;600&display=swap">
+<style>
+  :root {
+    color-scheme: light dark;
+    --ink: #17212e;
+    --ink-soft: #4b5768;
+    --ink-faint: #7c8798;
+    --paper: #eef1f4;
+    --surface: #ffffff;
+    --line: #d7dce2;
+    --accent: #2f5fd6;
+    --accent-soft: #e8edfc;
+    --warn: #b3651a;
+    --warn-soft: #f6e9db;
+    --ok: #1f8a68;
+    --ok-soft: #e1f2ec;
+    --code-bg: #101720;
+    --code-ink: #d9e2ec;
+    --code-accent: #7fb0ff;
+  }
+  @media (prefers-color-scheme: dark) {
+    :root:not([data-theme="light"]) {
+      --ink: #e8ecf1;
+      --ink-soft: #aab4c2;
+      --ink-faint: #7c8798;
+      --paper: #0e131a;
+      --surface: #161d27;
+      --line: #2a3341;
+      --accent: #7fa3ff;
+      --accent-soft: #1c2740;
+      --warn: #e2a355;
+      --warn-soft: #3a2c19;
+      --ok: #52caa0;
+      --ok-soft: #123528;
+      --code-bg: #0a0e13;
+      --code-ink: #d9e2ec;
+      --code-accent: #8fb8ff;
+    }
+  }
+  :root[data-theme="dark"] {
+    --ink: #e8ecf1;
+    --ink-soft: #aab4c2;
+    --ink-faint: #7c8798;
+    --paper: #0e131a;
+    --surface: #161d27;
+    --line: #2a3341;
+    --accent: #7fa3ff;
+    --accent-soft: #1c2740;
+    --warn: #e2a355;
+    --warn-soft: #3a2c19;
+    --ok: #52caa0;
+    --ok-soft: #123528;
+    --code-bg: #0a0e13;
+    --code-ink: #d9e2ec;
+    --code-accent: #8fb8ff;
+  }
+
+  * { box-sizing: border-box; }
+  html, body { margin: 0; }
+  body {
+    background: var(--paper);
+    color: var(--ink);
+    font-family: "IBM Plex Sans", -apple-system, "Segoe UI", sans-serif;
+    line-height: 1.6;
+    padding-inline: 20px;
+    padding-block: 48px 96px;
+  }
+  code, .mono {
+    font-family: "IBM Plex Mono", ui-monospace, "SF Mono", monospace;
+  }
+
+  main {
+    max-width: 760px;
+    margin: 0 auto;
+  }
+
+  /* ---- header ---- */
+  .eyebrow {
+    font-family: "IBM Plex Mono", monospace;
+    font-size: 12.5px;
+    letter-spacing: 0.08em;
+    text-transform: uppercase;
+    color: var(--accent);
+    margin-bottom: 14px;
+  }
+  h1 {
+    font-size: clamp(30px, 5vw, 42px);
+    line-height: 1.12;
+    letter-spacing: -0.01em;
+    margin: 0 0 12px;
+    text-wrap: balance;
+  }
+  .subtitle {
+    font-size: 17px;
+    color: var(--ink-soft);
+    max-width: 56ch;
+    margin: 0 0 28px;
+  }
+  .meta {
+    display: flex;
+    flex-wrap: wrap;
+    gap: 10px 22px;
+    align-items: center;
+    padding-block: 20px;
+    border-top: 1px solid var(--line);
+    border-bottom: 1px solid var(--line);
+    margin-bottom: 44px;
+    font-size: 13.5px;
+    color: var(--ink-soft);
+  }
+  .meta strong { color: var(--ink); font-weight: 600; }
+  .badge {
+    display: inline-flex;
+    align-items: center;
+    gap: 6px;
+    padding: 4px 10px;
+    border-radius: 999px;
+    font-size: 12.5px;
+    font-weight: 600;
+    background: var(--ok-soft);
+    color: var(--ok);
+  }
+  .badge::before {
+    content: "";
+    width: 6px;
+    height: 6px;
+    border-radius: 50%;
+    background: currentColor;
+  }
+
+  /* ---- sections ---- */
+  section { margin-bottom: 52px; }
+  .section-head {
+    display: flex;
+    align-items: baseline;
+    gap: 12px;
+    margin-bottom: 18px;
+  }
+  .section-num {
+    font-family: "IBM Plex Mono", monospace;
+    font-size: 13px;
+    color: var(--accent);
+    background: var(--accent-soft);
+    border-radius: 6px;
+    padding: 2px 7px;
+    flex-shrink: 0;
+  }
+  h2 {
+    font-size: 21px;
+    letter-spacing: -0.005em;
+    margin: 0;
+  }
+  h3 {
+    font-size: 16px;
+    margin: 24px 0 10px;
+    color: var(--ink);
+  }
+  p { margin: 0 0 14px; color: var(--ink); }
+  p.lede { color: var(--ink-soft); }
+  ul, ol { margin: 0 0 14px; padding-left: 22px; }
+  li { margin-bottom: 8px; }
+  a { color: var(--accent); }
+
+  /* summary bullets */
+  .summary-grid {
+    display: grid;
+    gap: 12px;
+  }
+  .summary-item {
+    display: grid;
+    grid-template-columns: 22px 1fr;
+    gap: 12px;
+    align-items: start;
+    background: var(--surface);
+    border: 1px solid var(--line);
+    border-radius: 10px;
+    padding: 14px 16px;
+  }
+  .summary-item .dot {
+    width: 8px; height: 8px;
+    border-radius: 50%;
+    margin-top: 7px;
+    background: var(--accent);
+  }
+  .summary-item.warn .dot { background: var(--warn); }
+  .summary-item.ok .dot { background: var(--ok); }
+  .summary-item b { display: block; font-size: 14.5px; margin-bottom: 2px; }
+  .summary-item span { font-size: 14px; color: var(--ink-soft); }
+
+  .mermaid {
+    background: var(--surface);
+    border: 1px solid var(--line);
+    border-radius: 12px;
+    padding: 12px;
+    margin-bottom: 14px;
+    overflow-x: auto;
+  }
+
+  table {
+    width: 100%;
+    border-collapse: collapse;
+    font-size: 13.5px;
+    margin-bottom: 14px;
+  }
+  th, td {
+    text-align: left;
+    padding: 9px 12px;
+    border-bottom: 1px solid var(--line);
+    vertical-align: top;
+  }
+  th {
+    font-size: 12px;
+    text-transform: uppercase;
+    letter-spacing: 0.04em;
+    color: var(--ink-faint);
+    font-weight: 600;
+  }
+  td.mono { font-family: "IBM Plex Mono", monospace; font-size: 12.5px; }
+
+  .callout {
+    border-left: 3px solid var(--warn);
+    background: var(--warn-soft);
+    border-radius: 0 10px 10px 0;
+    padding: 14px 18px;
+    margin-bottom: 14px;
+    font-size: 14.5px;
+  }
+  .callout.ok { border-left-color: var(--ok); background: var(--ok-soft); }
+  .callout b { display: block; margin-bottom: 4px; font-size: 13px; text-transform: uppercase; letter-spacing: 0.03em; }
+  .callout.ok b { color: var(--ok); }
+  .callout:not(.ok) b { color: var(--warn); }
+
+  .checklist { list-style: none; padding: 0; margin: 0 0 14px; display: grid; gap: 10px; }
+  .checklist li {
+    display: grid;
+    grid-template-columns: 26px 1fr;
+    gap: 12px;
+    background: var(--surface);
+    border: 1px solid var(--line);
+    border-radius: 10px;
+    padding: 12px 14px;
+    margin: 0;
+  }
+  .checklist .n {
+    font-family: "IBM Plex Mono", monospace;
+    font-size: 12.5px;
+    font-weight: 600;
+    color: var(--accent);
+    background: var(--accent-soft);
+    border-radius: 6px;
+    height: 22px; width: 22px;
+    display: flex; align-items: center; justify-content: center;
+  }
+  .checklist b { display: block; font-size: 14.5px; margin-bottom: 3px; }
+  .checklist p { margin: 0; font-size: 13.5px; color: var(--ink-soft); }
+
+  footer {
+    margin-top: 60px;
+    padding-top: 20px;
+    border-top: 1px solid var(--line);
+    font-size: 12.5px;
+    color: var(--ink-faint);
+  }
+
+  @media (max-width: 480px) {
+    .summary-item, .checklist li { grid-template-columns: 18px 1fr; }
+  }
+</style>
+</head>
+<body>
+<main>
+
+  <div class="eyebrow">Relatório técnico · mhl-runtime → equipe Senpai</div>
+  <h1>Sessão MCP sob Concorrência</h1>
+  <p class="subtitle">Causa raiz confirmada para o <code>decode response: EOF</code> e os 404 intermitentes de <code>run/status</code>, a correção já aplicada no <code>mhl-runtime</code>, e o que isso muda para o mutex hoje em <code>mhlbridge.Client</code>.</p>
+
+  <div class="meta">
+    <span>17 de setembro de 2026</span>
+    <span>·</span>
+    <span>Componente: <strong>mhl serve mcp --http</strong> (<code>internal/mcpserver</code>)</span>
+    <span>·</span>
+    <span class="badge">Corrigido no mhl-runtime — aguardando merge/release</span>
+  </div>
+
+  <section>
+    <div class="section-head"><span class="section-num">01</span><h2>Resumo executivo</h2></div>
+    <div class="summary-grid">
+      <div class="summary-item warn">
+        <div class="dot"></div>
+        <div><b>O bug era do servidor, não do cliente</b><span>Isolamos a causa: <code>mhl</code> tem uma <em>data race</em> real quando duas requisições HTTP chegam ao mesmo tempo carregando o mesmo <code>Mcp-Session-Id</code> — exatamente o padrão do Senpai (um processo, uma sessão, vários chamadores).</span></div>
+      </div>
+      <div class="summary-item ok">
+        <div class="dot"></div>
+        <div><b>Já corrigimos no mhl-runtime</b><span>A correção está implementada e validada (<code>go test -race</code> limpo, suíte completa passando), aguardando merge e um release publicado.</span></div>
+      </div>
+      <div class="summary-item">
+        <div class="dot"></div>
+        <div><b>O workaround do Senpai continua correto por enquanto</b><span>O mutex em <code>mhlbridge.Client.postRPC</code> resolve o sintoma hoje e deve permanecer até vocês atualizarem para uma versão do <code>mhl</code> com a correção.</span></div>
+      </div>
+      <div class="summary-item">
+        <div class="dot"></div>
+        <div><b>Depois da atualização, dá para relaxar o mutex</b><span>Uma vez confirmada a versão corrigida, a serialização total deixa de ser necessária por correção — pode virar uma escolha de trade-off (throughput vs. simplicidade), não mais uma obrigação.</span></div>
+      </div>
+    </div>
+  </section>
+
+  <section>
+    <div class="section-head"><span class="section-num">02</span><h2>O sintoma observado no Senpai</h2></div>
+    <p>Em testes reais, gerar uma coleção de ADRs disparava vários <code>run/start</code> em paralelo (um por item) na mesma sessão MCP, e uma fração das chamadas — de qualquer método, não só <code>run/start</code> — quebrava de forma intermitente:</p>
+    <ul>
+      <li><code>Error: decode response: EOF</code> ao decodificar a resposta.</li>
+      <li>Em alguns casos, <code>404 Not Found</code> ao consultar <code>run/status</code> de um run que a própria sessão havia iniciado.</li>
+    </ul>
+    <p>Um cliente HTTP isolado, sem nenhum código do Senpai envolvido, confirmou que o gatilho era puramente a concorrência sob o <strong>mesmo</strong> <code>Mcp-Session-Id</code>: mesma sessão + chamadas concorrentes deu 9 falhas em 40 tentativas; sessões diferentes sob a mesma carga deu 0 falhas em 40.</p>
+  </section>
+
+  <section>
+    <div class="section-head"><span class="section-num">03</span><h2>Causa raiz confirmada no mhl</h2></div>
+    <p>O servidor HTTP do <code>mhl</code> (<code>internal/mcpserver</code>) guarda a sessão do protocolo MCP num objeto em memória. Para uma sessão ativa, <code>memSessionStore.Get</code> devolve o <strong>mesmo ponteiro</strong> desse objeto para toda requisição que chega com o mesmo <code>Mcp-Session-Id</code> — o que é esperado, dado que o transporte Streamable HTTP permite requisições concorrentes numa mesma sessão (é exatamente o padrão que permite fazer polling de <code>run/status</code> enquanto outro <code>run/start</code> está em voo).</p>
+    <p>O problema: os campos mutáveis desse objeto (<code>principal</code>, <code>initialized</code>, <code>protocol</code>) eram lidos e escritos diretamente, sem nenhuma sincronização, em cada requisição. Duas requisições concorrentes na mesma sessão rodam em goroutines diferentes — isso é uma <em>data race</em> clássica: o campo é escrito em toda requisição (a identidade verificada do chamador) enquanto outra requisição concorrente pode estar lendo esse mesmo campo para decidir o dono (<code>Owner</code>) de um run.</p>
+
+    <pre class="mermaid">
+sequenceDiagram
+    participant A as Goroutine A (tools/call)
+    participant O as *session (mesmo ponteiro)
+    participant B as Goroutine B (run/status)
+    A-->>O: Get(sid) devolve o ponteiro compartilhado
+    B-->>O: Get(sid) devolve o mesmo ponteiro
+    A->>O: escreve sess.principal (sem lock)
+    B->>O: lê sess.principal (sem lock, ao mesmo tempo)
+    Note over A,B: leitura e escrita concorrentes na mesma memória,<br/>sem sincronização — comportamento indefinido em Go
+    O--xA: conexão fecha sem resposta válida
+    O--xB: Owner derivado incorretamente
+    A->>A: cliente vê "decode response: EOF"
+    B->>B: servidor responde 404 "unknown runId"
+    </pre>
+
+    <p>Isso bate exatamente com os dois sintomas: o runtime Go recupera um panic por requisição fechando a conexão sem uma resposta válida (o cliente lê isso como EOF no meio da decodificação); e um valor corrompido de <code>principal</code> no meio de uma leitura concorrente faz o cálculo do <code>Owner</code> do run não bater com o que foi persistido, e o servidor trata isso como "run desconhecido" — 404 — mesmo para um run que pertence à própria sessão.</p>
+
+    <div class="callout">
+      <b>Por que só aparece nesse padrão de deploy</b>
+      Isso só existe no backend de sessão padrão (sem <code>--state-dir</code> e sem uma extensão de <code>store</code> externa) — exatamente o modo do Senpai: um processo <code>mhl</code>, uma sessão, sem store externo. Um deploy com <code>--state-dir</code> ou um <code>extension store</code> (Postgres/Redis) aloca um objeto de sessão novo a cada leitura e nunca compartilha o ponteiro — por isso nunca foi exposto a essa race, mesmo sob carga.
+    </div>
+  </section>
+
+  <section>
+    <div class="section-head"><span class="section-num">04</span><h2>Correção aplicada</h2></div>
+    <p>Adicionamos um <code>sync.RWMutex</code> ao objeto de sessão e convertemos todo acesso a <code>principal</code>/<code>initialized</code>/<code>protocol</code> para métodos que tomam o lock (<code>setPrincipal</code>, <code>getPrincipal</code>, <code>setHandshake</code>, <code>isInitialized</code>, <code>getProtocol</code>). O id da sessão não precisou de proteção — é escrito uma única vez antes do objeto ser publicado no store, então nenhum leitor concorrente consegue observá-lo antes disso.</p>
+
+    <h3>Validação</h3>
+    <ul>
+      <li>Um teste de regressão dedicado dispara 16 goroutines fazendo <code>tools/call</code>, <code>run/start</code> e <code>tools/list</code> concorrentemente sob o mesmo <code>Mcp-Session-Id</code>.</li>
+      <li><strong>Sem a correção:</strong> <code>go test -race</code> reproduz a race de forma determinística, apontando exatamente para a escrita/leitura descritas acima.</li>
+      <li><strong>Com a correção:</strong> <code>go test -race</code> limpo nesse teste e em toda a suíte de <code>internal/mcpserver</code>; a suíte completa do repositório (<code>go test ./...</code>) também passa sem regressão.</li>
+    </ul>
+
+    <div class="callout ok">
+      <b>Status</b>
+      Implementado e validado localmente. Ainda não mesclado nem publicado em um release — a versão exata do <code>mhl</code> que incluirá essa correção depende do processo de merge/release do lado do mhl-runtime.
+    </div>
+  </section>
+
+  <section>
+    <div class="section-head"><span class="section-num">05</span><h2>O que isso muda para o cliente do Senpai</h2></div>
+    <p class="lede">O mutex único em <code>mhlbridge.Client.postRPC</code> foi a correção certa dado o que era conhecido na época — ele serializa toda chamada MCP da sessão, o que é mais restritivo do que o necessário (sacrifica o paralelismo real entre <code>run/start</code> e o polling de <code>run/status</code>), mas era a única opção enquanto o bug estava no servidor. Com a causa raiz corrigida do lado do <code>mhl</code>, isso passa a ser uma escolha, não mais uma obrigação.</p>
+
+    <ol class="checklist">
+      <li>
+        <span class="n">1</span>
+        <div><b>Por enquanto, não mexam no mutex</b><p>O binário <code>mhl</code> vendorizado em produção hoje ainda tem o bug. Remover ou relaxar o mutex antes de atualizar reintroduz o <code>decode response: EOF</code> e os 404 intermitentes.</p></div>
+      </li>
+      <li>
+        <span class="n">2</span>
+        <div><b>Confirmem com o time do mhl-runtime a versão que incluirá a correção</b><p>Peçam o número da versão/release assim que o merge acontecer, e tratem esse documento como o registro técnico para essa conversa.</p></div>
+      </li>
+      <li>
+        <span class="n">3</span>
+        <div><b>Ao atualizar, usem o teste de regressão de vocês como critério de aceite</b><p><code>TestMHLBridge_ConcurrentCallsOnTheSharedSessionNeverFail</code> já existe e já provou pegar essa classe de bug. Rodem ele contra o binário novo, inclusive com o mutex temporariamente removido num branch de validação — se ficar verde, a atualização fechou a lacuna para o caso de uso de vocês.</p></div>
+      </li>
+      <li>
+        <span class="n">4</span>
+        <div><b>Decidam entre manter a serialização total ou recuperar concorrência real</b><p>Confirmado o passo 3, vocês podem manter o mutex único por simplicidade (o custo é abrir mão de paralelismo entre chamadas na mesma sessão), ou relaxar a proteção para deixar <code>run/start</code> e o polling de <code>run/status</code> voltarem a rodar em paralelo — a decisão é de vocês, e nenhuma das duas é "a errada" nesse ponto.</p></div>
+      </li>
+      <li>
+        <span class="n">5</span>
+        <div><b>Registrem a versão mínima do mhl como dependência</b><p>Depois de migrar, deixem explícito (changelog, comentário no código, ou ambos) que a versão mínima do <code>mhl</code> vendorizado é a que inclui essa correção — evita que um downgrade acidental do binário reintroduza o bug silenciosamente.</p></div>
+      </li>
+    </ol>
+  </section>
+
+  <section>
+    <div class="section-head"><span class="section-num">06</span><h2>Apêndice — referências técnicas</h2></div>
+    <p>Para quem for revisar do lado de vocês, os pontos exatos da causa raiz no <code>mhl-runtime</code> (pacote <code>internal/mcpserver</code>):</p>
+    <table>
+      <thead>
+        <tr><th>Sintoma</th><th>Escrita não sincronizada</th><th>Leitura em conflito</th></tr>
+      </thead>
+      <tbody>
+        <tr>
+          <td>Corrupção de <code>principal</code> → <code>decode response: EOF</code></td>
+          <td class="mono">http.go:522<br><span style="color:var(--ink-faint)">sess.principal = principal</span></td>
+          <td class="mono">server.go:472<br><span style="color:var(--ink-faint)">callTool() lê sess.principal</span></td>
+        </tr>
+        <tr>
+          <td><code>Owner</code> incorreto → 404 <code>unknown runId</code></td>
+          <td class="mono">http.go:522<br><span style="color:var(--ink-faint)">sess.principal = principal</span></td>
+          <td class="mono">runs.go:896<br><span style="color:var(--ink-faint)">ownerOf() lê sess.principal</span></td>
+        </tr>
+      </tbody>
+    </table>
+    <p style="font-size:13.5px;color:var(--ink-soft)">Estrutura afetada: <code>type session struct</code> em <code>server.go</code> — a mesma instância é compartilhada entre requisições concorrentes pelo backend de sessão em memória (<code>memSessionStore</code>), o padrão usado quando <code>mhl serve mcp --http</code> roda sem <code>--state-dir</code> e sem uma extensão de <code>store</code> — o modo de deploy do Senpai.</p>
+  </section>
+
+  <footer>
+    Documento preparado a partir da investigação conjunta do bug relatado pelo Senpai contra <code>mhl serve mcp --http</code>. Baseado no código de <code>internal/mcpserver</code> no branch de correção local (não mesclado até a data acima).
+  </footer>
+
+</main>
+
+<script src="https://cdnjs.cloudflare.com/ajax/libs/mermaid/10.9.1/mermaid.min.js"></script>
+<script>
+  mermaid.initialize({
+    startOnLoad: true,
+    theme: window.matchMedia("(prefers-color-scheme: dark)").matches ? "dark" : "default"
+  });
+</script>
+</body>
+</html>

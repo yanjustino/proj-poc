@@ -72,6 +72,23 @@ export async function reconnectMCP() {
   return parseJSON(await App.ReconnectMCP(), 'ReconnectMCP');
 }
 
+// getAgent returns the persisted LLM backend ("" | "codex" | "claude" |
+// "devin") — "" means "mhl's own default" (see app.go's GetAgent). Unlike
+// mcpStatus/reconnectMCP this isn't JSON — App.GetAgent already returns a
+// bare string.
+export async function getAgent() {
+  return App.GetAgent();
+}
+
+// setAgent persists the chosen backend and reconnects the mhl bridge so it
+// actually takes effect (SENPAI_AGENT is only read at mhl's own startup —
+// see mhlbridge.Start). Same return shape as reconnectMCP() on success;
+// throws if `agent` itself is invalid (checked before anything is persisted
+// or reconnected — see app.go's SetAgent).
+export async function setAgent(agent) {
+  return parseJSON(await App.SetAgent(agent), 'SetAgent');
+}
+
 export async function getRunLogs(runId, since) {
   return parseJSON(await App.GetRunLogs(runId, since ?? ''), 'GetRunLogs');
 }

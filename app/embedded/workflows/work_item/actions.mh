@@ -69,19 +69,41 @@ export tool WorkItemActions {
         return if (item_type == "oportunidade") "discovery" else "delivery"
     }
 
+    // `?? 0` on cache_creation_tokens/cache_read_tokens/cost_usd: ledger
+    // lines written before Writer.generate started recording them don't
+    // have these keys at all, and a plain `entry.cache_creation_tokens`
+    // throws "field not found" on a genuinely missing key (confirmed —
+    // mhl's field access isn't forgiving the way a dynamic language's is).
+    // `entry?.x` reads it as null instead of throwing when absent, `?? 0`
+    // turns that null into the same zero a *current* Devin-generated line
+    // already uses — an old line and a Devin line end up indistinguishable
+    // here, which is correct: both really do mean "no cache/cost data for
+    // this call".
     summarize_usage(lines: any[]): any -> {
         var total_in = 0
         var total_out = 0
+        var total_cache_creation = 0
+        var total_cache_read = 0
+        var total_cost_usd = 0
         var by_artifact = []
 
         for (var line in lines) {
             var entry = line.value
+            var cache_creation = entry?.cache_creation_tokens ?? 0
+            var cache_read = entry?.cache_read_tokens ?? 0
+            var cost_usd = entry?.cost_usd ?? 0
             total_in = total_in + entry.tokens_in
             total_out = total_out + entry.tokens_out
+            total_cache_creation = total_cache_creation + cache_creation
+            total_cache_read = total_cache_read + cache_read
+            total_cost_usd = total_cost_usd + cost_usd
             by_artifact += [{
                 artifact: entry.artifact,
                 tokens_in: entry.tokens_in,
                 tokens_out: entry.tokens_out,
+                cache_creation_tokens: cache_creation,
+                cache_read_tokens: cache_read,
+                cost_usd: cost_usd,
                 at: line.ts
             }]
         }
@@ -89,6 +111,9 @@ export tool WorkItemActions {
         return {
             total_tokens_in: total_in,
             total_tokens_out: total_out,
+            total_cache_creation_tokens: total_cache_creation,
+            total_cache_read_tokens: total_cache_read,
+            total_cost_usd: total_cost_usd,
             by_artifact: by_artifact
         }
     }
@@ -127,6 +152,9 @@ test WorkItemActionsSpec {
         }
     }
 
+    // Lines in this exact old shape (no cache_*/cost_usd keys at all) are
+    // real, not a hypothetical — every line written before Writer.generate
+    // started recording those fields looks exactly like this.
     describe summarizes_usage_by_artifact {
         var result = WorkItemActions.summarize_usage([
             {value: {artifact: "brief", tokens_in: 10, tokens_out: 4}, ts: "t1"},
@@ -136,6 +164,36 @@ test WorkItemActionsSpec {
         are_equal(result.total_tokens_out, 7)
         are_equal(result.by_artifact.size(), 2)
         are_equal(result.by_artifact[1].artifact, "der")
+    }
+
+    describe an_old_line_with_no_cache_or_cost_fields_summarizes_as_zero_not_an_error {
+        var result = WorkItemActions.summarize_usage([
+            {value: {artifact: "brief", tokens_in: 10, tokens_out: 4}, ts: "t1"}
+        ])
+        are_equal(result.total_cache_creation_tokens, 0)
+        are_equal(result.total_cache_read_tokens, 0)
+        are_equal(result.total_cost_usd, 0)
+        are_equal(result.by_artifact[0].cache_creation_tokens, 0)
+        are_equal(result.by_artifact[0].cache_read_tokens, 0)
+        are_equal(result.by_artifact[0].cost_usd, 0)
+    }
+
+    describe sums_cache_tokens_and_cost_across_lines_that_do_have_them {
+        var result = WorkItemActions.summarize_usage([
+            {value: {
+                artifact: "brief", tokens_in: 2, tokens_out: 4,
+                cache_creation_tokens: 21260, cache_read_tokens: 0, cost_usd: 0.128202
+            }, ts: "t1"},
+            {value: {
+                artifact: "requisitos", tokens_in: 3, tokens_out: 6,
+                cache_creation_tokens: 0, cache_read_tokens: 21260, cost_usd: 0.0421
+            }, ts: "t2"}
+        ])
+        are_equal(result.total_cache_creation_tokens, 21260)
+        are_equal(result.total_cache_read_tokens, 21260)
+        are_equal(result.total_cost_usd, 0.170302)
+        are_equal(result.by_artifact[0].cache_creation_tokens, 21260)
+        are_equal(result.by_artifact[1].cache_read_tokens, 21260)
     }
 
     describe summarizes_empty_usage {

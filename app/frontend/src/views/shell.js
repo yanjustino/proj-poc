@@ -1,5 +1,5 @@
 import { ToggleMaximise, LogFrontendError } from '../../wailsjs/go/main/App';
-import { workItemList, waitUntilReady, mcpStatus, reconnectMCP } from '../api.js';
+import { workItemList, waitUntilReady, mcpStatus, reconnectMCP, getAgent, setAgent } from '../api.js';
 import { openNewWorkItemModal } from './new-workitem.js';
 import { renderWorkItemView } from './workitem-view.js';
 import { getState, setState, subscribe } from '../state.js';
@@ -7,6 +7,17 @@ import { mountReadingPane } from '../reading-pane.js';
 import { icon } from '../icons.js';
 
 const LEVEL_SHORT = { discovery: 'Discovery', delivery: 'Delivery' };
+
+// AGENT_OPTIONS mirrors workflows/shared/agents/agents.mh's AgentSelector —
+// the 3 backends Writer.generate can pick. "" (mhl's own default) isn't
+// offered as a fourth choice here: the select always sends one of these 3
+// explicit values, defaulting to "codex" (AgentSelector.pick's own default)
+// when getAgent() comes back "" (nothing chosen yet).
+const AGENT_OPTIONS = [
+  { value: 'codex', label: 'Codex' },
+  { value: 'claude', label: 'Claude' },
+  { value: 'devin', label: 'Devin' },
+];
 
 // mountShell builds the whole app chrome once into `root` — left sidebar
 // (work-items nav), middle content (whatever's selected: hero, tabs, the
@@ -29,6 +40,12 @@ export async function mountShell(root) {
         <div class="nav-search">${icon('search', 14)}<input placeholder="Buscar work-item..." data-filter /></div>
         <div class="nav-section">Work-items</div>
         <div class="nav-list" data-nav-list></div>
+        <div class="sidebar-agent">
+          <label for="agent-select">Agente</label>
+          <select id="agent-select" data-agent-select>
+            ${AGENT_OPTIONS.map((opt) => `<option value="${opt.value}">${opt.label}</option>`).join('')}
+          </select>
+        </div>
         <div class="sidebar-status" data-mcp-status></div>
       </aside>
       <main class="main" data-main></main>
@@ -40,6 +57,7 @@ export async function mountShell(root) {
   const filterInput = root.querySelector('[data-filter]');
   const mainEl = root.querySelector('[data-main]');
   const mcpStatusEl = root.querySelector('[data-mcp-status]');
+  const agentSelectEl = root.querySelector('[data-agent-select]');
 
   mountReadingPane(root.querySelector('[data-reading-pane]'));
 
@@ -95,6 +113,28 @@ export async function mountShell(root) {
     renderMcpStatus(status);
   }
   setInterval(refreshMcpStatus, MCP_STATUS_POLL_MS);
+
+  // Agent picker — changing it needs a fresh mhl process to take effect
+  // (SENPAI_AGENT is only read at mhl's own startup, see mhlbridge.Start),
+  // so this reuses the exact same reconnect + status-render path as the
+  // "Reconectar" button above rather than a separate one.
+  agentSelectEl.value = (await getAgent().catch(() => '')) || AGENT_OPTIONS[0].value;
+  agentSelectEl.addEventListener('change', async () => {
+    const chosen = agentSelectEl.value;
+    agentSelectEl.disabled = true;
+    reconnecting = true;
+    renderMcpStatus({ ready: false, error: `Trocando para ${chosen}…` });
+    try {
+      const next = await setAgent(chosen);
+      renderMcpStatus(next);
+    } catch (err) {
+      renderMcpStatus({ ready: false, error: String(err) });
+      LogFrontendError(`setAgent: failed: ${err && err.stack ? err.stack : err}`).catch(() => {});
+    } finally {
+      reconnecting = false;
+      agentSelectEl.disabled = false;
+    }
+  });
 
   navList.innerHTML = '<p class="empty-nav">Carregando…</p>';
 

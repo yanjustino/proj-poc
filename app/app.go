@@ -49,6 +49,16 @@ type App struct {
 	stateDir     string
 	codexCwdDir  string
 
+	// agent is the LLM backend Writer.generate uses (workflows/shared/
+	// agents/agents.mh's AgentSelector) — "" | "codex" | "claude" | "devin",
+	// "" meaning "mhl's own default" (currently codex). Loaded from
+	// settings.json at startup, updated by SetAgent, and passed to every
+	// connectBridge() call as mhlbridge.Start's agent argument — kept on the
+	// struct for the same reason mhlPath/workflowsDir/... are: so
+	// ReconnectMCP (and SetAgent, which just changes this then calls it)
+	// can respawn mhl with the current value without re-deriving it.
+	agent string
+
 	// emit sends one event to the frontend. Defaults to a real
 	// runtime.EventsEmit(a.ctx, ...) call in startup(), but stays a field
 	// (not a direct call) so a test can swap in a recorder — calling
@@ -121,6 +131,7 @@ func (a *App) startup(ctx context.Context) {
 		log.Printf("mhl bridge: resolve codex cwd (Codex may see more of the filesystem than intended): %v", err)
 	}
 	a.codexCwdDir = codexCwdDir
+	a.agent = loadSettings().Agent
 
 	if err := a.connectBridge(); err != nil {
 		log.Printf("mhl bridge: failed to start: %v", err)
@@ -138,7 +149,7 @@ func (a *App) startup(ctx context.Context) {
 // startup() and ReconnectMCP() spawn a bridge from, so the two can't drift
 // into starting it with different arguments.
 func (a *App) connectBridge() error {
-	client, err := mhlbridge.Start(a.ctx, a.mhlPath, a.workflowsDir, a.stateDir, a.dataDir, a.codexCwdDir)
+	client, err := mhlbridge.Start(a.ctx, a.mhlPath, a.workflowsDir, a.stateDir, a.dataDir, a.codexCwdDir, a.agent)
 	if err != nil {
 		return err
 	}
@@ -214,6 +225,33 @@ func (a *App) ReconnectMCP() (string, error) {
 	}
 	log.Printf("mhl bridge: reconnected, serving %s", a.workflowsDir)
 	return a.MCPStatus()
+}
+
+// GetAgent returns the persisted agent setting ("" | "codex" | "claude" |
+// "devin") — "" means "mhl's own default", not "unknown"; the frontend
+// shows that as whatever AgentSelector.pick's own default is (codex), kept
+// in exactly one place (agents.mh) rather than duplicated here.
+func (a *App) GetAgent() string {
+	return a.agent
+}
+
+// SetAgent persists agent to settings.json, then reconnects the mhl bridge
+// so the change actually takes effect — SENPAI_AGENT is only read at mhl's
+// own startup (see mhlbridge.Start), so a running process never picks up a
+// change to it on its own. Returns the same shape as MCPStatus/ReconnectMCP
+// (the panel's normal "is mhl up" state), since switching agents always
+// reconnects; a bad agent value is the one real error case, returned before
+// anything is persisted or reconnected.
+func (a *App) SetAgent(agent string) (string, error) {
+	agent = strings.ToLower(strings.TrimSpace(agent))
+	if !validAgents[agent] {
+		return "", fmt.Errorf("agente desconhecido: %q (use codex | claude | devin)", agent)
+	}
+	if err := saveSettings(appSettings{Agent: agent}); err != nil {
+		log.Printf("mhl bridge: save agent setting: %v", err)
+	}
+	a.agent = agent
+	return a.ReconnectMCP()
 }
 
 // LogFrontendError forwards an uncaught JS error/rejection (see

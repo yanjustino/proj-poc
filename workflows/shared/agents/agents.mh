@@ -162,7 +162,10 @@ tool AgentSelector {
 // `schema_file.content` (JSON inline); Codex usa `schema_file.path`
 // (caminho de arquivo).
 export tool Writer {
-    generate(prompt: string, schema_file: {content: string, path: string}, project_id: string, artifact: string): {content: string, tokens_in: number, tokens_out: number} -> {
+    generate(prompt: string, schema_file: {content: string, path: string}, project_id: string, artifact: string): {
+        content: string, tokens_in: number, tokens_out: number,
+        cache_creation_tokens: number, cache_read_tokens: number, cost_usd: number
+    } -> {
         var picked = AgentSelector.pick(prompt: prompt)
         var raw = match picked {
             nameof(Devin) -> Devin.run(prompt: DevinPrompt.build(instruction: prompt, schema: schema_file.content))
@@ -179,12 +182,18 @@ export tool Writer {
             artifact: artifact,
             tokens_in: usage.tokens_in,
             tokens_out: usage.tokens_out,
+            cache_creation_tokens: usage.cache_creation_tokens,
+            cache_read_tokens: usage.cache_read_tokens,
+            cost_usd: usage.cost_usd,
         })
 
         return {
             content: StructuredOutput.normalize_json(usage.content),
             tokens_in: usage.tokens_in,
-            tokens_out: usage.tokens_out
+            tokens_out: usage.tokens_out,
+            cache_creation_tokens: usage.cache_creation_tokens,
+            cache_read_tokens: usage.cache_read_tokens,
+            cost_usd: usage.cost_usd,
         }
     }
 }

@@ -49,7 +49,7 @@ export async function renderWorkItemView(container, project, { initialTab = 'art
 
     let artifactNodes = [];
     let rawNodes = [];
-    let usage = { total_tokens_in: 0, total_tokens_out: 0 };
+    let usage = { total_tokens_in: 0, total_tokens_out: 0, total_cache_creation_tokens: 0, total_cache_read_tokens: 0, total_cost_usd: 0 };
     try {
       [artifactNodes, rawNodes, usage] = await Promise.all([
         listProjectDir(project.id, 'artifacts', ''),
@@ -68,6 +68,27 @@ export async function renderWorkItemView(container, project, { initialTab = 'art
     const pct = expectedCount ? Math.round((doneCount / expectedCount) * 100) : 0;
     const totalTokens = (usage.total_tokens_in || 0) + (usage.total_tokens_out || 0);
 
+    // Cache tokens (Claude: cache_creation + cache_read; Codex: cache_write
+    // + cache_read, same two roles under different names; Devin: none — see
+    // workflows/shared/agents/usage.mh) are NOT part of totalTokens above:
+    // both CLIs report/bill them as distinct from "fresh" input, so folding
+    // them in would misrepresent what totalTokens has always meant. Cache
+    // gets its own card rather than living only in a tooltip — it's real
+    // data for 2 of the 3 agents, unlike cost (Claude-only), which is why
+    // cost is the one demoted to a tooltip detail here instead.
+    const cacheCreation = usage.total_cache_creation_tokens || 0;
+    const cacheRead = usage.total_cache_read_tokens || 0;
+    const totalCache = cacheCreation + cacheRead;
+    const costUsd = usage.total_cost_usd || 0;
+    const cacheLabel = totalCache > 0 ? totalCache.toLocaleString('pt-BR') : '—';
+    const cacheTitle = totalCache > 0
+      ? [
+          `${cacheCreation.toLocaleString('pt-BR')} de criação de cache`,
+          `${cacheRead.toLocaleString('pt-BR')} lidos do cache`,
+          costUsd > 0 ? `custo estimado: ${costUsd.toLocaleString('pt-BR', { style: 'currency', currency: 'USD' })}` : null,
+        ].filter(Boolean).join(' · ')
+      : 'Sem uso de cache registrado ainda (Devin não expõe isso)';
+
     summaryEl.innerHTML = `
       <div class="summary-card">
         <span class="summary-icon">${icon('inbox', 16)}</span>
@@ -81,6 +102,10 @@ export async function renderWorkItemView(container, project, { initialTab = 'art
       <div class="summary-card">
         <span class="summary-icon">${icon('zap', 16)}</span>
         <div><b>${totalTokens.toLocaleString('pt-BR')}</b><span>tokens utilizados</span></div>
+      </div>
+      <div class="summary-card" title="${escapeHtml(cacheTitle)}">
+        <span class="summary-icon">${icon('layers', 16)}</span>
+        <div><b>${cacheLabel}</b><span>tokens em cache</span></div>
       </div>
     `;
   }

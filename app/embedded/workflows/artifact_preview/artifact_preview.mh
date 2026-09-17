@@ -31,22 +31,24 @@ workflow ArtifactPreview {
     }
 
     step Dispatch {
-        if (artifact == "brief") goto Brief
-        if (artifact == "atributos") goto Atributos
-        if (artifact == "requisitos") goto Requisitos
-        if (artifact == "der") goto Der
-        if (artifact == "feature") goto Feature
-        if (artifact == "historia") goto Historia
-        if (artifact == "decisao") goto Decisao
-        if (artifact == "diagrama") goto Diagrama
-        if (artifact == "adr") goto Adr
-        if (artifact == "diagramas") goto Diagramas
-        if (artifact == "features") goto Features
-        if (artifact == "historias") goto Historias
-        fail(
-            "artefato desconhecido para preview: '" + artifact +
-            "' (use brief | atributos | requisitos | der | feature | historia | decisao | diagrama | adr | diagramas | features | historias)"
-        )
+        goto match artifact {
+            "brief"      -> Brief
+            "atributos"  -> Atributos
+            "requisitos" -> Requisitos
+            "der"        -> Der
+            "feature"    -> Feature
+            "historia"   -> Historia
+            "decisao"    -> Decisao
+            "diagrama"   -> Diagrama
+            "adr"        -> Adr
+            "diagramas"  -> Diagramas
+            "features"   -> Features
+            "historias"  -> Historias
+            _            -> fail(
+                "artefato desconhecido para preview: '" + artifact +
+                "' (use brief | atributos | requisitos | der | feature | historia | decisao | diagrama | adr | diagramas | features | historias)"
+            )
+        }
     }
 
     step Brief {

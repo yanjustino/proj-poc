@@ -18,6 +18,10 @@ export function DeleteProject(arg1) {
   return window['go']['main']['App']['DeleteProject'](arg1);
 }
 
+export function GetAgent() {
+  return window['go']['main']['App']['GetAgent']();
+}
+
 export function GetRunLogs(arg1, arg2) {
   return window['go']['main']['App']['GetRunLogs'](arg1, arg2);
 }
@@ -76,6 +80,10 @@ export function ResumeRun(arg1, arg2) {
 
 export function SelectRawFiles() {
   return window['go']['main']['App']['SelectRawFiles']();
+}
+
+export function SetAgent(arg1) {
+  return window['go']['main']['App']['SetAgent'](arg1);
 }
 
 export function StartRun(arg1, arg2) {

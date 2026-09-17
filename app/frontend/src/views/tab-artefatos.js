@@ -371,14 +371,26 @@ export async function renderArtefatosTab(container, project, { onChanged }) {
   // single whole-batch call if `data` doesn't have the expected array
   // (still correct, just concatenated, exactly like before this existed).
   //
-  // Each item's call is handled independently (its own try/catch, not a
-  // shared Promise.all-then-bail) — one item failing (a slow/stuck run, a
-  // shape ArtifactBody didn't expect) must not blank out the N-1 items that
-  // rendered fine and dump the whole batch back to raw JSON; it shows an
-  // inline error in just that item's slot instead. Verified against a real
-  // paused run where exactly this happened: 2 of 3 histórias previewed
-  // successfully and one call hung, and the all-or-nothing version was
-  // silently discarding the two good ones.
+  // Each item's call is handled independently (its own try/catch inside the
+  // Promise.all below, not a shared "any fails, all are lost") — one item
+  // failing (a shape ArtifactBody didn't expect, say) must not blank out
+  // the N-1 items that rendered fine and dump the whole batch back to raw
+  // JSON; it shows an inline error in just that item's slot instead.
+  // Verified against a real paused run where exactly this happened: 2 of 3
+  // histórias previewed successfully and one call hung, and the
+  // all-or-nothing version was silently discarding the two good ones.
+  //
+  // Firing these in parallel (Promise.all) used to crash mhl outright —
+  // "decode response: EOF", a "404 Not Found" polling status — root-caused
+  // to several requests in flight at once on this app's one shared MCP
+  // session (measured: 9/40 failures sharing a session under this same
+  // load, 0/40 giving each concurrent call its own session — see
+  // mhlbridge.go's postRPC comment). That's now fixed at the actual source
+  // — postRPC serializes every request on that session — so this can fire
+  // in parallel again rather than working around it with a client-side
+  // queue here; a from-scratch queue in this one caller would leave every
+  // OTHER concurrent-call site (run status polling racing a user action,
+  // for instance) with the same unfixed risk.
   //
   // Fire-and-forget from the caller on purpose (renderDetail() doesn't
   // await this) — the guards below (`active`, `selectedKey`, and the

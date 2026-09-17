@@ -15,39 +15,81 @@ export memory Usage {
 }
 
 // Formato do envelope de --output-format json do Claude Code CLI, confirmado
-// por spike real (FASE0-ACHADOS.md §5): usage.input_tokens/output_tokens
-// junto do conteudo pedido, duplicado em `result` (string JSON) e
-// `structured_output` (ja objeto). Devolvemos `result` porque e exatamente a
-// string que o `json.parse` do passo seguinte espera.
+// por spike real (FASE0-ACHADOS.md §5) e reconfirmado numa chamada real
+// direta a `claude -p ... --output-format json` (fora do mhl, comparando o
+// envelope cru byte a byte): usage.input_tokens/output_tokens junto do
+// conteudo pedido, duplicado em `result` (string JSON) e `structured_output`
+// (ja objeto). Devolvemos `result` porque e exatamente a string que o
+// `json.parse` do passo seguinte espera.
+//
+// Toda variante de extract_* devolve exatamente as mesmas 6 chaves — mesmo
+// quando um backend nao tem o conceito (cache/custo do Devin, cache_creation
+// do Codex) — para Writer.generate/Usage.append nunca precisar checar "esse
+// campo existe pra esse backend?" com acesso opcional; so preenche zero.
 export tool UsageParser {
     // `devin --print` devolve apenas a resposta final. A CLI nao expoe
-    // contagem de tokens em modo nao interativo; mantemos o contrato do
-    // ledger com zeros ate esse dado existir na interface oficial. O CLI
-    // pode envolver JSON em uma cerca Markdown mesmo quando instruido a nao
-    // faze-lo; removemos somente a cerca externa, preservando backticks que
-    // facam parte de campos internos.
-    extract_devin(raw: string): {tokens_in: number, tokens_out: number, content: string} -> {
+    // contagem de tokens (nem de cache, nem custo) em modo nao interativo —
+    // confirmado inspecionando os logs reais da CLI em
+    // ~/.local/share/devin/cli/logs/ numa chamada de verdade (nada de
+    // token/usage/cost em nenhuma linha, nem no nivel de log padrao).
+    // Mantemos o contrato do ledger com zeros ate esse dado existir na
+    // interface oficial. O CLI pode envolver JSON em uma cerca Markdown mesmo
+    // quando instruido a nao faze-lo; removemos somente a cerca externa,
+    // preservando backticks que facam parte de campos internos.
+    extract_devin(raw: string): {
+        tokens_in: number, tokens_out: number, content: string,
+        cache_creation_tokens: number, cache_read_tokens: number, cost_usd: number
+    } -> {
         var content = raw.trim()
         if (content.starts_with("```json")) content = content.substring(7, content.size()).trim()
         else if (content.starts_with("```")) content = content.substring(3, content.size()).trim()
         if (content.ends_with("```")) content = content.substring(0, content.size() - 3).trim()
-        return {tokens_in: 0, tokens_out: 0, content: content}
+        return {
+            tokens_in: 0, tokens_out: 0, content: content,
+            cache_creation_tokens: 0, cache_read_tokens: 0, cost_usd: 0
+        }
     }
 
-    extract_claude(raw: string): {tokens_in: number, tokens_out: number, content: string} -> {
+    // usage.cache_creation_input_tokens/cache_read_input_tokens e
+    // total_cost_usd (custo real ja calculado pela Anthropic, mais direto
+    // que converter token->preco a mao) vem no mesmo envelope de
+    // usage.input_tokens/output_tokens — so nao eram lidos antes. Uma
+    // chamada real (prompt trivial, contexto de sistema grande) confirmou:
+    // input_tokens:2, cache_creation_input_tokens:21260 — a maior parte do
+    // prompt vira criacao de cache, nao input "novo"; sem esses dois campos,
+    // o ledger fazia parecer que a chamada quase nao usou tokens de entrada.
+    extract_claude(raw: string): {
+        tokens_in: number, tokens_out: number, content: string,
+        cache_creation_tokens: number, cache_read_tokens: number, cost_usd: number
+    } -> {
         var envelope = json.parse(raw)
         return {
             tokens_in: envelope.usage.input_tokens,
             tokens_out: envelope.usage.output_tokens,
             content: envelope.result,
+            cache_creation_tokens: envelope.usage.cache_creation_input_tokens,
+            cache_read_tokens: envelope.usage.cache_read_input_tokens,
+            cost_usd: envelope.total_cost_usd,
         }
     }
 
     // `codex exec --json` emite JSONL. A resposta final vem no evento
-    // item.completed/agent_message e o consumo no turn.completed.
-    extract_codex(raw: string): {tokens_in: number, tokens_out: number, content: string} -> {
+    // item.completed/agent_message e o consumo no turn.completed —
+    // cached_input_tokens (quantos dos input_tokens vieram de cache,
+    // equivalente ao cache_read_input_tokens do Claude) e
+    // cache_write_input_tokens (equivalente ao cache_creation_input_tokens
+    // do Claude) no mesmo evento — confirmado numa chamada real ao `codex
+    // exec` com os mesmos flags do agent Codex, que devolveu ambos os
+    // campos junto de input_tokens/output_tokens. Nenhum custo em dolar
+    // exposto por este CLI — cost_usd fica 0 aqui, nao inventado.
+    extract_codex(raw: string): {
+        tokens_in: number, tokens_out: number, content: string,
+        cache_creation_tokens: number, cache_read_tokens: number, cost_usd: number
+    } -> {
         var tokens_in = 0
         var tokens_out = 0
+        var cache_creation_tokens = 0
+        var cache_read_tokens = 0
         var content = ""
         for (var event in json.parse_lines(raw)) {
             if (event.type == "item.completed" && event.item.type == "agent_message") {
@@ -56,9 +98,14 @@ export tool UsageParser {
             if (event.type == "turn.completed") {
                 tokens_in = event.usage.input_tokens
                 tokens_out = event.usage.output_tokens
+                cache_read_tokens = event.usage.cached_input_tokens
+                cache_creation_tokens = event.usage.cache_write_input_tokens
             }
         }
-        return {tokens_in: tokens_in, tokens_out: tokens_out, content: content}
+        return {
+            tokens_in: tokens_in, tokens_out: tokens_out, content: content,
+            cache_creation_tokens: cache_creation_tokens, cache_read_tokens: cache_read_tokens, cost_usd: 0
+        }
     }
 }
 
@@ -68,6 +115,9 @@ test UsageParserSpec {
         are_equal(parsed.tokens_in, 0)
         are_equal(parsed.tokens_out, 0)
         are_equal(parsed.content, "{\"ok\":true}")
+        are_equal(parsed.cache_creation_tokens, 0)
+        are_equal(parsed.cache_read_tokens, 0)
+        are_equal(parsed.cost_usd, 0)
     }
 
     describe removes_only_devins_outer_markdown_fence {
@@ -75,13 +125,35 @@ test UsageParserSpec {
         are_equal(parsed.content, "{\"body\":\"use ``` dentro\"}")
     }
 
-    describe extracts_codex_final_message_and_usage_from_jsonl {
+    describe extracts_claude_tokens_cache_and_cost_from_the_real_envelope_shape {
+        var raw = "{\"result\":\"{\\\"ok\\\":true}\",\"total_cost_usd\":0.128202,\"usage\":{" +
+            "\"input_tokens\":2,\"output_tokens\":4," +
+            "\"cache_creation_input_tokens\":21260,\"cache_read_input_tokens\":0}}"
+        var parsed = UsageParser.extract_claude(raw)
+        are_equal(parsed.tokens_in, 2)
+        are_equal(parsed.tokens_out, 4)
+        are_equal(parsed.content, "{\"ok\":true}")
+        are_equal(parsed.cache_creation_tokens, 21260)
+        are_equal(parsed.cache_read_tokens, 0)
+        are_equal(parsed.cost_usd, 0.128202)
+    }
+
+    // Formato confirmado numa chamada real ao `codex exec --json` (mesmos
+    // flags do agent Codex): turn.completed.usage traz input_tokens,
+    // cached_input_tokens, cache_write_input_tokens, output_tokens e
+    // reasoning_output_tokens juntos — o fixture inclui todos pra provar que
+    // extract_codex lê os dois campos de cache certos, nao so um.
+    describe extracts_codex_final_message_usage_and_both_cache_fields_from_jsonl {
         var raw = "{\"type\":\"thread.started\",\"thread_id\":\"t1\"}\n" +
             "{\"type\":\"item.completed\",\"item\":{\"id\":\"i1\",\"type\":\"agent_message\",\"text\":\"{\\\"ok\\\":true}\"}}\n" +
-            "{\"type\":\"turn.completed\",\"usage\":{\"input_tokens\":12,\"cached_input_tokens\":3,\"output_tokens\":7}}"
+            "{\"type\":\"turn.completed\",\"usage\":{\"input_tokens\":14368,\"cached_input_tokens\":10624," +
+            "\"cache_write_input_tokens\":512,\"output_tokens\":5,\"reasoning_output_tokens\":0}}"
         var parsed = UsageParser.extract_codex(raw)
-        are_equal(parsed.tokens_in, 12)
-        are_equal(parsed.tokens_out, 7)
+        are_equal(parsed.tokens_in, 14368)
+        are_equal(parsed.tokens_out, 5)
         are_equal(parsed.content, "{\"ok\":true}")
+        are_equal(parsed.cache_creation_tokens, 512)
+        are_equal(parsed.cache_read_tokens, 10624)
+        are_equal(parsed.cost_usd, 0)
     }
 }
