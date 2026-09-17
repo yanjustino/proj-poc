@@ -110,7 +110,7 @@
     padding-block: 20px;
     border-top: 1px solid var(--line);
     border-bottom: 1px solid var(--line);
-    margin-bottom: 44px;
+    margin-bottom: 28px;
     font-size: 13.5px;
     color: var(--ink-soft);
   }
@@ -132,6 +132,30 @@
     height: 6px;
     border-radius: 50%;
     background: currentColor;
+  }
+
+  .revnote {
+    display: flex;
+    gap: 12px;
+    align-items: flex-start;
+    background: var(--accent-soft);
+    border: 1px solid var(--accent);
+    border-radius: 10px;
+    padding: 14px 16px;
+    margin-bottom: 44px;
+    font-size: 14px;
+  }
+  .revnote .tag {
+    font-family: "IBM Plex Mono", monospace;
+    font-size: 11.5px;
+    font-weight: 600;
+    letter-spacing: 0.03em;
+    color: var(--accent);
+    background: var(--surface);
+    border-radius: 6px;
+    padding: 2px 8px;
+    flex-shrink: 0;
+    white-space: nowrap;
   }
 
   /* ---- sections ---- */
@@ -270,22 +294,28 @@
 
   @media (max-width: 480px) {
     .summary-item, .checklist li { grid-template-columns: 18px 1fr; }
+    .revnote { flex-direction: column; }
   }
 </style>
 </head>
 <body>
 <main>
 
-  <div class="eyebrow">Relatório técnico · mhl-runtime → equipe Senpai</div>
+  <div class="eyebrow">Relatório técnico · mhl-runtime → equipe Senpai · revisão 2</div>
   <h1>Sessão MCP sob Concorrência</h1>
-  <p class="subtitle">Causa raiz confirmada para o <code>decode response: EOF</code> e os 404 intermitentes de <code>run/status</code>, a correção já aplicada no <code>mhl-runtime</code>, e o que isso muda para o mutex hoje em <code>mhlbridge.Client</code>.</p>
+  <p class="subtitle">Duas causas raiz confirmadas para o <code>decode response: EOF</code> e os 404 intermitentes de <code>run/status</code> — uma no backend em memória, outra no backend em disco (o modo que o Senpai usa) — e o que isso muda para o mutex hoje em <code>mhlbridge.Client</code>.</p>
 
   <div class="meta">
-    <span>17 de setembro de 2026</span>
+    <span>18 de setembro de 2026 · revisão 2</span>
     <span>·</span>
     <span>Componente: <strong>mhl serve mcp --http</strong> (<code>internal/mcpserver</code>)</span>
     <span>·</span>
-    <span class="badge">Corrigido no mhl-runtime — aguardando merge/release</span>
+    <span class="badge">2 causas raiz corrigidas — aguardando release única com as duas</span>
+  </div>
+
+  <div class="revnote">
+    <span class="tag">O que mudou nesta revisão</span>
+    <span>A revisão 1 deste relatório descrevia o modo <code>--state-dir</code> (o do Senpai) como imune à race original — isso era verdade só para <em>aquela</em> race específica. A validação do time do Senpai contra o binário real <code>v1.4.0-beta.13</code>, com o mutex do <code>postRPC</code> removido, encontrou uma <strong>segunda</strong> causa raiz, num caminho de código diferente, que afeta exatamente o modo de deploy de vocês. Essa revisão corrige a lacuna e já traz a correção também para esse segundo bug.</span>
   </div>
 
   <section>
@@ -293,19 +323,19 @@
     <div class="summary-grid">
       <div class="summary-item warn">
         <div class="dot"></div>
-        <div><b>O bug era do servidor, não do cliente</b><span>Isolamos a causa: <code>mhl</code> tem uma <em>data race</em> real quando duas requisições HTTP chegam ao mesmo tempo carregando o mesmo <code>Mcp-Session-Id</code> — exatamente o padrão do Senpai (um processo, uma sessão, vários chamadores).</span></div>
+        <div><b>Eram dois bugs de servidor, não um</b><span>Além da race no backend de sessão em memória (já reportada), há uma segunda causa raiz independente no backend em disco (<code>--state-dir</code>) — o modo que o Senpai roda em produção.</span></div>
       </div>
       <div class="summary-item ok">
         <div class="dot"></div>
-        <div><b>Já corrigimos no mhl-runtime</b><span>A correção está implementada e validada (<code>go test -race</code> limpo, suíte completa passando), aguardando merge e um release publicado.</span></div>
+        <div><b>A validação de vocês encontrou a lacuna</b><span>Rodar <code>TestMHLBridge_ConcurrentCallsOnTheSharedSessionNeverFail</code> contra o binário real <code>v1.4.0-beta.13</code> com o mutex removido — em vez de confiar no changelog — foi o que expôs que o release não cobria o caso de uso de vocês. Reproduzimos de forma independente e confirmamos.</span></div>
+      </div>
+      <div class="summary-item ok">
+        <div class="dot"></div>
+        <div><b>Ambas já corrigidas no mhl-runtime</b><span>Implementadas e validadas localmente (testes de regressão dedicados para cada uma, suíte completa passando), aguardando merge e um release que inclua <strong>as duas</strong>.</span></div>
       </div>
       <div class="summary-item">
         <div class="dot"></div>
-        <div><b>O workaround do Senpai continua correto por enquanto</b><span>O mutex em <code>mhlbridge.Client.postRPC</code> resolve o sintoma hoje e deve permanecer até vocês atualizarem para uma versão do <code>mhl</code> com a correção.</span></div>
-      </div>
-      <div class="summary-item">
-        <div class="dot"></div>
-        <div><b>Depois da atualização, dá para relaxar o mutex</b><span>Uma vez confirmada a versão corrigida, a serialização total deixa de ser necessária por correção — pode virar uma escolha de trade-off (throughput vs. simplicidade), não mais uma obrigação.</span></div>
+        <div><b>O mutex continua sendo a única proteção real</b><span>Isso vale com mais força agora: <code>v1.4.0-beta.13</code> resolve só a primeira causa. Não removam nem relaxem o mutex até confirmarem uma versão que traga as duas correções.</span></div>
       </div>
     </div>
   </section>
@@ -317,13 +347,12 @@
       <li><code>Error: decode response: EOF</code> ao decodificar a resposta.</li>
       <li>Em alguns casos, <code>404 Not Found</code> ao consultar <code>run/status</code> de um run que a própria sessão havia iniciado.</li>
     </ul>
-    <p>Um cliente HTTP isolado, sem nenhum código do Senpai envolvido, confirmou que o gatilho era puramente a concorrência sob o <strong>mesmo</strong> <code>Mcp-Session-Id</code>: mesma sessão + chamadas concorrentes deu 9 falhas em 40 tentativas; sessões diferentes sob a mesma carga deu 0 falhas em 40.</p>
+    <p>Um cliente HTTP isolado, sem nenhum código do Senpai envolvido, confirmou que o gatilho era puramente a concorrência sob o <strong>mesmo</strong> <code>Mcp-Session-Id</code>: mesma sessão + chamadas concorrentes deu 9 falhas em 40 tentativas; sessões diferentes sob a mesma carga deu 0 falhas em 40. Isso identificava o padrão, mas não dizia ainda qual dos dois backends de sessão estava envolvido — o Senpai roda com <code>--state-dir</code>, então é o segundo (seção 3.2) que importa para vocês.</p>
   </section>
 
   <section>
-    <div class="section-head"><span class="section-num">03</span><h2>Causa raiz confirmada no mhl</h2></div>
-    <p>O servidor HTTP do <code>mhl</code> (<code>internal/mcpserver</code>) guarda a sessão do protocolo MCP num objeto em memória. Para uma sessão ativa, <code>memSessionStore.Get</code> devolve o <strong>mesmo ponteiro</strong> desse objeto para toda requisição que chega com o mesmo <code>Mcp-Session-Id</code> — o que é esperado, dado que o transporte Streamable HTTP permite requisições concorrentes numa mesma sessão (é exatamente o padrão que permite fazer polling de <code>run/status</code> enquanto outro <code>run/start</code> está em voo).</p>
-    <p>O problema: os campos mutáveis desse objeto (<code>principal</code>, <code>initialized</code>, <code>protocol</code>) eram lidos e escritos diretamente, sem nenhuma sincronização, em cada requisição. Duas requisições concorrentes na mesma sessão rodam em goroutines diferentes — isso é uma <em>data race</em> clássica: o campo é escrito em toda requisição (a identidade verificada do chamador) enquanto outra requisição concorrente pode estar lendo esse mesmo campo para decidir o dono (<code>Owner</code>) de um run.</p>
+    <div class="section-head"><span class="section-num">03</span><h2>Causa raiz nº 1 — backend em memória</h2></div>
+    <p>O servidor HTTP do <code>mhl</code> (<code>internal/mcpserver</code>) guarda a sessão do protocolo MCP num objeto em memória. Sem <code>--state-dir</code> e sem uma extensão de <code>store</code> externa, <code>memSessionStore.Get</code> devolve o <strong>mesmo ponteiro</strong> desse objeto para toda requisição que chega com o mesmo <code>Mcp-Session-Id</code>. Os campos mutáveis desse objeto (<code>principal</code>, <code>initialized</code>, <code>protocol</code>) eram lidos e escritos diretamente, sem nenhuma sincronização — uma <em>data race</em> de memória clássica entre goroutines de requisições concorrentes.</p>
 
     <pre class="mermaid">
 sequenceDiagram
@@ -341,84 +370,82 @@ sequenceDiagram
     B->>B: servidor responde 404 "unknown runId"
     </pre>
 
-    <p>Isso bate exatamente com os dois sintomas: o runtime Go recupera um panic por requisição fechando a conexão sem uma resposta válida (o cliente lê isso como EOF no meio da decodificação); e um valor corrompido de <code>principal</code> no meio de uma leitura concorrente faz o cálculo do <code>Owner</code> do run não bater com o que foi persistido, e o servidor trata isso como "run desconhecido" — 404 — mesmo para um run que pertence à própria sessão.</p>
+    <p><strong>Correção:</strong> um <code>sync.RWMutex</code> no objeto de sessão, com todo acesso a <code>principal</code>/<code>initialized</code>/<code>protocol</code> passando por métodos que tomam o lock. Validado com <code>go test -race</code>: reproduz a race de forma determinística sem a correção, limpo com ela. <strong>Esta é a única causa incluída em <code>v1.4.0-beta.13</code>.</strong></p>
+  </section>
+
+  <section>
+    <div class="section-head"><span class="section-num">03.2</span><h2>Causa raiz nº 2 — backend em disco (<code>--state-dir</code>, o modo do Senpai)</h2></div>
+    <p>Com <code>--state-dir</code> ativo, o <code>mhl</code> usa <code>diskSessionStore</code> em vez do backend em memória: cada <code>Get</code> lê a sessão de um arquivo JSON e devolve um objeto <strong>novo</strong> a cada chamada — por isso essa via nunca teve a race de ponteiro compartilhado da causa nº 1. A revisão 1 deste relatório parou por aí e concluiu, incorretamente, que esse modo era imune. Não é: o próprio <code>Get</code> tem uma causa raiz independente.</p>
+    <p>Toda chamada a <code>Get</code> atualiza o campo <code>LastUsed</code> da sessão de volta no disco — e essa escrita usava <code>os.WriteFile</code> direto no arquivo final (trunca, depois escreve), sem lock e sem <em>rename</em> atômico. Como <strong>toda</strong> requisição em voo na mesma sessão chama <code>Get</code> concorrentemente, duas escritas simultâneas nesse mesmo arquivo podem se intercalar; uma terceira leitura concorrente pode pegar o arquivo truncado no meio dessa escrita, falhar o <code>json.Unmarshal</code>, e a sessão volta como "desconhecida" — o mesmo <code>decode response: EOF</code> / 404, por um mecanismo de corrupção em disco, não de memória.</p>
 
     <div class="callout">
-      <b>Por que só aparece nesse padrão de deploy</b>
-      Isso só existe no backend de sessão padrão (sem <code>--state-dir</code> e sem uma extensão de <code>store</code> externa) — exatamente o modo do Senpai: um processo <code>mhl</code>, uma sessão, sem store externo. Um deploy com <code>--state-dir</code> ou um <code>extension store</code> (Postgres/Redis) aloca um objeto de sessão novo a cada leitura e nunca compartilha o ponteiro — por isso nunca foi exposto a essa race, mesmo sob carga.
+      <b>Por que passou pela primeira validação</b>
+      <code>go test -race</code> não acusa nada aqui: é corrupção de I/O de arquivo entre goroutines, fora do que o detector de races do Go instrumenta (ele só vê acessos à memória do processo). Uma suíte "limpa" com <code>-race</code> não é garantia nesse tipo de bug — é preciso um teste que efetivamente dispare requisições concorrentes e verifique a resposta, não apenas rodar sob o detector.
     </div>
-  </section>
 
-  <section>
-    <div class="section-head"><span class="section-num">04</span><h2>Correção aplicada</h2></div>
-    <p>Adicionamos um <code>sync.RWMutex</code> ao objeto de sessão e convertemos todo acesso a <code>principal</code>/<code>initialized</code>/<code>protocol</code> para métodos que tomam o lock (<code>setPrincipal</code>, <code>getPrincipal</code>, <code>setHandshake</code>, <code>isInitialized</code>, <code>getProtocol</code>). O id da sessão não precisou de proteção — é escrito uma única vez antes do objeto ser publicado no store, então nenhum leitor concorrente consegue observá-lo antes disso.</p>
-
-    <h3>Validação</h3>
-    <ul>
-      <li>Um teste de regressão dedicado dispara 16 goroutines fazendo <code>tools/call</code>, <code>run/start</code> e <code>tools/list</code> concorrentemente sob o mesmo <code>Mcp-Session-Id</code>.</li>
-      <li><strong>Sem a correção:</strong> <code>go test -race</code> reproduz a race de forma determinística, apontando exatamente para a escrita/leitura descritas acima.</li>
-      <li><strong>Com a correção:</strong> <code>go test -race</code> limpo nesse teste e em toda a suíte de <code>internal/mcpserver</code>; a suíte completa do repositório (<code>go test ./...</code>) também passa sem regressão.</li>
-    </ul>
+    <p><strong>Correção:</strong> a escrita de <code>Get</code> (e de <code>Put</code>, que tinha o mesmo padrão frágil) passou a usar um arquivo temporário com nome único por chamada seguido de <em>rename</em> atômico — um leitor concorrente agora só enxerga o arquivo antigo completo ou o novo completo, nunca um estado parcial. Validado com um teste dedicado disparando 16 goroutines concorrentes sob a mesma sessão com <code>--state-dir</code> configurado: <strong>87–98% de falha em 3 rodadas sem a correção</strong> (mais consistente até que a race original relatada por vocês), <strong>0 falhas em 3 rodadas com ela</strong>. Suíte completa do repositório também passa sem regressão.</p>
 
     <div class="callout ok">
-      <b>Status</b>
-      Implementado e validado localmente. Ainda não mesclado nem publicado em um release — a versão exata do <code>mhl</code> que incluirá essa correção depende do processo de merge/release do lado do mhl-runtime.
+      <b>Status combinado</b>
+      As duas correções estão implementadas e validadas localmente. Nenhum release publicado até agora contém as duas — <code>v1.4.0-beta.13</code> tem só a nº 1. A versão que incluirá a nº 2 depende do próximo merge/release do lado do mhl-runtime.
     </div>
   </section>
 
   <section>
-    <div class="section-head"><span class="section-num">05</span><h2>O que isso muda para o cliente do Senpai</h2></div>
-    <p class="lede">O mutex único em <code>mhlbridge.Client.postRPC</code> foi a correção certa dado o que era conhecido na época — ele serializa toda chamada MCP da sessão, o que é mais restritivo do que o necessário (sacrifica o paralelismo real entre <code>run/start</code> e o polling de <code>run/status</code>), mas era a única opção enquanto o bug estava no servidor. Com a causa raiz corrigida do lado do <code>mhl</code>, isso passa a ser uma escolha, não mais uma obrigação.</p>
+    <div class="section-head"><span class="section-num">04</span><h2>O que isso muda para o cliente do Senpai</h2></div>
+    <p class="lede">A conclusão da revisão 1 permanece — só fica mais forte agora que sabemos que o problema de vocês tem duas causas, não uma. O mutex único em <code>mhlbridge.Client.postRPC</code> continua sendo a proteção correta enquanto isso, e a atualização precisa esperar uma versão que resolva as duas, não só a que já foi taggeada.</p>
 
     <ol class="checklist">
       <li>
         <span class="n">1</span>
-        <div><b>Por enquanto, não mexam no mutex</b><p>O binário <code>mhl</code> vendorizado em produção hoje ainda tem o bug. Remover ou relaxar o mutex antes de atualizar reintroduz o <code>decode response: EOF</code> e os 404 intermitentes.</p></div>
+        <div><b>Não mexam no mutex — nem em <code>v1.4.0-beta.13</code></b><p>Essa versão resolve só a causa nº 1 (memória). A causa nº 2 (disco, o modo de vocês) continua presente nela. Atualizar para ela sozinha e relaxar o mutex reintroduz o bug.</p></div>
       </li>
       <li>
         <span class="n">2</span>
-        <div><b>Confirmem com o time do mhl-runtime a versão que incluirá a correção</b><p>Peçam o número da versão/release assim que o merge acontecer, e tratem esse documento como o registro técnico para essa conversa.</p></div>
+        <div><b>Peçam ao time do mhl-runtime uma versão com as duas correções</b><p>Não uma versão "com a correção" no singular — confirmem explicitamente que o release cobre causa nº 1 <em>e</em> nº 2 antes de considerar qualquer mudança no cliente.</p></div>
       </li>
       <li>
         <span class="n">3</span>
-        <div><b>Ao atualizar, usem o teste de regressão de vocês como critério de aceite</b><p><code>TestMHLBridge_ConcurrentCallsOnTheSharedSessionNeverFail</code> já existe e já provou pegar essa classe de bug. Rodem ele contra o binário novo, inclusive com o mutex temporariamente removido num branch de validação — se ficar verde, a atualização fechou a lacuna para o caso de uso de vocês.</p></div>
+        <div><b>Continuem validando do jeito que fizeram desta vez</b><p>Rodar <code>TestMHLBridge_ConcurrentCallsOnTheSharedSessionNeverFail</code> contra o binário vendorizado real, com o mutex temporariamente removido, foi exatamente o que expôs a lacuna que o nosso relatório original não via. Tratem isso como o critério de aceite padrão de vocês para qualquer atualização futura do <code>mhl</code> — não só desta vez.</p></div>
       </li>
       <li>
         <span class="n">4</span>
-        <div><b>Decidam entre manter a serialização total ou recuperar concorrência real</b><p>Confirmado o passo 3, vocês podem manter o mutex único por simplicidade (o custo é abrir mão de paralelismo entre chamadas na mesma sessão), ou relaxar a proteção para deixar <code>run/start</code> e o polling de <code>run/status</code> voltarem a rodar em paralelo — a decisão é de vocês, e nenhuma das duas é "a errada" nesse ponto.</p></div>
+        <div><b>Só depois disso, decidam sobre o mutex</b><p>Com o teste de vocês verde contra a versão nova (mutex removido), aí sim vira uma escolha entre manter a serialização total por simplicidade ou relaxar para recuperar paralelismo real entre <code>run/start</code> e o polling de <code>run/status</code>.</p></div>
       </li>
       <li>
         <span class="n">5</span>
-        <div><b>Registrem a versão mínima do mhl como dependência</b><p>Depois de migrar, deixem explícito (changelog, comentário no código, ou ambos) que a versão mínima do <code>mhl</code> vendorizado é a que inclui essa correção — evita que um downgrade acidental do binário reintroduza o bug silenciosamente.</p></div>
+        <div><b>Registrem a versão mínima do mhl como dependência</b><p>Deixem explícito (changelog, comentário no código, ou ambos) qual é a primeira versão do <code>mhl</code> vendorizado com as duas correções — evita que um downgrade acidental do binário reintroduza qualquer uma das duas silenciosamente.</p></div>
       </li>
     </ol>
   </section>
 
   <section>
-    <div class="section-head"><span class="section-num">06</span><h2>Apêndice — referências técnicas</h2></div>
-    <p>Para quem for revisar do lado de vocês, os pontos exatos da causa raiz no <code>mhl-runtime</code> (pacote <code>internal/mcpserver</code>):</p>
+    <div class="section-head"><span class="section-num">05</span><h2>Apêndice — referências técnicas</h2></div>
+    <p>Para quem for revisar do lado de vocês, os pontos exatos das duas causas raiz no <code>mhl-runtime</code> (pacote <code>internal/mcpserver</code>):</p>
     <table>
       <thead>
-        <tr><th>Sintoma</th><th>Escrita não sincronizada</th><th>Leitura em conflito</th></tr>
+        <tr><th>Causa</th><th>Local do bug</th><th>Mecanismo</th><th>Correção</th></tr>
       </thead>
       <tbody>
         <tr>
-          <td>Corrupção de <code>principal</code> → <code>decode response: EOF</code></td>
-          <td class="mono">http.go:522<br><span style="color:var(--ink-faint)">sess.principal = principal</span></td>
-          <td class="mono">server.go:472<br><span style="color:var(--ink-faint)">callTool() lê sess.principal</span></td>
+          <td>Nº 1 — memória</td>
+          <td class="mono">server.go / http.go / runs.go<br><span style="color:var(--ink-faint)">type session struct — campos principal/initialized/protocol</span></td>
+          <td>Leitura/escrita concorrente sem lock no mesmo <code>*session</code> compartilhado por <code>memSessionStore</code></td>
+          <td class="mono">sync.RWMutex + métodos de acesso</td>
         </tr>
         <tr>
-          <td><code>Owner</code> incorreto → 404 <code>unknown runId</code></td>
-          <td class="mono">http.go:522<br><span style="color:var(--ink-faint)">sess.principal = principal</span></td>
-          <td class="mono">runs.go:896<br><span style="color:var(--ink-faint)">ownerOf() lê sess.principal</span></td>
+          <td>Nº 2 — disco (<code>--state-dir</code>)</td>
+          <td class="mono">store.go:149-167<br><span style="color:var(--ink-faint)">diskSessionStore.Get() — bump de LastUsed</span></td>
+          <td><code>os.WriteFile</code> não atômico (trunca + escreve) disputado por toda requisição em voo na sessão</td>
+          <td class="mono">atomicWriteFile: temp único por chamada + os.Rename</td>
         </tr>
       </tbody>
     </table>
-    <p style="font-size:13.5px;color:var(--ink-soft)">Estrutura afetada: <code>type session struct</code> em <code>server.go</code> — a mesma instância é compartilhada entre requisições concorrentes pelo backend de sessão em memória (<code>memSessionStore</code>), o padrão usado quando <code>mhl serve mcp --http</code> roda sem <code>--state-dir</code> e sem uma extensão de <code>store</code> — o modo de deploy do Senpai.</p>
+    <p style="font-size:13.5px;color:var(--ink-soft)">O backend <code>extSessionStore</code> (extensão externa de <code>store</code>, ex.: Postgres/Redis) não foi afetado por nenhuma das duas: aloca um objeto de sessão novo a cada leitura (como o de disco) e delega a atomicidade da escrita à extensão, não a este código.</p>
   </section>
 
   <footer>
-    Documento preparado a partir da investigação conjunta do bug relatado pelo Senpai contra <code>mhl serve mcp --http</code>. Baseado no código de <code>internal/mcpserver</code> no branch de correção local (não mesclado até a data acima).
+    Documento preparado a partir da investigação conjunta do bug relatado pelo Senpai contra <code>mhl serve mcp --http</code>, com a causa nº 2 identificada pela validação do time do Senpai contra o binário real <code>v1.4.0-beta.13</code>. Baseado no código de <code>internal/mcpserver</code> em correções locais ainda não mescladas até a data acima.
   </footer>
 
 </main>
