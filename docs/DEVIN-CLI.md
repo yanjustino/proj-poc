@@ -44,7 +44,7 @@ confiaveis, `--respect-workspace-trust false`.
 ```text
 devin --config <workflows>/shared/agents/devin-generator.json \
   --model <modelo> --respect-workspace-trust false \
-  --permission-mode normal --prompt-file <arquivo-temporario> --print
+  --permission-mode auto --prompt-file <arquivo-temporario> --print
 ```
 
 O prompt e gravado num arquivo temporario dentro do proprio work-item e
