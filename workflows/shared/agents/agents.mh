@@ -32,16 +32,6 @@ import { Paths } from "../core/paths.mh"
 // A configuracao dedicada bloqueia todas as ferramentas do Devin: ele recebe
 // todo o contexto no prompt e so deve produzir dados, sem explorar o CWD do
 // mhl (que contem todos os work-items).
-tool DevinPrompt {
-    build(instruction: string, schema: string): string -> """
-${instruction}
-
-Responda somente com um objeto JSON valido, sem Markdown, comentarios ou texto adicional.
-O objeto deve obedecer exatamente a este JSON Schema:
-${schema}
-"""
-}
-
 tool DevinConfig {
     path(): string -> WorkflowsRoot.resolve("shared/agents/devin-generator.json")
 }
@@ -61,31 +51,6 @@ export agent Devin {
         max_attempts: 3
         delay: 2s
         retry_on: [500, 503, "timeout", "rate_limit", "empty response"]
-    }
-}
-
-// Windows limita a linha de comando criada por CreateProcess a cerca de 32K
-// caracteres. Prompts de ingestao incluem o documento e o JSON Schema, entao
-// nao podem ser passados como argumento. O Devin aceita --prompt-file; este
-// adaptador grava um arquivo efemero estritamente dentro do work-item, usa um
-// UUID para chamadas concorrentes e o remove tanto no sucesso quanto no erro.
-// Exportado porque Writer e consumido a partir de outros modulos
-// (Wiki/Discovery/Delivery). O runtime resolve a chamada indireta no escopo
-// do modulo importador; sem a exportacao, o caminho Devin falha com
-// `undefined variable "DevinPromptFile"`, embora o lint aceite a referencia.
-export tool DevinPromptFile {
-    run(prompt: string, project_id: string): string -> {
-        var path = Paths.root(Paths.ensure_valid(project_id)) + "/.devin-prompt-" + uuid.v4() + ".txt"
-        fs.write(path, prompt)
-        var raw = ""
-        try {
-            raw = Devin.run(prompt: path)
-        } catch (err) {
-            fail(err)
-        } finally {
-            fs.delete(path)
-        }
-        return raw
     }
 }
 
@@ -189,14 +154,43 @@ tool AgentSelector {
 // `schema_file.content` (JSON inline); Codex usa `schema_file.path`
 // (caminho de arquivo).
 export tool Writer {
+    // Mantido como metodo de Writer (em vez de um tool auxiliar) porque
+    // Writer e chamado por modulos importadores. `self` preserva o escopo do
+    // adapter em runtime e evita que Discovery/Wiki/Delivery tentem resolver
+    // um simbolo auxiliar como DevinPromptFile no proprio modulo.
+    generate_devin(instruction: string, schema: string, project_id: string): string -> {
+        var prompt = """
+${instruction}
+
+Responda somente com um objeto JSON valido, sem Markdown, comentarios ou texto adicional.
+O objeto deve obedecer exatamente a este JSON Schema:
+${schema}
+"""
+        // Windows limita a linha de comando criada por CreateProcess a cerca
+        // de 32K caracteres. O arquivo fica estritamente no work-item, usa
+        // UUID para chamadas concorrentes e e removido ate quando o CLI falha.
+        var path = Paths.root(Paths.ensure_valid(project_id)) + "/.devin-prompt-" + uuid.v4() + ".txt"
+        fs.write(path, prompt)
+        var raw = ""
+        try {
+            raw = Devin.run(prompt: path)
+        } catch (err) {
+            fail(err)
+        } finally {
+            fs.delete(path)
+        }
+        return raw
+    }
+
     generate(prompt: string, schema_file: {content: string, path: string}, project_id: string, artifact: string): {
         content: string, tokens_in: number, tokens_out: number,
         cache_creation_tokens: number, cache_read_tokens: number, cost_usd: number
     } -> {
         var picked = AgentSelector.pick(prompt: prompt)
         var raw = match picked {
-            nameof(Devin) -> DevinPromptFile.run(
-                prompt: DevinPrompt.build(instruction: prompt, schema: schema_file.content),
+            nameof(Devin) -> self.generate_devin(
+                instruction: prompt,
+                schema: schema_file.content,
                 project_id: project_id
             )
             nameof(Claude) -> Claude.run(prompt: prompt, schema: schema_file.content)

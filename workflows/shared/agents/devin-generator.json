@@ -20,5 +20,11 @@
     "claude": false
   },
   "version": 1,
-  "theme_mode": "nocolor"
+  "theme_mode": "dark",
+  "devin": {
+    "org_id": "org-1e48a90514964000862f3cbf7a8a87d0"
+  },
+  "shell": {
+    "setup_complete": true
+  }
 }
