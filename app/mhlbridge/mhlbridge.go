@@ -151,7 +151,9 @@ type rpcError struct {
 // default alone. Read fresh by every AgentSelector.pick() call but only
 // ever set here, at spawn time — changing it takes a fresh mhl process
 // (App.SetAgent's job: save the new value, then call ReconnectMCP).
-func Start(ctx context.Context, mhlPath, workflowsDir, stateDir, dataDir, codexCwdDir, agent string) (*Client, error) {
+// devinModel, when non-empty, is exported as SENPAI_DEVIN_MODEL and becomes
+// the value passed to `devin --model` by workflows/shared/agents/agents.mh.
+func Start(ctx context.Context, mhlPath, workflowsDir, stateDir, dataDir, codexCwdDir, agent, devinModel string) (*Client, error) {
 	// A previous mhl child can still be running here — not from another
 	// live instance (each Start() picks its own fresh port below), but from
 	// THIS app's own last run ending abruptly: a killed debug session, a
@@ -196,6 +198,9 @@ func Start(ctx context.Context, mhlPath, workflowsDir, stateDir, dataDir, codexC
 	}
 	if agent != "" {
 		env = append(env, "SENPAI_AGENT="+agent)
+	}
+	if devinModel != "" {
+		env = append(env, "SENPAI_DEVIN_MODEL="+devinModel)
 	}
 	cmd.Env = enrichedEnv(ctx, env)
 	var stderr bytes.Buffer

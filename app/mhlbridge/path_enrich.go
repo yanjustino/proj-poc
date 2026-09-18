@@ -59,6 +59,21 @@ func enrichedEnv(ctx context.Context, base []string) []string {
 	return append(out, "PATH="+merged)
 }
 
+// CommandContext creates a command that can resolve user-installed CLIs from
+// the same login-shell PATH used by Start. On Unix, /usr/bin/env performs the
+// executable lookup after cmd.Env has been installed; exec.Command's own
+// lookup happens too early and only sees the GUI process's minimal PATH.
+func CommandContext(ctx context.Context, name string, args ...string) *exec.Cmd {
+	if runtime.GOOS == "windows" {
+		cmd := exec.CommandContext(ctx, name, args...)
+		cmd.Env = enrichedEnv(ctx, os.Environ())
+		return cmd
+	}
+	cmd := exec.CommandContext(ctx, "/usr/bin/env", append([]string{name}, args...)...)
+	cmd.Env = enrichedEnv(ctx, os.Environ())
+	return cmd
+}
+
 // loginShellPath runs $SHELL as an interactive login shell just long enough
 // to print its PATH — interactive because profile files like ~/.zshrc only
 // load for interactive shells, and this is precisely the environment a

@@ -114,6 +114,7 @@ button { cursor: pointer; }
 .sidebar-agent label { flex: none; }
 .sidebar-agent select { flex: 1 1 auto; min-width: 0; border: 1px solid var(--line); border-radius: var(--radius-sm); background: var(--surface); color: var(--ink); font-family: var(--mono); font-size: 11px; padding: 4px 6px; }
 .sidebar-agent select:disabled { opacity: .6; }
+.sidebar-agent[hidden] { display: none; }
 
 .main { padding: 22px 26px 26px; overflow: auto; min-width: 0; }
 .center { display: grid; place-items: center; height: 100%; color: var(--muted); font-size: 13px; }

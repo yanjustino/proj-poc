@@ -89,6 +89,18 @@ export async function setAgent(agent) {
   return parseJSON(await App.SetAgent(agent), 'SetAgent');
 }
 
+export async function listDevinModels() {
+  return parseJSON(await App.ListDevinModels(), 'ListDevinModels');
+}
+
+export async function getDevinModel() {
+  return App.GetDevinModel();
+}
+
+export async function setDevinModel(model) {
+  return parseJSON(await App.SetDevinModel(model), 'SetDevinModel');
+}
+
 export async function getRunLogs(runId, since) {
   return parseJSON(await App.GetRunLogs(runId, since ?? ''), 'GetRunLogs');
 }

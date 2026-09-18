@@ -11,6 +11,8 @@ export function DeleteProject(arg1:string):Promise<void>;
 
 export function GetAgent():Promise<string>;
 
+export function GetDevinModel():Promise<string>;
+
 export function GetRunLogs(arg1:string,arg2:string):Promise<string>;
 
 export function GetRunStatus(arg1:string):Promise<string>;
@@ -18,6 +20,8 @@ export function GetRunStatus(arg1:string):Promise<string>;
 export function GetWorkflowManifest(arg1:string):Promise<string>;
 
 export function IsReady():Promise<boolean>;
+
+export function ListDevinModels():Promise<string>;
 
 export function ListIngestedRaw(arg1:string):Promise<string>;
 
@@ -42,6 +46,8 @@ export function ResumeRun(arg1:string,arg2:string):Promise<string>;
 export function SelectRawFiles():Promise<string>;
 
 export function SetAgent(arg1:string):Promise<string>;
+
+export function SetDevinModel(arg1:string):Promise<string>;
 
 export function StartRun(arg1:string,arg2:string):Promise<string>;
 

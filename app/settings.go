@@ -16,7 +16,8 @@ var validAgents = map[string]bool{"": true, "codex": true, "claude": true, "devi
 // currently just which LLM backend Writer.generate uses, but a struct
 // rather than a bare string so a later setting doesn't need a new file.
 type appSettings struct {
-	Agent string `json:"agent,omitempty"`
+	Agent      string `json:"agent,omitempty"`
+	DevinModel string `json:"devin_model,omitempty"`
 }
 
 // settingsFilePath is <senpaiBaseDir>/settings.json — a sibling of state/,

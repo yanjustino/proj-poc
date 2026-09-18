@@ -22,6 +22,10 @@ export function GetAgent() {
   return window['go']['main']['App']['GetAgent']();
 }
 
+export function GetDevinModel() {
+  return window['go']['main']['App']['GetDevinModel']();
+}
+
 export function GetRunLogs(arg1, arg2) {
   return window['go']['main']['App']['GetRunLogs'](arg1, arg2);
 }
@@ -36,6 +40,10 @@ export function GetWorkflowManifest(arg1) {
 
 export function IsReady() {
   return window['go']['main']['App']['IsReady']();
+}
+
+export function ListDevinModels() {
+  return window['go']['main']['App']['ListDevinModels']();
 }
 
 export function ListIngestedRaw(arg1) {
@@ -84,6 +92,10 @@ export function SelectRawFiles() {
 
 export function SetAgent(arg1) {
   return window['go']['main']['App']['SetAgent'](arg1);
+}
+
+export function SetDevinModel(arg1) {
+  return window['go']['main']['App']['SetDevinModel'](arg1);
 }
 
 export function StartRun(arg1, arg2) {

@@ -1,5 +1,15 @@
 import { ToggleMaximise, LogFrontendError } from '../../wailsjs/go/main/App';
-import { workItemList, waitUntilReady, mcpStatus, reconnectMCP, getAgent, setAgent } from '../api.js';
+import {
+  workItemList,
+  waitUntilReady,
+  mcpStatus,
+  reconnectMCP,
+  getAgent,
+  setAgent,
+  listDevinModels,
+  getDevinModel,
+  setDevinModel,
+} from '../api.js';
 import { openNewWorkItemModal } from './new-workitem.js';
 import { renderWorkItemView } from './workitem-view.js';
 import { getState, setState, subscribe } from '../state.js';
@@ -46,6 +56,12 @@ export async function mountShell(root) {
             ${AGENT_OPTIONS.map((opt) => `<option value="${opt.value}">${opt.label}</option>`).join('')}
           </select>
         </div>
+        <div class="sidebar-agent" data-devin-model-row hidden>
+          <label for="devin-model-select">Modelo</label>
+          <select id="devin-model-select" data-devin-model-select>
+            <option value="">Carregando…</option>
+          </select>
+        </div>
         <div class="sidebar-status" data-mcp-status></div>
       </aside>
       <main class="main" data-main></main>
@@ -58,6 +74,8 @@ export async function mountShell(root) {
   const mainEl = root.querySelector('[data-main]');
   const mcpStatusEl = root.querySelector('[data-mcp-status]');
   const agentSelectEl = root.querySelector('[data-agent-select]');
+  const devinModelRow = root.querySelector('[data-devin-model-row]');
+  const devinModelSelectEl = root.querySelector('[data-devin-model-select]');
 
   mountReadingPane(root.querySelector('[data-reading-pane]'));
 
@@ -118,7 +136,39 @@ export async function mountShell(root) {
   // (SENPAI_AGENT is only read at mhl's own startup, see mhlbridge.Start),
   // so this reuses the exact same reconnect + status-render path as the
   // "Reconectar" button above rather than a separate one.
+  async function refreshDevinModels() {
+    const isDevin = agentSelectEl.value === 'devin';
+    devinModelRow.hidden = !isDevin;
+    if (!isDevin) return;
+
+    devinModelSelectEl.disabled = true;
+    devinModelSelectEl.innerHTML = '<option value="">Carregando…</option>';
+    try {
+      const [models, selected] = await Promise.all([listDevinModels(), getDevinModel()]);
+      const groups = new Map();
+      models.forEach((model) => {
+        const family = model.familyLabel || 'Outros';
+        if (!groups.has(family)) groups.set(family, []);
+        groups.get(family).push(model);
+      });
+      devinModelSelectEl.innerHTML = [
+        '<option value="">Selecione um modelo…</option>',
+        ...Array.from(groups, ([family, variants]) =>
+          `<optgroup label="${escapeAttribute(family)}">${variants
+            .map((model) => `<option value="${escapeAttribute(model.id)}">${escapeHtml(model.label)}</option>`)
+            .join('')}</optgroup>`,
+        ),
+      ].join('');
+      devinModelSelectEl.value = models.some((model) => model.id === selected) ? selected : '';
+      devinModelSelectEl.disabled = false;
+    } catch (err) {
+      devinModelSelectEl.innerHTML = '<option value="">Não foi possível listar</option>';
+      LogFrontendError(`listDevinModels: failed: ${err && err.stack ? err.stack : err}`).catch(() => {});
+    }
+  }
+
   agentSelectEl.value = (await getAgent().catch(() => '')) || AGENT_OPTIONS[0].value;
+  await refreshDevinModels();
   agentSelectEl.addEventListener('change', async () => {
     const chosen = agentSelectEl.value;
     agentSelectEl.disabled = true;
@@ -127,12 +177,31 @@ export async function mountShell(root) {
     try {
       const next = await setAgent(chosen);
       renderMcpStatus(next);
+      await refreshDevinModels();
     } catch (err) {
       renderMcpStatus({ ready: false, error: String(err) });
       LogFrontendError(`setAgent: failed: ${err && err.stack ? err.stack : err}`).catch(() => {});
     } finally {
       reconnecting = false;
       agentSelectEl.disabled = false;
+    }
+  });
+
+  devinModelSelectEl.addEventListener('change', async () => {
+    const chosen = devinModelSelectEl.value;
+    if (!chosen) return;
+    devinModelSelectEl.disabled = true;
+    reconnecting = true;
+    renderMcpStatus({ ready: false, error: 'Trocando modelo do Devin…' });
+    try {
+      const next = await setDevinModel(chosen);
+      renderMcpStatus(next);
+    } catch (err) {
+      renderMcpStatus({ ready: false, error: String(err) });
+      LogFrontendError(`setDevinModel: failed: ${err && err.stack ? err.stack : err}`).catch(() => {});
+    } finally {
+      reconnecting = false;
+      devinModelSelectEl.disabled = false;
     }
   });
 
@@ -261,4 +330,8 @@ function escapeHtml(text) {
   const div = document.createElement('div');
   div.textContent = text ?? '';
   return div.innerHTML;
+}
+
+function escapeAttribute(text) {
+  return escapeHtml(text).replaceAll('"', '&quot;').replaceAll("'", '&#39;');
 }

@@ -67,3 +67,16 @@ func TestEnrichedEnv_LetsPATHOnlyToolResolve(t *testing.T) {
 		t.Fatalf("expected the original PATH to be preserved (not replaced); got %q", enrichedPath)
 	}
 }
+
+func TestCommandContextResolvesACommandWithTheEnrichedPath(t *testing.T) {
+	ctx, cancel := context.WithTimeout(context.Background(), 5*time.Second)
+	defer cancel()
+	cmd := CommandContext(ctx, "sh", "-c", "printf resolved")
+	out, err := cmd.Output()
+	if err != nil {
+		t.Fatalf("CommandContext could not execute a PATH command: %v", err)
+	}
+	if string(out) != "resolved" {
+		t.Fatalf("CommandContext output = %q, want resolved", out)
+	}
+}

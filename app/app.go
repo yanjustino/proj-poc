@@ -7,6 +7,7 @@ import (
 	"io"
 	"log"
 	"os"
+	"os/exec"
 	"path/filepath"
 	"regexp"
 	"slices"
@@ -58,6 +59,10 @@ type App struct {
 	// ReconnectMCP (and SetAgent, which just changes this then calls it)
 	// can respawn mhl with the current value without re-deriving it.
 	agent string
+	// devinModel is passed to the workflow as SENPAI_DEVIN_MODEL. It is kept
+	// independently from agent so a user's choice survives switching away
+	// from Devin and back.
+	devinModel string
 
 	// emit sends one event to the frontend. Defaults to a real
 	// runtime.EventsEmit(a.ctx, ...) call in startup(), but stays a field
@@ -131,7 +136,9 @@ func (a *App) startup(ctx context.Context) {
 		log.Printf("mhl bridge: resolve codex cwd (Codex may see more of the filesystem than intended): %v", err)
 	}
 	a.codexCwdDir = codexCwdDir
-	a.agent = loadSettings().Agent
+	settings := loadSettings()
+	a.agent = settings.Agent
+	a.devinModel = settings.DevinModel
 
 	if err := a.connectBridge(); err != nil {
 		log.Printf("mhl bridge: failed to start: %v", err)
@@ -149,7 +156,7 @@ func (a *App) startup(ctx context.Context) {
 // startup() and ReconnectMCP() spawn a bridge from, so the two can't drift
 // into starting it with different arguments.
 func (a *App) connectBridge() error {
-	client, err := mhlbridge.Start(a.ctx, a.mhlPath, a.workflowsDir, a.stateDir, a.dataDir, a.codexCwdDir, a.agent)
+	client, err := mhlbridge.Start(a.ctx, a.mhlPath, a.workflowsDir, a.stateDir, a.dataDir, a.codexCwdDir, a.agent, a.devinModel)
 	if err != nil {
 		return err
 	}
@@ -247,10 +254,105 @@ func (a *App) SetAgent(agent string) (string, error) {
 	if !validAgents[agent] {
 		return "", fmt.Errorf("agente desconhecido: %q (use codex | claude | devin)", agent)
 	}
-	if err := saveSettings(appSettings{Agent: agent}); err != nil {
+	if err := saveSettings(appSettings{Agent: agent, DevinModel: a.devinModel}); err != nil {
 		log.Printf("mhl bridge: save agent setting: %v", err)
 	}
 	a.agent = agent
+	return a.ReconnectMCP()
+}
+
+type devinModel struct {
+	ID          string `json:"id"`
+	Label       string `json:"label"`
+	FamilyLabel string `json:"familyLabel"`
+}
+
+type devinModelsResponse struct {
+	Families []struct {
+		FamilyLabel string `json:"family_label"`
+		Variants    []struct {
+			ModelUID string `json:"model_uid"`
+			Label    string `json:"label"`
+		} `json:"variants"`
+	} `json:"families"`
+}
+
+// ListDevinModels asks the authenticated Devin CLI which models are available
+// to this user. Only the fields needed by the picker are returned to the UI.
+func (a *App) ListDevinModels() (string, error) {
+	ctx := a.ctx
+	if ctx == nil {
+		ctx = context.Background()
+	}
+	ctx, cancel := context.WithTimeout(ctx, 30*time.Second)
+	defer cancel()
+
+	cmd := mhlbridge.CommandContext(ctx, "devin", "models", "list", "--format", "json")
+	out, err := cmd.Output()
+	if err != nil {
+		if ctx.Err() != nil {
+			return "", fmt.Errorf("listar modelos do Devin: %w", ctx.Err())
+		}
+		if exitErr, ok := err.(*exec.ExitError); ok {
+			if detail := strings.TrimSpace(string(exitErr.Stderr)); detail != "" {
+				return "", fmt.Errorf("listar modelos do Devin: %s", detail)
+			}
+		}
+		return "", fmt.Errorf("listar modelos do Devin: %w", err)
+	}
+	models, err := parseDevinModels(out)
+	if err != nil {
+		return "", err
+	}
+	body, err := json.Marshal(models)
+	if err != nil {
+		return "", err
+	}
+	return string(body), nil
+}
+
+func parseDevinModels(data []byte) ([]devinModel, error) {
+	var response devinModelsResponse
+	if err := json.Unmarshal(data, &response); err != nil {
+		return nil, fmt.Errorf("decodificar modelos do Devin: %w", err)
+	}
+	models := make([]devinModel, 0)
+	for _, family := range response.Families {
+		for _, variant := range family.Variants {
+			if variant.ModelUID == "" {
+				continue
+			}
+			label := variant.Label
+			if label == "" {
+				label = variant.ModelUID
+			}
+			models = append(models, devinModel{ID: variant.ModelUID, Label: label, FamilyLabel: family.FamilyLabel})
+		}
+	}
+	if len(models) == 0 {
+		return nil, fmt.Errorf("o Devin não retornou nenhum modelo disponível")
+	}
+	return models, nil
+}
+
+func (a *App) GetDevinModel() string {
+	return a.devinModel
+}
+
+// SetDevinModel persists the exact model_uid returned by ListDevinModels and
+// restarts mhl because its environment is fixed when the process starts.
+func (a *App) SetDevinModel(model string) (string, error) {
+	model = strings.TrimSpace(model)
+	if model == "" {
+		return "", fmt.Errorf("modelo do Devin não pode ser vazio")
+	}
+	if strings.ContainsAny(model, "\x00\r\n") {
+		return "", fmt.Errorf("modelo do Devin inválido")
+	}
+	if err := saveSettings(appSettings{Agent: a.agent, DevinModel: model}); err != nil {
+		return "", fmt.Errorf("salvar modelo do Devin: %w", err)
+	}
+	a.devinModel = model
 	return a.ReconnectMCP()
 }
 
