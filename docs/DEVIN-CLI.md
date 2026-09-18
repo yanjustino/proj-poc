@@ -66,7 +66,8 @@ desliga notificacoes; sem isso, sequencias ANSI podem contaminar o stdout de
 cerca Markdown externa (` ```json ... ``` `), que o CLI pode emitir mesmo
 quando o prompt pede JSON cru; cercas dentro de campos sao preservadas.
 Respostas vazias observadas em chamadas reais entram na politica de retry do
-agente (ate tres tentativas), junto com timeout, rate limit e erros 500/503.
+agente (ate cinco tentativas), junto com timeout, rate limit, erros 500/503 e
+falhas transitorias que o CLI marca com `cognition.ai/retryable: true`.
 O perfil nao inclui `org_id`, credenciais nem estado de setup: esses dados sao
 especificos da instalacao autenticada do usuario e nao podem ser sobrescritos
 por uma configuracao distribuida com o aplicativo.

@@ -48,9 +48,13 @@ export agent Devin {
         "--print"
     ]
     retry: {
-        max_attempts: 3
-        delay: 2s
-        retry_on: [500, 503, "timeout", "rate_limit", "empty response"]
+        max_attempts: 5
+        delay: 5s
+        // O Devin CLI devolve falhas transitorias do backend como exit 1,
+        // mas inclui cognition.ai/retryable:true no stderr. Esse marcador e
+        // mais confiavel que depender apenas de HTTP 500/503, que o CLI nao
+        // preserva necessariamente na mensagem externa.
+        retry_on: [500, 503, "timeout", "rate_limit", "empty response", "retryable", "unavailable", "Connection error"]
     }
 }
 
