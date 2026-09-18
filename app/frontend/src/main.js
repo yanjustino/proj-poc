@@ -2,6 +2,14 @@ import './style.css';
 import { LogFrontendError } from '../wailsjs/go/main/App';
 import { mountShell } from './views/shell.js';
 
+// Apply the saved preference before the shell is mounted, avoiding a flash
+// of the dark theme when a user has chosen the light one.
+try {
+  document.documentElement.dataset.theme = localStorage.getItem('senpai-theme') === 'light' ? 'light' : 'dark';
+} catch {
+  document.documentElement.dataset.theme = 'dark';
+}
+
 // Forward every uncaught error/rejection into the Go process's own log
 // (App.LogFrontendError) — a packaged production build has no reachable
 // devtools console by default, so this is the only way a bug like "the

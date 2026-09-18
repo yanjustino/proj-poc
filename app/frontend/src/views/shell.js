@@ -16,6 +16,7 @@ import { renderWorkItemView } from './workitem-view.js';
 import { getState, setState, subscribe } from '../state.js';
 import { mountReadingPane } from '../reading-pane.js';
 import { icon } from '../icons.js';
+import brandSymbol from '../assets/images/senpai-symbol.png';
 
 const LEVEL_SHORT = { discovery: 'Discovery', delivery: 'Delivery' };
 
@@ -42,10 +43,14 @@ export async function mountShell(root) {
       <aside class="sidebar">
         <div class="drag-strip"></div>
         <div class="sidebar-top">
-          <div class="brand"><span class="brand-mark">S</span><span class="brand-name">Senpai</span></div>
+          <div class="brand">
+            <span class="brand-mark"><img src="${brandSymbol}" alt="" /></span>
+            <span class="brand-copy"><span class="brand-name">Senpai</span><small>Refiner</small></span>
+          </div>
           <div class="sidebar-top-actions">
             <button class="icon-btn" aria-label="Novo work-item" title="Novo work-item" data-create>${icon('plus', 15)}</button>
             <button class="icon-btn" aria-label="Maximizar janela" title="Maximizar/restaurar janela" data-toggle-maximise>${icon('maximize', 15)}</button>
+            <button class="icon-btn" aria-label="Usar tema claro" title="Usar tema claro" data-theme-toggle>${icon('sun', 15)}</button>
           </div>
         </div>
         <div class="nav-search">${icon('search', 14)}<input placeholder="Buscar work-item..." data-filter /></div>
@@ -79,6 +84,28 @@ export async function mountShell(root) {
   const devinModelRow = root.querySelector('[data-devin-model-row]');
   const devinModelSelectEl = root.querySelector('[data-devin-model-select]');
   const appVersionEl = root.querySelector('[data-app-version]');
+  const themeToggleEl = root.querySelector('[data-theme-toggle]');
+
+  function renderThemeToggle() {
+    const isLight = document.documentElement.dataset.theme === 'light';
+    const label = isLight ? 'Usar tema escuro' : 'Usar tema claro';
+    themeToggleEl.innerHTML = icon(isLight ? 'moon' : 'sun', 15);
+    themeToggleEl.setAttribute('aria-label', label);
+    themeToggleEl.title = label;
+    themeToggleEl.setAttribute('aria-pressed', String(isLight));
+  }
+
+  renderThemeToggle();
+  themeToggleEl.addEventListener('click', () => {
+    const nextTheme = document.documentElement.dataset.theme === 'light' ? 'dark' : 'light';
+    document.documentElement.dataset.theme = nextTheme;
+    try {
+      localStorage.setItem('senpai-theme', nextTheme);
+    } catch {
+      // A troca continua válida para a sessão mesmo sem armazenamento local.
+    }
+    renderThemeToggle();
+  });
 
   appVersionEl.textContent = `Senpai ${await appVersion().catch(() => 'versão desconhecida')}`;
 
