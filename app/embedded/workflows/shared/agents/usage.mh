@@ -18,9 +18,11 @@ export memory Usage {
 // por spike real (FASE0-ACHADOS.md §5) e reconfirmado numa chamada real
 // direta a `claude -p ... --output-format json` (fora do mhl, comparando o
 // envelope cru byte a byte): usage.input_tokens/output_tokens junto do
-// conteudo pedido, duplicado em `result` (string JSON) e `structured_output`
-// (ja objeto). Devolvemos `result` porque e exatamente a string que o
-// `json.parse` do passo seguinte espera.
+// conteudo pedido em `structured_output` (objeto validado pelo schema). O
+// campo `result` pode conter uma explicacao em linguagem natural mesmo quando
+// `structured_output` esta correto — comportamento observado no Claude para
+// Windows. Preferimos o objeto validado e mantemos `result` apenas como
+// fallback para versoes antigas do CLI que nao exponham `structured_output`.
 //
 // Toda variante de extract_* devolve exatamente as mesmas 6 chaves — mesmo
 // quando um backend nao tem o conceito (cache/custo do Devin, cache_creation
@@ -63,10 +65,13 @@ export tool UsageParser {
         cache_creation_tokens: number, cache_read_tokens: number, cost_usd: number
     } -> {
         var envelope = json.parse(raw)
+        var content = envelope.result
+        var structured = envelope.get("structured_output", null)
+        if (structured != null) content = json.stringify(structured)
         return {
             tokens_in: envelope.usage.input_tokens,
             tokens_out: envelope.usage.output_tokens,
-            content: envelope.result,
+            content: content,
             cache_creation_tokens: envelope.usage.cache_creation_input_tokens,
             cache_read_tokens: envelope.usage.cache_read_input_tokens,
             cost_usd: envelope.total_cost_usd,
@@ -126,7 +131,7 @@ test UsageParserSpec {
     }
 
     describe extracts_claude_tokens_cache_and_cost_from_the_real_envelope_shape {
-        var raw = "{\"result\":\"{\\\"ok\\\":true}\",\"total_cost_usd\":0.128202,\"usage\":{" +
+        var raw = "{\"result\":\"Resposta em linguagem natural\",\"structured_output\":{\"ok\":true},\"total_cost_usd\":0.128202,\"usage\":{" +
             "\"input_tokens\":2,\"output_tokens\":4," +
             "\"cache_creation_input_tokens\":21260,\"cache_read_input_tokens\":0}}"
         var parsed = UsageParser.extract_claude(raw)
@@ -136,6 +141,14 @@ test UsageParserSpec {
         are_equal(parsed.cache_creation_tokens, 21260)
         are_equal(parsed.cache_read_tokens, 0)
         are_equal(parsed.cost_usd, 0.128202)
+    }
+
+    describe falls_back_to_claude_result_when_structured_output_is_absent {
+        var raw = "{\"result\":\"{\\\"ok\\\":true}\",\"total_cost_usd\":0.01,\"usage\":{" +
+            "\"input_tokens\":1,\"output_tokens\":2," +
+            "\"cache_creation_input_tokens\":0,\"cache_read_input_tokens\":0}}"
+        var parsed = UsageParser.extract_claude(raw)
+        are_equal(parsed.content, "{\"ok\":true}")
     }
 
     // Formato confirmado numa chamada real ao `codex exec --json` (mesmos
