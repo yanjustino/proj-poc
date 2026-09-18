@@ -6,7 +6,7 @@
 // (scroll position, open <details>, iframe content) that has nothing to do
 // with which work-item is selected.
 const state = {
-  view: 'list', // 'list' | 'workitem'
+  view: 'list', // 'list' | 'workitem' | 'logs'
   projectId: null,
 };
 

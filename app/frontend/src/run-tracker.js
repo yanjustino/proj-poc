@@ -6,7 +6,7 @@
 import { resumeAndWatch } from './api.js';
 import { dotClass } from './status.js';
 
-const STATE_LABEL = {
+export const STATE_LABEL = {
   working: 'gerando',
   queued: 'na fila',
   paused: 'aguarda aprovação',

@@ -68,6 +68,10 @@ button { cursor: pointer; }
    the percentage share would drop below a usable minimum, per the user's
    "só fica fixa quando a tela chega num tamanho mínimo". */
 .shell { height: 100vh; display: grid; grid-template-columns: minmax(210px, 20%) minmax(320px, 39%) minmax(380px, 41%); background: var(--bg-0); overflow: hidden; }
+/* Tela de Logs: sem work-item aberto, a coluna de leitura não tem o que
+   mostrar — dá a largura dela pro painel de log em vez de deixá-la vazia. */
+.shell.logs-open { grid-template-columns: minmax(210px, 20%) 1fr; }
+.shell.logs-open .reading-pane { display: none; }
 
 /* The reading pane reuses .document's header/body/shadow (see markup in
    shell.js: class="document reading-pane") — these two rules are the only
@@ -275,6 +279,21 @@ button { cursor: pointer; }
 .run-feedback-submit { flex: none; align-self: flex-end; }
 label.check { display: inline-flex; align-items: center; gap: 6px; font-size: 11px; color: var(--muted); }
 label.check input { accent-color: var(--blue); width: 15px; height: 15px; }
+
+/* Logs view — tela separada (data-open-logs no sidebar) para acompanhar a
+   saída retida de uma execução (mhl_run_logs), incluindo o stdout/stderr
+   cru dos agentes CLI (Devin/Codex/Claude) chamados por Writer.generate. */
+.logs-view { display: flex; gap: 16px; height: calc(100vh - 68px); min-height: 0; }
+.logs-runs { flex: none; width: 280px; display: flex; flex-direction: column; min-height: 0; }
+.logs-runs-head { display: flex; align-items: center; justify-content: space-between; margin-bottom: 8px; }
+.logs-runs-head h3 { font-size: 13px; margin: 0; }
+.logs-run-list { flex: 1 1 auto; overflow: auto; min-height: 0; }
+.logs-run-list .list-item small { display: block; }
+.logs-panel { flex: 1 1 auto; min-width: 0; display: flex; flex-direction: column; background: var(--surface); border: 1px solid var(--line); border-radius: var(--radius-md); box-shadow: var(--soft-shadow); overflow: hidden; }
+.logs-panel-head { flex: none; display: flex; align-items: center; justify-content: space-between; gap: 12px; padding: 10px 14px; border-bottom: 1px solid var(--line); }
+.logs-panel-meta { display: flex; align-items: center; gap: 8px; min-width: 0; font-size: 12px; color: var(--ink); }
+.logs-run-id { color: var(--muted); font-family: var(--mono); font-size: 10px; }
+.logs-output { flex: 1 1 auto; margin: 0; padding: 14px; overflow: auto; white-space: pre-wrap; word-break: break-word; font-family: var(--mono); font-size: 11px; line-height: 1.6; color: #55534b; background: var(--bg-0); }
 
 /* One button family for the whole app — replaces the old .btn/.pill-btn/
    .doc-action split (docs/design-system-senpai.html §05/§11: those three

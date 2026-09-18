@@ -458,10 +458,22 @@ func (c *Client) RunList(ctx context.Context) (json.RawMessage, error) {
 // since the given cursor (`since` — pass "" for the start; feed back the
 // response's own `nextSince` to continue). Shape ({text, nextSince,
 // dropped?}) returned as raw JSON — no caller needs it typed yet.
+//
+// `since` crosses the App/JS boundary as a string (Wails-bound methods only
+// take/return strings and JSON blobs cleanly), but mhl_run_logs's own
+// `since` parameter unmarshals into an int64 on the mhl side — sending it
+// through as a JSON string here fails with "invalid params: json: cannot
+// unmarshal string into Go struct field .since of type int64". Parsed back
+// into a number before it goes in the args map, so what mhl receives always
+// matches what it returned as `nextSince` in the first place.
 func (c *Client) RunLogs(ctx context.Context, runID, since string) (json.RawMessage, error) {
 	args := map[string]any{"runId": runID}
 	if since != "" {
-		args["since"] = since
+		n, err := strconv.ParseInt(since, 10, 64)
+		if err != nil {
+			return nil, fmt.Errorf("mhlbridge: RunLogs: invalid since cursor %q: %w", since, err)
+		}
+		args["since"] = n
 	}
 	result, err := c.ToolsCall(ctx, "mhl_run_logs", args)
 	if err != nil {

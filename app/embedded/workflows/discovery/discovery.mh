@@ -23,13 +23,15 @@ import {
 // schema de item unico (workflows/delivery/). HistoriasInstruction/
 // HistoriasSchemaFile ja sao compartilhados (artifacts_common.mh) porque
 // "quebrar uma feature em historias" e a mesma operacao nos dois workflows.
+// Sem `wiki_content` (ver comentario acima de AdrInstruction em
+// artifacts_common.mh) — features deriva de requisitos/adr/der/diagramas ja
+// sintetizados, nao da wiki bruta.
 prompt FeaturesInstruction(
     schema_conventions: prompt,
     requisitos_content: string,
     adr_content: string,
     der_content: string,
     diagramas_content: string,
-    wiki_content: string,
     feedback_content: string
 ) from "prompts/features.prompt.md"
 
@@ -235,7 +237,6 @@ workflow Discovery {
                 schema_conventions: ArtifactSchema(),
                 requisitos_content: requisitos_content,
                 atributos_content: atributos_content,
-                wiki_content: Context.wiki(project_id),
                 feedback_content: FeedbackBlock.render(pending_feedback)
             ),
             schema_file: AdrSchemaFile.get(),
@@ -280,7 +281,6 @@ workflow Discovery {
                 schema_conventions: ArtifactSchema(),
                 requisitos_content: requisitos_content,
                 atributos_content: atributos_content,
-                wiki_content: Context.wiki(project_id),
                 feedback_content: FeedbackBlock.render(pending_feedback)
             ),
             schema_file: DerSchemaFile.get(),
@@ -319,7 +319,6 @@ workflow Discovery {
                 schema_conventions: ArtifactSchema(),
                 requisitos_content: requisitos_content,
                 atributos_content: atributos_content,
-                wiki_content: Context.wiki(project_id),
                 feedback_content: FeedbackBlock.render(pending_feedback)
             ),
             schema_file: DiagramasSchemaFile.get(),
@@ -377,7 +376,6 @@ workflow Discovery {
                 adr_content: adr_content,
                 der_content: der_content,
                 diagramas_content: diagramas_content,
-                wiki_content: Context.wiki(project_id),
                 feedback_content: FeedbackBlock.render(pending_feedback)
             ),
             schema_file: FeaturesSchemaFile.get(), project_id: project_id, artifact: current_artifact
@@ -416,7 +414,7 @@ workflow Discovery {
         var feature_dir = ArtifactId.find_feature_dir(project_id, feature_id)
         var feature_content = Context.artifact(project_id, "features/" + feature_dir + "/feature.html")
         var response = Writer.generate(
-            prompt: HistoriasInstruction(schema_conventions: ArtifactSchema(), feature_content: feature_content, wiki_content: Context.wiki(project_id), feedback_content: FeedbackBlock.render(pending_feedback)),
+            prompt: HistoriasInstruction(schema_conventions: ArtifactSchema(), feature_content: feature_content, feedback_content: FeedbackBlock.render(pending_feedback)),
             schema_file: HistoriasSchemaFile.get(), project_id: project_id, artifact: current_artifact
         )
         tokens_in = response.tokens_in

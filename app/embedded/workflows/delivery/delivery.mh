@@ -25,18 +25,19 @@ import {
 // nunca a LLM escolhendo se "tem ou nao" atributos).
 tool NoAtributos {
     placeholder(): string ->
-        "(não se aplica neste nível — Delivery não gera atributos de qualidade; considere apenas requisitos e wiki)"
+        "(não se aplica neste nível — Delivery não gera atributos de qualidade; considere apenas requisitos)"
 }
 
 // Artefato final — especifico de Delivery, um item so por vez (nao um
-// backlog inteiro como o `features`/`historias` do Discovery).
+// backlog inteiro como o `features`/`historias` do Discovery). Sem
+// `wiki_content` (ver comentario de AdrInstruction em artifacts_common.mh) —
+// deriva de requisitos/adr/der/diagramas ja sintetizados, nao da wiki bruta.
 prompt FeatureInstruction(
     schema_conventions: prompt,
     requisitos_content: string,
     adr_content: string,
     der_content: string,
     diagramas_content: string,
-    wiki_content: string,
     feedback_content: string
 ) from "prompts/feature.prompt.md"
 
@@ -46,7 +47,6 @@ prompt HistoriaInstruction(
     adr_content: string,
     der_content: string,
     diagramas_content: string,
-    wiki_content: string,
     feedback_content: string
 ) from "prompts/historia.prompt.md"
 
@@ -247,7 +247,6 @@ workflow Delivery {
                 schema_conventions: ArtifactSchema(),
                 requisitos_content: requisitos_content,
                 atributos_content: NoAtributos.placeholder(),
-                wiki_content: Context.wiki(project_id),
                 feedback_content: FeedbackBlock.render(pending_feedback)
             ),
             schema_file: AdrSchemaFile.get(), project_id: project_id, artifact: current_artifact
@@ -288,7 +287,6 @@ workflow Delivery {
                 schema_conventions: ArtifactSchema(),
                 requisitos_content: requisitos_content,
                 atributos_content: NoAtributos.placeholder(),
-                wiki_content: Context.wiki(project_id),
                 feedback_content: FeedbackBlock.render(pending_feedback)
             ),
             schema_file: DerSchemaFile.get(), project_id: project_id, artifact: current_artifact
@@ -322,7 +320,6 @@ workflow Delivery {
                 schema_conventions: ArtifactSchema(),
                 requisitos_content: requisitos_content,
                 atributos_content: NoAtributos.placeholder(),
-                wiki_content: Context.wiki(project_id),
                 feedback_content: FeedbackBlock.render(pending_feedback)
             ),
             schema_file: DiagramasSchemaFile.get(), project_id: project_id, artifact: current_artifact
@@ -378,7 +375,6 @@ workflow Delivery {
                     adr_content: adr_content,
                     der_content: der_content,
                     diagramas_content: diagramas_content,
-                    wiki_content: Context.wiki(project_id),
                     feedback_content: FeedbackBlock.render(pending_feedback)
                 ),
                 schema_file: HistoriaSchemaFile.get(), project_id: project_id, artifact: current_artifact
@@ -391,7 +387,6 @@ workflow Delivery {
                     adr_content: adr_content,
                     der_content: der_content,
                     diagramas_content: diagramas_content,
-                    wiki_content: Context.wiki(project_id),
                     feedback_content: FeedbackBlock.render(pending_feedback)
                 ),
                 schema_file: FeatureSchemaFile.get(), project_id: project_id, artifact: current_artifact
@@ -438,7 +433,7 @@ workflow Delivery {
         var feature_content = Context.artifact(project_id, "feature.html")
         if (feature_content.is_empty()) fail("gere 'feature' antes de 'historias'")
         var response = Writer.generate(
-            prompt: HistoriasInstruction(schema_conventions: ArtifactSchema(), feature_content: feature_content, wiki_content: Context.wiki(project_id), feedback_content: FeedbackBlock.render(pending_feedback)),
+            prompt: HistoriasInstruction(schema_conventions: ArtifactSchema(), feature_content: feature_content, feedback_content: FeedbackBlock.render(pending_feedback)),
             schema_file: HistoriasSchemaFile.get(), project_id: project_id, artifact: current_artifact
         )
         tokens_in = response.tokens_in

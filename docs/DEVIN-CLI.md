@@ -42,10 +42,18 @@ confiaveis, `--respect-workspace-trust false`.
 `workflows/shared/agents/agents.mh` chama:
 
 ```text
-devin --config <workflows>/shared/agents/devin-generator.json \
-  --model <modelo> --respect-workspace-trust false \
+devin --model <modelo> --respect-workspace-trust false \
   --permission-mode auto --prompt-file <arquivo-temporario> --print
 ```
+
+**TEMPORARIO:** `--config <workflows>/shared/agents/devin-generator.json` foi
+removido de `agents.mh` porque, combinado com `--permission-mode`, estava
+derrubando a chamada com `connection error`/`cognition.ai/errorKind:
+unavailable` mesmo com o valor de permission-mode corrigido. Sem `--config`,
+o Devin roda SEM o deny-list abaixo — ele pode ler/executar/fazer fetch no
+CWD do `mhl` (que contem work-items de outros projetos). Restaurar assim que
+a causa raiz for confirmada via a tela de Logs (ver "Visibilidade de
+execucao" abaixo).
 
 O prompt e gravado num arquivo temporario dentro do proprio work-item e
 removido ao final da chamada. Isso evita o limite de aproximadamente 32 KiB
@@ -71,6 +79,18 @@ falhas transitorias que o CLI marca com `cognition.ai/retryable: true`.
 O perfil nao inclui `org_id`, credenciais nem estado de setup: esses dados sao
 especificos da instalacao autenticada do usuario e nao podem ser sobrescritos
 por uma configuracao distribuida com o aplicativo.
+
+## Visibilidade de execucao
+
+O app tem uma tela de Logs separada da tela principal (icone de terminal na
+barra lateral, `data-open-logs` em `shell.js`) que le `mhl_run_logs`
+(`app.GetRunLogs` -> `mhlbridge.Client.RunLogs`) e mostra a saida retida de
+cada execucao, incluindo o stdout/stderr bruto que os agentes CLI
+(Devin/Codex/Claude) produzem via `Writer.generate`. Ela lista as execucoes
+da sessao atual (`mhl_run_list`), faz polling do log da execucao selecionada
+e tem um botao "Copiar" para levar o texto para um relatório de bug. Antes
+dela nao havia nenhum lugar na UI para ver essa saida quando uma chamada de
+agente falhava.
 
 ## Diferencas em relacao ao Codex/Claude
 

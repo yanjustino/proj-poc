@@ -34,15 +34,27 @@ export tool FeedbackBlock {
 export prompt BriefInstruction(schema_conventions: prompt, wiki_content: string, feedback_content: string) from "prompts/brief.prompt.md"
 export prompt AtributosInstruction(schema_conventions: prompt, brief_content: string, wiki_content: string, feedback_content: string) from "prompts/atributos.prompt.md"
 export prompt RequisitosInstruction(schema_conventions: prompt, brief_content: string, wiki_content: string, feedback_content: string) from "prompts/requisitos.prompt.md"
-export prompt AdrInstruction(schema_conventions: prompt, requisitos_content: string, atributos_content: string, wiki_content: string, feedback_content: string) from "prompts/adr.prompt.md"
-export prompt DerInstruction(schema_conventions: prompt, requisitos_content: string, atributos_content: string, wiki_content: string, feedback_content: string) from "prompts/der.prompt.md"
-export prompt DiagramasInstruction(schema_conventions: prompt, requisitos_content: string, atributos_content: string, wiki_content: string, feedback_content: string) from "prompts/diagramas.prompt.md"
+// Adr/Der/Diagramas/Historias nao recebem `wiki_content`, de proposito: sao
+// artefatos derivados de requisitos/atributos/feature ja sintetizados, nao
+// do material bruto da wiki (so brief/atributos/requisitos leem a wiki
+// diretamente). Alem de ser redundante (o que a wiki tem de relevante ja foi
+// destilado pelos artefatos predecessores), Context.wiki(project_id)
+// concatena TODAS as paginas da wiki do projeto — pode facilmente passar de
+// dezenas de KB. Devin recebe o prompt via `--prompt-file`, mas Claude/Codex
+// nao tem um flag equivalente (so leem argv ou stdin, e o bloco `agent` do
+// mhl nao suporta redirecionar stdin) — um prompt desse tamanho no argv
+// estoura o limite de ~32K caracteres de linha de comando do Windows
+// (CreateProcess), derrubando a chamada com "O nome do arquivo ou a extensao
+// e muito grande" (Windows error 206) antes mesmo de chegar no backend.
+export prompt AdrInstruction(schema_conventions: prompt, requisitos_content: string, atributos_content: string, feedback_content: string) from "prompts/adr.prompt.md"
+export prompt DerInstruction(schema_conventions: prompt, requisitos_content: string, atributos_content: string, feedback_content: string) from "prompts/der.prompt.md"
+export prompt DiagramasInstruction(schema_conventions: prompt, requisitos_content: string, atributos_content: string, feedback_content: string) from "prompts/diagramas.prompt.md"
 
 // Gera historias pra UMA feature — usado por Discovery (feature dentro do
 // backlog de uma Oportunidade) e por Delivery (a unica feature implicita de
 // um projeto standalone). `feature_content` e o feature.html de qualquer um
 // dos dois casos — a instrucao nao muda, so quem fornece o conteudo muda.
-export prompt HistoriasInstruction(schema_conventions: prompt, feature_content: string, wiki_content: string, feedback_content: string) from "prompts/historias.prompt.md"
+export prompt HistoriasInstruction(schema_conventions: prompt, feature_content: string, feedback_content: string) from "prompts/historias.prompt.md"
 
 prompt HistoriasSchemaContent() from "schemas/historias.schema.json"
 prompt BriefSchemaContent() from "schemas/brief.schema.json"

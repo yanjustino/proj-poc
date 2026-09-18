@@ -13,6 +13,7 @@ import {
 } from '../api.js';
 import { openNewWorkItemModal } from './new-workitem.js';
 import { renderWorkItemView } from './workitem-view.js';
+import { renderLogsView } from './logs-view.js';
 import { getState, setState, subscribe } from '../state.js';
 import { mountReadingPane } from '../reading-pane.js';
 import { icon } from '../icons.js';
@@ -49,6 +50,7 @@ export async function mountShell(root) {
           </div>
           <div class="sidebar-top-actions">
             <button class="icon-btn" aria-label="Novo work-item" title="Novo work-item" data-create>${icon('plus', 15)}</button>
+            <button class="icon-btn" aria-label="Ver logs de execução" title="Ver logs de execução" data-open-logs>${icon('terminal', 15)}</button>
             <button class="icon-btn" aria-label="Maximizar janela" title="Maximizar/restaurar janela" data-toggle-maximise>${icon('maximize', 15)}</button>
             <button class="icon-btn" aria-label="Usar tema claro" title="Usar tema claro" data-theme-toggle>${icon('sun', 15)}</button>
           </div>
@@ -76,6 +78,7 @@ export async function mountShell(root) {
     </div>
   `;
 
+  const shellEl = root.querySelector('.shell');
   const navList = root.querySelector('[data-nav-list]');
   const filterInput = root.querySelector('[data-filter]');
   const mainEl = root.querySelector('[data-main]');
@@ -294,11 +297,17 @@ export async function mountShell(root) {
     renderMain(initialTab);
   }
 
+  function openLogs() {
+    setState({ view: 'logs' });
+    renderMain();
+  }
+
   // Mirrors workitem-view.js's disposeTab: a generation or wiki question
   // started under one work-item keeps running (and writing into the shared
   // reading pane once it resolves) even after the user switches to a
   // different work-item entirely — disposeView() tells the outgoing
-  // work-item's view to stop before the next one takes over.
+  // work-item's view to stop before the next one takes over. Also covers
+  // switching away from the Logs screen (clears its polling intervals).
   let disposeView = null;
 
   async function renderMain(initialTab) {
@@ -306,6 +315,16 @@ export async function mountShell(root) {
     disposeView?.();
     disposeView = null;
     const state = getState();
+    // A coluna de leitura (reading-pane) so faz sentido junto de um
+    // work-item aberto — na tela de Logs ela so mostrava o placeholder da
+    // aba anterior ("Fontes não usa a coluna de leitura..."), sobrando
+    // largura inútil ao lado do painel de log. Escondida via classe (não
+    // desmontada) porque mountReadingPane roda uma vez só, pro app inteiro.
+    shellEl.classList.toggle('logs-open', state.view === 'logs');
+    if (state.view === 'logs') {
+      disposeView = renderLogsView(mainEl);
+      return;
+    }
     if (!state.projectId) {
       mainEl.innerHTML = '<div class="center">Selecione um work-item ou crie um novo para começar.</div>';
       return;
@@ -348,6 +367,8 @@ export async function mountShell(root) {
     await loadProjects();
     openWorkItem(project.id, 'fontes');
   });
+
+  root.querySelector('[data-open-logs]').addEventListener('click', () => openLogs());
 
   subscribe(() => renderNav());
 

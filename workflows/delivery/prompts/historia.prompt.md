@@ -18,8 +18,4 @@ ${der_content}
 
 ${diagramas_content}
 
-## Conteúdo da wiki
-
-${wiki_content}
-
 ${feedback_content}
