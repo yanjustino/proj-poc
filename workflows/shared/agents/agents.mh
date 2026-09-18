@@ -69,7 +69,11 @@ export agent Devin {
 // nao podem ser passados como argumento. O Devin aceita --prompt-file; este
 // adaptador grava um arquivo efemero estritamente dentro do work-item, usa um
 // UUID para chamadas concorrentes e o remove tanto no sucesso quanto no erro.
-tool DevinPromptFile {
+// Exportado porque Writer e consumido a partir de outros modulos
+// (Wiki/Discovery/Delivery). O runtime resolve a chamada indireta no escopo
+// do modulo importador; sem a exportacao, o caminho Devin falha com
+// `undefined variable "DevinPromptFile"`, embora o lint aceite a referencia.
+export tool DevinPromptFile {
     run(prompt: string, project_id: string): string -> {
         var path = Paths.root(Paths.ensure_valid(project_id)) + "/.devin-prompt-" + uuid.v4() + ".txt"
         fs.write(path, prompt)
