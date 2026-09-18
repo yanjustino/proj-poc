@@ -5,6 +5,7 @@ import { inlineMermaid, hasMermaidDiagram } from '../mermaid-inline.js';
 import { beginCustom, buildDocFrame, showHtmlDoc, showEmpty, showAction, showLoading } from '../reading-pane.js';
 import { setActiveRun, getActiveRun, clearActiveRun } from '../active-runs.js';
 import { dotClass } from '../status.js';
+import { icon } from '../icons.js';
 
 const LABELS = {
   brief: 'Brief',
@@ -21,6 +22,30 @@ const LABELS = {
 
 function labelFor(name) {
   return LABELS[name] || name;
+}
+
+const ARTIFACT_DESCRIPTIONS = {
+  brief: 'Visão executiva, contexto e objetivos que orientam o trabalho.',
+  atributos: 'Critérios não funcionais que moldam a qualidade da solução.',
+  requisitos: 'Necessidades funcionais, regras de negócio e resultados esperados.',
+  adr: 'Escolhas arquiteturais registradas com contexto e consequências.',
+  der: 'Entidades, atributos e relacionamentos essenciais do domínio.',
+  diagramas: 'Visões dos componentes, limites e principais fluxos do sistema.',
+  features: 'Capacidades de negócio conectadas aos requisitos e objetivos.',
+  historias: 'Histórias detalhadas para implementação e validação.',
+  feature: 'Detalhamento funcional da entrega e seus critérios de aceite.',
+  historia: 'Comportamento esperado, regras e critérios de aceite da história.',
+};
+
+const ARTIFACT_ICONS = {
+  brief: 'zap', atributos: 'checkCircle', requisitos: 'fileText', adr: 'layers', der: 'inbox',
+  diagramas: 'maximize', features: 'layers', historias: 'fileText', feature: 'layers', historia: 'fileText',
+};
+
+function descriptionFor(row) {
+  if (row.groupKey) return `Documento da coleção ${labelFor(row.entry.artifact)}.`;
+  if (row.featureId) return `Histórias vinculadas à feature ${row.featureId}.`;
+  return ARTIFACT_DESCRIPTIONS[row.entry.artifact] || 'Documento gerado a partir do contexto do work-item.';
 }
 
 // PENDING_COLLECTION maps a collection artifact's row key to where its
@@ -52,8 +77,8 @@ function itemTitleFromFilename(filename) {
   return base.replace(/-/g, ' ');
 }
 
-// renderArtefatosTab owns only the middle-column checklist now — a
-// dependency-gated list of artifacts with live status dots. Whatever is
+// renderArtefatosTab owns only the middle-column artifact map — a
+// dependency-gated card grid with live status dots. Whatever is
 // selected (a live generation, a "gerar" call-to-action, or a finished
 // artifact's preview) renders in the shared reading pane (reading-pane.js)
 // on the right, matching the 3-column reference layout.
@@ -84,14 +109,27 @@ export async function renderArtefatosTab(container, project, { onChanged }) {
   const workflow = project.level === 'discovery' ? 'Discovery' : 'Delivery';
 
   container.innerHTML = `
-    <div class="upload-row">
-      <label class="check"><input type="checkbox" data-buddy checked /> Revisar antes de gravar (Modo Buddy)</label>
+    <div class="artifact-map-head">
+      <div>
+        <div class="artifact-map-title"><h2>Mapa de artefatos</h2><span data-artifact-count>0 itens</span></div>
+        <p>Explore, gere e revise os documentos deste work-item.</p>
+      </div>
+      <div class="artifact-map-controls">
+        <label class="artifact-buddy"><input type="checkbox" data-buddy checked /><span>Modo Buddy</span></label>
+        <div class="artifact-filters">
+          <button class="artifact-filter active" data-filter="all">Todos</button>
+          <button class="artifact-filter" data-filter="ready">Prontos</button>
+          <button class="artifact-filter" data-filter="pending">Pendentes</button>
+        </div>
+      </div>
     </div>
-    <div class="artifact-list" data-list></div>
+    <div class="artifact-card-grid" data-list></div>
   `;
 
   const listEl = container.querySelector('[data-list]');
   const buddyCheckbox = container.querySelector('[data-buddy]');
+  const countEl = container.querySelector('[data-artifact-count]');
+  const filterButtons = [...container.querySelectorAll('[data-filter]')];
   showEmpty('Selecione um artefato para ler ou gerar.');
 
   let doneNames = new Set();
@@ -105,6 +143,7 @@ export async function renderArtefatosTab(container, project, { onChanged }) {
   let historiasDoneFeatureIds = new Set();
   const trackers = new Map(); // key -> { element, update, status }
   let selectedKey = sequence[0]?.artifact ?? null;
+  let activeFilter = 'all';
 
   // buildItemRows expands one collection-type entry into its real per-item
   // rows once its dir has children — replacing the single group row that
@@ -218,10 +257,19 @@ export async function renderArtefatosTab(container, project, { onChanged }) {
 
   function renderList() {
     const rows = rowsToRender();
-    if (!selectedKey || !rows.some((r) => r.key === selectedKey)) selectedKey = rows[0]?.key ?? null;
+    const visibleRows = rows.filter((row) => {
+      if (activeFilter === 'all') return true;
+      return activeFilter === 'ready' ? isRowDone(row) : !isRowDone(row);
+    });
+    if (!selectedKey || !visibleRows.some((r) => r.key === selectedKey)) selectedKey = visibleRows[0]?.key ?? null;
+    countEl.textContent = `${rows.length} ${rows.length === 1 ? 'item' : 'itens'}`;
 
-    let lastCategory = null;
-    listEl.innerHTML = rows
+    if (visibleRows.length === 0) {
+      listEl.innerHTML = '<div class="artifact-map-empty">Nenhum artefato neste filtro.</div>';
+      return;
+    }
+
+    listEl.innerHTML = visibleRows
       .map((row) => {
         const tracker = trackers.get(row.key);
         const done = isRowDone(row);
@@ -235,35 +283,37 @@ export async function renderArtefatosTab(container, project, { onChanged }) {
           : ready
             ? 'pronto para gerar'
             : `depende de: ${missingDeps(row.entry, doneNames).map(labelFor).join(', ')}`;
-        // A category header separates the checklist into named sections
-        // (Discovery/Contexto, Decisões e modelos, Features/Entrega) so a
-        // list that's grown to include e.g. six ADRs and four Features
-        // doesn't read as one undifferentiated scroll of buttons.
-        let groupHeader = '';
-        if (row.category && row.category !== lastCategory) {
-          groupHeader = `<div class="artifact-group-label">${escapeHtml(row.category)}</div>`;
-          lastCategory = row.category;
-        }
         // Only exactly the "pronto para gerar" case (ready, not done, no
         // tracker running/failed) gets the inline button — a failed/paused
         // row already has its own action in the reading pane (Tentar
         // novamente / Aprovar e continuar), right next to the content that
         // explains why.
         const showGenerate = ready && !done && !state;
+        const artifactName = row.entry.artifact;
+        const kindClass = ['adr', 'der'].includes(artifactName)
+          ? 'decision'
+          : artifactName === 'diagramas'
+            ? 'diagram'
+            : ['features', 'feature', 'historias', 'historia'].includes(artifactName)
+              ? 'feature'
+              : 'discovery';
         return `
-          ${groupHeader}
-          <div class="artifact-item">
-            <button class="artifact ${row.key === selectedKey ? 'active' : ''}" data-key="${row.key}" ${!ready && !done && !state ? 'disabled' : ''} title="${statusText}">
-              <span class="artifact-top"><strong>${row.label}</strong><i class="status-dot ${dot}"></i></span>
-              <small>${statusText}</small>
+          <article class="artifact-card ${kindClass} ${row.key === 'brief' ? 'featured' : ''} ${row.key === selectedKey ? 'selected' : ''} ${!done ? 'pending' : ''}">
+            <button class="artifact-card-main" data-key="${escapeHtml(row.key)}" ${!ready && !done && !state ? 'disabled' : ''} title="${escapeHtml(statusText)}">
+              <span class="artifact-card-kind"><i>${icon(ARTIFACT_ICONS[artifactName] || 'fileText', 14)}</i>${escapeHtml(row.category || labelFor(artifactName))}</span>
+              <strong>${escapeHtml(row.label)}</strong>
+              <span class="artifact-card-description">${escapeHtml(descriptionFor(row))}</span>
             </button>
-            ${showGenerate ? `<button class="button primary small artifact-generate-btn" data-generate="${row.key}" title="Gerar ${escapeHtml(row.label)}">Gerar</button>` : ''}
-          </div>
+            <footer class="artifact-card-foot">
+              <span class="status-dot ${dot}"></span><span>${escapeHtml(statusText)}</span>
+              ${showGenerate ? `<button class="artifact-card-generate" data-generate="${escapeHtml(row.key)}" title="Gerar ${escapeHtml(row.label)}">Gerar →</button>` : ''}
+            </footer>
+          </article>
         `;
       })
       .join('');
 
-    listEl.querySelectorAll('.artifact').forEach((button) => {
+    listEl.querySelectorAll('.artifact-card-main').forEach((button) => {
       button.addEventListener('click', () => {
         selectedKey = button.dataset.key;
         renderList();
@@ -286,6 +336,15 @@ export async function renderArtefatosTab(container, project, { onChanged }) {
       });
     });
   }
+
+  filterButtons.forEach((button) => {
+    button.addEventListener('click', () => {
+      activeFilter = button.dataset.filter;
+      filterButtons.forEach((candidate) => candidate.classList.toggle('active', candidate === button));
+      renderList();
+      renderDetail();
+    });
+  });
 
   function currentRow() {
     return rowsToRender().find((r) => r.key === selectedKey) || null;

@@ -9,6 +9,7 @@ import {
   listDevinModels,
   getDevinModel,
   setDevinModel,
+  appVersion,
 } from '../api.js';
 import { openNewWorkItemModal } from './new-workitem.js';
 import { renderWorkItemView } from './workitem-view.js';
@@ -63,6 +64,7 @@ export async function mountShell(root) {
           </select>
         </div>
         <div class="sidebar-status" data-mcp-status></div>
+        <div class="sidebar-version" data-app-version>Senpai</div>
       </aside>
       <main class="main" data-main></main>
       <article class="document reading-pane" data-reading-pane></article>
@@ -76,6 +78,9 @@ export async function mountShell(root) {
   const agentSelectEl = root.querySelector('[data-agent-select]');
   const devinModelRow = root.querySelector('[data-devin-model-row]');
   const devinModelSelectEl = root.querySelector('[data-devin-model-select]');
+  const appVersionEl = root.querySelector('[data-app-version]');
+
+  appVersionEl.textContent = `Senpai ${await appVersion().catch(() => 'versão desconhecida')}`;
 
   mountReadingPane(root.querySelector('[data-reading-pane]'));
 

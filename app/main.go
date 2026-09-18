@@ -24,6 +24,7 @@ func main() {
 	} else if logFile != nil {
 		defer logFile.Close()
 	}
+	log.Printf("senpai version: %s", currentAppVersion())
 
 	// Create an instance of the app structure
 	app := NewApp()

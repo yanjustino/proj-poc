@@ -2,6 +2,7 @@ import { listProjectDir, readProjectFile, startAndWatch } from '../api.js';
 import { renderMarkdown } from '../markdown.js';
 import { createRunTracker } from '../run-tracker.js';
 import { showMarkdownDoc, showEmpty } from '../reading-pane.js';
+import { icon } from '../icons.js';
 
 const GROUPS = [
   { dir: 'sources', label: 'Fontes' },
@@ -9,6 +10,15 @@ const GROUPS = [
   { dir: 'concepts', label: 'Conceitos' },
   { dir: 'answers', label: 'Respostas arquivadas' },
 ];
+
+const GROUP_ICONS = { index: 'layers', sources: 'fileText', entities: 'inbox', concepts: 'zap', answers: 'checkCircle' };
+const GROUP_DESCRIPTIONS = {
+  index: 'Visão geral e navegação do conhecimento consolidado.',
+  sources: 'Sínteses rastreáveis dos documentos enviados.',
+  entities: 'Pessoas, sistemas e organizações relevantes.',
+  concepts: 'Termos, regras e ideias centrais do domínio.',
+  answers: 'Respostas arquivadas para consulta posterior.',
+};
 
 // renderWikiTab owns only the middle column now (ask box + group tabs/tree
 // + lint controls) — the actual page content goes to the shared reading
@@ -31,19 +41,28 @@ export async function renderWikiTab(container, project) {
   // fontes/entidades/conceitos, the combined list became too long to
   // navigate at a glance.
   container.innerHTML = `
-    <div class="wiki-ask">
-      <input type="text" placeholder="Perguntar à wiki..." data-question />
-      <button class="button primary" data-ask>Perguntar</button>
-    </div>
-    <label class="check" style="margin-top:8px"><input type="checkbox" data-file-answer /> Arquivar a resposta como página nova</label>
-    <div data-ask-tracker></div>
-    <div class="wiki-answer" data-answer hidden></div>
+    <section class="wiki-query-card">
+      <div class="wiki-query-heading"><span>${icon('zap', 15)}</span><div><strong>Pergunte à sua wiki</strong><small>Consulte o conhecimento consolidado neste work-item.</small></div></div>
+      <div class="wiki-ask">
+        <input type="text" placeholder="O que você quer saber?" data-question />
+        <button class="button primary" data-ask>Perguntar</button>
+      </div>
+      <label class="check"><input type="checkbox" data-file-answer /> Arquivar a resposta como página nova</label>
+      <div data-ask-tracker></div>
+      <div class="wiki-answer" data-answer hidden></div>
+    </section>
 
-    <div class="tabs" data-tree-tabs></div>
-    <nav class="wiki-tree" data-tree></nav>
+    <div class="collection-map-head wiki-map-head">
+      <div>
+        <div class="collection-map-title"><h2>Páginas da wiki</h2><span data-wiki-count>0 páginas</span></div>
+        <p>Conhecimento organizado por fontes, entidades e conceitos.</p>
+      </div>
+      <button class="button tertiary small" data-lint-btn>${icon('checkCircle', 14)} Verificar wiki</button>
+    </div>
+    <div class="wiki-group-filters" data-tree-tabs></div>
+    <nav class="wiki-card-grid" data-tree></nav>
 
     <div class="wiki-lint-report">
-      <button class="button secondary small" data-lint-btn>Rodar lint da wiki</button>
       <div data-lint-tracker></div>
       <div data-lint-result></div>
     </div>
@@ -51,6 +70,7 @@ export async function renderWikiTab(container, project) {
 
   const tabsEl = container.querySelector('[data-tree-tabs]');
   const treeEl = container.querySelector('[data-tree]');
+  const wikiCountEl = container.querySelector('[data-wiki-count]');
   showEmpty('Selecione uma página da wiki para ler.');
 
   // latestByName is listProjectDir's own result, keyed by top-level name
@@ -73,7 +93,9 @@ export async function renderWikiTab(container, project) {
   }
 
   function markActiveRow() {
-    treeEl.querySelectorAll('button').forEach((b) => b.classList.toggle('active', b.dataset.path === openPath));
+    treeEl.querySelectorAll('[data-path]').forEach((button) => {
+      button.closest('.wiki-page-card')?.classList.toggle('selected', button.dataset.path === openPath);
+    });
   }
 
   // Índice gets a tab of its own (dir: "index") even though it's a single
@@ -93,7 +115,7 @@ export async function renderWikiTab(container, project) {
     const groups = groupsWithContent();
     if (!groups.some((g) => g.dir === selectedGroup)) selectedGroup = groups[0]?.dir ?? 'index';
     tabsEl.innerHTML = groups
-      .map((g) => `<button class="tab-btn ${g.dir === selectedGroup ? 'active' : ''}" data-group="${g.dir}">${escapeHtml(g.label)}</button>`)
+      .map((g) => `<button class="collection-filter ${g.dir === selectedGroup ? 'active' : ''}" data-group="${g.dir}">${escapeHtml(g.label)}</button>`)
       .join('');
     tabsEl.querySelectorAll('button').forEach((button) => {
       button.addEventListener('click', () => {
@@ -105,18 +127,26 @@ export async function renderWikiTab(container, project) {
   }
 
   function renderList() {
-    let html;
+    let pages;
     if (selectedGroup === 'index') {
-      html = `<button data-path="index.md">Índice</button>`;
+      pages = [{ path: 'index.md', label: 'Índice' }];
     } else {
       const children = (latestByName[selectedGroup]?.children || []).filter((c) => !c.isDir);
-      html = children
-        .map((child) => `<button data-path="${selectedGroup}/${child.name}">${escapeHtml(child.name.replace(/\.md$/, ''))}</button>`)
-        .join('');
+      pages = children.map((child) => ({ path: `${selectedGroup}/${child.name}`, label: child.name.replace(/\.md$/, '') }));
     }
-    treeEl.innerHTML = html || '<p class="doc-empty">Nada aqui ainda.</p>';
+    treeEl.innerHTML = pages.length
+      ? pages.map((page) => `
+          <article class="wiki-page-card ${page.path === openPath ? 'selected' : ''}">
+            <button data-path="${escapeHtml(page.path)}" data-label="${escapeHtml(page.label)}">
+              <span class="wiki-page-kind"><i>${icon(GROUP_ICONS[selectedGroup] || 'fileText', 14)}</i>${escapeHtml(selectedGroup === 'index' ? 'Índice' : GROUPS.find((g) => g.dir === selectedGroup)?.label || 'Wiki')}</span>
+              <strong>${escapeHtml(page.label)}</strong>
+              <span>${escapeHtml(GROUP_DESCRIPTIONS[selectedGroup] || 'Página de conhecimento do work-item.')}</span>
+              <footer><span class="status-dot done"></span>Disponível para leitura</footer>
+            </button>
+          </article>`).join('')
+      : '<div class="collection-map-empty">Nada aqui ainda.</div>';
     treeEl.querySelectorAll('button').forEach((button) => {
-      button.addEventListener('click', () => openPage('wiki', button.dataset.path, button.textContent).catch(() => {}));
+      button.addEventListener('click', () => openPage('wiki', button.dataset.path, button.dataset.label).catch(() => {}));
     });
     markActiveRow();
   }
@@ -131,6 +161,8 @@ export async function renderWikiTab(container, project) {
       return;
     }
     latestByName = Object.fromEntries(nodes.map((n) => [n.name, n]));
+    const pageCount = nodes.reduce((total, node) => total + (node.isDir ? (node.children || []).filter((child) => !child.isDir).length : node.name === 'index.md' ? 1 : 0), 0);
+    wikiCountEl.textContent = `${pageCount} ${pageCount === 1 ? 'página' : 'páginas'}`;
     if (groupsWithContent().length === 0) {
       tabsEl.innerHTML = '';
       treeEl.innerHTML = '<p class="doc-empty">Wiki ainda vazia.</p>';

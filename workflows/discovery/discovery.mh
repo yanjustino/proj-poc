@@ -313,6 +313,7 @@ workflow Discovery {
         if (requisitos_content.is_empty()) fail("gere 'requisitos' antes de 'diagramas'")
         var atributos_content = Context.artifact(project_id, "atributos.html")
         if (atributos_content.is_empty()) fail("gere 'atributos' antes de 'diagramas'")
+        
         var response = Writer.generate(
             prompt: DiagramasInstruction(
                 schema_conventions: ArtifactSchema(),
@@ -325,6 +326,7 @@ workflow Discovery {
             project_id: project_id,
             artifact: current_artifact
         )
+        
         tokens_in = response.tokens_in
         tokens_out = response.tokens_out
         var raw = response.content

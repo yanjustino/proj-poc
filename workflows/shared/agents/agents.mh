@@ -24,6 +24,7 @@
 import { Usage, UsageParser } from "usage.mh"
 import { StructuredOutput } from "structured_output.mh"
 import { WorkflowsRoot } from "../core/workflows_root.mh"
+import { Paths } from "../core/paths.mh"
 
 // Backend usado no ambiente alvo. O Devin CLI nao oferece uma flag de
 // JSON Schema equivalente a `codex --output-schema`/`claude --json-schema`;
@@ -53,12 +54,34 @@ export agent Devin {
         "--model", env("SENPAI_DEVIN_MODEL", "swe-1-6-slow"),
         "--respect-workspace-trust", "false",
         "--permission-mode", "normal",
-        "--print", "${prompt}"
+        "--prompt-file", "${prompt}",
+        "--print"
     ]
     retry: {
         max_attempts: 3
         delay: 2s
         retry_on: [500, 503, "timeout", "rate_limit", "empty response"]
+    }
+}
+
+// Windows limita a linha de comando criada por CreateProcess a cerca de 32K
+// caracteres. Prompts de ingestao incluem o documento e o JSON Schema, entao
+// nao podem ser passados como argumento. O Devin aceita --prompt-file; este
+// adaptador grava um arquivo efemero estritamente dentro do work-item, usa um
+// UUID para chamadas concorrentes e o remove tanto no sucesso quanto no erro.
+tool DevinPromptFile {
+    run(prompt: string, project_id: string): string -> {
+        var path = Paths.root(Paths.ensure_valid(project_id)) + "/.devin-prompt-" + uuid.v4() + ".txt"
+        fs.write(path, prompt)
+        var raw = ""
+        try {
+            raw = Devin.run(prompt: path)
+        } catch (err) {
+            fail(err)
+        } finally {
+            fs.delete(path)
+        }
+        return raw
     }
 }
 
@@ -168,7 +191,10 @@ export tool Writer {
     } -> {
         var picked = AgentSelector.pick(prompt: prompt)
         var raw = match picked {
-            nameof(Devin) -> Devin.run(prompt: DevinPrompt.build(instruction: prompt, schema: schema_file.content))
+            nameof(Devin) -> DevinPromptFile.run(
+                prompt: DevinPrompt.build(instruction: prompt, schema: schema_file.content),
+                project_id: project_id
+            )
             nameof(Claude) -> Claude.run(prompt: prompt, schema: schema_file.content)
             nameof(Codex) -> Codex.run(prompt: prompt, schema: schema_file.path)
         }

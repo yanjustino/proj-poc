@@ -67,6 +67,7 @@ func CommandContext(ctx context.Context, name string, args ...string) *exec.Cmd 
 	if runtime.GOOS == "windows" {
 		cmd := exec.CommandContext(ctx, name, args...)
 		cmd.Env = enrichedEnv(ctx, os.Environ())
+		setProcessGroup(cmd)
 		return cmd
 	}
 	cmd := exec.CommandContext(ctx, "/usr/bin/env", append([]string{name}, args...)...)

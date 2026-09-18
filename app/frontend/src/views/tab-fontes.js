@@ -39,22 +39,34 @@ export async function renderFontesTab(container, project, { onChanged }) {
   let active = true;
 
   container.innerHTML = `
-    <div class="upload-row">
-      <div class="upload-actions">
+    <div class="collection-map-head">
+      <div>
+        <div class="collection-map-title"><h2>Fontes do projeto</h2><span data-source-count>0 arquivos</span></div>
+        <p>Documentos usados como contexto para construir a wiki e os artefatos.</p>
+      </div>
+      <div class="collection-map-actions">
         <button class="button tertiary small" data-ingest-pending disabled>${icon('inbox', 14)} Ingerir pendentes</button>
         <button class="button primary small" data-add>${icon('plus', 14)} Adicionar fontes</button>
       </div>
     </div>
-    <div class="source-list" data-sources></div>
+    <div class="collection-filters" data-source-filters>
+      <button class="collection-filter active" data-source-filter="all">Todas</button>
+      <button class="collection-filter" data-source-filter="ready">Ingeridas</button>
+      <button class="collection-filter" data-source-filter="pending">Pendentes</button>
+    </div>
+    <div class="source-card-grid" data-sources></div>
   `;
 
   const sourcesEl = container.querySelector('[data-sources]');
   const addButton = container.querySelector('[data-add]');
   const ingestPendingButton = container.querySelector('[data-ingest-pending]');
+  const sourceCountEl = container.querySelector('[data-source-count]');
+  const filterButtons = [...container.querySelectorAll('[data-source-filter]')];
 
   let rawNames = [];
   let ingestedNames = new Set();
   let batching = false; // true only while ingestBatch's own sequential loop is driving things
+  let activeFilter = 'all';
   const trackers = new Map(); // filename -> live tracker (fresh or reattached), removed once that file's run reaches a terminal state
 
   // Keyed by project + filename (not just filename) so this stays correct
@@ -97,17 +109,24 @@ export async function renderFontesTab(container, project, { onChanged }) {
   }
 
   function render() {
+    const visibleNames = rawNames.filter((name) => {
+      if (activeFilter === 'all') return true;
+      return activeFilter === 'ready' ? ingestedNames.has(name) : !ingestedNames.has(name);
+    });
+    sourceCountEl.textContent = `${rawNames.length} ${rawNames.length === 1 ? 'arquivo' : 'arquivos'}`;
     if (rawNames.length === 0) {
-      sourcesEl.innerHTML = '<p class="doc-empty">Nenhuma fonte enviada ainda.</p>';
+      sourcesEl.innerHTML = '<div class="collection-map-empty">Nenhuma fonte enviada ainda.</div>';
+    } else if (visibleNames.length === 0) {
+      sourcesEl.innerHTML = '<div class="collection-map-empty">Nenhuma fonte neste filtro.</div>';
     } else {
       sourcesEl.innerHTML = '';
-      for (const name of rawNames) {
-        const row = document.createElement('div');
-        row.className = 'source-item';
+      for (const name of visibleNames) {
+        const row = document.createElement('article');
+        row.className = `source-card ${ingestedNames.has(name) ? 'ready' : 'pending'}`;
         sourcesEl.appendChild(row);
         const tracker = trackers.get(name);
         if (tracker) {
-          row.innerHTML = `<div class="source-row"><span class="source-name">${icon('fileText', 14)} <strong>${escapeHtml(name)}</strong></span></div>`;
+          row.innerHTML = sourceCardBody(name, 'Processando a fonte…', 'working');
           row.appendChild(tracker.element);
         } else {
           row.innerHTML = rowBody(name);
@@ -123,22 +142,35 @@ export async function renderFontesTab(container, project, { onChanged }) {
       : `${icon('inbox', 14)} Ingerir pendentes`;
   }
 
-  function rowBody(name) {
-    if (ingestedNames.has(name)) {
-      return `
-        <div class="source-row">
-          <span class="source-name">${icon('fileText', 14)} <strong>${escapeHtml(name)}</strong></span>
-          <span class="source-status source-status-done">${icon('checkCircle', 14)} Ingerido</span>
-        </div>
-      `;
-    }
+  function sourceCardBody(name, status, state, action = '') {
+    const extension = name.includes('.') ? name.split('.').pop().toUpperCase() : 'ARQUIVO';
     return `
-      <div class="source-row">
-        <span class="source-name">${icon('fileText', 14)} <strong>${escapeHtml(name)}</strong></span>
-        <button class="button secondary small" data-ingest-one ${batching ? 'disabled' : ''}>Ingerir</button>
-      </div>
+      <div class="source-card-kind"><i>${icon('fileText', 15)}</i><span>${escapeHtml(extension)}</span></div>
+      <strong title="${escapeHtml(name)}">${escapeHtml(name)}</strong>
+      <p>${state === 'done' ? 'Disponível como contexto na wiki.' : 'Aguardando processamento para entrar no contexto.'}</p>
+      <footer><span class="status-dot ${state}"></span><span>${escapeHtml(status)}</span>${action}</footer>
     `;
   }
+
+  function rowBody(name) {
+    if (ingestedNames.has(name)) {
+      return sourceCardBody(name, 'Ingerido', 'done');
+    }
+    return sourceCardBody(
+      name,
+      'Pendente',
+      '',
+      `<button class="source-card-action" data-ingest-one ${batching ? 'disabled' : ''}>Ingerir →</button>`,
+    );
+  }
+
+  filterButtons.forEach((button) => {
+    button.addEventListener('click', () => {
+      activeFilter = button.dataset.sourceFilter;
+      filterButtons.forEach((candidate) => candidate.classList.toggle('active', candidate === button));
+      render();
+    });
+  });
 
   addButton.addEventListener('click', async () => {
     addButton.disabled = true;

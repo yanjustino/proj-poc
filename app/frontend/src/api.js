@@ -38,6 +38,10 @@ export async function waitUntilReady() {
   }
 }
 
+export async function appVersion() {
+  return App.AppVersion();
+}
+
 export async function listWorkflows() {
   return parseJSON(await App.ListWorkflows(), 'ListWorkflows');
 }

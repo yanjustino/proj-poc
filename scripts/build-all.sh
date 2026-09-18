@@ -22,6 +22,7 @@ set -euo pipefail
 ROOT="$(CDPATH= cd -P -- "$(dirname -- "${BASH_SOURCE[0]}")/.." && pwd)"
 MHL_RUNTIME_DIR="${MHL_RUNTIME_DIR:-$HOME/Documents/mhl.lang.nosync/src/mhl-runtime}"
 WAILS="${WAILS:-$HOME/go/bin/wails}"
+APP_VERSION="${SENPAI_VERSION:-$(git -C "$ROOT" describe --tags --always --dirty)}"
 
 update_deps=0
 mode=debug
@@ -90,9 +91,9 @@ rm -rf "$bundle"
 # it, exactly like the VS Code task does.
 wails_failed=0
 if [ "$mode" = debug ]; then
-  ( cd "$ROOT/app" && CGO_LDFLAGS="-framework UniformTypeIdentifiers" "$WAILS" build -debug -clean ) || wails_failed=1
+  ( cd "$ROOT/app" && CGO_LDFLAGS="-framework UniformTypeIdentifiers" "$WAILS" build -debug -clean -ldflags "-X main.buildVersion=$APP_VERSION" ) || wails_failed=1
 else
-  ( cd "$ROOT/app" && CGO_LDFLAGS="-framework UniformTypeIdentifiers" "$WAILS" build -clean ) || wails_failed=1
+  ( cd "$ROOT/app" && CGO_LDFLAGS="-framework UniformTypeIdentifiers" "$WAILS" build -clean -ldflags "-X main.buildVersion=$APP_VERSION" ) || wails_failed=1
 fi
 if [ "$wails_failed" -ne 0 ]; then
   echo "warning: wails build reported a failure (likely its own flaky self-sign) — retrying the re-sign below before giving up" >&2

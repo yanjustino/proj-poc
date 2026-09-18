@@ -106,6 +106,7 @@ button { cursor: pointer; }
 .sidebar-status-copy { min-width: 0; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
 .sidebar-status-copy b { color: var(--ink); font-weight: 600; font-family: var(--sans); }
 .sidebar-status-reconnect { flex: none; white-space: nowrap; }
+.sidebar-version { flex: none; padding: 5px 7px 0; color: var(--muted); font: 10px var(--mono); opacity: .8; }
 
 /* Agent picker — sits just above .sidebar-status (its own top border reads
    as the divider between "work-items" and "app-level" chrome, so this one
@@ -137,30 +138,50 @@ button { cursor: pointer; }
 .tab-btn { border: 0; background: transparent; padding: 9px 14px; font-size: 12px; font-weight: 600; color: var(--muted); border-bottom: 2px solid transparent; }
 .tab-btn.active { color: var(--blue-deep); border-bottom-color: var(--blue); }
 
-/* Artefatos — a single-column list now; the actual content lives in the
-   shared reading pane (reading-pane.js), not inline next to this list. */
-.artifact-list, .document { background: var(--surface); border: 1px solid var(--line); border-radius: var(--radius-md); box-shadow: var(--soft-shadow); }
-.artifact-list { padding: 7px; }
-.artifact-group-label {
-  font-size: 11px;
-  text-transform: uppercase;
-  letter-spacing: .09em;
-  color: var(--ink);
-  font-weight: 700;
-  margin: 18px 6px 8px;
-  padding-top: 14px;
-  border-top: 1px solid var(--line);
-}
-.artifact-group-label:first-child { margin-top: 4px; padding-top: 0; border-top: 0; }
-.artifact-item { display: flex; align-items: center; gap: 6px; }
-.artifact-item .artifact-generate-btn { flex: none; }
-.artifact { width: 100%; border: 0; border-radius: var(--radius-sm); background: transparent; padding: 10px; text-align: left; color: #55534b; display: block; flex: 1; min-width: 0; }
-.artifact:hover { background: var(--surface-2); }
-.artifact.active { background: var(--blue-soft); color: var(--blue-deep); }
-.artifact:disabled { opacity: .5; cursor: not-allowed; }
-.artifact-top { display: flex; justify-content: space-between; gap: 5px; align-items: center; }
-.artifact strong { font-size: 12px; }
-.artifact small { display: block; font: 400 9px var(--mono); color: var(--muted); margin-top: 3px; }
+.document { background: var(--surface); border: 1px solid var(--line); border-radius: var(--radius-md); box-shadow: var(--soft-shadow); }
+
+/* Artefatos — card map inspired by temp/index.html. These selectors are
+   intentionally scoped to this tab so Fontes/Wiki keep their current list
+   presentation. */
+.artifact-map-head { display: flex; align-items: flex-end; justify-content: space-between; gap: 18px; margin: 2px 0 15px; }
+.artifact-map-title { display: flex; align-items: center; gap: 9px; }
+.artifact-map-title h2 { margin: 0; font-size: 17px; letter-spacing: -.02em; }
+.artifact-map-title span { padding: 3px 8px; border-radius: 999px; background: var(--surface-3); color: var(--muted); font: 10px var(--mono); }
+.artifact-map-head p { margin: 5px 0 0; color: var(--muted); font-size: 11px; }
+.artifact-map-controls { display: flex; flex-direction: column; align-items: flex-end; gap: 8px; }
+.artifact-buddy { display: flex; align-items: center; gap: 6px; color: var(--muted); font-size: 10px; white-space: nowrap; }
+.artifact-buddy input { accent-color: var(--ink); }
+.artifact-filters { display: flex; gap: 5px; }
+.artifact-filter { border: 1px solid var(--line); background: var(--surface); border-radius: 999px; padding: 6px 9px; color: var(--muted); font-size: 10px; }
+.artifact-filter:hover { border-color: #c9c5ba; color: var(--ink); }
+.artifact-filter.active { background: var(--ink); border-color: var(--ink); color: var(--surface); }
+.artifact-card-grid { display: grid; grid-template-columns: repeat(auto-fit, minmax(190px, 1fr)); gap: 11px; align-items: stretch; }
+.artifact-map-empty { grid-column: 1 / -1; border: 1px dashed var(--line); border-radius: 14px; padding: 34px 20px; text-align: center; color: var(--muted); font-size: 12px; }
+.artifact-card { min-height: 158px; border: 1px solid var(--line); border-radius: 15px; background: var(--surface); display: flex; flex-direction: column; overflow: hidden; position: relative; transition: transform .18s ease, box-shadow .18s ease, border-color .18s ease; }
+.artifact-card:hover { transform: translateY(-2px); border-color: #cbc7bb; box-shadow: var(--shadow); }
+.artifact-card.selected { border-color: var(--ink); box-shadow: 0 0 0 1px var(--ink); }
+.artifact-card-main { border: 0; background: transparent; color: inherit; padding: 15px 15px 8px; text-align: left; display: flex; flex: 1; flex-direction: column; align-items: flex-start; width: 100%; }
+.artifact-card-main:disabled { cursor: not-allowed; opacity: .53; }
+.artifact-card-kind { display: flex; align-items: center; gap: 7px; color: var(--muted); font-size: 9px; line-height: 26px; text-transform: uppercase; letter-spacing: .09em; font-weight: 700; }
+.artifact-card-kind i { width: 26px; height: 26px; border-radius: 8px; display: grid; place-items: center; background: var(--blue-soft); color: var(--blue-deep); font-style: normal; }
+.artifact-card.decision .artifact-card-kind i { background: #fff1d7; color: #8d6215; }
+.artifact-card.diagram .artifact-card-kind i { background: #eeebff; color: #6551af; }
+.artifact-card.feature .artifact-card-kind i { background: #e5f5eb; color: #28724e; }
+.artifact-card-main > strong { margin: 16px 0 5px; color: var(--ink); font-size: 14px; line-height: 1.3; }
+.artifact-card-description { color: var(--muted); font-size: 11px; line-height: 1.45; }
+.artifact-card-foot { min-height: 38px; display: flex; align-items: center; gap: 7px; margin: 0 15px; padding: 10px 0 12px; color: var(--muted); font: 500 9px var(--mono); border-top: 1px solid #f0eee8; }
+.artifact-card-generate { margin-left: auto; border: 0; background: transparent; padding: 3px 0 3px 6px; color: var(--blue-deep); font: 600 10px var(--sans); }
+.artifact-card-generate:hover { color: var(--ink); }
+.artifact-card.featured { grid-column: 1 / -1; min-height: 174px; border-color: #20231e; background: linear-gradient(118deg, #1d201b 0 72%, #2a3025 72%); color: var(--surface); }
+.artifact-card.featured.selected { box-shadow: 0 0 0 2px var(--blue); }
+.artifact-card.featured:after { content: '↗'; position: absolute; right: 20px; bottom: -6px; color: #b8e86f; font: 82px/1 var(--serif); transform: rotate(-7deg); pointer-events: none; }
+.artifact-card.featured .artifact-card-main { padding-right: 34%; }
+.artifact-card.featured .artifact-card-kind { color: #aeb5a9; }
+.artifact-card.featured .artifact-card-kind i { background: rgba(255,255,255,.1); color: #b8e86f; }
+.artifact-card.featured .artifact-card-main > strong { color: var(--surface); font: 600 22px/1.15 var(--serif); }
+.artifact-card.featured .artifact-card-description { color: #b8beb4; }
+.artifact-card.featured .artifact-card-foot { border-top-color: rgba(255,255,255,.1); color: #b8beb4; position: relative; z-index: 1; }
+.artifact-card.featured .artifact-card-generate { color: #b8e86f; }
 /* One dot component for every place a run/connection's state shows as a
    colored dot — tab-artefatos.js's artifact list, run-tracker.js's tracker,
    shell.js's MCP status panel. Was two parallel systems (.status-dot here,
@@ -261,25 +282,58 @@ label.check input { accent-color: var(--blue); width: 15px; height: 15px; }
 .button.large.icon-only { width: var(--control-lg); }
 .button:disabled { opacity: .5; cursor: not-allowed; box-shadow: none; }
 
+/* Shared collection-map language used by Fontes and Wiki, matching the
+   Artefatos card grid without coupling their behavior. */
+.collection-map-head { display: flex; align-items: flex-end; justify-content: space-between; gap: 16px; margin: 2px 0 13px; }
+.collection-map-title { display: flex; align-items: center; gap: 9px; }
+.collection-map-title h2 { margin: 0; font-size: 17px; letter-spacing: -.02em; }
+.collection-map-title span { padding: 3px 8px; border-radius: 999px; background: var(--surface-3); color: var(--muted); font: 10px var(--mono); }
+.collection-map-head p { margin: 5px 0 0; color: var(--muted); font-size: 11px; }
+.collection-map-actions { display: flex; align-items: center; gap: 7px; }
+.collection-filters, .wiki-group-filters { display: flex; gap: 5px; margin-bottom: 12px; overflow-x: auto; }
+.collection-filter { flex: none; border: 1px solid var(--line); background: var(--surface); border-radius: 999px; padding: 6px 9px; color: var(--muted); font-size: 10px; }
+.collection-filter:hover { border-color: #c9c5ba; color: var(--ink); }
+.collection-filter.active { background: var(--ink); border-color: var(--ink); color: var(--surface); }
+.collection-map-empty { grid-column: 1 / -1; border: 1px dashed var(--line); border-radius: 14px; padding: 34px 20px; text-align: center; color: var(--muted); font-size: 12px; }
+
 /* Fontes */
-.upload-row { display: flex; align-items: center; justify-content: flex-end; gap: 10px; margin-bottom: 14px; }
-.upload-actions { display: flex; align-items: center; gap: 8px; flex: none; }
-.source-list { display: flex; flex-direction: column; gap: 10px; }
-.source-item { background: var(--surface); border: 1px solid var(--line); border-radius: var(--radius-md); padding: 12px 14px; box-shadow: var(--soft-shadow); }
-.source-item strong { font-size: 12px; color: var(--ink); }
-.source-row { display: flex; align-items: center; justify-content: space-between; gap: 10px; }
-.source-name { display: inline-flex; align-items: center; gap: 7px; min-width: 0; color: var(--muted); }
-.source-name strong { overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
-.source-status { display: inline-flex; align-items: center; gap: 5px; font-size: 11px; font-weight: 600; flex: none; }
-.source-status-done { color: var(--green); }
+.source-card-grid { display: grid; grid-template-columns: repeat(auto-fit, minmax(190px, 1fr)); gap: 11px; }
+.source-card { min-height: 154px; border: 1px solid var(--line); border-radius: 15px; background: var(--surface); padding: 15px; display: flex; flex-direction: column; overflow: hidden; transition: transform .18s ease, box-shadow .18s ease, border-color .18s ease; }
+.source-card:hover { transform: translateY(-2px); border-color: #cbc7bb; box-shadow: var(--shadow); }
+.source-card-kind { display: flex; align-items: center; gap: 7px; color: var(--muted); font: 700 9px var(--sans); letter-spacing: .09em; }
+.source-card-kind i { width: 27px; height: 27px; border-radius: 8px; display: grid; place-items: center; background: var(--blue-soft); color: var(--blue-deep); }
+.source-card.ready .source-card-kind i { background: #e5f5eb; color: #28724e; }
+.source-card > strong { margin: 15px 0 5px; color: var(--ink); font-size: 13px; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+.source-card > p { margin: 0; color: var(--muted); font-size: 10px; line-height: 1.45; }
+.source-card > footer { display: flex; align-items: center; gap: 7px; margin-top: auto; padding-top: 12px; border-top: 1px solid #f0eee8; color: var(--muted); font: 500 9px var(--mono); }
+.source-card-action { margin-left: auto; border: 0; background: transparent; color: var(--blue-deep); padding: 3px 0 3px 6px; font: 600 10px var(--sans); }
+.source-card-action:hover { color: var(--ink); }
+.source-card-action:disabled { opacity: .5; cursor: not-allowed; }
+.source-card .run-tracker { border-top: 1px solid #f0eee8; padding-top: 9px; }
 
 /* Wiki — tree/ask/lint controls only now; the page itself renders in the
    shared reading pane. .wiki-doc stays as a class (applied to the reading
    pane's body, see reading-pane.js) purely for its typography rules below. */
-.wiki-tree { background: var(--surface); border: 1px solid var(--line); border-radius: var(--radius-md); box-shadow: var(--soft-shadow); padding: 7px; }
-.wiki-tree button { display: block; width: 100%; text-align: left; border: 0; border-radius: var(--radius-sm); background: transparent; padding: 10px; font-size: 12px; color: #55534b; }
-.wiki-tree button:hover { background: var(--surface-2); }
-.wiki-tree button.active { background: var(--blue-soft); color: var(--blue-deep); }
+.wiki-query-card { border-radius: 15px; background: linear-gradient(118deg, #1d201b 0 74%, #2a3025 74%); color: var(--surface); padding: 16px; margin-bottom: 18px; box-shadow: var(--soft-shadow); }
+.wiki-query-heading { display: flex; align-items: center; gap: 9px; margin-bottom: 12px; }
+.wiki-query-heading > span { width: 28px; height: 28px; border-radius: 8px; display: grid; place-items: center; background: rgba(255,255,255,.1); color: #b8e86f; }
+.wiki-query-heading strong { display: block; font: 600 16px var(--serif); }
+.wiki-query-heading small { display: block; margin-top: 2px; color: #aeb5a9; font-size: 10px; }
+.wiki-query-card label.check { margin-top: 9px; color: #aeb5a9; }
+.wiki-query-card label.check input { accent-color: #b8e86f; }
+.wiki-query-card .button.primary { background: #b8e86f; color: #1d201b; }
+.wiki-query-card .button.primary:hover { background: #c9f58e; }
+.wiki-map-head { margin-top: 0; }
+.wiki-card-grid { display: grid; grid-template-columns: repeat(auto-fit, minmax(190px, 1fr)); gap: 11px; }
+.wiki-page-card { min-height: 154px; border: 1px solid var(--line); border-radius: 15px; background: var(--surface); overflow: hidden; transition: transform .18s ease, box-shadow .18s ease, border-color .18s ease; }
+.wiki-page-card:hover { transform: translateY(-2px); border-color: #cbc7bb; box-shadow: var(--shadow); }
+.wiki-page-card.selected { border-color: var(--ink); box-shadow: 0 0 0 1px var(--ink); }
+.wiki-page-card > button { width: 100%; height: 100%; min-height: 154px; border: 0; background: transparent; padding: 15px; text-align: left; display: flex; flex-direction: column; align-items: flex-start; color: inherit; }
+.wiki-page-kind { display: flex; align-items: center; gap: 7px; color: var(--muted); font-size: 9px; text-transform: uppercase; letter-spacing: .09em; font-weight: 700; }
+.wiki-page-kind i { width: 27px; height: 27px; border-radius: 8px; display: grid; place-items: center; background: #eeebff; color: #6551af; }
+.wiki-page-card strong { margin: 15px 0 5px; color: var(--ink); font-size: 13px; }
+.wiki-page-card button > span:not(.wiki-page-kind) { color: var(--muted); font-size: 10px; line-height: 1.45; }
+.wiki-page-card footer { display: flex; align-items: center; gap: 7px; width: 100%; margin-top: auto; padding-top: 12px; border-top: 1px solid #f0eee8; color: var(--muted); font: 500 9px var(--mono); }
 
 /* The reading pane itself: serif body copy, mirroring the reference's
    document-viewer typography — everything else in the app (chrome, nav,
@@ -297,13 +351,13 @@ label.check input { accent-color: var(--blue); width: 15px; height: 15px; }
 .wiki-doc th { background: var(--surface-2); font-weight: 700; color: var(--ink); }
 
 .wiki-ask { display: flex; gap: 8px; }
-[data-tree-tabs] { margin-top: 14px; }
 /* height: --control-md (not the 42px form-field default from §06) so this
    row's input matches its default-size "Perguntar" button beside it — an
    inline ask bar, not a stacked labeled form. */
-.wiki-ask input { flex: 1; height: var(--control-md); border: 1px solid var(--line); border-radius: var(--radius-md); background: var(--surface); color: var(--ink); padding: 0 11px; font-size: 12px; outline: none; }
+.wiki-ask input { flex: 1; height: var(--control-md); border: 1px solid rgba(255,255,255,.14); border-radius: var(--radius-md); background: rgba(255,255,255,.1); color: var(--surface); padding: 0 11px; font-size: 12px; outline: none; }
+.wiki-ask input::placeholder { color: #aeb5a9; }
 .wiki-ask input:focus { border-color: var(--blue); box-shadow: 0 0 0 3px var(--blue-soft); }
-.wiki-answer { margin-top: 12px; background: var(--blue-soft); border-left: 3px solid var(--blue); padding: 12px; font-size: 12px; color: var(--ink); font-family: var(--serif); }
+.wiki-answer { margin-top: 12px; background: rgba(255,255,255,.08); border-left: 3px solid #b8e86f; padding: 12px; font-size: 12px; color: var(--surface); font-family: var(--serif); }
 .wiki-lint-report { margin-top: 14px; }
 .wiki-lint-report pre { background: var(--surface-2); color: #55534b; padding: 12px; font-size: 11px; overflow: auto; max-height: 260px; }
 

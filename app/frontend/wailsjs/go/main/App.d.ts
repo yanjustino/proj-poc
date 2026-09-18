@@ -3,6 +3,8 @@
 
 export function AddRawFile(arg1:string,arg2:string):Promise<string>;
 
+export function AppVersion():Promise<string>;
+
 export function CancelRun(arg1:string):Promise<string>;
 
 export function DataDir():Promise<string>;

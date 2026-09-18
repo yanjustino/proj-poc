@@ -44,8 +44,12 @@ confiaveis, `--respect-workspace-trust false`.
 ```text
 devin --config <workflows>/shared/agents/devin-generator.json \
   --model <modelo> --respect-workspace-trust false \
-  --permission-mode normal --print <prompt>
+  --permission-mode normal --prompt-file <arquivo-temporario> --print
 ```
+
+O prompt e gravado num arquivo temporario dentro do proprio work-item e
+removido ao final da chamada. Isso evita o limite de aproximadamente 32 KiB
+da linha de comando do Windows sem truncar o documento ou o JSON Schema.
 
 O modelo padrao e `swe-1-6-slow`, disponivel inclusive no plano Free. Defina
 `SENPAI_DEVIN_MODEL` para usar outro
@@ -63,6 +67,9 @@ cerca Markdown externa (` ```json ... ``` `), que o CLI pode emitir mesmo
 quando o prompt pede JSON cru; cercas dentro de campos sao preservadas.
 Respostas vazias observadas em chamadas reais entram na politica de retry do
 agente (ate tres tentativas), junto com timeout, rate limit e erros 500/503.
+O perfil nao inclui `org_id`, credenciais nem estado de setup: esses dados sao
+especificos da instalacao autenticada do usuario e nao podem ser sobrescritos
+por uma configuracao distribuida com o aplicativo.
 
 ## Diferencas em relacao ao Codex/Claude
 
