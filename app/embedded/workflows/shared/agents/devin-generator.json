@@ -20,5 +20,8 @@
     "claude": false
   },
   "version": 1,
-  "theme_mode": "nocolor"
+  "theme_mode": "dark",
+  "shell": {
+    "setup_complete": true
+  }
 }
