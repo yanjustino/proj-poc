@@ -133,6 +133,14 @@ export async function readProjectFile(projectId, root, relative) {
   return App.ReadProjectFile(projectId, root, relative);
 }
 
+export async function exportProject(projectId) {
+  return App.ExportProject(projectId);
+}
+
+export async function exportProjectFile(projectId, root, relative) {
+  return App.ExportProjectFile(projectId, root, relative);
+}
+
 // isFullyTerminal is deliberately narrower than the bridge's own
 // RunStatus.Terminal() (which also treats "paused" as terminal, purely to
 // know when to stop polling on the Go side) — from the UI's perspective a

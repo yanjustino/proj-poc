@@ -163,6 +163,7 @@ button { cursor: pointer; }
 .artifact-map-title span { padding: 3px 8px; border-radius: 999px; background: var(--surface-3); color: var(--muted); font: 10px var(--mono); }
 .artifact-map-head p { margin: 5px 0 0; color: var(--muted); font-size: 11px; }
 .artifact-map-controls { display: flex; flex-direction: column; align-items: flex-end; gap: 8px; }
+.artifact-map-actions { display: flex; align-items: center; gap: 10px; }
 .artifact-buddy { display: flex; align-items: center; gap: 6px; color: var(--muted); font-size: 10px; white-space: nowrap; }
 .artifact-buddy input { accent-color: var(--ink); }
 .artifact-filters { display: flex; gap: 5px; }
@@ -186,6 +187,12 @@ button { cursor: pointer; }
 .artifact-card-foot { min-height: 38px; display: flex; align-items: center; gap: 7px; margin: 0 15px; padding: 10px 0 12px; color: var(--muted); font: 500 9px var(--mono); border-top: 1px solid #f0eee8; }
 .artifact-card-generate { margin-left: auto; border: 0; background: transparent; padding: 3px 0 3px 6px; color: var(--blue-deep); font: 600 10px var(--sans); }
 .artifact-card-generate:hover { color: var(--ink); }
+.artifact-card-export { margin-left: auto; border: 0; background: transparent; color: var(--blue-deep); padding: 3px 0 3px 6px; display: inline-flex; align-items: center; gap: 5px; font: 600 10px var(--sans); }
+.artifact-card-export:hover { color: var(--ink); }
+.artifact-card-export:disabled { opacity: .5; cursor: wait; }
+.export-status { margin: -5px 0 14px; padding: 10px 12px; border: 1px solid rgba(46,139,104,.3); border-radius: var(--radius-md); background: rgba(46,139,104,.1); color: #47a880; font-size: 12px; line-height: 1.4; overflow-wrap: anywhere; }
+.export-status.error { border-color: rgba(200,58,55,.3); background: rgba(200,58,55,.1); color: #e45c58; }
+.export-status[hidden] { display: none; }
 .artifact-card.featured { grid-column: 1 / -1; min-height: 174px; border-color: #20231e; background: linear-gradient(118deg, #1d201b 0 72%, #2a3025 72%); color: var(--surface); }
 .artifact-card.featured.selected { box-shadow: 0 0 0 2px var(--blue); }
 .artifact-card.featured:after { content: '↗'; position: absolute; right: 20px; bottom: -6px; color: #b8e86f; font: 82px/1 var(--serif); transform: rotate(-7deg); pointer-events: none; }
@@ -459,8 +466,8 @@ button { color: inherit; }
 .artifact-card.feature .artifact-card-kind i, .source-card.ready .source-card-kind i { background: rgba(46,139,104,.16); color: #47a880; }
 .artifact-card-main > strong, .source-card > strong, .wiki-page-card strong { color: var(--rice-paper); }
 .artifact-card-foot, .source-card > footer, .wiki-page-card footer, .source-card .run-tracker { border-color: var(--line); }
-.artifact-card-generate, .source-card-action { color: #ed675f; }
-.artifact-card-generate:hover, .source-card-action:hover { color: #fff; }
+.artifact-card-generate, .artifact-card-export, .source-card-action { color: #ed675f; }
+.artifact-card-generate:hover, .artifact-card-export:hover, .source-card-action:hover { color: #fff; }
 .artifact-card.featured { border-color: #46302f; background: var(--surface); color: var(--rice-paper); box-shadow: inset 3px 0 var(--vermilion); }
 .artifact-card.featured:after { color: rgba(229,57,47,.22); }
 .artifact-card.featured.selected { border-color: var(--vermilion); box-shadow: inset 3px 0 var(--vermilion), 0 0 0 1px var(--vermilion); }
@@ -544,7 +551,7 @@ html, body { font-size: 15px; }
 .artifact-card-description, .source-card > p,
 .wiki-page-card button > span:not(.wiki-page-kind) { font-size: 13px; }
 .artifact-card-foot, .source-card > footer, .wiki-page-card footer { font-size: 11px; }
-.artifact-card-generate, .source-card-action { font-size: 12px; }
+.artifact-card-generate, .artifact-card-export, .source-card-action { font-size: 12px; }
 .doc-title, .doc-pending-item-title { font-size: 15px; }
 .doc-type { font-size: 11px; }
 .doc-empty, .doc-index-item { font-size: 15px; }
@@ -593,6 +600,7 @@ html[data-theme='light'] .wiki-query-card { border-color: #d7aaa5; }
 html[data-theme='light'] .wiki-answer { color: var(--ink); }
 html[data-theme='light'] .button.secondary:hover,
 html[data-theme='light'] .button.tertiary:hover { background: var(--surface-2); color: var(--ink); }
+html[data-theme='light'] .artifact-card-export:hover { color: var(--ink); }
 
 @media (prefers-reduced-motion: reduce) {
   * { scroll-behavior: auto !important; transition: none !important; }

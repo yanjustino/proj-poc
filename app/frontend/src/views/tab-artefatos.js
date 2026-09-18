@@ -1,4 +1,13 @@
-import { listProjectDir, readProjectFile, startAndWatch, watchExistingRun, isFullyTerminal, artifactPreview } from '../api.js';
+import {
+  artifactPreview,
+  exportProject,
+  exportProjectFile,
+  isFullyTerminal,
+  listProjectDir,
+  readProjectFile,
+  startAndWatch,
+  watchExistingRun,
+} from '../api.js';
 import { sequenceFor, isReady, missingDeps, featureIdOf, featureTitleOf } from '../artifacts.js';
 import { createRunTracker } from '../run-tracker.js';
 import { inlineMermaid, hasMermaidDiagram } from '../mermaid-inline.js';
@@ -115,7 +124,10 @@ export async function renderArtefatosTab(container, project, { onChanged }) {
         <p>Explore, gere e revise os documentos deste work-item.</p>
       </div>
       <div class="artifact-map-controls">
-        <label class="artifact-buddy"><input type="checkbox" data-buddy checked /><span>Modo Buddy</span></label>
+        <div class="artifact-map-actions">
+          <label class="artifact-buddy"><input type="checkbox" data-buddy checked /><span>Modo Buddy</span></label>
+          <button class="button secondary small" data-export-all title="Exportar toda a Wiki e todos os Artefatos">${icon('download', 14)} Exportar tudo</button>
+        </div>
         <div class="artifact-filters">
           <button class="artifact-filter active" data-filter="all">Todos</button>
           <button class="artifact-filter" data-filter="ready">Prontos</button>
@@ -123,6 +135,7 @@ export async function renderArtefatosTab(container, project, { onChanged }) {
         </div>
       </div>
     </div>
+    <div class="export-status" data-export-status hidden></div>
     <div class="artifact-card-grid" data-list></div>
   `;
 
@@ -130,6 +143,8 @@ export async function renderArtefatosTab(container, project, { onChanged }) {
   const buddyCheckbox = container.querySelector('[data-buddy]');
   const countEl = container.querySelector('[data-artifact-count]');
   const filterButtons = [...container.querySelectorAll('[data-filter]')];
+  const exportAllButton = container.querySelector('[data-export-all]');
+  const exportStatusEl = container.querySelector('[data-export-status]');
   showEmpty('Selecione um artefato para ler ou gerar.');
 
   let doneNames = new Set();
@@ -144,6 +159,24 @@ export async function renderArtefatosTab(container, project, { onChanged }) {
   const trackers = new Map(); // key -> { element, update, status }
   let selectedKey = sequence[0]?.artifact ?? null;
   let activeFilter = 'all';
+
+  function showExportStatus(message, state = 'success') {
+    exportStatusEl.hidden = false;
+    exportStatusEl.className = `export-status ${state}`;
+    exportStatusEl.textContent = message;
+  }
+
+  exportAllButton.addEventListener('click', async () => {
+    exportAllButton.disabled = true;
+    try {
+      const destination = await exportProject(project.id);
+      if (destination) showExportStatus(`Wiki e artefatos exportados para ${destination}`);
+    } catch (err) {
+      showExportStatus(`Não foi possível exportar: ${String(err.message || err)}`, 'error');
+    } finally {
+      exportAllButton.disabled = false;
+    }
+  });
 
   // buildItemRows expands one collection-type entry into its real per-item
   // rows once its dir has children — replacing the single group row that
@@ -289,6 +322,7 @@ export async function renderArtefatosTab(container, project, { onChanged }) {
         // novamente / Aprovar e continuar), right next to the content that
         // explains why.
         const showGenerate = ready && !done && !state;
+        const exportPath = done ? row.previewPath || row.entry.path : '';
         const artifactName = row.entry.artifact;
         const kindClass = ['adr', 'der'].includes(artifactName)
           ? 'decision'
@@ -306,6 +340,7 @@ export async function renderArtefatosTab(container, project, { onChanged }) {
             </button>
             <footer class="artifact-card-foot">
               <span class="status-dot ${dot}"></span><span>${escapeHtml(statusText)}</span>
+              ${exportPath ? `<button class="artifact-card-export" data-export-file="${escapeAttribute(exportPath)}" title="Exportar ${escapeAttribute(row.label)}">${icon('download', 12)} Exportar</button>` : ''}
               ${showGenerate ? `<button class="artifact-card-generate" data-generate="${escapeHtml(row.key)}" title="Gerar ${escapeHtml(row.label)}">Gerar →</button>` : ''}
             </footer>
           </article>
@@ -333,6 +368,21 @@ export async function renderArtefatosTab(container, project, { onChanged }) {
         // showing whatever was open before).
         selectedKey = row.key;
         generate(row);
+      });
+    });
+
+    listEl.querySelectorAll('[data-export-file]').forEach((button) => {
+      button.addEventListener('click', async (event) => {
+        event.stopPropagation();
+        button.disabled = true;
+        try {
+          const destination = await exportProjectFile(project.id, 'artifacts', button.dataset.exportFile);
+          if (destination) showExportStatus(`Artefato exportado para ${destination}`);
+        } catch (err) {
+          showExportStatus(`Não foi possível exportar o artefato: ${String(err.message || err)}`, 'error');
+        } finally {
+          button.disabled = false;
+        }
       });
     });
   }
@@ -722,4 +772,8 @@ function escapeHtml(text) {
   const div = document.createElement('div');
   div.textContent = text ?? '';
   return div.innerHTML;
+}
+
+function escapeAttribute(text) {
+  return escapeHtml(text).replaceAll('"', '&quot;').replaceAll("'", '&#39;');
 }

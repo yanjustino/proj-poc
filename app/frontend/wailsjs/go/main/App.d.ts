@@ -11,6 +11,10 @@ export function DataDir():Promise<string>;
 
 export function DeleteProject(arg1:string):Promise<void>;
 
+export function ExportProject(arg1:string):Promise<string>;
+
+export function ExportProjectFile(arg1:string,arg2:string,arg3:string):Promise<string>;
+
 export function GetAgent():Promise<string>;
 
 export function GetDevinModel():Promise<string>;

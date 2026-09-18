@@ -200,7 +200,13 @@ export async function mountShell(root) {
   }
 
   agentSelectEl.value = (await getAgent().catch(() => '')) || AGENT_OPTIONS[0].value;
-  await refreshDevinModels();
+  // Listing Devin models invokes an external CLI and may take up to its
+  // 30-second backend timeout. It must not sit on the startup critical path:
+  // the sidebar, work-item list and selected project are all usable while
+  // this picker independently finishes loading (or reports its own error).
+  refreshDevinModels().catch((err) => {
+    LogFrontendError(`refreshDevinModels: failed: ${err && err.stack ? err.stack : err}`).catch(() => {});
+  });
   agentSelectEl.addEventListener('change', async () => {
     const chosen = agentSelectEl.value;
     agentSelectEl.disabled = true;

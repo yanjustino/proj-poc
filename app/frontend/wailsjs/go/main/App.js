@@ -22,6 +22,14 @@ export function DeleteProject(arg1) {
   return window['go']['main']['App']['DeleteProject'](arg1);
 }
 
+export function ExportProject(arg1) {
+  return window['go']['main']['App']['ExportProject'](arg1);
+}
+
+export function ExportProjectFile(arg1, arg2, arg3) {
+  return window['go']['main']['App']['ExportProjectFile'](arg1, arg2, arg3);
+}
+
 export function GetAgent() {
   return window['go']['main']['App']['GetAgent']();
 }

@@ -1061,3 +1061,213 @@ func (a *App) ReadProjectFile(projectID string, root string, relative string) (s
 	}
 	return string(content), nil
 }
+
+// ExportProject lets the user choose a destination directory, then exports
+// the complete wiki/ and artifacts/ trees into a new, non-overwriting
+// senpai-<projectID>/ folder. The returned path is empty when the dialog is
+// cancelled, otherwise it is the absolute directory that was created.
+func (a *App) ExportProject(projectID string) (string, error) {
+	if err := validateProjectID(projectID); err != nil {
+		return "", err
+	}
+	destination, err := runtime.OpenDirectoryDialog(a.ctx, runtime.OpenDialogOptions{
+		Title:                "Exportar Wiki e Artefatos",
+		CanCreateDirectories: true,
+	})
+	if err != nil {
+		return "", fmt.Errorf("selecionar pasta de exportacao: %w", err)
+	}
+	if destination == "" {
+		return "", nil
+	}
+	return a.exportProjectTo(projectID, destination)
+}
+
+// exportProjectTo contains the filesystem part of ExportProject separately
+// from the native dialog so it can be tested headlessly.
+func (a *App) exportProjectTo(projectID string, destinationParent string) (string, error) {
+	if err := validateProjectID(projectID); err != nil {
+		return "", err
+	}
+	if a.dataDir == "" {
+		return "", fmt.Errorf("data dir nao resolvido — veja o log de startup")
+	}
+	projectDir := filepath.Join(a.dataDir, "projects", projectID)
+	if info, err := os.Stat(projectDir); err != nil {
+		if os.IsNotExist(err) {
+			return "", fmt.Errorf("work-item nao encontrado: %q", projectID)
+		}
+		return "", fmt.Errorf("ler work-item para exportacao: %w", err)
+	} else if !info.IsDir() {
+		return "", fmt.Errorf("work-item nao e um diretorio: %q", projectID)
+	}
+
+	parentInfo, err := os.Stat(destinationParent)
+	if err != nil {
+		return "", fmt.Errorf("ler pasta de destino: %w", err)
+	}
+	if !parentInfo.IsDir() {
+		return "", fmt.Errorf("destino nao e uma pasta: %q", destinationParent)
+	}
+
+	exportDir := uniqueDirectoryDestination(destinationParent, "senpai-"+projectID)
+	for _, root := range []string{"wiki", "artifacts"} {
+		source, err := a.projectRootDir(projectID, root, []string{"wiki", "artifacts"})
+		if err != nil {
+			return "", err
+		}
+		if pathIsWithin(source, exportDir) {
+			return "", fmt.Errorf("a pasta de exportacao nao pode ficar dentro de %s/", root)
+		}
+	}
+
+	if err := os.Mkdir(exportDir, 0o755); err != nil {
+		return "", fmt.Errorf("criar pasta de exportacao: %w", err)
+	}
+	completed := false
+	defer func() {
+		if !completed {
+			_ = os.RemoveAll(exportDir)
+		}
+	}()
+
+	for _, root := range []string{"wiki", "artifacts"} {
+		source := filepath.Join(projectDir, root)
+		if _, err := os.Stat(source); err != nil {
+			if os.IsNotExist(err) {
+				continue
+			}
+			return "", fmt.Errorf("ler %s para exportacao: %w", root, err)
+		}
+		if err := copyDirectory(source, filepath.Join(exportDir, root)); err != nil {
+			return "", fmt.Errorf("exportar %s: %w", root, err)
+		}
+	}
+	completed = true
+	return exportDir, nil
+}
+
+// ExportProjectFile exports one generated wiki/artifact file through a
+// native Save As dialog. root and relative go through the same allowlist and
+// traversal protection as ReadProjectFile.
+func (a *App) ExportProjectFile(projectID string, root string, relative string) (string, error) {
+	rootDir, err := a.projectRootDir(projectID, root, []string{"wiki", "artifacts"})
+	if err != nil {
+		return "", err
+	}
+	source, err := resolveSafeRelative(rootDir, relative)
+	if err != nil {
+		return "", err
+	}
+	info, err := os.Stat(source)
+	if err != nil {
+		return "", fmt.Errorf("ler arquivo para exportacao: %w", err)
+	}
+	if info.IsDir() {
+		return "", fmt.Errorf("caminho e um diretorio, nao um arquivo: %q", relative)
+	}
+
+	destination, err := runtime.SaveFileDialog(a.ctx, runtime.SaveDialogOptions{
+		Title:                "Exportar " + filepath.Base(relative),
+		DefaultFilename:      filepath.Base(relative),
+		CanCreateDirectories: true,
+	})
+	if err != nil {
+		return "", fmt.Errorf("selecionar destino do arquivo: %w", err)
+	}
+	if destination == "" {
+		return "", nil
+	}
+	if err := copyExportFile(source, destination); err != nil {
+		return "", err
+	}
+	return destination, nil
+}
+
+func uniqueDirectoryDestination(parent string, name string) string {
+	candidate := filepath.Join(parent, name)
+	if _, err := os.Stat(candidate); os.IsNotExist(err) {
+		return candidate
+	}
+	for i := 2; ; i++ {
+		candidate = filepath.Join(parent, name+" ("+strconv.Itoa(i)+")")
+		if _, err := os.Stat(candidate); os.IsNotExist(err) {
+			return candidate
+		}
+	}
+}
+
+func pathIsWithin(parent string, candidate string) bool {
+	parentAbs, err := filepath.Abs(parent)
+	if err != nil {
+		return false
+	}
+	candidateAbs, err := filepath.Abs(candidate)
+	if err != nil {
+		return false
+	}
+	rel, err := filepath.Rel(parentAbs, candidateAbs)
+	return err == nil && rel != ".." && !strings.HasPrefix(rel, ".."+string(filepath.Separator))
+}
+
+func copyDirectory(source string, destination string) error {
+	entries, err := os.ReadDir(source)
+	if err != nil {
+		return err
+	}
+	if err := os.MkdirAll(destination, 0o755); err != nil {
+		return err
+	}
+	for _, entry := range entries {
+		if entry.Type()&os.ModeSymlink != 0 {
+			return fmt.Errorf("links simbolicos nao sao exportados: %s", entry.Name())
+		}
+		sourcePath := filepath.Join(source, entry.Name())
+		destinationPath := filepath.Join(destination, entry.Name())
+		if entry.IsDir() {
+			if err := copyDirectory(sourcePath, destinationPath); err != nil {
+				return err
+			}
+			continue
+		}
+		if err := copyExportFile(sourcePath, destinationPath); err != nil {
+			return err
+		}
+	}
+	return nil
+}
+
+func copyExportFile(source string, destination string) error {
+	sourceAbs, err := filepath.Abs(source)
+	if err != nil {
+		return fmt.Errorf("resolver arquivo de origem: %w", err)
+	}
+	destinationAbs, err := filepath.Abs(destination)
+	if err != nil {
+		return fmt.Errorf("resolver arquivo de destino: %w", err)
+	}
+	if sourceAbs == destinationAbs {
+		return fmt.Errorf("origem e destino da exportacao sao o mesmo arquivo")
+	}
+
+	in, err := os.Open(source)
+	if err != nil {
+		return fmt.Errorf("abrir arquivo para exportacao: %w", err)
+	}
+	defer in.Close()
+	if err := os.MkdirAll(filepath.Dir(destination), 0o755); err != nil {
+		return fmt.Errorf("criar pasta do arquivo exportado: %w", err)
+	}
+	out, err := os.OpenFile(destination, os.O_CREATE|os.O_WRONLY|os.O_TRUNC, 0o644)
+	if err != nil {
+		return fmt.Errorf("criar arquivo exportado: %w", err)
+	}
+	if _, err := io.Copy(out, in); err != nil {
+		_ = out.Close()
+		return fmt.Errorf("copiar arquivo exportado: %w", err)
+	}
+	if err := out.Close(); err != nil {
+		return fmt.Errorf("finalizar arquivo exportado: %w", err)
+	}
+	return nil
+}
