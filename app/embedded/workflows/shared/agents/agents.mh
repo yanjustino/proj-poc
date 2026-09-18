@@ -43,7 +43,7 @@ export agent Devin {
         "--config", DevinConfig.path(),
         "--model", env("SENPAI_DEVIN_MODEL", "swe-1-6-slow"),
         "--respect-workspace-trust", "false",
-        "--permission-mode", "normal",
+        "--permission-mode", "auto",
         "--prompt-file", "${prompt}",
         "--print"
     ]
