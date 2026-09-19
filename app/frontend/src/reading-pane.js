@@ -24,6 +24,7 @@ export function mountReadingPane(container) {
       </div>
     </header>
     <div class="doc-body" data-rp-body></div>
+    <div class="doc-footer" data-rp-footer hidden></div>
   `;
   els = {
     container,
@@ -31,6 +32,7 @@ export function mountReadingPane(container) {
     typeEl: container.querySelector('[data-rp-type]'),
     tools: container.querySelector('[data-rp-tools]'),
     body: container.querySelector('[data-rp-body]'),
+    footer: container.querySelector('[data-rp-footer]'),
     expandBtn: container.querySelector('[data-rp-expand]'),
   };
   fullscreenTarget = container;
@@ -45,6 +47,31 @@ export function mountReadingPane(container) {
 function setHeader(title, type) {
   els.titleEl.textContent = title || '';
   els.typeEl.textContent = type || '';
+  // Every show*/beginCustom call below routes through here first — the one
+  // choke point where "the pane now shows something else" is known, so it's
+  // also where a stale footer (a paused run's composer left over from
+  // whatever was open before) gets dropped. A caller that still wants one
+  // calls setFooter() again right after.
+  clearFooter();
+}
+
+// setFooter mounts a persistent action bar below .doc-body — its own flex
+// child of .document (see .doc-footer in style.css), not part of .doc-body's
+// scrolling content, so it stays visible at the bottom of the pane
+// regardless of how far the document above it is scrolled. Built for
+// run-tracker.js's paused-state composer (tab-artefatos.js's "Aprovar" /
+// "Regenerar" / "Cancelar" bar used to scroll out of view above a long
+// preview — see that tab's renderDetail()) but generic to any single
+// element a caller wants pinned there.
+export function setFooter(element) {
+  els.footer.innerHTML = '';
+  els.footer.hidden = false;
+  els.footer.appendChild(element);
+}
+
+export function clearFooter() {
+  els.footer.innerHTML = '';
+  els.footer.hidden = true;
 }
 
 export function showEmpty(message) {

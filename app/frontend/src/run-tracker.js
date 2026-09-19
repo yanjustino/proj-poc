@@ -3,7 +3,7 @@
 // (one per artifact being generated). Owns its own <div> and re-renders it
 // on every status update; the caller just mounts `.element` and forwards
 // startAndWatch/resumeAndWatch's onUpdate callback into `.update(status)`.
-import { resumeAndWatch } from './api.js';
+import { resumeAndWatch, cancelRun } from './api.js';
 import { dotClass } from './status.js';
 
 export const STATE_LABEL = {
@@ -15,11 +15,31 @@ export const STATE_LABEL = {
   canceled: 'cancelado',
 };
 
-export function createRunTracker({ resumeArgs = { approved: true } } = {}) {
+// onCancel: called after a paused run is canceled on the backend, instead of
+// the tracker showing its own "cancelado" state — lets the host (Artefatos
+// tab) drop the tracker entirely and fall back to "pronto para gerar", since
+// canceling here abandons the draft rather than leaving a record of it (see
+// tab-artefatos.js's onRunCancel). Left unset, the tracker shows "cancelado"
+// itself — fine for a host (Fontes' ingest) that never actually pauses.
+export function createRunTracker({ resumeArgs = { approved: true }, onCancel } = {}) {
   const element = document.createElement('div');
   element.className = 'run-tracker';
+  // Kept as a second, separate root (not just a child of `element`) so a
+  // host with a persistent action-bar slot — the reading pane's
+  // setFooter/.doc-footer, pinned below the scrollable document instead of
+  // scrolling away with it — can mount it there instead of wherever
+  // `element` itself ends up. A host with no such slot (Fontes' compact
+  // source-card tracker) just appends both, one after the other, same as
+  // before this existed.
+  const composer = document.createElement('div');
+  composer.className = 'run-composer';
+  composer.hidden = true;
   let status = null;
-  let resuming = false;
+  // Which paused-state action is in flight, if any — drives both the
+  // clicked button's own "…ing" label and disabling every control in the
+  // composer (typing a new comment mid-request wouldn't be reflected in the
+  // request already sent).
+  let busyAction = null; // null | 'approve' | 'regenerate' | 'cancel'
   // Kept across re-renders (not just read from the DOM at submit time) so a
   // stray render() mid-typing — shouldn't happen while genuinely paused
   // (nothing pushes a new status until resumed), but cheap to be correct
@@ -37,6 +57,8 @@ export function createRunTracker({ resumeArgs = { approved: true } } = {}) {
   function render() {
     if (!status) {
       element.innerHTML = '';
+      composer.innerHTML = '';
+      composer.hidden = true;
       return;
     }
     const s = status;
@@ -50,68 +72,104 @@ export function createRunTracker({ resumeArgs = { approved: true } } = {}) {
     // antes de gravar em artifacts/") — see mhlbridge.RunStatus.Reason's doc
     // comment for why this was silently dropped before it.
     const reasonLine = s.state === 'paused' && s.reason ? `<span class="run-reason">${escapeHtml(s.reason)}</span>` : '';
-    const approveButton =
-      s.state === 'paused'
-        ? `<button class="button primary small run-approve" ${resuming ? 'disabled' : ''}>${resuming ? 'Aplicando…' : 'Aprovar e continuar'}</button>`
-        : '';
-    // Solicitar mudanças: an alternative to approving — resumes the SAME
-    // paused run with approved:false + feedback instead of true. Gate (see
-    // discovery.mh/delivery.mh) treats that as "go back to *Generate with
-    // this comment attached", not "pause again" — a real regeneration, not
-    // a cosmetic note. flex-basis:100% on .run-feedback (in .run-tracker's
-    // wrapping flex row) puts it on its own line without a wrapper element.
-    const feedbackForm =
-      s.state === 'paused'
-        ? `<div class="run-feedback">
-            <textarea class="run-feedback-input" placeholder="Pedir uma mudança nesta versão (opcional) — a próxima geração considera isto." ${resuming ? 'disabled' : ''}>${escapeHtml(feedbackText)}</textarea>
-            <button class="button secondary small run-feedback-submit" ${resuming ? 'disabled' : ''}>Enviar e regenerar</button>
-          </div>`
-        : '';
+    const busy = busyAction !== null;
 
     element.innerHTML = `
-      <span class="status-dot ${dotClass(s.state)}"></span>
-      <span class="run-label">${label}</span>
-      ${stepLine}
-      ${tokensLine(s)}
+      <div class="run-status-row">
+        <span class="status-dot ${dotClass(s.state)}"></span>
+        <span class="run-label">${label}</span>
+        ${stepLine}
+        ${tokensLine(s)}
+      </div>
       ${reasonLine}
       ${errorLine}
-      ${approveButton}
-      ${feedbackForm}
     `;
 
-    const button = element.querySelector('.run-approve');
-    if (button) {
-      button.addEventListener('click', async () => {
-        resuming = true;
+    // Chat-style composer for the paused state: the feedback field sits on
+    // top (like a message draft), and every action lives in one row at the
+    // bottom — Cancelar/Regenerar/Aprovar — instead of the approve button
+    // and the feedback form each having their own row. "Solicitar mudanças"
+    // (Regenerar) resumes the SAME paused run with approved:false + feedback
+    // instead of true; Gate (see discovery.mh/delivery.mh) treats that as
+    // "go back to *Generate with this comment attached", not "pause again"
+    // — a real regeneration, not a cosmetic note. Cancelar calls
+    // mhl_run_cancel and, when the host gave us one, hands off to onCancel
+    // instead of rendering a "cancelado" state here — see this file's
+    // createRunTracker doc comment for why. Lives in its own root (see
+    // `composer` above `element`) so a host can pin it below the scrollable
+    // document instead of letting it scroll away with the rest of `element`.
+    if (s.state !== 'paused') {
+      composer.innerHTML = '';
+      composer.hidden = true;
+    } else {
+      composer.hidden = false;
+      composer.innerHTML = `
+        <textarea class="run-feedback-input" placeholder="Pedir uma mudança nesta versão (opcional) — a próxima geração considera isto." ${busy ? 'disabled' : ''}>${escapeHtml(feedbackText)}</textarea>
+        <div class="run-composer-actions">
+          <button class="button tertiary small run-cancel" ${busy ? 'disabled' : ''}>${busyAction === 'cancel' ? 'Cancelando…' : 'Cancelar'}</button>
+          <div class="run-composer-actions-right">
+            <button class="button secondary small run-feedback-submit" ${busy ? 'disabled' : ''}>${busyAction === 'regenerate' ? 'Enviando…' : 'Regenerar'}</button>
+            <button class="button primary small run-approve" ${busy ? 'disabled' : ''}>${busyAction === 'approve' ? 'Aplicando…' : 'Aprovar'}</button>
+          </div>
+        </div>
+      `;
+    }
+
+    const approveButton = composer.querySelector('.run-approve');
+    if (approveButton) {
+      approveButton.addEventListener('click', async () => {
+        busyAction = 'approve';
         render();
         try {
           await resumeAndWatch(s.runId, resumeArgs, (next) => update(next));
         } catch (err) {
-          resuming = false;
+          busyAction = null;
           status = { ...s, state: 'failed', error: String(err) };
           render();
         }
       });
     }
 
-    const feedbackInput = element.querySelector('.run-feedback-input');
+    const feedbackInput = composer.querySelector('.run-feedback-input');
     if (feedbackInput) {
       feedbackInput.addEventListener('input', () => {
         feedbackText = feedbackInput.value;
       });
     }
 
-    const feedbackSubmit = element.querySelector('.run-feedback-submit');
+    const feedbackSubmit = composer.querySelector('.run-feedback-submit');
     if (feedbackSubmit) {
       feedbackSubmit.addEventListener('click', async () => {
         const text = feedbackText.trim();
         if (!text) return;
-        resuming = true;
+        busyAction = 'regenerate';
         render();
         try {
           await resumeAndWatch(s.runId, { approved: false, feedback: text }, (next) => update(next));
         } catch (err) {
-          resuming = false;
+          busyAction = null;
+          status = { ...s, state: 'failed', error: String(err) };
+          render();
+        }
+      });
+    }
+
+    const cancelButton = composer.querySelector('.run-cancel');
+    if (cancelButton) {
+      cancelButton.addEventListener('click', async () => {
+        busyAction = 'cancel';
+        render();
+        try {
+          await cancelRun(s.runId);
+          if (onCancel) {
+            onCancel();
+          } else {
+            busyAction = null;
+            status = { ...s, state: 'canceled' };
+            render();
+          }
+        } catch (err) {
+          busyAction = null;
           status = { ...s, state: 'failed', error: String(err) };
           render();
         }
@@ -121,12 +179,12 @@ export function createRunTracker({ resumeArgs = { approved: true } } = {}) {
 
   function update(next) {
     status = next;
-    resuming = false;
+    busyAction = null;
     feedbackText = '';
     render();
   }
 
-  return { element, update, get status() { return status; } };
+  return { element, composer, update, get status() { return status; } };
 }
 
 function escapeHtml(text) {

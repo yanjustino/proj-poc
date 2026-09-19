@@ -235,6 +235,16 @@ export async function resumeAndWatch(runId, args, onUpdate) {
   return resumed;
 }
 
+// cancelRun stops a run in place (Modo Buddy's "Cancelar", mhl_run_cancel).
+// Unlike resumeAndWatch, nothing needs re-arming afterward: canceled is
+// always fully terminal (see isFullyTerminal above), so there's nothing left
+// to watch. Returns the final status directly — CancelRun doesn't also push
+// a 'run:<runId>' event, so the caller must apply this return value itself
+// rather than waiting on the same EventsOn subscription startAndWatch used.
+export async function cancelRun(runId) {
+  return parseJSON(await App.CancelRun(runId), 'CancelRun');
+}
+
 export async function workItemList() {
   const result = await callWorkflowOnce('WorkItem', { action: 'list' });
   return result.projects ?? [];

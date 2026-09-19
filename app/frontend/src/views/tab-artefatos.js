@@ -11,7 +11,7 @@ import {
 import { sequenceFor, isReady, missingDeps, featureIdOf, featureTitleOf } from '../artifacts.js';
 import { createRunTracker } from '../run-tracker.js';
 import { inlineMermaid, hasMermaidDiagram } from '../mermaid-inline.js';
-import { beginCustom, buildDocFrame, showHtmlDoc, showEmpty, showAction, showLoading } from '../reading-pane.js';
+import { beginCustom, buildDocFrame, showHtmlDoc, showEmpty, showAction, showLoading, setFooter } from '../reading-pane.js';
 import { setActiveRun, getActiveRun, clearActiveRun } from '../active-runs.js';
 import { dotClass } from '../status.js';
 import { icon } from '../icons.js';
@@ -416,7 +416,15 @@ export async function renderArtefatosTab(container, project, { onChanged }) {
       // aprovação") here meant "Aprovar e continuar" had to be clicked
       // blind. Render it as the real HTML the artifact will end up as
       // (async, appended below) instead of nothing.
-      if (tracker.status.state === 'paused') appendPausedPreview(row, tracker, body);
+      if (tracker.status.state === 'paused') {
+        // Pinned below the scrollable preview (reading-pane.js's
+        // .doc-footer) instead of appended inline into `body` — a long
+        // preview (several ADRs/features stacked, see appendPausedPreview)
+        // used to push Aprovar/Regenerar/Cancelar out of view above it, so
+        // approving meant scrolling back up to find them blind.
+        setFooter(tracker.composer);
+        appendPausedPreview(row, tracker, body);
+      }
       return;
     }
 
@@ -714,8 +722,25 @@ export async function renderArtefatosTab(container, project, { onChanged }) {
     if (selectedKey === row.key) renderDetail();
   }
 
+  // onRunCancel is run-tracker.js's onCancel hook for a paused run's
+  // "Cancelar" — the whole point of canceling here is abandoning the draft,
+  // not leaving a "cancelado" row behind (unlike a run that fails on its
+  // own). Dropping the tracker entirely means renderDetail()'s tracker
+  // lookup comes back empty, so the row falls straight back through to
+  // isRowDone (still false, nothing was ever committed to artifacts/) into
+  // the plain "pronto para gerar" / "Gerar" state — exactly like the draft,
+  // and the pending_data it lived in, never existed.
+  function onRunCancel(row, key) {
+    clearActiveRun(key);
+    trackers.delete(row.key);
+    if (!active) return;
+    renderList();
+    if (selectedKey === row.key) renderDetail();
+  }
+
   function generate(row) {
-    const tracker = createRunTracker();
+    const key = activeKey(row);
+    const tracker = createRunTracker({ onCancel: () => onRunCancel(row, key) });
     trackers.set(row.key, tracker);
     // Seed a non-null "working" status right away — App.StartRun's own
     // response is still an unresolved promise at this point, so without
@@ -724,7 +749,6 @@ export async function renderArtefatosTab(container, project, { onChanged }) {
     // back to the "Gerar" button, as if the click had done nothing.
     tracker.update({ runId: '', state: 'working' });
 
-    const key = activeKey(row);
     const args =
       workflow === 'Discovery'
         ? { project_id: project.id, artifact: row.featureId ? 'historias' : row.key, buddy: buddyCheckbox.checked, ...(row.featureId ? { feature_id: row.featureId } : {}) }
@@ -748,7 +772,7 @@ export async function renderArtefatosTab(container, project, { onChanged }) {
       const key = activeKey(row);
       const runId = getActiveRun(key);
       if (!runId) continue;
-      const tracker = createRunTracker();
+      const tracker = createRunTracker({ onCancel: () => onRunCancel(row, key) });
       trackers.set(row.key, tracker);
       tracker.update({ runId, state: 'working' });
       selectedKey = row.key; // jump straight to the progress the user left running

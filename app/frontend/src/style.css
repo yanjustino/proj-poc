@@ -232,6 +232,14 @@ button { cursor: pointer; }
    the header action like "Gerar"), see reading-pane.js. */
 .doc-tools { display: flex; align-items: center; gap: 6px; flex: none; }
 .doc-body { padding: 20px 24px; flex: 1; overflow: auto; }
+/* Persistent footer slot (reading-pane.js's setFooter/clearFooter) — a
+   flex:none sibling of .doc-body, not part of its scrolling content, so
+   whatever's pinned here (today: run-tracker.js's paused-state composer)
+   stays at the bottom of the pane no matter how far the document above it
+   is scrolled. `hidden` (native attribute, toggled from JS) keeps it out of
+   the way — no reserved empty strip — when nothing needs it. */
+.doc-footer { flex: none; padding: 12px 24px 18px; }
+.doc-footer[hidden] { display: none; }
 .doc-empty { color: var(--muted); font-size: 13px; padding: 30px; text-align: center; }
 .doc-frame { width: 100%; height: 100%; min-height: 380px; border: 0; background: #fff; }
 /* Stacked pending-item preview (tab-artefatos.js's appendPausedPreview) —
@@ -269,14 +277,24 @@ button { cursor: pointer; }
 .pane-fullscreen { position: fixed !important; inset: 20px; z-index: 200; border-radius: var(--radius-lg); overflow: hidden; box-shadow: var(--shadow); }
 
 /* Run tracker */
-.run-tracker { display: flex; align-items: center; gap: 8px; flex-wrap: wrap; font-size: 11px; color: var(--muted); margin-top: 6px; }
+.run-tracker { display: flex; flex-direction: column; gap: 8px; font-size: 11px; color: var(--muted); margin-top: 6px; }
+.run-status-row { display: flex; align-items: center; gap: 8px; flex-wrap: wrap; }
 .run-tokens { font-family: var(--mono); color: var(--muted); }
 .run-error { color: var(--red); }
 .run-reason { color: var(--muted); }
-.run-feedback { flex-basis: 100%; display: flex; gap: 6px; align-items: flex-start; margin-top: 4px; }
-.run-feedback-input { flex: 1; min-height: 56px; resize: vertical; border: 1px solid var(--line); border-radius: var(--radius-md); background: var(--surface); color: var(--ink); padding: 8px 10px; font-size: 12px; font-family: var(--sans); outline: none; }
-.run-feedback-input:focus { border-color: var(--blue); box-shadow: 0 0 0 3px var(--blue-soft); }
-.run-feedback-submit { flex: none; align-self: flex-end; }
+/* Chat-style composer for a paused run — one bordered, rounded card (like a
+   chat app's message box) instead of a bare textarea: the feedback field on
+   top, blended into the card with no border of its own, and every action —
+   Cancelar, Regenerar, Aprovar — in a row underneath it, separated by a
+   hairline. Mounted into .doc-footer (see reading-pane.js's setFooter), so
+   it reads as a composer pinned at the bottom of the pane, not another
+   block of the scrolling document. */
+.run-composer { display: flex; flex-direction: column; gap: 6px; border: 1px solid var(--line); border-radius: var(--radius-lg); background: var(--surface); box-shadow: var(--soft-shadow); padding: 10px 12px 8px; transition: border-color .15s; }
+.run-composer:focus-within { border-color: var(--blue); }
+.run-feedback-input { width: 100%; min-height: 40px; max-height: 200px; resize: vertical; border: 0; background: transparent; color: var(--ink); padding: 2px; font-size: 12px; font-family: var(--sans); outline: none; }
+.run-feedback-input::placeholder { color: var(--muted); }
+.run-composer-actions { display: flex; align-items: center; justify-content: space-between; gap: 8px; padding-top: 6px; border-top: 1px solid var(--line); }
+.run-composer-actions-right { display: flex; align-items: center; gap: 8px; }
 label.check { display: inline-flex; align-items: center; gap: 6px; font-size: 11px; color: var(--muted); }
 label.check input { accent-color: var(--blue); width: 15px; height: 15px; }
 
@@ -531,8 +549,10 @@ button { color: inherit; }
 .wiki-doc a { color: #ed675f; }
 .wiki-doc th { background: var(--surface-2); color: var(--rice-paper); }
 
-.run-feedback-input, .modal input, .modal select { background: var(--bg-0); color: var(--rice-paper); }
-.run-feedback-input:focus, .modal input:focus, .modal select:focus { border-color: var(--vermilion); box-shadow: 0 0 0 3px rgba(229,57,47,.13); }
+.modal input, .modal select { background: var(--bg-0); color: var(--rice-paper); }
+.modal input:focus, .modal select:focus { border-color: var(--vermilion); box-shadow: 0 0 0 3px rgba(229,57,47,.13); }
+.run-feedback-input { color: var(--rice-paper); }
+.run-composer { background: var(--surface-2); }
 .modal-backdrop { background: rgba(0,0,0,.7); backdrop-filter: blur(6px); }
 .modal { border-color: var(--line); border-radius: var(--radius-lg); background: var(--surface); }
 .modal h2 { color: var(--rice-paper); font: 650 24px/1.2 var(--serif); }

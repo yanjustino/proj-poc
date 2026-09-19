@@ -128,6 +128,7 @@ export async function renderFontesTab(container, project, { onChanged }) {
         if (tracker) {
           row.innerHTML = sourceCardBody(name, 'Processando a fonte…', 'working');
           row.appendChild(tracker.element);
+          row.appendChild(tracker.composer);
         } else {
           row.innerHTML = rowBody(name);
           const ingestButton = row.querySelector('[data-ingest-one]');
