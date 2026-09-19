@@ -34,6 +34,15 @@ export function createRunTracker({ resumeArgs = { approved: true }, onCancel } =
   const composer = document.createElement('div');
   composer.className = 'run-composer';
   composer.hidden = true;
+  // approveAction is Aprovar's own root, separate from `composer` — the
+  // reading pane mounts it in the header toolbar (reading-pane.js's
+  // setToolbarAction) instead of the footer, while Cancelar/Regenerar stay in
+  // `composer` below. Same reasoning as `composer` itself: rebuilt wholesale
+  // on every render(), so a host just re-mounts it once and never needs to
+  // track it across renders.
+  const approveAction = document.createElement('div');
+  approveAction.className = 'run-approve-action';
+  approveAction.hidden = true;
   let status = null;
   // Which paused-state action is in flight, if any — drives both the
   // clicked button's own "…ing" label and disabling every control in the
@@ -59,6 +68,8 @@ export function createRunTracker({ resumeArgs = { approved: true }, onCancel } =
       element.innerHTML = '';
       composer.innerHTML = '';
       composer.hidden = true;
+      approveAction.innerHTML = '';
+      approveAction.hidden = true;
       return;
     }
     const s = status;
@@ -86,21 +97,27 @@ export function createRunTracker({ resumeArgs = { approved: true }, onCancel } =
     `;
 
     // Chat-style composer for the paused state: the feedback field sits on
-    // top (like a message draft), and every action lives in one row at the
-    // bottom — Cancelar/Regenerar/Aprovar — instead of the approve button
-    // and the feedback form each having their own row. "Solicitar mudanças"
-    // (Regenerar) resumes the SAME paused run with approved:false + feedback
-    // instead of true; Gate (see discovery.mh/delivery.mh) treats that as
-    // "go back to *Generate with this comment attached", not "pause again"
-    // — a real regeneration, not a cosmetic note. Cancelar calls
-    // mhl_run_cancel and, when the host gave us one, hands off to onCancel
-    // instead of rendering a "cancelado" state here — see this file's
-    // createRunTracker doc comment for why. Lives in its own root (see
-    // `composer` above `element`) so a host can pin it below the scrollable
-    // document instead of letting it scroll away with the rest of `element`.
+    // top (like a message draft), Cancelar/Regenerar live in one row below
+    // it. "Solicitar mudanças" (Regenerar) resumes the SAME paused run with
+    // approved:false + feedback instead of true; Gate (see
+    // discovery.mh/delivery.mh) treats that as "go back to *Generate with
+    // this comment attached", not "pause again" — a real regeneration, not a
+    // cosmetic note. Cancelar calls mhl_run_cancel and, when the host gave us
+    // one, hands off to onCancel instead of rendering a "cancelado" state
+    // here — see this file's createRunTracker doc comment for why. Lives in
+    // its own root (see `composer` above `element`) so a host can pin it
+    // below the scrollable document instead of letting it scroll away with
+    // the rest of `element`.
+    //
+    // Aprovar lives in `approveAction`, a separate root the host mounts in
+    // the reading pane's header toolbar instead of down here (see
+    // reading-pane.js's setToolbarAction) — Modo Buddy's primary action reads
+    // better next to "ver fonte"/expand than buried below a long preview.
     if (s.state !== 'paused') {
       composer.innerHTML = '';
       composer.hidden = true;
+      approveAction.innerHTML = '';
+      approveAction.hidden = true;
     } else {
       composer.hidden = false;
       composer.innerHTML = `
@@ -109,13 +126,14 @@ export function createRunTracker({ resumeArgs = { approved: true }, onCancel } =
           <button class="button tertiary small run-cancel" ${busy ? 'disabled' : ''}>${busyAction === 'cancel' ? 'Cancelando…' : 'Cancelar'}</button>
           <div class="run-composer-actions-right">
             <button class="button secondary small run-feedback-submit" ${busy ? 'disabled' : ''}>${busyAction === 'regenerate' ? 'Enviando…' : 'Regenerar'}</button>
-            <button class="button primary small run-approve" ${busy ? 'disabled' : ''}>${busyAction === 'approve' ? 'Aplicando…' : 'Aprovar'}</button>
           </div>
         </div>
       `;
+      approveAction.hidden = false;
+      approveAction.innerHTML = `<button class="button primary small run-approve" ${busy ? 'disabled' : ''}>${busyAction === 'approve' ? 'Aplicando…' : 'Aprovar'}</button>`;
     }
 
-    const approveButton = composer.querySelector('.run-approve');
+    const approveButton = approveAction.querySelector('.run-approve');
     if (approveButton) {
       approveButton.addEventListener('click', async () => {
         busyAction = 'approve';
@@ -184,7 +202,7 @@ export function createRunTracker({ resumeArgs = { approved: true }, onCancel } =
     render();
   }
 
-  return { element, composer, update, get status() { return status; } };
+  return { element, composer, approveAction, update, get status() { return status; } };
 }
 
 function escapeHtml(text) {

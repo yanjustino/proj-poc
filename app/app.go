@@ -79,11 +79,21 @@ type App struct {
 	// real-world crash this fixes.
 	pollingRuns   map[string]bool
 	pollingRunsMu sync.Mutex
+
+	// runProjects maps a runID to the project_id it was started for —
+	// populated (best-effort) by StartRun from its own arguments, read by
+	// WatchRun's log-tee goroutine to know where under projects/<id>/ to
+	// persist mhl_run_logs output (see runLogFilePath). Every workflow call
+	// this app makes that can run long enough to matter (Wiki/Discovery/
+	// Delivery, via startAndWatch in the frontend) already sends project_id
+	// in its arguments.
+	runProjects   map[string]string
+	runProjectsMu sync.Mutex
 }
 
 // NewApp creates a new App application struct
 func NewApp() *App {
-	return &App{pollingRuns: make(map[string]bool)}
+	return &App{pollingRuns: make(map[string]bool), runProjects: make(map[string]string)}
 }
 
 // startup is called when the app starts. The context is saved
@@ -500,6 +510,16 @@ func (a *App) StartRun(workflow string, argumentsJSON string) (string, error) {
 	if err != nil {
 		return "", err
 	}
+	// Best-effort: if arguments carries a valid project_id (every long-running
+	// workflow call the frontend makes does — Wiki/Discovery/Delivery), record
+	// it so WatchRun's log-tee goroutine knows where to persist this run's
+	// logs. A caller without one (WorkItem's own actions, which never reach
+	// WatchRun — see api.js's callWorkflowOnce) just never gets an entry here.
+	if projectID, ok := arguments["project_id"].(string); ok && validateProjectID(projectID) == nil {
+		a.runProjectsMu.Lock()
+		a.runProjects[status.RunID] = projectID
+		a.runProjectsMu.Unlock()
+	}
 	return encodeStatus(status)
 }
 
@@ -580,6 +600,18 @@ func (a *App) GetRunLogs(runID string, since string) (string, error) {
 	return string(result), nil
 }
 
+// GetRunProjectID returns the project_id StartRun associated with runID
+// (best-effort — see runProjects' own doc comment), or "" if unknown (a run
+// from before this app session, or one whose arguments never carried a valid
+// project_id, e.g. WorkItem's own actions). Lets the frontend's Logs screen
+// (logs-view.js) look up that project's prompt_log.jsonl/usage.jsonl for a
+// selected run without keeping its own separate copy of this mapping.
+func (a *App) GetRunProjectID(runID string) string {
+	a.runProjectsMu.Lock()
+	defer a.runProjectsMu.Unlock()
+	return a.runProjects[runID]
+}
+
 // WatchRun polls mhl_run_status on the Go side (not the frontend — §6.2 of
 // the plan) and pushes every snapshot to the frontend as a
 // "run:<runId>" event, until the run reaches a terminal state (completed/
@@ -649,6 +681,19 @@ func (a *App) WatchRun(runID string) error {
 			log.Printf("mhl bridge: WatchRun(%s): poll ended: %v", runID, err)
 		}
 	}()
+
+	// tailRunLogs only runs when this call actually owns the run (the status
+	// poll goroutine above was just spawned, not reused) and StartRun managed
+	// to associate this runID with a project_id — see runProjects' own doc
+	// comment. It shares the pollingRuns entry as its own stop signal instead
+	// of a second one, so it can never outlive the status poll it's paired
+	// with.
+	a.runProjectsMu.Lock()
+	projectID, hasProject := a.runProjects[runID]
+	a.runProjectsMu.Unlock()
+	if hasProject {
+		go a.tailRunLogs(runID, projectID)
+	}
 	return nil
 }
 
@@ -659,6 +704,119 @@ func (a *App) publishRunStatus(runID string, status *mhlbridge.RunStatus) {
 		return
 	}
 	a.emit("run:"+runID, body)
+}
+
+// tailRunLogsInterval trades freshness for load — coarser than
+// runPollInterval's 500ms status poll on purpose, since disk-persisted logs
+// are for after-the-fact reading (item 6 of FEATURES.md), not live display
+// (the Logs screen already polls mhl_run_logs itself, on its own schedule,
+// whenever it's open — see logs-view.js).
+const tailRunLogsInterval = 2 * time.Second
+
+// tailRunLogs persists a run's mhl_run_logs output to
+// projects/<projectID>/run_logs/<runID>.log as it happens, so it survives
+// past mhl's own in-memory retention and past this process exiting entirely
+// (mhl_run_logs itself is never written to disk — see
+// mhlbridge.Client.RunLogs' doc comment). Runs for exactly as long as
+// WatchRun's status-poll goroutine does for the same runID, checking
+// a.pollingRuns as its own stop signal instead of duplicating that
+// lifecycle.
+func (a *App) tailRunLogs(runID string, projectID string) {
+	path, err := runLogFilePath(a.dataDir, projectID, runID)
+	if err != nil {
+		log.Printf("mhl bridge: tailRunLogs(%s): %v", runID, err)
+		return
+	}
+	ticker := time.NewTicker(tailRunLogsInterval)
+	defer ticker.Stop()
+	since := ""
+	for {
+		a.pollingRunsMu.Lock()
+		stillWatching := a.pollingRuns[runID]
+		a.pollingRunsMu.Unlock()
+		if !stillWatching {
+			return
+		}
+		result, err := a.mhl.RunLogs(a.ctx, runID, since)
+		if err != nil {
+			log.Printf("mhl bridge: tailRunLogs(%s): fetch logs: %v", runID, err)
+		} else {
+			var parsed struct {
+				Text      string `json:"text"`
+				NextSince int64  `json:"nextSince"`
+			}
+			if err := json.Unmarshal(result, &parsed); err != nil {
+				log.Printf("mhl bridge: tailRunLogs(%s): decode logs: %v", runID, err)
+			} else {
+				if parsed.Text != "" {
+					if err := appendToFile(path, parsed.Text+"\n"); err != nil {
+						log.Printf("mhl bridge: tailRunLogs(%s): write %s: %v", runID, path, err)
+					}
+				}
+				since = strconv.FormatInt(parsed.NextSince, 10)
+			}
+		}
+		<-ticker.C
+	}
+}
+
+// runIDPattern mirrors the shape mhl_run_start actually returns (confirmed
+// by inspecting real runIds during this app's own testing) — loose but
+// still rejects anything that could escape projects/<projectID>/run_logs/
+// (a "/" or ".."), same discipline as projectIDPattern.
+var runIDPattern = regexp.MustCompile(`^[A-Za-z0-9_-]{1,128}$`)
+
+// runLogFilePath resolves projects/<projectID>/run_logs/<runID>.log under
+// dataDir, validating both segments first — never trusts a runID handed back
+// by mhl to be traversal-safe without checking, same discipline as
+// projectRootDir/resolveSafeRelative.
+func runLogFilePath(dataDir string, projectID string, runID string) (string, error) {
+	if dataDir == "" {
+		return "", fmt.Errorf("data dir nao resolvido — veja o log de startup")
+	}
+	if err := validateProjectID(projectID); err != nil {
+		return "", err
+	}
+	if !runIDPattern.MatchString(runID) {
+		return "", fmt.Errorf("runId invalido: %q", runID)
+	}
+	return filepath.Join(dataDir, "projects", projectID, "run_logs", runID+".log"), nil
+}
+
+// appendToFile creates the destination's directory if needed and appends
+// text to it — tailRunLogs' own write path, factored out so it's testable
+// without a real run.
+func appendToFile(path string, text string) error {
+	if err := os.MkdirAll(filepath.Dir(path), 0o755); err != nil {
+		return err
+	}
+	f, err := os.OpenFile(path, os.O_APPEND|os.O_CREATE|os.O_WRONLY, 0o644)
+	if err != nil {
+		return err
+	}
+	defer f.Close()
+	_, err = f.WriteString(text)
+	return err
+}
+
+// ReadPersistedRunLogs reads projects/<projectID>/run_logs/<runID>.log (see
+// tailRunLogs) — empty string, not an error, if this run was never persisted
+// (never watched via WatchRun, or predates this feature). Lets the frontend
+// recover a run's log after this process restarted and mhl's own in-memory
+// retention (mhl_run_logs) is gone.
+func (a *App) ReadPersistedRunLogs(projectID string, runID string) (string, error) {
+	path, err := runLogFilePath(a.dataDir, projectID, runID)
+	if err != nil {
+		return "", err
+	}
+	content, err := os.ReadFile(path)
+	if err != nil {
+		if os.IsNotExist(err) {
+			return "", nil
+		}
+		return "", fmt.Errorf("ler logs persistidos: %w", err)
+	}
+	return string(content), nil
 }
 
 func decodeArguments(argumentsJSON string) (map[string]any, error) {

@@ -1,7 +1,7 @@
-import { listProjectDir, readProjectFile, startAndWatch } from '../api.js';
+import { listProjectDir, readProjectFile, startAndWatch, wikiSyncHtml } from '../api.js';
 import { renderMarkdown } from '../markdown.js';
 import { createRunTracker } from '../run-tracker.js';
-import { showMarkdownDoc, showEmpty } from '../reading-pane.js';
+import { showMarkdownDoc, showHtmlDoc, showEmpty } from '../reading-pane.js';
 import { icon } from '../icons.js';
 
 const GROUPS = [
@@ -81,14 +81,34 @@ export async function renderWikiTab(container, project) {
   let selectedGroup = 'index'; // 'index' | one of GROUPS[].dir
   let openPath = null; // currently-open page's data-path, kept across tab switches so the right row re-marks .active
 
+  // A wiki agora é lida como o HTML estático gerado por WikiHtmlExport
+  // (workflows/shared/wiki/wiki_html_export.mh), nunca mais como .md cru
+  // renderizado no navegador — o .md continua existindo por baixo (é nele
+  // que a LLM acumula fatos incrementalmente), mas o usuário nunca mais o
+  // vê diretamente. allowScripts: true porque a página gerada embute sua
+  // própria busca local (index.html) — conteúdo determinístico, nunca da
+  // LLM, então é seguro rodar.
+  function htmlRelativeFor(relative) {
+    return relative === 'index.md' ? 'html/index.html' : 'html/' + relative.replace(/\.md$/, '.html');
+  }
+
   async function openPage(root, relative, label) {
     openPath = relative;
     markActiveRow();
     try {
-      const text = await readProjectFile(project.id, root, relative);
-      showMarkdownDoc(label, renderMarkdown(text));
-    } catch (err) {
-      showMarkdownDoc(label, `<p class="doc-empty">Não foi possível abrir "${escapeHtml(label)}": ${escapeHtml(String(err))}</p>`);
+      const html = await readProjectFile(project.id, root, htmlRelativeFor(relative));
+      showHtmlDoc(label, html, { allowScripts: true });
+    } catch {
+      // wiki/html pode ainda não existir pra um work-item cuja wiki foi
+      // ingerida antes de sync_html existir e cujo sync no mount (abaixo)
+      // falhou por algum motivo — cai pro .md cru em vez de deixar a
+      // página vazia.
+      try {
+        const text = await readProjectFile(project.id, root, relative);
+        showMarkdownDoc(label, renderMarkdown(text));
+      } catch (err) {
+        showMarkdownDoc(label, `<p class="doc-empty">Não foi possível abrir "${escapeHtml(label)}": ${escapeHtml(String(err))}</p>`);
+      }
     }
   }
 
@@ -174,6 +194,9 @@ export async function renderWikiTab(container, project) {
 
   await buildTree();
   if (latestByName['index.md']) {
+    // Best-effort: garante que wiki/html está atual antes de abrir — se
+    // falhar, openPage ainda cai pro .md cru sozinho.
+    await wikiSyncHtml(project.id).catch(() => {});
     await openPage('wiki', 'index.md', 'Índice');
   } else {
     showEmpty('Adicione fontes na aba "Fontes" para gerar a wiki.');

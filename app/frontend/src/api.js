@@ -109,6 +109,21 @@ export async function getRunLogs(runId, since) {
   return parseJSON(await App.GetRunLogs(runId, since ?? ''), 'GetRunLogs');
 }
 
+// getPersistedRunLogs reads a run's log back from disk (see app.go's
+// ReadPersistedRunLogs) — survives past mhl's own in-memory retention and
+// past this process restarting, unlike getRunLogs above. Empty string, not
+// an error, if this run was never persisted.
+export async function getPersistedRunLogs(projectId, runId) {
+  return App.ReadPersistedRunLogs(projectId, runId);
+}
+
+// getRunProjectId returns the project_id StartRun associated with runId, or
+// "" if unknown (see app.go's GetRunProjectID) — lets the Logs screen look up
+// that project's prompt_log.jsonl for a selected run.
+export async function getRunProjectId(runId) {
+  return App.GetRunProjectID(runId);
+}
+
 export async function selectRawFiles() {
   return parseJSON(await App.SelectRawFiles(), 'SelectRawFiles');
 }
@@ -139,6 +154,14 @@ export async function exportProject(projectId) {
 
 export async function exportProjectFile(projectId, root, relative) {
   return App.ExportProjectFile(projectId, root, relative);
+}
+
+// wikiSyncHtml regenerates wiki/html/ (WikiHtmlExport.sync, no LLM call) —
+// called before a wiki page is opened so the HTML shown is always current,
+// even for a work-item whose wiki existed before this action did.
+export async function wikiSyncHtml(projectId) {
+  const result = await callWorkflowOnce('Wiki', { project_id: projectId, action: 'sync_html' });
+  return result;
 }
 
 // isFullyTerminal is deliberately narrower than the bridge's own
@@ -258,6 +281,14 @@ export async function workItemCreate(name, itemType) {
 export async function workItemUsage(projectId) {
   const result = await callWorkflowOnce('WorkItem', { action: 'usage', project_id: projectId });
   return result.usage;
+}
+
+// workItemPromptLog returns every LLM call recorded for this work-item —
+// final prompt, raw response and usage per call (workflows/work_item/
+// actions.mh's WorkItemActions.prompt_log) — oldest first.
+export async function workItemPromptLog(projectId) {
+  const result = await callWorkflowOnce('WorkItem', { action: 'prompt_log', project_id: projectId });
+  return result.prompt_log;
 }
 
 // artifactPreview renders a paused run's pending_data through the same

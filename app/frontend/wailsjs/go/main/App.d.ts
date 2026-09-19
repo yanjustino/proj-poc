@@ -21,6 +21,8 @@ export function GetDevinModel():Promise<string>;
 
 export function GetRunLogs(arg1:string,arg2:string):Promise<string>;
 
+export function GetRunProjectID(arg1:string):Promise<string>;
+
 export function GetRunStatus(arg1:string):Promise<string>;
 
 export function GetWorkflowManifest(arg1:string):Promise<string>;
@@ -42,6 +44,8 @@ export function LogFrontendError(arg1:string):Promise<void>;
 export function MCPStatus():Promise<string>;
 
 export function MarkRawIngested(arg1:string,arg2:string):Promise<string>;
+
+export function ReadPersistedRunLogs(arg1:string,arg2:string):Promise<string>;
 
 export function ReadProjectFile(arg1:string,arg2:string,arg3:string):Promise<string>;
 

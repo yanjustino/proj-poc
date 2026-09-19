@@ -42,6 +42,10 @@ export function GetRunLogs(arg1, arg2) {
   return window['go']['main']['App']['GetRunLogs'](arg1, arg2);
 }
 
+export function GetRunProjectID(arg1) {
+  return window['go']['main']['App']['GetRunProjectID'](arg1);
+}
+
 export function GetRunStatus(arg1) {
   return window['go']['main']['App']['GetRunStatus'](arg1);
 }
@@ -84,6 +88,10 @@ export function MCPStatus() {
 
 export function MarkRawIngested(arg1, arg2) {
   return window['go']['main']['App']['MarkRawIngested'](arg1, arg2);
+}
+
+export function ReadPersistedRunLogs(arg1, arg2) {
+  return window['go']['main']['App']['ReadPersistedRunLogs'](arg1, arg2);
 }
 
 export function ReadProjectFile(arg1, arg2, arg3) {

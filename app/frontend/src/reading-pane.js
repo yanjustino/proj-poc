@@ -74,6 +74,18 @@ export function clearFooter() {
   els.footer.hidden = true;
 }
 
+// setToolbarAction mounts a single element into the header toolbar
+// (.doc-tools), alongside "ver fonte"/expand — for a primary action that
+// belongs in the top bar instead of the footer (run-tracker.js's "Aprovar",
+// see tab-artefatos.js's renderDetail()). No separate clear function: every
+// show*/beginCustom call already resets `els.tools.innerHTML` up front (same
+// as setHeader already does for the footer), so the next document shown
+// drops this automatically.
+export function setToolbarAction(element) {
+  els.tools.innerHTML = '';
+  els.tools.appendChild(element);
+}
+
 export function showEmpty(message) {
   setHeader('', '');
   els.tools.innerHTML = '';
@@ -179,11 +191,17 @@ function widenReadingWidth(html) {
 // iframe content height isn't a CSS-computable property of the frame
 // itself; `allow-same-origin` (set unconditionally below) is what makes
 // contentDocument reachable from here despite the sandbox.
-export function buildDocFrame(rawHtml, { mermaid, inlineMermaid, autoHeight } = {}) {
+// allowScripts is a second, independent reason to enable 'allow-scripts' on
+// the sandbox — for content we generated ourselves deterministically (never
+// raw LLM output) that needs its own inline <script> to work, e.g. the wiki's
+// static HTML export embedding a local search box (tab-wiki.js). Kept apart
+// from `mermaid` because that flag also controls the inlineMermaid rewrite,
+// which a caller like this has no use for.
+export function buildDocFrame(rawHtml, { mermaid, inlineMermaid, autoHeight, allowScripts } = {}) {
   const widened = widenReadingWidth(rawHtml);
   const iframe = document.createElement('iframe');
   iframe.className = autoHeight ? 'doc-frame doc-frame-auto' : 'doc-frame';
-  iframe.setAttribute('sandbox', mermaid ? 'allow-scripts allow-same-origin' : 'allow-same-origin');
+  iframe.setAttribute('sandbox', mermaid || allowScripts ? 'allow-scripts allow-same-origin' : 'allow-same-origin');
   iframe.srcdoc = mermaid ? inlineMermaid(widened) : widened;
   if (autoHeight) {
     iframe.addEventListener('load', () => {
@@ -203,7 +221,7 @@ export function buildDocFrame(rawHtml, { mermaid, inlineMermaid, autoHeight } = 
 // "ver fonte" toggle. `mermaid` inlines the bundled mermaid.min.js in place
 // of the artifact's asset-relative <script> (see mermaid-inline.js) so a
 // diagram renders inside the app without depending on any file on disk.
-export function showHtmlDoc(title, rawHtml, { mermaid, inlineMermaid } = {}) {
+export function showHtmlDoc(title, rawHtml, { mermaid, inlineMermaid, allowScripts } = {}) {
   setHeader(title, 'HTML');
   let showingSource = false;
 
@@ -214,7 +232,7 @@ export function showHtmlDoc(title, rawHtml, { mermaid, inlineMermaid } = {}) {
       return;
     }
     els.body.innerHTML = '';
-    els.body.appendChild(buildDocFrame(rawHtml, { mermaid, inlineMermaid }));
+    els.body.appendChild(buildDocFrame(rawHtml, { mermaid, inlineMermaid, allowScripts }));
   }
 
   function toggleLabel() {

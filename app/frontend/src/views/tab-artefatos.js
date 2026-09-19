@@ -11,7 +11,7 @@ import {
 import { sequenceFor, isReady, missingDeps, featureIdOf, featureTitleOf } from '../artifacts.js';
 import { createRunTracker } from '../run-tracker.js';
 import { inlineMermaid, hasMermaidDiagram } from '../mermaid-inline.js';
-import { beginCustom, buildDocFrame, showHtmlDoc, showEmpty, showAction, showLoading, setFooter } from '../reading-pane.js';
+import { beginCustom, buildDocFrame, showHtmlDoc, showEmpty, showAction, showLoading, setFooter, setToolbarAction } from '../reading-pane.js';
 import { setActiveRun, getActiveRun, clearActiveRun } from '../active-runs.js';
 import { dotClass } from '../status.js';
 import { icon } from '../icons.js';
@@ -423,6 +423,7 @@ export async function renderArtefatosTab(container, project, { onChanged }) {
         // used to push Aprovar/Regenerar/Cancelar out of view above it, so
         // approving meant scrolling back up to find them blind.
         setFooter(tracker.composer);
+        setToolbarAction(tracker.approveAction);
         appendPausedPreview(row, tracker, body);
       }
       return;

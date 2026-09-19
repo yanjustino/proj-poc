@@ -1,0 +1,259 @@
+// tool WikiHtmlExport — espelha wiki/*.md como HTML estático navegável e
+// pesquisável em wiki/html/, sem nenhuma dependência de servidor (abre por
+// file:// ou incluído no zip de "Exportar tudo"). Determinístico (C3): a LLM
+// nunca participa daqui, só título/resumo/corpo já gravados pelo WikiPages.
+//
+// Sem parser de Markdown na linguagem mhl — não é necessário: o formato que
+// WikiPages realmente escreve é estreito e conhecido (`# título`, blocos de
+// `## Fatos (data)`, listas `- item`, parágrafos simples; ver
+// workflows/shared/wiki/wiki_pages.mh), então md_to_html cobre exatamente
+// isso via string.split/starts_with, sem regex nem biblioteca externa.
+// Formatação inline (negrito, links, ...) dentro de um parágrafo não é
+// interpretada — sai como texto puro, mesma limitação em qualquer bloco que
+// WikiPages não gera ele mesmo (ex. o corpo de uma resposta arquivada).
+
+import { Paths } from "../core/paths.mh"
+import { Html } from "../core/html.mh"
+import { WikiIndex } from "wiki_index.mh"
+
+export tool WikiHtmlExport {
+    // categories é método (não uma constante de módulo — sem precedente na
+    // base pra isso) só pra não repetir esta lista nos 3 lugares que
+    // precisam dela (sync/render_index/build_search_entries).
+    categories(): {dir: string, label: string}[] -> [
+        {dir: "sources", label: "Fontes"},
+        {dir: "entities", label: "Entidades"},
+        {dir: "concepts", label: "Conceitos"},
+        {dir: "answers", label: "Respostas arquivadas"},
+    ]
+
+    // sync regera wiki/html inteiro a partir do estado atual (o mesmo que
+    // WikiIndex usa) — mesma escolha de WikiIndex.render: mais simples e
+    // barato que tentar atualizar incrementalmente um HTML já escrito.
+    sync(project_id: string) -> {
+        var state = WikiIndex.load(project_id)
+        for (var category in self.categories()) {
+            var entries = state.get(category.dir, [])
+            for (var entry in entries) {
+                var markdown = fs.read(Paths.wiki(project_id, category.dir + "/" + entry.slug + ".md"))
+                var body_html = self.md_to_html(self.strip_leading_title(markdown, entry.title))
+                var page_html = self.render_page(entry.title, category.label, body_html)
+                fs.write(Paths.wiki(project_id, "html/" + category.dir + "/" + entry.slug + ".html"), page_html)
+            }
+        }
+        fs.write(Paths.wiki(project_id, "html/index.html"), self.render_index(state))
+    }
+
+    // --- markdown -> HTML (determinístico, subconjunto estreito) ---
+
+    // strip_leading_title remove o "# <title>" que abre todo .md que
+    // WikiPages escreve (write_source/upsert_fact_page/write_answer sempre
+    // comecam assim) — render_page ja mostra o titulo no proprio <header>;
+    // sem isso, cada pagina exibia o mesmo titulo duas vezes (header + <h1>
+    // duplicado no corpo). So remove quando o bloco bate com o titulo real
+    // (nunca um chute — evita comer um heading legitimo que por acaso comece
+    // igual, caso alguma pagina futura nao siga esse padrao).
+    strip_leading_title(markdown: string, title: string): string -> {
+        var trimmed = markdown.trim()
+        var heading = "# " + title
+        if (!trimmed.starts_with(heading)) return trimmed
+        return trimmed.substring(heading.size(), trimmed.size()).trim()
+    }
+
+    md_to_html(markdown: string): string -> {
+        var blocks = markdown.trim().split("\n\n").filter((block) -> !block.trim().is_empty())
+        return blocks.map((block) -> self.render_block(block.trim())).join("\n")
+    }
+
+    render_block(block: string): string -> {
+        if (block.starts_with("# ")) return "<h1>" + html.escape(block.substring(2, block.size())) + "</h1>"
+        if (block.starts_with("## ")) return "<h2>" + html.escape(block.substring(3, block.size())) + "</h2>"
+        if (block.starts_with("- ")) return self.render_list_block(block)
+        return "<p>" + html.escape(block) + "</p>"
+    }
+
+    render_list_block(block: string): string -> {
+        var items = block.split("\n")
+            .map((line) -> line.trim())
+            .filter((line) -> line.starts_with("- "))
+            .map((line) -> line.substring(2, line.size()))
+        return Html.list(items)
+    }
+
+    // --- shells HTML (auto-contidos: CSS inline, sem asset externo) ---
+
+    render_page(title: string, category_label: string, body_html: string): string -> {
+        var escaped_title = html.escape(title)
+        var escaped_category = html.escape(category_label)
+        return
+        """
+        <!doctype html>
+        <html lang="pt-BR">
+        <head>
+        <meta charset="utf-8" />
+        <title>${escaped_title} — Wiki</title>
+        <style>${self.page_css()}</style>
+        </head>
+        <body>
+        <div class="wiki-page">
+        <header class="wiki-page-head"><span class="wiki-category">${escaped_category}</span><h1>${escaped_title}</h1></header>
+        <main>${body_html}</main>
+        </div>
+        </body>
+        </html>
+        """
+    }
+
+    render_index(state: any): string -> {
+        var sections = self.categories()
+            .filter((category) -> !state.get(category.dir, []).is_empty())
+            .map((category) -> self.render_index_section(category, state.get(category.dir, [])))
+            .join("\n")
+        var search_json = json.stringify(self.build_search_entries(state)).replace("</script>", "<\\/script>")
+        return
+        """
+        <!doctype html>
+        <html lang="pt-BR">
+        <head>
+        <meta charset="utf-8" />
+        <title>Índice da wiki</title>
+        <style>${self.page_css()}</style>
+        </head>
+        <body>
+        <div class="wiki-page">
+        <header class="wiki-page-head"><h1>Wiki</h1><p>Navegação e busca local — nenhum servidor necessário.</p></header>
+        <div class="wiki-search"><input type="text" id="wiki-search-input" placeholder="Buscar na wiki..." autocomplete="off" /></div>
+        <ul id="wiki-search-results" class="wiki-index-list" hidden></ul>
+        <main id="wiki-static-nav">${sections}</main>
+        </div>
+        <script>
+        var WIKI_INDEX = ${search_json};
+        (function () {
+          var input = document.getElementById('wiki-search-input');
+          var results = document.getElementById('wiki-search-results');
+          var staticNav = document.getElementById('wiki-static-nav');
+          function renderResults(items) {
+            results.innerHTML = '';
+            items.forEach(function (item) {
+              var li = document.createElement('li');
+              var a = document.createElement('a');
+              a.href = item.path;
+              var strong = document.createElement('strong');
+              strong.textContent = item.title;
+              var small = document.createElement('small');
+              small.textContent = item.category + ' — ' + item.summary;
+              a.appendChild(strong);
+              a.appendChild(small);
+              li.appendChild(a);
+              results.appendChild(li);
+            });
+          }
+          input.addEventListener('input', function () {
+            var q = input.value.trim().toLowerCase();
+            if (!q) {
+              results.hidden = true;
+              staticNav.hidden = false;
+              return;
+            }
+            staticNav.hidden = true;
+            results.hidden = false;
+            renderResults(WIKI_INDEX.filter(function (item) {
+              return (item.title + ' ' + item.summary + ' ' + item.category).toLowerCase().indexOf(q) !== -1;
+            }));
+          });
+        })();
+        </script>
+        </body>
+        </html>
+        """
+    }
+
+    render_index_section(category: {dir: string, label: string}, entries: any[]): string -> {
+        var items = entries
+            .map((entry) -> "<li><a href=\"" + category.dir + "/" + entry.slug + ".html\"><strong>" +
+                html.escape(entry.title) + "</strong><small>" + html.escape(entry.summary) + "</small></a></li>")
+            .join("")
+        return "<section class=\"wiki-index-section\"><h2>" + html.escape(category.label) + "</h2><ul class=\"wiki-index-list\">" + items + "</ul></section>"
+    }
+
+    build_search_entries(state: any): any[] -> {
+        var entries = []
+        for (var category in self.categories()) {
+            for (var entry in state.get(category.dir, [])) {
+                entries += [{
+                    category: category.label,
+                    title: entry.title,
+                    summary: entry.summary,
+                    path: category.dir + "/" + entry.slug + ".html",
+                }]
+            }
+        }
+        return entries
+    }
+
+    page_css(): string ->
+        "body{margin:0;background:#f6f4ee;color:#1d1d1a;font:15px/1.6 -apple-system,BlinkMacSystemFont,'Segoe UI',sans-serif}" +
+        ".wiki-page{max-width:760px;margin:0 auto;padding:32px 24px 64px}" +
+        ".wiki-page-head{margin-bottom:24px}" +
+        ".wiki-category{display:inline-block;font-size:11px;letter-spacing:.06em;text-transform:uppercase;color:#82806f;margin-bottom:6px}" +
+        "h1{margin:0;font-size:26px}h2{font-size:17px;margin:22px 0 8px}" +
+        "p{margin:0 0 12px}ul{margin:0 0 12px;padding-left:22px}li{margin-bottom:4px}" +
+        ".wiki-search{margin:18px 0}" +
+        "#wiki-search-input{width:100%;box-sizing:border-box;padding:10px 12px;border:1px solid #d8d5ca;border-radius:8px;font-size:14px}" +
+        ".wiki-index-section{margin-bottom:22px}" +
+        ".wiki-index-list{list-style:none;padding:0;margin:0}" +
+        ".wiki-index-list li{margin-bottom:2px}" +
+        ".wiki-index-list a{display:block;padding:9px 10px;border-radius:8px;text-decoration:none;color:inherit}" +
+        ".wiki-index-list a:hover{background:#ece9df}" +
+        ".wiki-index-list strong{display:block;font-size:14px}" +
+        ".wiki-index-list small{display:block;color:#82806f;font-size:12px;margin-top:2px}"
+}
+
+test WikiHtmlExportSpec {
+    describe strip_leading_title_removes_the_opening_heading_that_matches_the_title {
+        are_equal(
+            WikiHtmlExport.strip_leading_title("# Ata da Reunião\n\nResumo aqui.", "Ata da Reunião"),
+            "Resumo aqui."
+        )
+    }
+
+    describe strip_leading_title_leaves_content_untouched_when_it_does_not_open_with_the_title {
+        are_equal(
+            WikiHtmlExport.strip_leading_title("## Fatos (2026-01-01)\n\n- fato", "Alguma Entidade"),
+            "## Fatos (2026-01-01)\n\n- fato"
+        )
+    }
+
+    describe md_to_html_renders_heading_paragraph_and_list_blocks {
+        var html_out = WikiHtmlExport.md_to_html("# Título\n\nUm resumo.\n\n## Fatos (2026-01-01)\n\n- fato um\n- fato dois")
+        are_equal(html_out, "<h1>Título</h1>\n<p>Um resumo.</p>\n<h2>Fatos (2026-01-01)</h2>\n<ul><li>fato um</li><li>fato dois</li></ul>")
+    }
+
+    describe md_to_html_escapes_html_special_characters {
+        var html_out = WikiHtmlExport.md_to_html("# <script>\n\nA & B")
+        is_true(html_out.contains("&lt;script&gt;"))
+        is_true(html_out.contains("A &amp; B"))
+    }
+
+    describe render_index_section_lists_entries_with_links {
+        var section = WikiHtmlExport.render_index_section(
+            {dir: "sources", label: "Fontes"},
+            [{slug: "ata", title: "Ata", summary: "resumo da ata"}]
+        )
+        is_true(section.contains("<h2>Fontes</h2>"))
+        is_true(section.contains("href=\"sources/ata.html\""))
+        is_true(section.contains("Ata"))
+    }
+
+    describe build_search_entries_flattens_every_category {
+        var entries = WikiHtmlExport.build_search_entries({
+            sources: [{slug: "a", title: "A", summary: "sa"}],
+            entities: [{slug: "b", title: "B", summary: "sb"}],
+            concepts: [],
+            answers: [],
+        })
+        are_equal(entries.size(), 2)
+        are_equal(entries[0].category, "Fontes")
+        are_equal(entries[1].category, "Entidades")
+    }
+}
