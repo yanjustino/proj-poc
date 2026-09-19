@@ -196,13 +196,17 @@ export tool Writer {
     // adapter em runtime e evita que Discovery/Wiki/Delivery tentem resolver
     // um simbolo auxiliar como DevinPromptFile no proprio modulo.
     generate_devin(instruction: string, schema: string, project_id: string): string -> {
-        var prompt = """
-${instruction}
+        var prompt = 
+        """
+        ${instruction}
 
-Responda somente com um objeto JSON valido, sem Markdown, comentarios ou texto adicional.
-O objeto deve obedecer exatamente a este JSON Schema:
-${schema}
-"""
+        Responda somente com um objeto JSON valido, sem Markdown, comentarios ou texto adicional.
+        O objeto deve obedecer exatamente a este JSON Schema:
+        ${schema}
+        """
+
+        
+
         // Windows limita a linha de comando criada por CreateProcess a cerca
         // de 32K caracteres. O arquivo fica estritamente no work-item, usa
         // UUID para chamadas concorrentes e e removido ate quando o CLI falha.
