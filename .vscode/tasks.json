@@ -2,12 +2,37 @@
     "version": "2.0.0",
     "tasks": [
         {
+            // Keeps app/embedded/bin/mhl-<goos>-<goarch> in sync with the
+            // `mhl` on PATH before every local debug build — a stale
+            // vendored binary otherwise silently exercises whatever mhl
+            // version was last copied there (real incident: it sat on
+            // v1.4.0-beta.14, missing `stdin:` support, for a day after the
+            // dev `mhl` install moved to v1.4.0-beta.15 — the app kept
+            // building and running fine, just against the wrong runtime,
+            // with no error pointing at the actual cause). See
+            // app/embedded/sync-dev-mhl.sh and README.md. Windows command
+            // assumes `bash` is reachable (Git for Windows) — adjust if
+            // your Windows dev setup doesn't have it on PATH.
+            "label": "sync vendored mhl binary",
+            "type": "shell",
+            "command": "bash embedded/sync-dev-mhl.sh",
+            "windows": {
+                "command": "bash embedded/sync-dev-mhl.sh"
+            },
+            "options": {
+                "cwd": "${workspaceFolder}/app"
+            },
+            "problemMatcher": []
+        },
+        {
             "label": "build frontend",
             "type": "shell",
             "command": "npm run build",
             "options": {
                 "cwd": "${workspaceFolder}/app/frontend"
             },
+            "dependsOn": ["sync vendored mhl binary"],
+            "dependsOrder": "sequence",
             "problemMatcher": []
         },
         {
@@ -44,6 +69,8 @@
             "options": {
                 "cwd": "${workspaceFolder}/app"
             },
+            "dependsOn": ["sync vendored mhl binary"],
+            "dependsOrder": "sequence",
             "problemMatcher": ["$go"]
         }
     ]

@@ -64,14 +64,31 @@ export agent Devin {
     }
 }
 
+// Prompt vai por `stdin:` de novo — as duas tentativas anteriores falharam
+// nao porque o mecanismo nao funciona, mas porque a frase posicional pedia
+// pro modelo falar SOBRE o stdin em si ("Execute as instrucoes recebidas
+// pela entrada padrao" / "Repita o texto recebido pela entrada padrao"):
+// isso e uma pergunta de introspeccao, e o Claude respondeu com uma frase
+// generica de treino ("nao tenho um stream de stdin separado") em vez de
+// checar o proprio contexto. Confirmado com 2 chamadas reais via CLI direto
+// (fora do mhl, isolando so o comportamento do `claude`): uma instrucao
+// posicional que aponta pra uma TAREFA concreta sobre "o conteudo abaixo"
+// (em vez de sobre o mecanismo em si) faz o modelo processar o stdin pipado
+// de verdade — testado com e sem `--disallowed-tools`, resposta refletiu com
+// precisao o conteudo que so existia no stdin. `--json-schema` continua SEM
+// alternativa a inline (residual conhecido pra schemas excepcionalmente
+// grandes); o prompt (que pode incluir wiki inteira) agora sai do argv de
+// verdade, igual ao Codex.
 export agent Claude {
     command: "claude"
     args: [
-        "-p", "${prompt}",
+        "-p",
+        "Leia o conteúdo abaixo e responda exatamente como ele pede.",
         "--output-format", "json",
         "--json-schema", "${schema}",
         "--disallowed-tools", "Bash,Read,Write,Edit,MultiEdit,NotebookEdit,WebFetch,WebSearch,Glob,Grep,Task"
     ]
+    stdin: "${prompt}"
 
     retry: {
         max_attempts: 3
@@ -105,6 +122,15 @@ export agent Claude {
 // nesse tratamento, em lugar nenhum da linguagem (MHL-Melhorias.md #18,
 // corrigido depois do achado original desta fase — a solucao via `tool
 // CodexCwd` que o achado documentava nao e mais necessaria).
+// Prompt vai por `stdin:` (ver comentario equivalente no agent Claude,
+// acima) em vez de "${prompt}" como ultimo argumento posicional. Pro Codex
+// isso e o mecanismo OFICIALMENTE documentado, nao um contorno: `codex exec`
+// aceita "-" no lugar de PROMPT com o sentido exato de "leia o prompt do
+// stdin" (learn.chatgpt.com/docs/developer-commands — "Use `-` to pipe the
+// prompt from stdin"). `--output-schema` ja era um caminho de arquivo, entao
+// so o prompt (o lado que podia crescer sem limite via wiki_content) estava
+// no argv — com "-" + stdin, nenhum conteudo de tamanho variavel entra mais
+// na linha de comando.
 export agent Codex {
     description: "Gera conteúdo estruturado com Codex em sandbox somente leitura."
     command: "codex"
@@ -119,8 +145,9 @@ export agent Codex {
         "--color", "never",
         "--json",
         "--output-schema", "${schema}",
-        "${prompt}"
+        "-"
     ]
+    stdin: "${prompt}"
     retry: {
         max_attempts: 3
         delay: 2s

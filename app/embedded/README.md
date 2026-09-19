@@ -37,7 +37,26 @@ has installed. This means: **whenever you upgrade your local dev `mhl`
 install and validate the new version, also refresh the matching file here**
 — otherwise `go test`/`wails build` keep exercising the older vendored
 binary. `app.go`'s startup log always prints the vendored binary's path and
-sha256 so a stale copy doesn't go unnoticed.
+sha256 so a stale copy doesn't go unnoticed — but that only helps if you
+actually go read the log; nothing surfaces the mismatch anywhere in the UI.
+
+Real incident this bit: `bin/mhl-darwin-arm64` sat on `v1.4.0-beta.14`
+(before `mhl` added `stdin:` support to `agent` blocks) for a day after the
+local `mhl` install moved to `v1.4.0-beta.15`. Nothing errored — the app
+built and ran fine, `mhl lint`/`mhl test` on the CLI passed, and the only
+symptom was Claude Code CLI silently getting empty stdin at runtime, which
+looked exactly like an upstream CLI bug until the vendored binary's own
+version was checked directly.
+
+**`./sync-dev-mhl.sh`** exists for exactly this: run from this directory (or
+via the "sync vendored mhl binary" VS Code task, wired as a `preLaunchTask`
+dependency ahead of both debug configs in `.vscode/tasks.json`, so it runs
+automatically before every local Run/Debug) to copy whatever `mhl` is
+currently on `PATH` into `bin/mhl-<goos>-<goarch>` **for the current
+machine only** — a no-op if it's already up to date. This is the dev-loop
+counterpart to the numbered `./sync.sh` procedure above, which stays the
+right tool for a real release (all platforms at once, from a `dist/` tree
+built by `mhl-runtime`'s own `./build.sh release`).
 
 ## `workflows/`
 
