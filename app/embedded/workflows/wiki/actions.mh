@@ -4,6 +4,7 @@
 import { Slug } from "../shared/core/slug.mh"
 import { WikiIndex } from "../shared/wiki/wiki_index.mh"
 import { WikiPages, WikiLog } from "../shared/wiki/wiki_pages.mh"
+import { WikiHtmlExport } from "../shared/wiki/wiki_html_export.mh"
 
 export tool WikiActions {
     commit_ingest(project_id: string, data: any): {
@@ -41,6 +42,7 @@ export tool WikiActions {
         }
 
         self.log(project_id, "ingest", data.source_title)
+        WikiHtmlExport.sync(project_id)
         return {
             source_title: data.source_title,
             source_slug: source_slug,
@@ -58,10 +60,18 @@ export tool WikiActions {
             summary: question
         })
         self.log(project_id, "query", title)
+        WikiHtmlExport.sync(project_id)
         return slug
     }
 
+    // Sem WikiHtmlExport.sync aqui: lint so le e reporta, nunca chama
+    // WikiIndex.upsert_* — nao ha estado novo pra espelhar em wiki/html/.
     record_lint(project_id: string) -> self.log(project_id, "lint", "relatorio gerado")
+
+    // sync_html regera wiki/html/ sob demanda, sem depender de um novo
+    // ingest/query/file_answer — a aba Wiki chama isso ao abrir, pra cobrir
+    // work-items cuja wiki existia antes de WikiHtmlExport existir.
+    sync_html(project_id: string) -> WikiHtmlExport.sync(project_id)
 
     // project_id precisa ser parametro aqui, nao so dos metodos chamadores
     // (commit_ingest/file_answer/record_lint) — `self.<metodo>(...)` e uma

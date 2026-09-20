@@ -14,6 +14,16 @@ export memory Usage {
     path_guard: "no_traversal"
 }
 
+// memory PromptLog — mesmo espirito do Usage acima, mas grava o prompt final
+// e a resposta crua da chamada (auditoria/depuracao), nao so os numeros de
+// consumo. Escrita por Writer.generate (agents.mh), logo apos Usage.append,
+// pro mesmo artifact/execucao — nunca formatado pela LLM (C3).
+export memory PromptLog {
+    type: "jsonl"
+    path: "projects/${project_id}/prompt_log.jsonl"
+    path_guard: "no_traversal"
+}
+
 // Formato do envelope de --output-format json do Claude Code CLI, confirmado
 // por spike real (FASE0-ACHADOS.md §5) e reconfirmado numa chamada real
 // direta a `claude -p ... --output-format json` (fora do mhl, comparando o

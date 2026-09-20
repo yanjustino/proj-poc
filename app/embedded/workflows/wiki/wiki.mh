@@ -17,7 +17,7 @@ workflow Wiki {
     description: "Ingestao, consulta e saneamento da wiki de um work-item (padrao wiki-llm.md)."
 
     input project_id: string
-    input action: string             // "ingest" | "query" | "lint"
+    input action: string             // "ingest" | "query" | "lint" | "sync_html"
     input raw_paths: string[] = []   // ingest: exatamente 1 elemento nesta versao (v1)
     input question: string = ""      // query
     input file_answer: bool = false  // query
@@ -32,6 +32,7 @@ workflow Wiki {
 
     output: {
         action: action,
+        current_artifact: current_artifact,
         result: wiki_result,
         tokens_in: tokens_in,
         tokens_out: tokens_out,
@@ -42,7 +43,8 @@ workflow Wiki {
         if (action == "ingest") goto IngestGenerate
         if (action == "query") goto Query
         if (action == "lint") goto Lint
-        fail("acao desconhecida: '" + action + "' (use ingest | query | lint)")
+        if (action == "sync_html") goto SyncHtml
+        fail("acao desconhecida: '" + action + "' (use ingest | query | lint | sync_html)")
     }
 
     // Ingest e 3 steps, nao 1, especificamente pra Modo Buddy (pause/resume)
@@ -158,6 +160,17 @@ workflow Wiki {
         wiki_result = json.parse(raw)
 
         WikiActions.record_lint(project_id)
+        goto Done
+    }
+
+    // sync_html regera wiki/html/ (WikiHtmlExport) a partir do estado atual,
+    // sem chamar a LLM — usado pela aba Wiki do frontend pra garantir que o
+    // HTML exibido esta sempre atualizado antes de abrir uma pagina, mesmo
+    // pra work-items cuja wiki foi ingerida antes desta acao existir.
+    step SyncHtml {
+        current_artifact = "sync_html"
+        WikiActions.sync_html(project_id)
+        wiki_result = {synced: true}
         goto Done
     }
 

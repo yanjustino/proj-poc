@@ -1,0 +1,102 @@
+// Fragmento `partial workflow Discovery` — artefatos de documento simples
+// (um unico HTML por oportunidade): brief, atributos, requisitos. Mesclado
+// em discovery.mh via `import "discovery.documento.mh"` (por extenso).
+
+import { Paths } from "../shared/core/paths.mh"
+import { Writer } from "../shared/agents/agents.mh"
+import { Context } from "../shared/artifacts/context.mh"
+import { ArtifactBody } from "../shared/artifacts/artifact_body.mh"
+import { PageShell, ArtifactMeta } from "../shared/artifacts/page_shell.mh"
+import {
+    ArtifactSchema, FeedbackBlock,
+    BriefInstruction, AtributosInstruction, RequisitosInstruction,
+    BriefSchemaFile, AtributosSchemaFile, RequisitosSchemaFile
+} from "../shared/artifacts/artifacts_common.mh"
+
+partial workflow Discovery {
+    step BriefGenerate {
+        self.current_artifact = "brief"
+        var response = Writer.generate(
+            prompt: BriefInstruction(schema_conventions: ArtifactSchema(), wiki_content: Context.wiki(project_id), feedback_content: FeedbackBlock.render(pending_feedback)),
+            schema_file: BriefSchemaFile.get(), project_id: project_id, artifact: self.current_artifact
+        )
+        self.tokens_in = response.tokens_in
+        self.tokens_out = response.tokens_out
+        var raw = response.content
+        self.pending_data = json.parse(raw)
+        goto Gate
+    }
+
+    step BriefCommit {
+        var data = self.pending_data
+        var body = ArtifactBody.brief(data)
+        var rendered = PageShell(
+            title: "Brief",
+            body: body,
+            meta: ArtifactMeta.line(time.format(time.now(), "yyyy-MM-dd HH:mm"), "artifacts/brief.html", self.tokens_in, self.tokens_out)
+        )
+        fs.write(Paths.artifact(project_id, "brief.html"), rendered)
+        self.discovery_result = {artifact: "brief", path: "artifacts/brief.html"}
+        goto Done
+    }
+
+    step AtributosGenerate {
+        self.current_artifact = "atributos"
+
+        var brief_content = Context.artifact(project_id, "brief.html")
+        if (brief_content.is_empty()) fail("gere 'brief' antes de 'atributos'")
+
+        var response = Writer.generate(
+            prompt: AtributosInstruction(schema_conventions: ArtifactSchema(), brief_content: brief_content, wiki_content: Context.wiki(project_id), feedback_content: FeedbackBlock.render(pending_feedback)),
+            schema_file: AtributosSchemaFile.get(), project_id: project_id, artifact: self.current_artifact
+        )
+
+        self.tokens_in = response.tokens_in
+        self.tokens_out = response.tokens_out
+        var raw = response.content
+        self.pending_data = json.parse(raw)
+        
+        goto Gate
+    }
+
+    step AtributosCommit {
+        var data = self.pending_data
+        var body = ArtifactBody.atributos(data)
+        var rendered = PageShell(
+            title: "Atributos de Qualidade",
+            body: body,
+            meta: ArtifactMeta.line(time.format(time.now(), "yyyy-MM-dd HH:mm"), "artifacts/atributos.html", self.tokens_in, self.tokens_out)
+        )
+        fs.write(Paths.artifact(project_id, "atributos.html"), rendered)
+        self.discovery_result = {artifact: "atributos", path: "artifacts/atributos.html"}
+        goto Done
+    }
+
+    step RequisitosGenerate {
+        self.current_artifact = "requisitos"
+        var brief_content = Context.artifact(project_id, "brief.html")
+        if (brief_content.is_empty()) fail("gere 'brief' antes de 'requisitos'")
+        var response = Writer.generate(
+            prompt: RequisitosInstruction(schema_conventions: ArtifactSchema(), brief_content: brief_content, wiki_content: Context.wiki(project_id), feedback_content: FeedbackBlock.render(pending_feedback)),
+            schema_file: RequisitosSchemaFile.get(), project_id: project_id, artifact: self.current_artifact
+        )
+        self.tokens_in = response.tokens_in
+        self.tokens_out = response.tokens_out
+        var raw = response.content
+        self.pending_data = json.parse(raw)
+        goto Gate
+    }
+
+    step RequisitosCommit {
+        var data = self.pending_data
+        var body = ArtifactBody.requisitos(data)
+        var rendered = PageShell(
+            title: "Requisitos",
+            body: body,
+            meta: ArtifactMeta.line(time.format(time.now(), "yyyy-MM-dd HH:mm"), "artifacts/requisitos.html", self.tokens_in, self.tokens_out)
+        )
+        fs.write(Paths.artifact(project_id, "requisitos.html"), rendered)
+        self.discovery_result = {artifact: "requisitos", path: "artifacts/requisitos.html"}
+        goto Done
+    }
+}

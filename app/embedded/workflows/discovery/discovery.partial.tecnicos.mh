@@ -1,0 +1,148 @@
+// Fragmento `partial workflow Discovery` — artefatos tecnicos de
+// arquitetura que se desdobram em varios arquivos por oportunidade: adr,
+// der, diagramas. Mesclado em discovery.mh via `import "discovery.tecnicos.mh"`
+// (por extenso).
+
+import { Paths } from "../shared/core/paths.mh"
+import { Writer } from "../shared/agents/agents.mh"
+import { Context } from "../shared/artifacts/context.mh"
+import { ArtifactBody } from "../shared/artifacts/artifact_body.mh"
+import { Slug } from "../shared/core/slug.mh"
+import { ArtifactId } from "../shared/artifacts/artifact_id.mh"
+import { PageShell, ArtifactMeta } from "../shared/artifacts/page_shell.mh"
+import {
+    ArtifactSchema, FeedbackBlock,
+    AdrInstruction, DerInstruction, DiagramasInstruction,
+    AdrSchemaFile, DerSchemaFile, DiagramasSchemaFile
+} from "../shared/artifacts/artifacts_common.mh"
+
+partial workflow Discovery {
+    step AdrGenerate {
+        self.current_artifact = "adr"
+        var requisitos_content = Context.artifact(project_id, "requisitos.html")
+        if (requisitos_content.is_empty()) fail("gere 'requisitos' antes de 'adr'")
+        var atributos_content = Context.artifact(project_id, "atributos.html")
+        if (atributos_content.is_empty()) fail("gere 'atributos' antes de 'adr'")
+
+        var response = Writer.generate(
+            prompt: AdrInstruction(
+                schema_conventions: ArtifactSchema(),
+                requisitos_content: requisitos_content,
+                atributos_content: atributos_content,
+                feedback_content: FeedbackBlock.render(pending_feedback)
+            ),
+            schema_file: AdrSchemaFile.get(),
+            project_id: project_id,
+            artifact: self.current_artifact
+        )
+
+        self.tokens_in = response.tokens_in
+        self.tokens_out = response.tokens_out
+
+        var raw = response.content
+        self.pending_data = json.parse(raw)
+        goto Gate
+    }
+
+    step AdrCommit {
+        var data = self.pending_data
+        var written = []
+        dir.create(Paths.artifact(project_id, "adr"))
+        for (var decision in data.decisions) {
+            var id = ArtifactId.next_adr_id(project_id)
+            var folder = ArtifactId.folder_name(id, decision.titulo)
+            var body = ArtifactBody.adr(decision)
+            var rendered = PageShell(
+                title: html.escape(id + " — " + decision.titulo),
+                body: body,
+                meta: ArtifactMeta.line(time.format(time.now(), "yyyy-MM-dd HH:mm"), "artifacts/adr/" + folder + ".html", self.tokens_in, self.tokens_out)
+            )
+            fs.write(Paths.artifact(project_id, "adr/" + folder + ".html"), rendered)
+            written += [folder]
+        }
+        self.discovery_result = {artifact: "adr", written: written}
+        goto Done
+    }
+
+    step DerGenerate {
+        self.current_artifact = "der"
+        var requisitos_content = Context.artifact(project_id, "requisitos.html")
+        if (requisitos_content.is_empty()) fail("gere 'requisitos' antes de 'der'")
+        var atributos_content = Context.artifact(project_id, "atributos.html")
+        if (atributos_content.is_empty()) fail("gere 'atributos' antes de 'der'")
+        var response = Writer.generate(
+            prompt: DerInstruction(
+                schema_conventions: ArtifactSchema(),
+                requisitos_content: requisitos_content,
+                atributos_content: atributos_content,
+                feedback_content: FeedbackBlock.render(pending_feedback)
+            ),
+            schema_file: DerSchemaFile.get(),
+            project_id: project_id,
+            artifact: self.current_artifact
+        )
+        self.tokens_in = response.tokens_in
+        self.tokens_out = response.tokens_out
+        var raw = response.content
+        self.pending_data = json.parse(raw)
+        goto Gate
+    }
+
+    step DerCommit {
+        var data = self.pending_data
+        var body = ArtifactBody.der(data)
+        var rendered = PageShell(
+            title: "DER",
+            body: body,
+            meta: ArtifactMeta.line(time.format(time.now(), "yyyy-MM-dd HH:mm"), "artifacts/der.html", self.tokens_in, self.tokens_out)
+        )
+        fs.write(Paths.artifact(project_id, "der.html"), rendered)
+        self.discovery_result = {artifact: "der", path: "artifacts/der.html"}
+        goto Done
+    }
+
+    step DiagramasGenerate {
+        self.current_artifact = "diagramas"
+        var requisitos_content = Context.artifact(project_id, "requisitos.html")
+        if (requisitos_content.is_empty()) fail("gere 'requisitos' antes de 'diagramas'")
+        var atributos_content = Context.artifact(project_id, "atributos.html")
+        if (atributos_content.is_empty()) fail("gere 'atributos' antes de 'diagramas'")
+
+        var response = Writer.generate(
+            prompt: DiagramasInstruction(
+                schema_conventions: ArtifactSchema(),
+                requisitos_content: requisitos_content,
+                atributos_content: atributos_content,
+                feedback_content: FeedbackBlock.render(pending_feedback)
+            ),
+            schema_file: DiagramasSchemaFile.get(),
+            project_id: project_id,
+            artifact: self.current_artifact
+        )
+
+        self.tokens_in = response.tokens_in
+        self.tokens_out = response.tokens_out
+        var raw = response.content
+        self.pending_data = json.parse(raw)
+        goto Gate
+    }
+
+    step DiagramasCommit {
+        var data = self.pending_data
+        var written = []
+        dir.create(Paths.artifact(project_id, "diagramas"))
+        for (var diagrama in data.diagramas) {
+            var slug = Slug.from_title(diagrama.titulo)
+            var body = ArtifactBody.diagrama(diagrama)
+            var rendered = PageShell(
+                title: html.escape(diagrama.titulo),
+                body: body,
+                meta: ArtifactMeta.line(time.format(time.now(), "yyyy-MM-dd HH:mm"), "artifacts/diagramas/" + slug + ".html", self.tokens_in, self.tokens_out)
+            )
+            fs.write(Paths.artifact(project_id, "diagramas/" + slug + ".html"), rendered)
+            written += [slug]
+        }
+        self.discovery_result = {artifact: "diagramas", written: written}
+        goto Done
+    }
+}

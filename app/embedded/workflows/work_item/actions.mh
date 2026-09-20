@@ -58,6 +58,48 @@ export tool WorkItemActions {
         return self.summarize_usage(json.parse_lines(fs.read(path)))
     }
 
+    // prompt_log devolve o prompt final + resposta bruta (e o consumo,
+    // duplicado de usage.jsonl na propria linha — ver Writer.generate em
+    // agents.mh) de cada chamada de LLM deste work-item, em ordem
+    // cronologica (mais antiga primeiro — sem `.reverse()` disponivel pra
+    // array aqui; quem precisar de mais-recente-primeiro inverte do lado de
+    // quem chama) — usado pela tela de Logs do frontend pra mostrar o que
+    // uma geracao especifica realmente fez, nao so o progresso tecnico do
+    // mhl.
+    prompt_log(project_id: string): any[] -> {
+        project_id = Paths.ensure_valid(project_id)
+        var path = Paths.prompt_log_file(project_id)
+        if (!fs.exists(path)) return []
+        return self.format_prompt_log(json.parse_lines(fs.read(path)))
+    }
+
+    // Separado de prompt_log() (I/O) pra ficar testavel sem fs — mesmo
+    // padrao de summarize_usage() acima.
+    //
+    // `tokens_in`/`tokens_out` usam `?? 0` pelo mesmo motivo que os campos de
+    // cache/custo abaixo (linhas gravadas antes de Writer.generate passar a
+    // registra-los nao tem essas chaves) — confirmado em produção: um
+    // work-item real com entradas de antes desse campo existir (ingest da
+    // wiki) tinha 2 linhas sem `tokens_in`, e um `line.value.tokens_in` direto
+    // (sem guarda) derrubava `format_prompt_log` inteiro com "field not
+    // found" pra QUALQUER artefato do work-item, nao so pra essa linha —
+    // a tela de Logs ficava sem nenhuma Chamada de LLM, de nenhum artefato.
+    format_prompt_log(lines: any[]): any[] -> {
+        var entries = lines.map((line) -> {
+            artifact: line.value.artifact,
+            backend: line.value.backend,
+            prompt: line.value.prompt,
+            response: line.value.response,
+            tokens_in: line.value?.tokens_in ?? 0,
+            tokens_out: line.value?.tokens_out ?? 0,
+            cache_creation_tokens: line.value?.cache_creation_tokens ?? 0,
+            cache_read_tokens: line.value?.cache_read_tokens ?? 0,
+            cost_usd: line.value?.cost_usd ?? 0,
+            at: line.ts,
+        })
+        return entries.sort_by((entry) -> entry.at)
+    }
+
     level_for(item_type: string): string -> {
         var valid_types = ["oportunidade", "feature", "historia"]
         if (!valid_types.contains(item_type)) {
@@ -201,5 +243,55 @@ test WorkItemActionsSpec {
         are_equal(result.total_tokens_in, 0)
         are_equal(result.total_tokens_out, 0)
         are_equal(result.by_artifact, [])
+    }
+
+    describe formats_prompt_log_entries_in_chronological_order {
+        var result = WorkItemActions.format_prompt_log([
+            {value: {
+                artifact: "requisitos", backend: "Claude", prompt: "gere os requisitos", response: "{...}",
+                tokens_in: 7, tokens_out: 3, cache_creation_tokens: 21260, cache_read_tokens: 0, cost_usd: 0.12
+            }, ts: "2026-01-01T11:00:00Z"},
+            {value: {
+                artifact: "brief", backend: "Codex", prompt: "gere o brief", response: "{...}",
+                tokens_in: 10, tokens_out: 4, cache_creation_tokens: 0, cache_read_tokens: 0, cost_usd: 0
+            }, ts: "2026-01-01T10:00:00Z"}
+        ])
+        are_equal(result.size(), 2)
+        are_equal(result[0].artifact, "brief")
+        are_equal(result[0].backend, "Codex")
+        are_equal(result[1].artifact, "requisitos")
+    }
+
+    // Mesma logica de an_old_line_with_no_cache_or_cost_fields_summarizes_as_zero_not_an_error
+    // acima, aplicada a format_prompt_log.
+    describe an_old_prompt_log_line_with_no_cache_or_cost_fields_formats_as_zero {
+        var result = WorkItemActions.format_prompt_log([
+            {value: {artifact: "brief", backend: "Codex", prompt: "p", response: "r", tokens_in: 1, tokens_out: 2}, ts: "t1"}
+        ])
+        are_equal(result[0].cache_creation_tokens, 0)
+        are_equal(result[0].cache_read_tokens, 0)
+        are_equal(result[0].cost_usd, 0)
+    }
+
+    // Reproduz um caso real: um work-item com linhas do ingest da wiki
+    // gravadas antes de Writer.generate passar a registrar tokens_in/
+    // tokens_out em toda entrada tinha 2 dessas — e um acesso direto (sem
+    // `?? 0`) a esses dois campos derrubava format_prompt_log inteiro com
+    // "field not found" pra QUALQUER linha da lista, nao so pra essa,
+    // esvaziando a tela de Logs por completo (nenhuma Chamada de LLM
+    // aparecia, de nenhum artefato).
+    describe an_old_prompt_log_line_with_no_token_fields_formats_as_zero_and_does_not_fail_the_whole_batch {
+        var result = WorkItemActions.format_prompt_log([
+            {value: {artifact: "ingest:notas.md", backend: "Codex", prompt: "p", response: "r"}, ts: "t1"},
+            {value: {artifact: "brief", backend: "Codex", prompt: "p", response: "r", tokens_in: 5, tokens_out: 7}, ts: "t2"}
+        ])
+        are_equal(result[0].tokens_in, 0)
+        are_equal(result[0].tokens_out, 0)
+        are_equal(result[1].tokens_in, 5)
+        are_equal(result[1].tokens_out, 7)
+    }
+
+    describe format_prompt_log_of_empty_lines_is_empty {
+        are_equal(WorkItemActions.format_prompt_log([]), [])
     }
 }

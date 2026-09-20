@@ -21,7 +21,7 @@
 // normaliza o conteudo (`UsageParser`/`StructuredOutput`) explicitamente,
 // depois de receber essa string de volta — nenhum lugar mágico "ve" nada.
 
-import { Usage, UsageParser } from "usage.mh"
+import { Usage, UsageParser, PromptLog } from "usage.mh"
 import { StructuredOutput } from "structured_output.mh"
 import { WorkflowsRoot } from "../core/workflows_root.mh"
 import { Paths } from "../core/paths.mh"
@@ -245,6 +245,25 @@ export tool Writer {
 
         Usage.append({
             artifact: artifact,
+            tokens_in: usage.tokens_in,
+            tokens_out: usage.tokens_out,
+            cache_creation_tokens: usage.cache_creation_tokens,
+            cache_read_tokens: usage.cache_read_tokens,
+            cost_usd: usage.cost_usd,
+        })
+
+        // `raw` (nao `usage.content`) de proposito: e a resposta crua do CLI,
+        // antes de UsageParser.extract_* desembrulhar/normalizar — o que
+        // auditoria/depuracao de uma geracao especifica precisa ver. Os
+        // campos de consumo sao duplicados de Usage.append (mesmos valores)
+        // pra esta linha ser auto-suficiente — quem le prompt_log.jsonl pra
+        // depurar uma geracao nao precisa tambem abrir usage.jsonl e juntar
+        // os dois por artifact/timestamp.
+        PromptLog.append({
+            artifact: artifact,
+            backend: picked,
+            prompt: prompt,
+            response: raw,
             tokens_in: usage.tokens_in,
             tokens_out: usage.tokens_out,
             cache_creation_tokens: usage.cache_creation_tokens,

@@ -1,7 +1,6 @@
 // Normaliza o contrato JSON devolvido por qualquer backend estruturado.
 // Remove marcadores de fechamento que vazem para o valor do próprio campo,
 // sem acoplar workflows ou regras de domínio ao agente escolhido.
-
 export tool StructuredOutput {
     const STRING_TYPE = "string"
     const ARRAY_TYPE = "array"
