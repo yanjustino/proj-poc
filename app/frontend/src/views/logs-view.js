@@ -113,9 +113,53 @@ export function renderLogsView(container) {
         llmCalls: [],
         llmCallsFetched: false,
         llmCallsFetchedAfterTerminal: false,
+        // openStates/llmOpenStates remember which <details> the reader
+        // toggled by hand, keyed by index — see applyOpenOverrides. Without
+        // this, every poll tick (LOG_POLL_MS/RUN_LIST_POLL_MS below) tore
+        // down and rebuilt these panels from scratch, silently re-closing
+        // whatever the reader had just opened to actually read (the "refresh
+        // atrapalha a leitura" complaint this exists to fix).
+        openStates: new Map(),
+        llmOpenStates: new Map(),
       });
     }
     return logCache.get(runId);
+  }
+
+  // applyOpenOverrides wires each freshly-rebuilt <details> to remember its
+  // own open/closed state in `overrides` (keyed by its position, which is
+  // stable — groups/llmCalls only ever grow by appending, never reorder) so
+  // the next rebuild can restore it instead of falling back to whatever
+  // "should" be open by default.
+  function applyOpenOverrides(container, overrides) {
+    container.querySelectorAll('details').forEach((el, index) => {
+      el.addEventListener('toggle', () => overrides.set(index, el.open));
+    });
+  }
+
+  // openAttr resolves one <details>' open attribute: the reader's own
+  // choice if they've ever touched this one, otherwise whatever the caller
+  // says it should default to.
+  function openAttr(overrides, index, defaultOpen) {
+    const open = overrides.has(index) ? overrides.get(index) : defaultOpen;
+    return open ? 'open' : '';
+  }
+
+  // groupsSignature/llmCallsSignature are cheap "did this actually change"
+  // checks — groups/llmCalls only ever grow (a group's text is appended to,
+  // never rewritten; llmCalls is only ever a longer or equal-length list —
+  // see ensureLlmCalls), so length + the newest entry's size/identity is
+  // enough to detect real change without a deep comparison. pollLogsOnce
+  // uses these to skip re-rendering (and re-tearing-down every <details>,
+  // resetting scroll/selection) on ticks where nothing new actually arrived.
+  function groupsSignature(cache) {
+    const last = cache.groups[cache.groups.length - 1];
+    return `${cache.groups.length}:${last ? last.text.length + ':' + last.state : ''}`;
+  }
+
+  function llmCallsSignature(cache) {
+    const last = cache.llmCalls[cache.llmCalls.length - 1];
+    return `${cache.llmCalls.length}:${last ? last.at : ''}`;
   }
 
   // ensureLlmCalls resolves this run's project_id (once, via
@@ -175,7 +219,7 @@ export function renderLogsView(container) {
         .map((entry, index) => {
           const costNote = entry.cost_usd ? ` · US$ ${Number(entry.cost_usd).toFixed(4)}` : '';
           return `
-          <details class="logs-step-group" ${index === lastIndex ? 'open' : ''}>
+          <details class="logs-step-group" ${openAttr(cache.llmOpenStates, index, index === lastIndex)}>
             <summary>
               <strong>${escapeHtml(entry.backend || '—')}</strong>
               <small>${entry.tokens_in ?? 0} → ${entry.tokens_out ?? 0} tokens${costNote}</small>
@@ -190,6 +234,7 @@ export function renderLogsView(container) {
         })
         .join('')}
     `;
+    applyOpenOverrides(llmCallsEl, cache.llmOpenStates);
   }
 
   function currentGroup(cache) {
@@ -271,7 +316,9 @@ export function renderLogsView(container) {
   // for free, no bespoke toggle JS needed. Every group starts open except
   // ones that finished successfully before the run's own last (still-open)
   // group, so a long run reads top-to-bottom without the user having to
-  // expand every finished step just to see what's currently running/failed.
+  // expand every finished step just to see what's currently running/failed
+  // — unless the reader has already toggled that group by hand, in which
+  // case openAttr/cache.openStates (see applyOpenOverrides) wins instead.
   function renderGroups() {
     const cache = cacheFor(selectedRunId);
     const wasAtBottom = logOutputEl.scrollHeight - logOutputEl.scrollTop - logOutputEl.clientHeight < 24;
@@ -290,9 +337,9 @@ export function renderLogsView(container) {
     logOutputEl.innerHTML = cache.groups
       .map((group, index) => {
         const lineCount = group.text ? group.text.split('\n').length : 0;
-        const open = index === lastIndex || group.state === 'failed';
+        const defaultOpen = index === lastIndex || group.state === 'failed';
         return `
-          <details class="logs-step-group" ${open ? 'open' : ''}>
+          <details class="logs-step-group" ${openAttr(cache.openStates, index, defaultOpen)}>
             <summary>
               <span class="status-dot ${dotClass(group.state)}"></span>
               <strong>${escapeHtml(group.step)}</strong>
@@ -304,6 +351,7 @@ export function renderLogsView(container) {
         `;
       })
       .join('');
+    applyOpenOverrides(logOutputEl, cache.openStates);
     if (autoScroll || wasAtBottom) {
       logOutputEl.scrollTop = logOutputEl.scrollHeight;
     } else {
@@ -327,6 +375,14 @@ export function renderLogsView(container) {
       if (result.nextSince != null) cache.since = String(result.nextSince);
       if (result.dropped) cache.dropped = true;
       cache.lastError = null;
+      // Rebuilding either panel tears down every <details> and rebuilds it
+      // (applyOpenOverrides re-attaches the toggle listeners, but the DOM
+      // nodes themselves are new — mid-drag text selection doesn't survive
+      // that). Comparing a before/after signature skips the rebuild on the
+      // very common tick where this poll fetched nothing new, instead of
+      // doing it unconditionally every LOG_POLL_MS regardless of content.
+      const groupsSigBefore = groupsSignature(cache);
+      const llmCallsSigBefore = llmCallsSignature(cache);
       if (runStatus) {
         appendToGroup(cache, runStatus.step, runStatus.stepIndex, runStatus.state, result.text);
       } else if (result.text) {
@@ -337,8 +393,8 @@ export function renderLogsView(container) {
       await ensureLlmCalls(runId, cache, runStatus);
       if (runId !== selectedRunId) return;
       renderMeta();
-      renderGroups();
-      renderLlmCalls();
+      if (groupsSignature(cache) !== groupsSigBefore) renderGroups();
+      if (llmCallsSignature(cache) !== llmCallsSigBefore) renderLlmCalls();
     } catch (err) {
       if (runId !== selectedRunId) return;
       // Não repete a mesma falha a cada 1.5s no corpo do log (viraria ruído

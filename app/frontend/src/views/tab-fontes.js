@@ -276,6 +276,11 @@ export async function renderFontesTab(container, project, { onChanged }) {
 
   return () => {
     active = false;
+    // A tracker still working/queued when this tab unmounts owns a ticking
+    // setInterval (run-tracker.js's elapsed-time display) — nothing else
+    // ever references it again to clear it, so this must, even though the
+    // ingest itself keeps running on the backend regardless.
+    for (const tracker of trackers.values()) tracker.dispose();
   };
 }
 

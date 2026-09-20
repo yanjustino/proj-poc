@@ -54,6 +54,29 @@ export function createRunTracker({ resumeArgs = { approved: true }, onCancel } =
   // (nothing pushes a new status until resumed), but cheap to be correct
   // about — never wipes what the user already typed.
   let feedbackText = '';
+  // tickTimer redraws the widget once a second while a run is working/
+  // queued, purely so elapsedLine below has something to advance — mhl can
+  // go a long stretch (one slow LLM call) without pushing a single status
+  // update, which otherwise reads as frozen (the exact complaint that led
+  // to this: "gerando" sitting still with no step change and, on the Devin
+  // backend, no token count either — see output/DEVIN-CLI.md, tokens_in/out
+  // stay 0 = "unavailable" for that backend, not live progress). Started/
+  // stopped from ensureTicking(), called at the end of every render() —
+  // self-correcting, so a status update that ends the run also stops the
+  // ticker without any extra bookkeeping.
+  let tickTimer = null;
+
+  function ensureTicking() {
+    const shouldTick = status && (status.state === 'working' || status.state === 'queued');
+    if (shouldTick && !tickTimer) {
+      tickTimer = setInterval(() => {
+        if (status) render();
+      }, 1000);
+    } else if (!shouldTick && tickTimer) {
+      clearInterval(tickTimer);
+      tickTimer = null;
+    }
+  }
 
   function tokensLine(s) {
     const vars = s.vars || {};
@@ -61,6 +84,42 @@ export function createRunTracker({ resumeArgs = { approved: true }, onCancel } =
     const tokensOut = vars.tokens_out;
     if (tokensIn == null && tokensOut == null) return '';
     return `<span class="run-tokens">${tokensIn ?? 0} → ${tokensOut ?? 0} tokens</span>`;
+  }
+
+  function elapsedLine(s) {
+    if (s.state !== 'working' && s.state !== 'queued') return '';
+    const startMs = s.startedAt ? Date.parse(s.startedAt) : NaN;
+    if (Number.isNaN(startMs)) return '';
+    const totalSeconds = Math.max(0, Math.floor((Date.now() - startMs) / 1000));
+    const minutes = Math.floor(totalSeconds / 60);
+    const seconds = totalSeconds % 60;
+    const label = minutes > 0 ? `${minutes}min ${seconds}s` : `${seconds}s`;
+    return `<span class="run-elapsed">${label}</span>`;
+  }
+
+  // doCancel is shared by the paused composer's own "Cancelar" (below) and
+  // the inline one rendered directly on the working/queued status row (see
+  // render()) — same abandon-this-run semantics either way, just reachable
+  // earlier: previously "Cancelar" only existed once a run reached Modo
+  // Buddy's pause point, so a run stuck mid-generation (the reported case)
+  // had no way to stop short of force-quitting the app.
+  async function doCancel(s) {
+    busyAction = 'cancel';
+    render();
+    try {
+      await cancelRun(s.runId);
+      if (onCancel) {
+        onCancel();
+      } else {
+        busyAction = null;
+        status = { ...s, state: 'canceled' };
+        render();
+      }
+    } catch (err) {
+      busyAction = null;
+      status = { ...s, state: 'failed', error: String(err) };
+      render();
+    }
   }
 
   function render() {
@@ -84,17 +143,33 @@ export function createRunTracker({ resumeArgs = { approved: true }, onCancel } =
     // comment for why this was silently dropped before it.
     const reasonLine = s.state === 'paused' && s.reason ? `<span class="run-reason">${escapeHtml(s.reason)}</span>` : '';
     const busy = busyAction !== null;
+    // Reachable while working/queued only — the paused state already has
+    // its own Cancelar in `composer` below, pinned to the reading pane's
+    // footer instead of scrolling away with `element`.
+    const cancelInline =
+      s.state === 'working' || s.state === 'queued'
+        ? `<button class="button tertiary small run-cancel-inline" ${busy ? 'disabled' : ''}>${busyAction === 'cancel' ? 'Cancelando…' : 'Cancelar'}</button>`
+        : '';
 
     element.innerHTML = `
       <div class="run-status-row">
         <span class="status-dot ${dotClass(s.state)}"></span>
         <span class="run-label">${label}</span>
+        ${elapsedLine(s)}
         ${stepLine}
         ${tokensLine(s)}
       </div>
       ${reasonLine}
       ${errorLine}
+      ${cancelInline}
     `;
+
+    const cancelInlineButton = element.querySelector('.run-cancel-inline');
+    if (cancelInlineButton) {
+      cancelInlineButton.addEventListener('click', () => doCancel(s));
+    }
+
+    ensureTicking();
 
     // Chat-style composer for the paused state: the feedback field sits on
     // top (like a message draft), Cancelar/Regenerar live in one row below
@@ -174,24 +249,7 @@ export function createRunTracker({ resumeArgs = { approved: true }, onCancel } =
 
     const cancelButton = composer.querySelector('.run-cancel');
     if (cancelButton) {
-      cancelButton.addEventListener('click', async () => {
-        busyAction = 'cancel';
-        render();
-        try {
-          await cancelRun(s.runId);
-          if (onCancel) {
-            onCancel();
-          } else {
-            busyAction = null;
-            status = { ...s, state: 'canceled' };
-            render();
-          }
-        } catch (err) {
-          busyAction = null;
-          status = { ...s, state: 'failed', error: String(err) };
-          render();
-        }
-      });
+      cancelButton.addEventListener('click', () => doCancel(s));
     }
   }
 
@@ -202,7 +260,19 @@ export function createRunTracker({ resumeArgs = { approved: true }, onCancel } =
     render();
   }
 
-  return { element, composer, approveAction, update, get status() { return status; } };
+  // dispose stops tickTimer — without this, a tracker abandoned mid-run
+  // (its host unmounts, or replaces it with a fresh one for the same row)
+  // would keep ticking every second forever; nothing else ever references
+  // it again to clear it. The host is expected to call this whenever it
+  // drops a tracker it didn't get to a terminal state.
+  function dispose() {
+    if (tickTimer) {
+      clearInterval(tickTimer);
+      tickTimer = null;
+    }
+  }
+
+  return { element, composer, approveAction, update, dispose, get status() { return status; } };
 }
 
 function escapeHtml(text) {

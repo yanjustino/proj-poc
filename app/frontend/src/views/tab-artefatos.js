@@ -534,6 +534,30 @@ export async function renderArtefatosTab(container, project, { onChanged }) {
             .catch((err) => ({ ok: false, error: err }))
         )
       );
+
+      // Retry each failure once, sequentially, after the concurrent batch
+      // above has fully settled. Root cause (see output/mhl-bug-report.md
+      // bug #2): mhl's own writeLatest shares one fixed .tmp filename per
+      // pipeline, so N concurrent ArtifactPreview sessions for this same
+      // pipeline (exactly what the Promise.all above fires) can collide on
+      // os.Rename to the same destination — "no such file or directory" on
+      // macOS/Linux, "Acesso negado" on Windows (same race, OS-specific
+      // rename error). That's a bug in mhl itself, not fixable from here.
+      // By the time we retry, every session from the initial burst has
+      // already finished, so a lone retry has no sibling to race against
+      // and reliably clears the transient failure.
+      if (stillCurrent()) {
+        for (let i = 0; i < results.length; i++) {
+          if (results[i].ok) continue;
+          try {
+            results[i] = { ok: true, html: await artifactPreview(collection.itemArtifact, items[i]) };
+          } catch (err) {
+            results[i] = { ok: false, error: err };
+          }
+          if (!stillCurrent()) return;
+        }
+      }
+
       if (!stillCurrent()) return;
       loading.remove();
       results.forEach((result, i) => {
@@ -733,6 +757,7 @@ export async function renderArtefatosTab(container, project, { onChanged }) {
   // and the pending_data it lived in, never existed.
   function onRunCancel(row, key) {
     clearActiveRun(key);
+    trackers.get(row.key)?.dispose();
     trackers.delete(row.key);
     if (!active) return;
     renderList();
@@ -790,6 +815,12 @@ export async function renderArtefatosTab(container, project, { onChanged }) {
 
   return () => {
     active = false;
+    // A tracker still working/queued when this tab unmounts owns a ticking
+    // setInterval (run-tracker.js's elapsed-time display) — nothing else
+    // ever references it again to clear it, so this must, even though the
+    // generation itself keeps running on the backend regardless (see this
+    // function's own doc comment on `active`).
+    for (const tracker of trackers.values()) tracker.dispose();
   };
 }
 
