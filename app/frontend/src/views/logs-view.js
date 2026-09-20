@@ -20,10 +20,21 @@ const LOG_POLL_MS = 1500;
 // inside the view's closure.
 const logCache = new Map(); // runId -> { text, since, dropped }
 
+// api.js's callWorkflowOnce fires a brand-new mhl_run_start for every
+// WorkItem/ArtifactPreview action — including ones the user never asked to
+// watch, like this same view's own ensureLlmCalls polling "prompt_log" every
+// couple seconds while a real run is selected. Neither workflow ever calls
+// an LLM (see callWorkflowOnce's own doc comment), so they never produce
+// anything worth showing here; left unfiltered they showed up as a stream of
+// noise sessions with just "step: Dispatch" → "step: PromptLog"/etc., no
+// agent output at all. This view exists to watch Wiki/Discovery/Delivery
+// (the only workflows started via startAndWatch), so anything else is
+// dropped before it ever reaches the run list.
+const INTERNAL_ONLY_TOOLS = new Set(['WorkItem', 'ArtifactPreview']);
+
 function normalizeRunList(raw) {
-  if (Array.isArray(raw)) return raw;
-  if (raw && Array.isArray(raw.runs)) return raw.runs;
-  return [];
+  const runs = Array.isArray(raw) ? raw : raw && Array.isArray(raw.runs) ? raw.runs : [];
+  return runs.filter((run) => !INTERNAL_ONLY_TOOLS.has(run.tool));
 }
 
 function runLabel(run) {

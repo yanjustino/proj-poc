@@ -75,14 +75,23 @@ export tool WorkItemActions {
 
     // Separado de prompt_log() (I/O) pra ficar testavel sem fs — mesmo
     // padrao de summarize_usage() acima.
+    //
+    // `tokens_in`/`tokens_out` usam `?? 0` pelo mesmo motivo que os campos de
+    // cache/custo abaixo (linhas gravadas antes de Writer.generate passar a
+    // registra-los nao tem essas chaves) — confirmado em produção: um
+    // work-item real com entradas de antes desse campo existir (ingest da
+    // wiki) tinha 2 linhas sem `tokens_in`, e um `line.value.tokens_in` direto
+    // (sem guarda) derrubava `format_prompt_log` inteiro com "field not
+    // found" pra QUALQUER artefato do work-item, nao so pra essa linha —
+    // a tela de Logs ficava sem nenhuma Chamada de LLM, de nenhum artefato.
     format_prompt_log(lines: any[]): any[] -> {
         var entries = lines.map((line) -> {
             artifact: line.value.artifact,
             backend: line.value.backend,
             prompt: line.value.prompt,
             response: line.value.response,
-            tokens_in: line.value.tokens_in,
-            tokens_out: line.value.tokens_out,
+            tokens_in: line.value?.tokens_in ?? 0,
+            tokens_out: line.value?.tokens_out ?? 0,
             cache_creation_tokens: line.value?.cache_creation_tokens ?? 0,
             cache_read_tokens: line.value?.cache_read_tokens ?? 0,
             cost_usd: line.value?.cost_usd ?? 0,
@@ -262,6 +271,24 @@ test WorkItemActionsSpec {
         are_equal(result[0].cache_creation_tokens, 0)
         are_equal(result[0].cache_read_tokens, 0)
         are_equal(result[0].cost_usd, 0)
+    }
+
+    // Reproduz um caso real: um work-item com linhas do ingest da wiki
+    // gravadas antes de Writer.generate passar a registrar tokens_in/
+    // tokens_out em toda entrada tinha 2 dessas — e um acesso direto (sem
+    // `?? 0`) a esses dois campos derrubava format_prompt_log inteiro com
+    // "field not found" pra QUALQUER linha da lista, nao so pra essa,
+    // esvaziando a tela de Logs por completo (nenhuma Chamada de LLM
+    // aparecia, de nenhum artefato).
+    describe an_old_prompt_log_line_with_no_token_fields_formats_as_zero_and_does_not_fail_the_whole_batch {
+        var result = WorkItemActions.format_prompt_log([
+            {value: {artifact: "ingest:notas.md", backend: "Codex", prompt: "p", response: "r"}, ts: "t1"},
+            {value: {artifact: "brief", backend: "Codex", prompt: "p", response: "r", tokens_in: 5, tokens_out: 7}, ts: "t2"}
+        ])
+        are_equal(result[0].tokens_in, 0)
+        are_equal(result[0].tokens_out, 0)
+        are_equal(result[1].tokens_in, 5)
+        are_equal(result[1].tokens_out, 7)
     }
 
     describe format_prompt_log_of_empty_lines_is_empty {

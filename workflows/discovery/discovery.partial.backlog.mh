@@ -1,0 +1,153 @@
+// Fragmento `partial workflow Discovery` — a quebra do backlog em si:
+// features (o backlog inteiro, varios itens de uma vez) e historias (uma
+// feature ja identificada quebrada em historias). Mesclado em discovery.mh
+// via `import "discovery.backlog.mh"` (por extenso).
+
+import { Paths } from "../shared/core/paths.mh"
+import { Writer } from "../shared/agents/agents.mh"
+import { Context } from "../shared/artifacts/context.mh"
+import { ArtifactBody } from "../shared/artifacts/artifact_body.mh"
+import { ArtifactId } from "../shared/artifacts/artifact_id.mh"
+import { PageShell, ArtifactMeta } from "../shared/artifacts/page_shell.mh"
+import { WorkflowsRoot } from "../shared/core/workflows_root.mh"
+import { ArtifactSchema, FeedbackBlock, HistoriasInstruction, HistoriasSchemaFile} from "../shared/artifacts/artifacts_common.mh"
+
+// O SCHEMA de features (o backlog inteiro, varios itens de uma vez) e
+// especifico de Discovery — Delivery nao gera um backlog, gera o
+// detalhamento final de UMA feature/historia ja identificada, com seu proprio
+// schema de item unico (workflows/delivery/). HistoriasInstruction/
+// HistoriasSchemaFile ja sao compartilhados (artifacts_common.mh) porque
+// "quebrar uma feature em historias" e a mesma operacao nos dois workflows.
+// Sem `wiki_content` (ver comentario acima de AdrInstruction em
+// artifacts_common.mh) — features deriva de requisitos/adr/der/diagramas ja
+// sintetizados, nao da wiki bruta.
+prompt FeaturesInstruction(
+    schema_conventions: prompt,
+    requisitos_content: string,
+    adr_content: string,
+    der_content: string,
+    diagramas_content: string,
+    feedback_content: string
+) from "prompts/features.prompt.md"
+
+prompt FeaturesSchemaContent() from "schemas/features.schema.json"
+
+tool FeaturesSchemaFile {
+    get(): {content: string, path: string} -> {
+        content: FeaturesSchemaContent(),
+        path: WorkflowsRoot.resolve("discovery/schemas/features.schema.json")
+    }
+}
+
+partial workflow Discovery {
+    step FeaturesGenerate {
+        self.current_artifact = "features"
+
+        var requisitos_content = Context.artifact(project_id, "requisitos.html")
+        if (requisitos_content.is_empty()) fail("gere 'requisitos' antes de 'features'")
+
+        var adr_content = Context.artifact_dir(project_id, "adr")
+        if (adr_content.is_empty()) fail("gere 'adr' antes de 'features'")
+
+        var der_content = Context.artifact(project_id, "der.html")
+        if (der_content.is_empty()) der_content = "(não gerado para esta oportunidade)"
+
+        var diagramas_content = Context.artifact_dir(project_id, "diagramas")
+        if (diagramas_content.is_empty()) fail("gere 'diagramas' antes de 'features'")
+
+        var response = Writer.generate(
+            prompt: FeaturesInstruction(
+                schema_conventions: ArtifactSchema(),
+                requisitos_content: requisitos_content,
+                adr_content: adr_content,
+                der_content: der_content,
+                diagramas_content: diagramas_content,
+                feedback_content: FeedbackBlock.render(pending_feedback)
+            ),
+            schema_file: FeaturesSchemaFile.get(), 
+            project_id: project_id, 
+            artifact: self.current_artifact
+        )
+
+        self.tokens_in = response.tokens_in
+        self.tokens_out = response.tokens_out
+        var raw = response.content
+        self.pending_data = json.parse(raw)
+
+        goto Gate
+    }
+
+    step FeaturesCommit {
+        var data = self.pending_data
+        var written = []
+        dir.create(Paths.artifact(project_id, "features"))
+
+        for (var feature in data.features) {
+            var id = ArtifactId.next_feature_id(project_id)
+            var folder = ArtifactId.folder_name(id, feature.titulo)
+            var body = ArtifactBody.feature(feature)
+            var rendered = PageShell(
+                title: html.escape(id + " — " + feature.titulo),
+                body: body,
+                meta: ArtifactMeta.line(time.format(time.now(), "yyyy-MM-dd HH:mm"), "artifacts/features/" + folder + "/feature.html", self.tokens_in, self.tokens_out)
+            )
+            dir.create(Paths.artifact(project_id, "features/" + folder))
+            fs.write(Paths.artifact(project_id, "features/" + folder + "/feature.html"), rendered)
+            written += [folder]
+        }
+
+        self.discovery_result = {artifact: "features", written: written}
+        
+        goto Done
+    }
+
+    step HistoriasGenerate {
+        if (feature_id.is_empty()) fail("'feature_id' e obrigatorio para artifact: \"historias\"")
+        self.current_artifact = "historias"
+        var feature_dir = ArtifactId.find_feature_dir(project_id, feature_id)
+        var feature_content = Context.artifact(project_id, "features/" + feature_dir + "/feature.html")
+        var response = Writer.generate(
+            prompt: HistoriasInstruction(schema_conventions: ArtifactSchema(), feature_content: feature_content, feedback_content: FeedbackBlock.render(pending_feedback)),
+            schema_file: HistoriasSchemaFile.get(), project_id: project_id, artifact: self.current_artifact
+        )
+        self.tokens_in = response.tokens_in
+        self.tokens_out = response.tokens_out
+        var raw = response.content
+        var data = json.parse(raw)
+        data["feature_dir"] = feature_dir
+        self.pending_data = data
+        goto Gate
+    }
+
+    step HistoriasCommit {
+        var data = self.pending_data
+        var feature_dir = data.feature_dir
+        var historias_base = Paths.artifact(project_id, "historias/" + feature_dir)
+        var written = []
+        
+        dir.create(historias_base)
+        
+        for (var historia in data.historias) {
+            var id = ArtifactId.next_historia_id(project_id, feature_dir)
+            var folder = ArtifactId.folder_name(id, historia.titulo)
+            var body = ArtifactBody.historia(historia)
+        
+            var rendered = PageShell(
+                title: html.escape(id + " — " + historia.titulo),
+                body: body,
+                meta: ArtifactMeta.line(
+                    time.format(time.now(), "yyyy-MM-dd HH:mm"),
+                    "artifacts/historias/" + feature_dir + "/" + folder + "/historia.html",
+                    self.tokens_in,
+                    self.tokens_out
+                )
+            )
+
+            dir.create(historias_base + "/" + folder)
+            fs.write(historias_base + "/" + folder + "/historia.html", rendered)
+            written += [folder]
+        }
+        self.discovery_result = {artifact: "historias", feature_id: feature_id, written: written}
+        goto Done
+    }
+}
