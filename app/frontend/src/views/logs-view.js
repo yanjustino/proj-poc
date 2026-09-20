@@ -275,6 +275,13 @@ export function renderLogsView(container) {
   function renderGroups() {
     const cache = cacheFor(selectedRunId);
     const wasAtBottom = logOutputEl.scrollHeight - logOutputEl.scrollTop - logOutputEl.clientHeight < 24;
+    // Reassigning innerHTML (below) tears down every child node, and browsers
+    // drop a scrolled-away-from-zero scrollTop when that happens — so without
+    // restoring it explicitly, each poll tick (every LOG_POLL_MS) yanked the
+    // reader back to the very top of a long run's log, mid-read. Only the
+    // "stick to bottom while tailing" case was ever restored (below); a
+    // reader scrolled up into the middle had nothing putting them back.
+    const previousScrollTop = logOutputEl.scrollTop;
     if (cache.groups.length === 0) {
       logOutputEl.innerHTML = '<p class="empty-nav">(sem saída registrada ainda)</p>';
       return;
@@ -299,6 +306,8 @@ export function renderLogsView(container) {
       .join('');
     if (autoScroll || wasAtBottom) {
       logOutputEl.scrollTop = logOutputEl.scrollHeight;
+    } else {
+      logOutputEl.scrollTop = previousScrollTop;
     }
   }
 

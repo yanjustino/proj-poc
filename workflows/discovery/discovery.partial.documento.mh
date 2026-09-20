@@ -42,16 +42,20 @@ partial workflow Discovery {
 
     step AtributosGenerate {
         self.current_artifact = "atributos"
+
         var brief_content = Context.artifact(project_id, "brief.html")
         if (brief_content.is_empty()) fail("gere 'brief' antes de 'atributos'")
+
         var response = Writer.generate(
             prompt: AtributosInstruction(schema_conventions: ArtifactSchema(), brief_content: brief_content, wiki_content: Context.wiki(project_id), feedback_content: FeedbackBlock.render(pending_feedback)),
             schema_file: AtributosSchemaFile.get(), project_id: project_id, artifact: self.current_artifact
         )
+
         self.tokens_in = response.tokens_in
         self.tokens_out = response.tokens_out
         var raw = response.content
         self.pending_data = json.parse(raw)
+        
         goto Gate
     }
 

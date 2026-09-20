@@ -52,8 +52,6 @@ partial workflow Discovery {
         tokens_out: tokens_out,
     }
 
-    //before_start: () -> {}
-
     route CommitRouter(artifact: string) {
         "brief"      -> BriefCommit
         "atributos"  -> AtributosCommit
