@@ -21,7 +21,7 @@ import { PageShell } from "../shared/artifacts/page_shell.mh"
 workflow ArtifactPreview {
     description: "Renderiza o rascunho de um artefato pausado (Modo Buddy) para pre-visualizacao, sem gravar nada em disco."
 
-    input artifact: string // brief | atributos | requisitos | der | feature | historia | decisao | diagrama | adr | diagramas | features | historias
+    input artifact: string // brief | atributos | requisitos | der | feature | historia | decisao | diagrama | adr | diagramas | features | dependencias | historias
     input data: any
 
     var preview_html = ""
@@ -43,10 +43,11 @@ workflow ArtifactPreview {
             "adr"        -> Adr
             "diagramas"  -> Diagramas
             "features"   -> Features
+            "dependencias" -> Dependencias
             "historias"  -> Historias
             _            -> fail(
                 "artefato desconhecido para preview: '" + artifact +
-                "' (use brief | atributos | requisitos | der | feature | historia | decisao | diagrama | adr | diagramas | features | historias)"
+                "' (use brief | atributos | requisitos | der | feature | historia | decisao | diagrama | adr | diagramas | features | dependencias | historias)"
             )
         }
     }
@@ -73,6 +74,11 @@ workflow ArtifactPreview {
 
     step Feature {
         preview_html = PageShell(title: "Detalhamento da feature", body: ArtifactBody.feature(data), meta: "Rascunho — ainda não gravado")
+        goto Done
+    }
+
+    step Dependencias {
+        preview_html = PageShell(title: "Mapa de Dependências", body: ArtifactBody.dependencias(data), meta: "Rascunho — ainda não gravado")
         goto Done
     }
 
@@ -182,6 +188,30 @@ test ArtifactPreviewSpec {
         is_true(run.ok)
         is_true(run.vars.preview_html.contains("A"))
         is_true(run.vars.preview_html.contains("B"))
+    }
+
+    describe dependencias_renders_the_map_ordem_and_diagram {
+        var run = ArtifactPreview.run(inputs: {
+            artifact: "dependencias",
+            data: {
+                features: [
+                    {feature_codigo: "FT001", feature_titulo: "Cadastro", depende_de: []},
+                    {feature_codigo: "FT002", feature_titulo: "Pagamentos", depende_de: [
+                        {feature_codigo: "FT001", justificativa: "precisa do cadastro", fontes: ["features/FT001-cadastro"]}
+                    ]},
+                ],
+                ordem_execucao: [
+                    {feature_codigo: "FT001", feature_titulo: "Cadastro"},
+                    {feature_codigo: "FT002", feature_titulo: "Pagamentos"},
+                ],
+                diagrama_mermaid: "graph LR; FT001 --> FT002;",
+                gaps: [],
+            }
+        })
+        is_true(run.ok)
+        is_true(run.vars.preview_html.contains("Mapa de Dependências"))
+        is_true(run.vars.preview_html.contains("FT002"))
+        is_true(run.vars.preview_html.contains("graph LR"))
     }
 
     describe unknown_artifact_fails_before_touching_anything {

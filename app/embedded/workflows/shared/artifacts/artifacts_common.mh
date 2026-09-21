@@ -86,6 +86,14 @@ export prompt DiagramaBody(diagram_type: string, hierarchy_level: string, descri
 export prompt FeatureBody(resumo: string, resumo_fontes: string, objetivo: string, objetivo_fontes: string, personas_tabela: string, em_escopo_lista: string, fora_escopo_lista: string, regras_lista: string, interacoes_lista: string, criterios_lista: string, historias_lista: string, dependencias_lista: string, dependencias_sistema_lista: string, gaps_lista: string, questoes_lista: string, fontes_nota: string) from "templates/feature_body.html"
 export prompt HistoriaBody(statement: string, statement_fontes: string, atributos_lista: string, contexto_negocio: string, contexto_fontes: string, criterios_lista: string, cenarios_gherkin: string, cenarios_fontes: string, regras_lista: string, dod_lista: string, dependencias_lista: string, fora_escopo_lista: string, exemplo_uso: string, exemplo_fontes: string, contratos_interface: string, contratos_fontes: string, questoes_lista: string, fontes_nota: string) from "templates/historia_body.html"
 
+// DependenciasBody — Discovery-only (a "dependência entre features" só faz
+// sentido quando o work-item tem um backlog de mais de uma feature; Delivery
+// nunca gera isso), mas o template de renderização mora aqui junto dos
+// outros pela mesma razão que FeatureBody/HistoriaBody moram: é a única
+// parte compartilhável entre o que gera o artefato (discovery.partial.
+// backlog.mh, ao lado de Features) e como ele vira HTML.
+export prompt DependenciasBody(mapa_tabela: string, ordem_tabela: string, diagrama_mermaid: string, gaps_lista: string) from "templates/dependencias_body.html"
+
 test SchemaFileSpec {
     describe exposes_schema_content_and_codex_file_path {
         var schema_file = AtributosSchemaFile.get()

@@ -83,6 +83,36 @@ export tool ArtifactHtml {
             {texto: "Natureza: " + nature, fontes: fontes},
             {texto: "Especialidade: " + specialty, fontes: fontes},
         ])
+
+    // dependency_map renders the "quem depende de quem" table for the
+    // dependencias artifact — one row per feature, its own "depende de"
+    // column listing each prerequisite's code + the LLM's justification for
+    // that specific edge, badged with fontes like every other citation.
+    // "—" (not an empty cell) for a feature with no dependencies, so an
+    // intentional "nothing here" reads differently from a rendering bug.
+    dependency_map(items: {feature_codigo: string, feature_titulo: string, depende_de: {feature_codigo: string, justificativa: string, fontes: string[]}[]}[]): string ->
+        "<table><thead><tr><th>Código</th><th>Feature</th><th>Depende de</th></tr></thead><tbody>" +
+        items.map((x) -> "<tr><td>" + html.escape(x.feature_codigo) + "</td><td>" + html.escape(x.feature_titulo) + "</td><td>" +
+            (if (x.depende_de.is_empty()) "—" else
+                "<ul>" + x.depende_de.map((d) -> "<li><strong>" + html.escape(d.feature_codigo) + "</strong> — " + html.escape(d.justificativa) + " " + Cite.badges(d.fontes) + "</li>").join("") + "</ul>"
+            ) + "</td></tr>").join("") + "</tbody></table>"
+
+    // execution_order renders ordem_execucao as a numbered table instead of
+    // a bare <ol> — matches this artifact's other table, and leaves room to
+    // show the code alongside the title without the two running together.
+    // A plain counter var instead of a map-with-index helper (mhl's array
+    // type has no confirmed map_indexed/enumerate — every other loop in
+    // this codebase that needs a running total or index uses exactly this
+    // shape, e.g. UsageParser.extract_codex/DirText.concat_all).
+    execution_order(items: {feature_codigo: string, feature_titulo: string}[]): string -> {
+        var rows = ""
+        var n = 1
+        for (var x in items) {
+            rows = rows + "<tr><td>${n}</td><td>" + html.escape(x.feature_codigo) + "</td><td>" + html.escape(x.feature_titulo) + "</td></tr>"
+            n = n + 1
+        }
+        return "<table><thead><tr><th>#</th><th>Código</th><th>Feature</th></tr></thead><tbody>" + rows + "</tbody></table>"
+    }
 }
 
 test ArtifactHtmlSpec {
@@ -97,6 +127,34 @@ test ArtifactHtmlSpec {
         are_equal(
             ArtifactHtml.requirements([{id: "FR-001", titulo: "Criar <pedido>", descricao: "Aceitar & validar", criterios_aceitacao: "Pedido persistido", prioridade: "Must", fontes: ["sources/ata"]}]),
             "<table><thead><tr><th>ID</th><th>Título</th><th>Descrição</th><th>Critérios de aceitação</th><th>Prioridade</th><th>Fontes</th></tr></thead><tbody><tr><td>FR-001</td><td>Criar &lt;pedido&gt;</td><td>Aceitar &amp; validar</td><td>Pedido persistido</td><td>Must</td><td><span class=\"cite cite-fonte\">sources/ata</span></td></tr></tbody></table>"
+        )
+    }
+
+    describe dependency_map_lists_each_prerequisite_with_justification_and_sources {
+        are_equal(
+            ArtifactHtml.dependency_map([
+                {feature_codigo: "FT002", feature_titulo: "Pagamentos", depende_de: [
+                    {feature_codigo: "FT001", justificativa: "precisa do cadastro & login", fontes: ["features/FT001-cadastro"]}
+                ]}
+            ]),
+            "<table><thead><tr><th>Código</th><th>Feature</th><th>Depende de</th></tr></thead><tbody><tr><td>FT002</td><td>Pagamentos</td><td><ul><li><strong>FT001</strong> — precisa do cadastro &amp; login <span class=\"cite cite-fonte\">features/FT001-cadastro</span></li></ul></td></tr></tbody></table>"
+        )
+    }
+
+    describe dependency_map_shows_a_dash_for_a_feature_with_no_dependencies {
+        are_equal(
+            ArtifactHtml.dependency_map([{feature_codigo: "FT001", feature_titulo: "Cadastro", depende_de: []}]),
+            "<table><thead><tr><th>Código</th><th>Feature</th><th>Depende de</th></tr></thead><tbody><tr><td>FT001</td><td>Cadastro</td><td>—</td></tr></tbody></table>"
+        )
+    }
+
+    describe execution_order_numbers_rows_starting_at_one {
+        are_equal(
+            ArtifactHtml.execution_order([
+                {feature_codigo: "FT001", feature_titulo: "Cadastro"},
+                {feature_codigo: "FT002", feature_titulo: "Pagamentos"},
+            ]),
+            "<table><thead><tr><th>#</th><th>Código</th><th>Feature</th></tr></thead><tbody><tr><td>1</td><td>FT001</td><td>Cadastro</td></tr><tr><td>2</td><td>FT002</td><td>Pagamentos</td></tr></tbody></table>"
         )
     }
 }

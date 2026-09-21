@@ -5,7 +5,7 @@ import { Cite } from "cite.mh"
 import { ArtifactHtml } from "artifact_html.mh"
 import {
     BriefBody, AtributosBody, RequisitosBody, AdrBody, DerBody, DiagramaBody,
-    FeatureBody, HistoriaBody
+    FeatureBody, HistoriaBody, DependenciasBody
 } from "artifacts_common.mh"
 
 export tool ArtifactBody {
@@ -126,5 +126,12 @@ export tool ArtifactBody {
         contratos_fontes: Cite.note(data.contratos_fontes),
         questoes_lista: Cite.list(data.questoes_abertas),
         fontes_nota: Cite.note(data.fontes)
+    )
+
+    dependencias(data: any): string -> DependenciasBody(
+        mapa_tabela: ArtifactHtml.dependency_map(data.features),
+        ordem_tabela: ArtifactHtml.execution_order(data.ordem_execucao),
+        diagrama_mermaid: html.escape(data.diagrama_mermaid),
+        gaps_lista: Cite.list(data.gaps)
     )
 }

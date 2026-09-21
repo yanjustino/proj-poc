@@ -39,6 +39,30 @@ tool FeaturesSchemaFile {
     }
 }
 
+// dependencias e Discovery-only pelo mesmo motivo que features e: so um
+// backlog com mais de uma feature tem dependencia ENTRE features pra
+// mapear. `features_content` chega ja com o codigo FT00N real de cada uma
+// no cabecalho (montado abaixo, em DependenciasGenerate, do mesmo jeito que
+// DirText.concat_all monta pra adr/diagramas — so que feito na mao aqui
+// porque features/ e uma pasta de pastas, uma a mais de profundidade do
+// que Context.artifact_dir sabe percorrer) — diferente de quando as
+// proprias features foram geradas, quando nenhum codigo existia ainda e
+// dependencias_integridade so podia referenciar outra feature pelo titulo.
+prompt DependenciasInstruction(
+    schema_conventions: prompt,
+    features_content: string,
+    feedback_content: string
+) from "prompts/dependencias.prompt.md"
+
+prompt DependenciasSchemaContent() from "schemas/dependencias.schema.json"
+
+tool DependenciasSchemaFile {
+    get(): {content: string, path: string} -> {
+        content: DependenciasSchemaContent(),
+        path: WorkflowsRoot.resolve("discovery/schemas/dependencias.schema.json")
+    }
+}
+
 partial workflow Discovery {
     step FeaturesGenerate {
         self.current_artifact = "features"
@@ -97,7 +121,58 @@ partial workflow Discovery {
         }
 
         self.discovery_result = {artifact: "features", written: written}
-        
+
+        goto Done
+    }
+
+    // Nao usa Context.artifact_dir: ele concatena um NIVEL de arquivos
+    // (adr/ADR-001.html), mas features/ e uma pasta de pastas
+    // (features/FT001-slug/feature.html, um nivel a mais) — o mesmo motivo
+    // pelo qual HistoriasGenerate acima le uma feature por vez via
+    // ArtifactId.find_feature_dir + Context.artifact em vez de
+    // Context.artifact_dir. Cabecalho "# features/<pasta>" no mesmo formato
+    // que DirText.concat_all usa (dir_text.mh), pra ArtifactSchema regra 4
+    // (citar a fonte pelo identificador do cabecalho) valer aqui tambem.
+    step DependenciasGenerate {
+        self.current_artifact = "dependencias"
+        var features_dir = Paths.artifact(project_id, "features")
+        if (!dir.exists(features_dir)) fail("gere 'features' antes de 'dependencias'")
+
+        var features_content = ""
+        for (var entry in dir.list(features_dir)) {
+            var name = entry.replace(features_dir + "/", "")
+            var content = Context.artifact(project_id, "features/" + name + "/feature.html")
+            features_content = features_content + "\n\n---\n\n# features/" + name + "\n\n" + content
+        }
+
+        var response = Writer.generate(
+            prompt: DependenciasInstruction(
+                schema_conventions: ArtifactSchema(),
+                features_content: features_content,
+                feedback_content: FeedbackBlock.render(pending_feedback)
+            ),
+            schema_file: DependenciasSchemaFile.get(),
+            project_id: project_id,
+            artifact: self.current_artifact
+        )
+
+        self.tokens_in = response.tokens_in
+        self.tokens_out = response.tokens_out
+        self.pending_data = json.parse(response.content)
+
+        goto Gate
+    }
+
+    step DependenciasCommit {
+        var data = self.pending_data
+        var body = ArtifactBody.dependencias(data)
+        var rendered = PageShell(
+            title: "Mapa de Dependências",
+            body: body,
+            meta: ArtifactMeta.line(time.format(time.now(), "yyyy-MM-dd HH:mm"), "artifacts/dependencias.html", self.tokens_in, self.tokens_out)
+        )
+        fs.write(Paths.artifact(project_id, "dependencias.html"), rendered)
+        self.discovery_result = {artifact: "dependencias", path: "artifacts/dependencias.html"}
         goto Done
     }
 
