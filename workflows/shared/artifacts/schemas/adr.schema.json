@@ -6,21 +6,154 @@
     "decisions": {
       "type": "array",
       "minItems": 1,
-      "description": "Decisões arquiteturais relevantes identificadas a partir da wiki e dos requisitos, uma por item.",
+      "description": "Decisões arquiteturais relevantes identificadas a partir da wiki, dos requisitos e dos atributos de qualidade, uma por item — no formato MADR (Markdown Architectural Decision Records).",
       "items": {
         "type": "object",
         "additionalProperties": false,
-        "required": ["titulo", "contexto", "decisao", "consequencias", "fontes"],
+        "required": [
+          "titulo", "status",
+          "contexto_e_problema", "contexto_fontes",
+          "fatores_decisao",
+          "opcoes_consideradas",
+          "decisao_final",
+          "consequencias_positivas", "consequencias_negativas",
+          "opcoes_pros_contras",
+          "links",
+          "fontes"
+        ],
         "properties": {
           "titulo": { "type": "string", "description": "Título curto da decisão (ex.: 'Usar tokenização via PSP')." },
-          "contexto": { "type": "string", "description": "O que motiva esta decisão — a situação/restrição que a força." },
-          "decisao": { "type": "string", "description": "O que foi decidido, de forma direta." },
-          "consequencias": { "type": "string", "description": "Efeitos (positivos e negativos) de seguir esta decisão." },
+          "status": {
+            "type": "string",
+            "enum": ["proposta", "aceita", "rejeitada", "descontinuada"],
+            "description": "Estado atual da decisão. Use 'aceita' quando os requisitos/atributos já a sustentam como definitiva; 'proposta' quando ainda depende de validação fora do escopo desta síntese."
+          },
+          "contexto_e_problema": {
+            "type": "string",
+            "description": "Contexto e problema que motivam a decisão, em 2-3 frases — o que força esta escolha a ser feita agora. Pode ser articulado como uma pergunta."
+          },
+          "contexto_fontes": {
+            "type": "array",
+            "items": { "type": "string" },
+            "minItems": 1,
+            "description": "Referências que sustentam o contexto e o problema."
+          },
+          "fatores_decisao": {
+            "type": "array",
+            "minItems": 1,
+            "description": "Forças, restrições ou preocupações que pesam na escolha (ex.: um atributo de qualidade, uma restrição arquitetural, um requisito não-funcional).",
+            "items": {
+              "type": "object",
+              "additionalProperties": false,
+              "required": ["texto", "fontes"],
+              "properties": {
+                "texto": { "type": "string" },
+                "fontes": { "type": "array", "items": { "type": "string" }, "minItems": 1 }
+              }
+            }
+          },
+          "opcoes_consideradas": {
+            "type": "array",
+            "minItems": 2,
+            "description": "Nomes curtos de cada opção genuinamente avaliada (mínimo 2 — inclua 'manter como está' ou uma alternativa trivial se só houver uma opção real, mas a comparação deve ser honesta).",
+            "items": { "type": "string" }
+          },
+          "decisao_final": {
+            "type": "object",
+            "additionalProperties": false,
+            "required": ["opcao_escolhida", "justificativa", "fontes"],
+            "description": "A opção escolhida dentre 'opcoes_consideradas' e por quê.",
+            "properties": {
+              "opcao_escolhida": { "type": "string", "description": "Deve ser exatamente um dos textos de 'opcoes_consideradas'." },
+              "justificativa": { "type": "string", "description": "Por que esta opção venceu (ex.: única que atende a um critério eliminatório, resolve a força X, ou tem o melhor equilíbrio de trade-offs)." },
+              "fontes": { "type": "array", "items": { "type": "string" }, "minItems": 1 }
+            }
+          },
+          "consequencias_positivas": {
+            "type": "array",
+            "minItems": 1,
+            "description": "Efeitos favoráveis de seguir a decisão (ex.: melhoria de um atributo de qualidade, capacidade habilitada).",
+            "items": {
+              "type": "object",
+              "additionalProperties": false,
+              "required": ["texto", "fontes"],
+              "properties": {
+                "texto": { "type": "string" },
+                "fontes": { "type": "array", "items": { "type": "string" }, "minItems": 1 }
+              }
+            }
+          },
+          "consequencias_negativas": {
+            "type": "array",
+            "minItems": 1,
+            "description": "Custos ou riscos honestos de seguir a decisão (ex.: complexidade adicional, decisão de acompanhamento necessária, atributo de qualidade comprometido). Toda decisão real tem pelo menos um.",
+            "items": {
+              "type": "object",
+              "additionalProperties": false,
+              "required": ["texto", "fontes"],
+              "properties": {
+                "texto": { "type": "string" },
+                "fontes": { "type": "array", "items": { "type": "string" }, "minItems": 1 }
+              }
+            }
+          },
+          "opcoes_pros_contras": {
+            "type": "array",
+            "minItems": 2,
+            "description": "Prós e contras de CADA opção listada em 'opcoes_consideradas', incluindo a escolhida — uma entrada por opção, mesma ordem.",
+            "items": {
+              "type": "object",
+              "additionalProperties": false,
+              "required": ["opcao", "pros", "contras"],
+              "properties": {
+                "opcao": { "type": "string", "description": "Deve corresponder a um dos textos de 'opcoes_consideradas'." },
+                "pros": {
+                  "type": "array",
+                  "minItems": 1,
+                  "items": {
+                    "type": "object",
+                    "additionalProperties": false,
+                    "required": ["texto", "fontes"],
+                    "properties": {
+                      "texto": { "type": "string" },
+                      "fontes": { "type": "array", "items": { "type": "string" }, "minItems": 1 }
+                    }
+                  }
+                },
+                "contras": {
+                  "type": "array",
+                  "minItems": 1,
+                  "items": {
+                    "type": "object",
+                    "additionalProperties": false,
+                    "required": ["texto", "fontes"],
+                    "properties": {
+                      "texto": { "type": "string" },
+                      "fontes": { "type": "array", "items": { "type": "string" }, "minItems": 1 }
+                    }
+                  }
+                }
+              }
+            }
+          },
+          "links": {
+            "type": "array",
+            "description": "Relações estruturais com outras decisões desta mesma síntese, se houver (ex.: 'Refina', 'Depende de'). Vazio se nenhuma decisão desta lista se relaciona com outra.",
+            "items": {
+              "type": "object",
+              "additionalProperties": false,
+              "required": ["tipo", "referencia"],
+              "properties": {
+                "tipo": { "type": "string", "description": "Natureza da relação (ex.: 'Refina', 'Depende de', 'Substitui')." },
+                "referencia": { "type": "string", "description": "Título de outra decisão desta mesma lista (ver 'titulo')." }
+              }
+            }
+          },
           "fontes": {
             "type": "array",
             "items": { "type": "string" },
             "minItems": 1,
-            "description": "Referências que sustentam esta decisão como um todo (contexto+decisão+consequências)."
+            "description": "Referências gerais que sustentam esta decisão como um todo."
           }
         }
       }

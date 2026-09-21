@@ -84,6 +84,27 @@ export tool ArtifactHtml {
             {texto: "Especialidade: " + specialty, fontes: fontes},
         ])
 
+    // considered_options/decision_outcome/options_pros_and_cons/adr_links
+    // render an ADR's MADR-shaped sections (workflows/shared/artifacts/
+    // schemas/adr.schema.json) — considered_options is a plain enumeration
+    // (no fontes: it's just naming the alternatives, the actual claims
+    // about each one carry their own citations in options_pros_and_cons).
+    considered_options(items: string[]): string ->
+        "<ul>" + items.map((o) -> "<li>" + html.escape(o) + "</li>").join("") + "</ul>"
+
+    decision_outcome(opcao_escolhida: string, justificativa: string): string ->
+        "<p><strong>Opção escolhida:</strong> " + html.escape(opcao_escolhida) + " — " + html.escape(justificativa) + "</p>"
+
+    options_pros_and_cons(items: {opcao: string, pros: {texto: string, fontes: string[]}[], contras: {texto: string, fontes: string[]}[]}[]): string ->
+        items.map((x) ->
+            "<h3>" + html.escape(x.opcao) + "</h3>" +
+            "<p><strong>Prós</strong></p>" + Cite.list(x.pros) +
+            "<p><strong>Contras</strong></p>" + Cite.list(x.contras)
+        ).join("")
+
+    adr_links(items: {tipo: string, referencia: string}[]): string ->
+        "<ul>" + items.map((l) -> "<li><strong>" + html.escape(l.tipo) + "</strong> — " + html.escape(l.referencia) + "</li>").join("") + "</ul>"
+
     // dependency_map renders the "quem depende de quem" table for the
     // dependencias artifact — one row per feature, its own "depende de"
     // column listing each prerequisite's code + the LLM's justification for
@@ -155,6 +176,37 @@ test ArtifactHtmlSpec {
                 {feature_codigo: "FT002", feature_titulo: "Pagamentos"},
             ]),
             "<table><thead><tr><th>#</th><th>Código</th><th>Feature</th></tr></thead><tbody><tr><td>1</td><td>FT001</td><td>Cadastro</td></tr><tr><td>2</td><td>FT002</td><td>Pagamentos</td></tr></tbody></table>"
+        )
+    }
+
+    describe considered_options_lists_each_option_escaped {
+        are_equal(
+            ArtifactHtml.considered_options(["Postgres", "<MySQL>"]),
+            "<ul><li>Postgres</li><li>&lt;MySQL&gt;</li></ul>"
+        )
+    }
+
+    describe decision_outcome_escapes_both_fields {
+        are_equal(
+            ArtifactHtml.decision_outcome("<Postgres>", "atende & escala"),
+            "<p><strong>Opção escolhida:</strong> &lt;Postgres&gt; — atende &amp; escala</p>"
+        )
+    }
+
+    describe options_pros_and_cons_renders_a_heading_and_two_lists_per_option {
+        are_equal(
+            ArtifactHtml.options_pros_and_cons([
+                {opcao: "Postgres", pros: [{texto: "maduro", fontes: ["inferência"]}], contras: [{texto: "custo & operação", fontes: ["gap"]}]}
+            ]),
+            "<h3>Postgres</h3><p><strong>Prós</strong></p><ul><li>maduro <span class=\"cite cite-inferencia\">inferência</span></li></ul>" +
+            "<p><strong>Contras</strong></p><ul><li>custo &amp; operação <span class=\"cite cite-gap\">gap</span></li></ul>"
+        )
+    }
+
+    describe adr_links_renders_type_and_reference_escaped {
+        are_equal(
+            ArtifactHtml.adr_links([{tipo: "Depende de", referencia: "Usar <Postgres>"}]),
+            "<ul><li><strong>Depende de</strong> — Usar &lt;Postgres&gt;</li></ul>"
         )
     }
 }

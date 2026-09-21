@@ -64,11 +64,14 @@ export async function mountShell(root) {
             ${AGENT_OPTIONS.map((opt) => `<option value="${opt.value}">${opt.label}</option>`).join('')}
           </select>
         </div>
-        <div class="sidebar-agent" data-devin-model-row hidden>
-          <label for="devin-model-select">Modelo</label>
-          <select id="devin-model-select" data-devin-model-select>
-            <option value="">Carregando…</option>
-          </select>
+        <div class="sidebar-agent-block" data-devin-model-row hidden>
+          <div class="sidebar-agent">
+            <label for="devin-model-select">Modelo</label>
+            <select id="devin-model-select" data-devin-model-select>
+              <option value="">Carregando…</option>
+            </select>
+          </div>
+          <small class="sidebar-agent-hint" data-devin-model-cost></small>
         </div>
         <div class="sidebar-status" data-mcp-status></div>
         <div class="sidebar-version" data-app-version>Senpai</div>
@@ -86,6 +89,7 @@ export async function mountShell(root) {
   const agentSelectEl = root.querySelector('[data-agent-select]');
   const devinModelRow = root.querySelector('[data-devin-model-row]');
   const devinModelSelectEl = root.querySelector('[data-devin-model-select]');
+  const devinModelCostEl = root.querySelector('[data-devin-model-cost]');
   const appVersionEl = root.querySelector('[data-app-version]');
   const themeToggleEl = root.querySelector('[data-theme-toggle]');
 
@@ -180,6 +184,15 @@ export async function mountShell(root) {
   // (SENPAI_AGENT is only read at mhl's own startup, see mhlbridge.Start),
   // so this reuses the exact same reconnect + status-render path as the
   // "Reconectar" button above rather than a separate one.
+  // Keyed by model id so the "custo" hint under the select can be looked up
+  // again on every change without another round trip to ListDevinModels.
+  let devinModelsById = new Map();
+
+  function updateDevinModelCost() {
+    const model = devinModelsById.get(devinModelSelectEl.value);
+    devinModelCostEl.textContent = model && model.costSummary ? model.costSummary : '';
+  }
+
   async function refreshDevinModels() {
     const isDevin = agentSelectEl.value === 'devin';
     devinModelRow.hidden = !isDevin;
@@ -187,8 +200,10 @@ export async function mountShell(root) {
 
     devinModelSelectEl.disabled = true;
     devinModelSelectEl.innerHTML = '<option value="">Carregando…</option>';
+    devinModelCostEl.textContent = '';
     try {
       const [models, selected] = await Promise.all([listDevinModels(), getDevinModel()]);
+      devinModelsById = new Map(models.map((model) => [model.id, model]));
       const groups = new Map();
       models.forEach((model) => {
         const family = model.familyLabel || 'Outros';
@@ -199,12 +214,16 @@ export async function mountShell(root) {
         '<option value="">Selecione um modelo…</option>',
         ...Array.from(groups, ([family, variants]) =>
           `<optgroup label="${escapeAttribute(family)}">${variants
-            .map((model) => `<option value="${escapeAttribute(model.id)}">${escapeHtml(model.label)}</option>`)
+            .map(
+              (model) =>
+                `<option value="${escapeAttribute(model.id)}" title="${escapeAttribute(model.costSummary || '')}">${escapeHtml(model.label)}</option>`,
+            )
             .join('')}</optgroup>`,
         ),
       ].join('');
       devinModelSelectEl.value = models.some((model) => model.id === selected) ? selected : '';
       devinModelSelectEl.disabled = false;
+      updateDevinModelCost();
     } catch (err) {
       devinModelSelectEl.innerHTML = '<option value="">Não foi possível listar</option>';
       LogFrontendError(`listDevinModels: failed: ${err && err.stack ? err.stack : err}`).catch(() => {});
@@ -239,6 +258,7 @@ export async function mountShell(root) {
 
   devinModelSelectEl.addEventListener('change', async () => {
     const chosen = devinModelSelectEl.value;
+    updateDevinModelCost();
     if (!chosen) return;
     devinModelSelectEl.disabled = true;
     reconnecting = true;

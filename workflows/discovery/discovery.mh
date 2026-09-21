@@ -12,6 +12,7 @@
 import "discovery.partial.backlog.mh"
 import "discovery.partial.documento.mh"
 import "discovery.partial.tecnicos.mh"
+import "discovery.partial.hook.mh"
 
 import { Paths } from "../shared/core/paths.mh"
 

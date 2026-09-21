@@ -275,14 +275,16 @@ type devinModel struct {
 	ID          string `json:"id"`
 	Label       string `json:"label"`
 	FamilyLabel string `json:"familyLabel"`
+	CostSummary string `json:"costSummary"`
 }
 
 type devinModelsResponse struct {
 	Families []struct {
 		FamilyLabel string `json:"family_label"`
 		Variants    []struct {
-			ModelUID string `json:"model_uid"`
-			Label    string `json:"label"`
+			ModelUID    string `json:"model_uid"`
+			Label       string `json:"label"`
+			CostSummary string `json:"cost_summary"`
 		} `json:"variants"`
 	} `json:"families"`
 }
@@ -336,7 +338,7 @@ func parseDevinModels(data []byte) ([]devinModel, error) {
 			if label == "" {
 				label = variant.ModelUID
 			}
-			models = append(models, devinModel{ID: variant.ModelUID, Label: label, FamilyLabel: family.FamilyLabel})
+			models = append(models, devinModel{ID: variant.ModelUID, Label: label, FamilyLabel: family.FamilyLabel, CostSummary: variant.CostSummary})
 		}
 	}
 	if len(models) == 0 {

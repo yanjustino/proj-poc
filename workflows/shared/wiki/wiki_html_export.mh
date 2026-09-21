@@ -85,8 +85,7 @@ export tool WikiHtmlExport {
     render_page(title: string, category_label: string, body_html: string): string -> {
         var escaped_title = html.escape(title)
         var escaped_category = html.escape(category_label)
-        return
-        """
+        return """
         <!doctype html>
         <html lang="pt-BR">
         <head>
@@ -110,8 +109,7 @@ export tool WikiHtmlExport {
             .map((category) -> self.render_index_section(category, state.get(category.dir, [])))
             .join("\n")
         var search_json = json.stringify(self.build_search_entries(state)).replace("</script>", "<\\/script>")
-        return
-        """
+        return """
         <!doctype html>
         <html lang="pt-BR">
         <head>

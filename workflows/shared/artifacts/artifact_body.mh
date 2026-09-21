@@ -51,9 +51,17 @@ export tool ArtifactBody {
     )
 
     adr(data: any): string -> AdrBody(
-        contexto: html.escape(data.contexto),
-        decisao: html.escape(data.decisao),
-        consequencias: html.escape(data.consequencias),
+        status: html.escape(data.status),
+        contexto_e_problema: html.escape(data.contexto_e_problema),
+        contexto_fontes: Cite.note(data.contexto_fontes),
+        fatores_decisao_lista: Cite.list(data.fatores_decisao),
+        opcoes_consideradas_lista: ArtifactHtml.considered_options(data.opcoes_consideradas),
+        decisao_final: ArtifactHtml.decision_outcome(data.decisao_final.opcao_escolhida, data.decisao_final.justificativa),
+        decisao_final_fontes: Cite.note(data.decisao_final.fontes),
+        consequencias_positivas_lista: Cite.list(data.consequencias_positivas),
+        consequencias_negativas_lista: Cite.list(data.consequencias_negativas),
+        opcoes_pros_contras: ArtifactHtml.options_pros_and_cons(data.opcoes_pros_contras),
+        links_lista: ArtifactHtml.adr_links(data.links),
         fontes_nota: Cite.note(data.fontes)
     )
 

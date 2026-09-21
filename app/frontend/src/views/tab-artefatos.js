@@ -733,12 +733,45 @@ export async function renderArtefatosTab(container, project, { onChanged }) {
       body.innerHTML = '<p class="doc-empty">Nenhuma história gerada ainda.</p>';
       return;
     }
-    body.innerHTML = `<ul class="doc-index">${folders
-      .map((f) => `<li><button class="doc-index-item" data-folder="${escapeHtml(f.name)}">${escapeHtml(codedHistoriaTitle(row.featureFolder, f.name))}</button></li>`)
+    // Each item's "Como ..., quero ..., para ..." comes from its own
+    // historia.html (ArtifactHtml.story_statement renders it as the doc's
+    // one <blockquote> — see workflows/shared/artifacts/artifact_html.mh).
+    // There's no lighter-weight metadata file for it, so this reads every
+    // história's full HTML up front instead of only on click — fine at this
+    // list's size (one feature's histórias, typically single digits) and
+    // done in parallel; a folder whose read fails still shows its title.
+    const items = await Promise.all(folders.map(async (f) => ({
+      folder: f.name,
+      title: codedHistoriaTitle(row.featureFolder, f.name),
+      statement: await storyStatementOf(project.id, row.featureFolder, f.name),
+    })));
+    body.innerHTML = `<ul class="doc-index">${items
+      .map((it) => `<li><button class="doc-index-item" data-folder="${escapeHtml(it.folder)}">
+        <span class="doc-index-icon">${icon('fileText', 18)}</span>
+        <span class="doc-index-copy">
+          <strong class="doc-index-title">${escapeHtml(it.title)}</strong>
+          ${it.statement ? `<span class="doc-index-statement">${escapeHtml(it.statement)}</span>` : ''}
+        </span>
+      </button></li>`)
       .join('')}</ul>`;
     body.querySelectorAll('[data-folder]').forEach((button) => {
       button.addEventListener('click', () => openHistoria(row.featureFolder, button.dataset.folder));
     });
+  }
+
+  // storyStatementOf reads one história's rendered HTML and pulls out the
+  // plain-text "Como ..., quero ..., para ..." blockquote — the only place
+  // that statement is stored (see renderHistoriasIndex's comment above).
+  // Swallows read/parse errors: a missing or malformed file just means no
+  // preview text under that item's title, not a broken index.
+  async function storyStatementOf(projectId, featureFolder, folderName) {
+    try {
+      const html = await readProjectFile(projectId, 'artifacts', `historias/${featureFolder}/${folderName}/historia.html`);
+      const blockquote = new DOMParser().parseFromString(html, 'text/html').querySelector('blockquote');
+      return blockquote ? blockquote.textContent.trim().replace(/\s+/g, ' ') : '';
+    } catch {
+      return '';
+    }
   }
 
   async function openHistoria(featureFolder, folderName) {
