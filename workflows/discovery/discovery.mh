@@ -16,10 +16,10 @@ import "discovery.partial.tecnicos.mh"
 import { Paths } from "../shared/core/paths.mh"
 
 partial workflow Discovery {
-    description: "Artefatos de nivel Oportunidade: brief, atributos, requisitos, adr, der, diagramas, features, historias."
+    description: "Artefatos de nivel Oportunidade: brief, atributos, requisitos, adr, der, diagramas, features, dependencias, historias."
 
     input project_id: string
-    input artifact: string        // brief | atributos | requisitos | adr | der | diagramas | features | historias
+    input artifact: string        // brief | atributos | requisitos | adr | der | diagramas | features | dependencias | historias
     input feature_id: string = "" // obrigatorio (valor) so para artifact:"historias"
     input buddy: bool = false
     input approved: bool = false
@@ -60,6 +60,7 @@ partial workflow Discovery {
         "der"        -> DerCommit
         "diagramas"  -> DiagramasCommit
         "features"   -> FeaturesCommit
+        "dependencias" -> DependenciasCommit
         "historias"  -> HistoriasCommit
         _ -> fail("invariante violado: artefato desconhecido chegou ao Gate")
     }
@@ -72,9 +73,10 @@ partial workflow Discovery {
         "adr"        -> AdrGenerate
         "diagramas"  -> DiagramasGenerate
         "features"   -> FeaturesGenerate
+        "dependencias" -> DependenciasGenerate
         "historias"  -> HistoriasGenerate
         _ -> fail("artefato desconhecido: '" + artifact +
-                "' (use brief | atributos | requisitos | adr | der | diagramas | features | historias)"
+                "' (use brief | atributos | requisitos | adr | der | diagramas | features | dependencias | historias)"
         )
     }
 
@@ -186,6 +188,12 @@ test DiscoveryWorkflowSpec {
         var run = Discovery.run(inputs: {project_id: "spec-test-project", artifact: "features"})
         is_false(run.ok)
         is_true(run.error.contains("gere 'requisitos' antes de 'features'"))
+    }
+
+    describe dependencias_requires_features_first {
+        var run = Discovery.run(inputs: {project_id: "spec-test-project", artifact: "dependencias"})
+        is_false(run.ok)
+        is_true(run.error.contains("gere 'features' antes de 'dependencias'"))
     }
 
     describe historias_requires_a_feature_id {

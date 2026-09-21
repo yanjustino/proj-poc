@@ -143,8 +143,13 @@ button { cursor: pointer; }
 .hero h1 { font-size: 28px; letter-spacing: -.02em; margin: 4px 0; color: var(--ink); font-family: var(--serif); font-weight: 600; }
 .hero p { font-size: 12px; color: var(--muted); margin: 0; }
 
-.summary { display: grid; grid-template-columns: repeat(4, 1fr); gap: 12px; margin-bottom: 18px; }
-.summary-card { background: var(--surface); border: 1px solid var(--line); border-radius: var(--radius-md); padding: 14px; display: flex; align-items: center; gap: 11px; box-shadow: var(--soft-shadow); }
+/* auto-fit instead of a fixed 4 columns — splitting tokens into entrada/
+   saída/cache made this 5 cards, and a rigid 4-up grid would either cram a
+   lone 5th card onto its own half-empty row or squeeze every card back down
+   to fit, undoing the point of separating them. Cards find their own width
+   (minmax) and wrap however the pane's actual width allows. */
+.summary { display: grid; grid-template-columns: repeat(auto-fit, minmax(160px, 1fr)); gap: 14px; margin-bottom: 18px; }
+.summary-card { background: var(--surface); border: 1px solid var(--line); border-radius: var(--radius-md); padding: 16px; display: flex; align-items: center; gap: 12px; box-shadow: var(--soft-shadow); }
 .summary-icon { width: 32px; height: 32px; display: grid; place-items: center; background: var(--surface-2); color: var(--blue-deep); border-radius: var(--radius-sm); flex: none; }
 .summary-card b { display: block; font-size: 18px; color: var(--ink); }
 .summary-card span { font-size: 10px; color: var(--muted); }
@@ -166,12 +171,17 @@ button { cursor: pointer; }
 .artifact-map-title h2 { margin: 0; font-size: 17px; letter-spacing: -.02em; }
 .artifact-map-title span { padding: 3px 8px; border-radius: 999px; background: var(--surface-3); color: var(--muted); font: 10px var(--mono); }
 .artifact-map-head p { margin: 5px 0 0; color: var(--muted); font-size: 11px; }
-.artifact-map-controls { display: flex; flex-direction: column; align-items: flex-end; gap: 8px; }
-.artifact-map-actions { display: flex; align-items: center; gap: 10px; }
-.artifact-buddy { display: flex; align-items: center; gap: 6px; color: var(--muted); font-size: 10px; white-space: nowrap; }
-.artifact-buddy input { accent-color: var(--ink); }
+.artifact-map-controls { display: flex; flex-direction: row; align-items: center; flex-wrap: wrap; justify-content: flex-end; gap: 14px; }
 .artifact-filters { display: flex; gap: 5px; }
 .artifact-filter { border: 1px solid var(--line); background: var(--surface); border-radius: 999px; padding: 6px 9px; color: var(--muted); font-size: 10px; }
+/* Its own row below the header, same treatment as tab-wiki.js's own group
+   tabs (.collection-filters/.wiki-group-filters) — same .artifact-filter
+   pill buttons as the status filter above, not a native <select>, per
+   direct feedback: other screens (Wiki's Fontes/Entidades/Conceitos) filter
+   with buttons, this one should match instead of standing out as a
+   dropdown. overflow-x:auto mirrors those two for the same reason: a
+   work-item with many categories shouldn't force the row to wrap. */
+.artifact-category-filters { display: flex; gap: 5px; margin: 0 0 12px; overflow-x: auto; }
 .artifact-filter:hover { border-color: #c9c5ba; color: var(--ink); }
 .artifact-filter.active { background: var(--ink); border-color: var(--ink); color: var(--surface); }
 .artifact-card-grid { display: grid; grid-template-columns: repeat(auto-fit, minmax(190px, 1fr)); gap: 11px; align-items: stretch; }
@@ -280,6 +290,43 @@ button { cursor: pointer; }
 .run-tokens { font-family: var(--mono); color: var(--muted); }
 .run-error { color: var(--red); }
 .run-reason { color: var(--muted); }
+/* working/queued's own hero — a bare status dot + "gerando" read as frozen
+   on a run with no visible step change for a while (real feedback: a
+   Feature generation that looked stuck, no error, just silent). Just the
+   Senpai illustration (senpai-loading-illustration.png, swappable — see the
+   ?inline import in run-tracker.js) gently floating, no overlay on top of
+   it anymore: an earlier version pinned a small animated "reactor" at a
+   fixed % position tuned to one specific illustration's red sun, which
+   broke (floated over blank space) the moment that file was swapped for a
+   different piece of art with the sun somewhere else, or none at all. */
+.run-generating { display: flex; flex-direction: column; align-items: center; gap: 28px; text-align: center; padding: 22px 12px; }
+.run-orbit { position: relative; width: 320px; flex: none; animation: run-orbit-float 6s ease-in-out infinite; }
+.run-orbit-image { display: block; width: 100%; height: auto; opacity: .92; }
+/* Two <img>s, one shown at a time via html[data-theme] — swapped instead of
+   filtered: senpai-loading-illustration.png is shaded for this app's dark
+   default, senpai-loading-illustration-light.png is its own separate asset
+   tuned for the light theme's cream/white surfaces, so no brightness/
+   contrast hack is needed to keep either one legible. */
+.run-orbit-image-light { display: none; }
+html[data-theme='light'] .run-orbit-image-dark { display: none; }
+html[data-theme='light'] .run-orbit-image-light { display: block; }
+@keyframes run-orbit-float { 0%, 100% { transform: translateY(-3px); } 50% { transform: translateY(3px); } }
+
+.run-generating-status { display: flex; flex-direction: column; align-items: center; gap: 12px; }
+.run-generating-badge { display: inline-flex; align-items: center; gap: 8px; font-family: var(--mono); font-size: 13px; letter-spacing: .14em; text-transform: uppercase; color: var(--amber); }
+.run-generating-blink { width: 8px; height: 8px; border-radius: 50%; background: var(--amber); animation: run-generating-blink 1.2s ease-in-out infinite; }
+@keyframes run-generating-blink { 0%, 100% { opacity: 1; } 50% { opacity: .25; } }
+.run-generating-stage { font-size: 22px; font-weight: 600; color: var(--ink); max-width: 460px; }
+.run-generating-meta { display: flex; align-items: center; gap: 10px; flex-wrap: wrap; justify-content: center; font-family: var(--mono); font-size: 14px; color: var(--muted); }
+.run-generating-sep { color: var(--line); }
+
+.run-cancel-inline { display: block; width: 100%; max-width: 360px; margin: 0 auto; text-align: center; padding: 12px 16px; font-size: 14px; }
+/* Artefatos-only (see createRunTracker's fillHeight option) — while
+   working/queued, tracker.element is the reading pane's entire body content
+   (beginCustom() clears everything else out), so it should sit centered in
+   that space rather than pinned to the top like every other .run-tracker
+   use (Fontes' compact per-file card, Wiki's inline query/lint tracker). */
+.run-tracker-fill { min-height: 100%; justify-content: center; align-items: center; }
 /* Chat-style composer for a paused run — one bordered, rounded card (like a
    chat app's message box) instead of a bare textarea: the feedback field on
    top, blended into the card with no border of its own, and every action —
@@ -493,7 +540,7 @@ button { color: inherit; }
 .hero p { color: var(--muted); font-family: var(--mono); font-size: 10px; }
 .hero > .icon-btn { border: 1px solid var(--line); background: var(--surface); }
 
-.summary { gap: 8px; margin-bottom: 24px; }
+.summary { gap: 14px; margin-bottom: 24px; }
 .summary-card { padding: 16px; border-color: var(--line); background: var(--surface); box-shadow: none; border-radius: var(--radius-md); }
 .summary-icon { color: var(--vermilion); background: rgba(229,57,47,.12); border-radius: var(--radius-md); }
 .summary-card b { color: var(--rice-paper); font-size: 17px; }
@@ -512,7 +559,7 @@ button { color: inherit; }
 .artifact-filter, .collection-filter { border-color: var(--line); background: transparent; border-radius: var(--radius-md); padding: 6px 10px; }
 .artifact-filter:hover, .collection-filter:hover { border-color: #55545a; color: var(--rice-paper); }
 .artifact-filter.active, .collection-filter.active { border-color: var(--vermilion); background: var(--vermilion); color: #fff; }
-.artifact-buddy input, label.check input { accent-color: var(--vermilion); }
+label.check input { accent-color: var(--vermilion); }
 .artifact-map-empty, .collection-map-empty { border-color: #55545a; border-radius: var(--radius-lg); }
 
 .artifact-card, .source-card, .wiki-page-card { border-color: var(--line); border-radius: var(--radius-lg); background: var(--surface); }
@@ -573,6 +620,7 @@ button { color: inherit; }
 .modal input:focus, .modal select:focus { border-color: var(--vermilion); box-shadow: 0 0 0 3px rgba(229,57,47,.13); }
 .run-feedback-input { color: var(--rice-paper); }
 .run-composer { background: var(--surface-2); }
+.run-generating-stage { color: var(--rice-paper); }
 .modal-backdrop { background: rgba(0,0,0,.7); backdrop-filter: blur(6px); }
 .modal { border-color: var(--line); border-radius: var(--radius-lg); background: var(--surface); }
 .modal h2 { color: var(--rice-paper); font: 650 24px/1.2 var(--serif); }
@@ -601,7 +649,7 @@ html, body { font-size: 15px; }
 .tab-btn { font-size: 14px; }
 .artifact-map-title span, .collection-map-title span { font-size: 11px; }
 .artifact-map-head p, .collection-map-head p { font-size: 13px; }
-.artifact-buddy, .artifact-filter, .collection-filter { font-size: 12px; }
+.artifact-filter, .collection-filter { font-size: 12px; }
 .artifact-map-empty, .collection-map-empty { font-size: 14px; }
 .artifact-card, .source-card, .wiki-page-card,
 .wiki-page-card > button { min-height: 174px; }

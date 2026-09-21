@@ -131,9 +131,18 @@ export async function mountShell(root) {
     const dot = status.ready ? 'done' : 'failed';
     const plain = status.ready ? `${status.name || 'mhl'} ${status.version || ''}`.trim() : status.error || 'MCP indisponível';
     const html = status.ready ? `<b>${escapeHtml(status.name || 'mhl')}</b> ${escapeHtml(status.version || '')}` : escapeHtml(plain);
-    const reconnectButton = !status.ready
-      ? `<button class="button secondary small sidebar-status-reconnect" data-mcp-reconnect ${reconnecting ? 'disabled' : ''}>${reconnecting ? 'Reconectando…' : 'Reconectar'}</button>`
-      : '';
+    // Shown even when status.ready is true, not just on a detected failure —
+    // real gap this closes: /healthz is a plain GET, and Go's own
+    // net/http.Transport transparently retries a GET on a fresh connection
+    // when the pooled one turns out dead, but does the same for a POST only
+    // when it never reached the wire — every mhlbridge RPC call is a POST
+    // (JSON-RPC needs a body), so a broken pooled connection can fail real
+    // actions with "decode response: EOF" while /healthz keeps reporting
+    // ready right through it, hiding the one button that fixes it exactly
+    // when it's needed. Always-visible costs nothing when things are fine
+    // (reconnectMCP() respawning a healthy mhl is just a brief blip) and
+    // guarantees a way out when the probe and reality disagree.
+    const reconnectButton = `<button class="button secondary small sidebar-status-reconnect" data-mcp-reconnect ${reconnecting ? 'disabled' : ''} title="Reiniciar a conexão com o mhl">${reconnecting ? 'Reconectando…' : 'Reconectar'}</button>`;
     mcpStatusEl.innerHTML = `<span class="status-dot ${dot}"></span><span class="sidebar-status-copy" title="${escapeHtml(plain)}">${html}</span>${reconnectButton}`;
 
     const button = mcpStatusEl.querySelector('[data-mcp-reconnect]');

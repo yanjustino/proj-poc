@@ -224,7 +224,28 @@ func Start(ctx context.Context, mhlPath, workflowsDir, stateDir, dataDir, codexC
 	c := &Client{
 		cmd:     cmd,
 		baseURL: "http://" + addr,
-		http:    &http.Client{Timeout: 30 * time.Second},
+		// DisableKeepAlives: reported symptom (real user, this exact
+		// process) — the app sits idle for a while (nothing polling,
+		// nothing generating), then the next action fails outright with
+		// "decode response: EOF" and stays broken until the mhl child is
+		// manually reconnected. Classic stale-keep-alive-connection
+		// failure: Go's default Transport pools and reuses idle TCP
+		// connections, but if the far end (mhl's own HTTP server) closes
+		// one while it sits idle in that pool — its own idle timeout, not
+		// configurable from here since mhl is a separate binary — the next
+		// request reusing it reads zero bytes before any response body,
+		// which json.Decode reports as plain EOF. Worse on a POST than a
+		// GET: net/http only auto-retries a request transparently on a
+		// dead reused connection when it knows the request is safe to
+		// resend (GET, HEAD, …); every RPC call here is a POST (JSON-RPC
+		// requires a body), so the stale hit surfaces as a real error
+		// instead of a silent, invisible retry. This is a loopback
+		// connection to a child process this app itself spawned —
+		// re-dialing per request costs a fraction of a millisecond here,
+		// nowhere close to real network latency — so trading keep-alive
+		// reuse away outright removes the whole failure class instead of
+		// papering over it with a retry-on-EOF special case.
+		http:    &http.Client{Timeout: 30 * time.Second, Transport: &http.Transport{DisableKeepAlives: true}},
 		pidFile: pidFile,
 		stderr:  &stderr,
 	}

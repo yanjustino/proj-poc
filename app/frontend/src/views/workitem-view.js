@@ -66,16 +66,17 @@ export async function renderWorkItemView(container, project, { initialTab = 'art
       return false;
     }).length;
     const pct = expectedCount ? Math.round((doneCount / expectedCount) * 100) : 0;
-    const totalTokens = (usage.total_tokens_in || 0) + (usage.total_tokens_out || 0);
+    const tokensIn = usage.total_tokens_in || 0;
+    const tokensOut = usage.total_tokens_out || 0;
 
     // Cache tokens (Claude: cache_creation + cache_read; Codex: cache_write
     // + cache_read, same two roles under different names; Devin: none — see
-    // workflows/shared/agents/usage.mh) are NOT part of totalTokens above:
-    // both CLIs report/bill them as distinct from "fresh" input, so folding
-    // them in would misrepresent what totalTokens has always meant. Cache
-    // gets its own card rather than living only in a tooltip — it's real
-    // data for 2 of the 3 agents, unlike cost (Claude-only), which is why
-    // cost is the one demoted to a tooltip detail here instead.
+    // workflows/shared/agents/usage.mh) get their own card, kept separate
+    // from tokensIn/tokensOut above: both CLIs report/bill them as distinct
+    // from "fresh" input, so folding them in would misrepresent what those
+    // two numbers mean. Cache is real data for 2 of the 3 agents, unlike
+    // cost (Claude-only), which is why cost is the one demoted to a tooltip
+    // detail here instead.
     const cacheCreation = usage.total_cache_creation_tokens || 0;
     const cacheRead = usage.total_cache_read_tokens || 0;
     const totalCache = cacheCreation + cacheRead;
@@ -100,8 +101,12 @@ export async function renderWorkItemView(container, project, { initialTab = 'art
         <span class="ring" style="background:conic-gradient(var(--green) 0 ${pct}%,var(--line) ${pct}%)"><i>${pct}%</i></span>
       </div>
       <div class="summary-card">
-        <span class="summary-icon">${icon('zap', 16)}</span>
-        <div><b>${totalTokens.toLocaleString('pt-BR')}</b><span>tokens utilizados</span></div>
+        <span class="summary-icon">${icon('arrowDown', 16)}</span>
+        <div><b>${tokensIn.toLocaleString('pt-BR')}</b><span>tokens de entrada</span></div>
+      </div>
+      <div class="summary-card">
+        <span class="summary-icon">${icon('arrowUp', 16)}</span>
+        <div><b>${tokensOut.toLocaleString('pt-BR')}</b><span>tokens de saída</span></div>
       </div>
       <div class="summary-card" title="${escapeHtml(cacheTitle)}">
         <span class="summary-icon">${icon('layers', 16)}</span>

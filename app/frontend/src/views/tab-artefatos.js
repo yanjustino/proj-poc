@@ -24,6 +24,7 @@ const LABELS = {
   der: 'DER',
   diagramas: 'Diagramas C4',
   features: 'Features',
+  dependencias: 'Mapa de dependências',
   historias: 'Histórias',
   feature: 'Detalhamento da feature',
   historia: 'Detalhamento da história',
@@ -41,6 +42,7 @@ const ARTIFACT_DESCRIPTIONS = {
   der: 'Entidades, atributos e relacionamentos essenciais do domínio.',
   diagramas: 'Visões dos componentes, limites e principais fluxos do sistema.',
   features: 'Capacidades de negócio conectadas aos requisitos e objetivos.',
+  dependencias: 'Grafo de dependências entre features e ordem de execução sugerida.',
   historias: 'Histórias detalhadas para implementação e validação.',
   feature: 'Detalhamento funcional da entrega e seus critérios de aceite.',
   historia: 'Comportamento esperado, regras e critérios de aceite da história.',
@@ -48,7 +50,7 @@ const ARTIFACT_DESCRIPTIONS = {
 
 const ARTIFACT_ICONS = {
   brief: 'zap', atributos: 'checkCircle', requisitos: 'fileText', adr: 'layers', der: 'inbox',
-  diagramas: 'maximize', features: 'layers', historias: 'fileText', feature: 'layers', historia: 'fileText',
+  diagramas: 'maximize', features: 'layers', dependencias: 'layers', historias: 'fileText', feature: 'layers', historia: 'fileText',
 };
 
 function descriptionFor(row) {
@@ -86,6 +88,29 @@ function itemTitleFromFilename(filename) {
   return base.replace(/-/g, ' ');
 }
 
+// folderTitle is itemTitleFromFilename's counterpart for folder-based
+// collections (Features, and Delivery's flat Historias) — featureIdOf/
+// featureTitleOf already split "FT003-nome-da-feature" into code + title,
+// this just recombines them in the same "CODE — title" shape
+// itemTitleFromFilename uses, instead of the code silently getting dropped
+// (real complaint: the Features cards and the Histórias index showed only
+// the title, with no way to tell "US0001" in one feature from "US0001" in
+// another — see codedHistoriaTitle below for the composite id that fixes
+// that specific case).
+function folderTitle(folderName) {
+  return `${featureIdOf(folderName)} — ${featureTitleOf(folderName)}`;
+}
+
+// codedHistoriaTitle is folderTitle's variant for a história folder nested
+// under one feature (Discovery only) — a bare "US0001" repeats across every
+// feature's own histórias/ (each feature restarts its own numbering), so
+// the id shown/used here is the feature's own code prefixed on, same
+// "FT003-US0001" shape the workflow itself would need to disambiguate one
+// história from another with the same number in a different feature.
+function codedHistoriaTitle(featureFolderName, historiaFolderName) {
+  return `${featureIdOf(featureFolderName)}-${featureIdOf(historiaFolderName)} — ${featureTitleOf(historiaFolderName)}`;
+}
+
 // renderArtefatosTab owns only the middle-column artifact map — a
 // dependency-gated card grid with live status dots. Whatever is
 // selected (a live generation, a "gerar" call-to-action, or a finished
@@ -116,6 +141,12 @@ export async function renderArtefatosTab(container, project, { onChanged }) {
   let active = true;
   const sequence = sequenceFor(project);
   const workflow = project.level === 'discovery' ? 'Discovery' : 'Delivery';
+  // Fixed for the lifetime of this mount (sequenceFor's own order — Brief/
+  // Contexto first, Entrega/Features last), unlike doneNames/collectionChildren
+  // below: category is a static property of each sequence entry, not
+  // something that depends on what's actually been generated yet, so the
+  // category filter's own option list never needs to be recomputed.
+  const categories = [...new Set(sequence.map((entry) => entry.category))];
 
   container.innerHTML = `
     <div class="artifact-map-head">
@@ -124,10 +155,7 @@ export async function renderArtefatosTab(container, project, { onChanged }) {
         <p>Explore, gere e revise os documentos deste work-item.</p>
       </div>
       <div class="artifact-map-controls">
-        <div class="artifact-map-actions">
-          <label class="artifact-buddy"><input type="checkbox" data-buddy checked /><span>Modo Buddy</span></label>
-          <button class="button secondary small" data-export-all title="Exportar toda a Wiki e todos os Artefatos">${icon('download', 14)} Exportar tudo</button>
-        </div>
+        <button class="button secondary small" data-export-all title="Exportar toda a Wiki e todos os Artefatos">${icon('download', 14)} Exportar tudo</button>
         <div class="artifact-filters">
           <button class="artifact-filter active" data-filter="all">Todos</button>
           <button class="artifact-filter" data-filter="ready">Prontos</button>
@@ -135,14 +163,15 @@ export async function renderArtefatosTab(container, project, { onChanged }) {
         </div>
       </div>
     </div>
+    <div class="artifact-category-filters" data-category-filters></div>
     <div class="export-status" data-export-status hidden></div>
     <div class="artifact-card-grid" data-list></div>
   `;
 
   const listEl = container.querySelector('[data-list]');
-  const buddyCheckbox = container.querySelector('[data-buddy]');
   const countEl = container.querySelector('[data-artifact-count]');
   const filterButtons = [...container.querySelectorAll('[data-filter]')];
+  const categoryFiltersEl = container.querySelector('[data-category-filters]');
   const exportAllButton = container.querySelector('[data-export-all]');
   const exportStatusEl = container.querySelector('[data-export-status]');
   showEmpty('Selecione um artefato para ler ou gerar.');
@@ -159,6 +188,24 @@ export async function renderArtefatosTab(container, project, { onChanged }) {
   const trackers = new Map(); // key -> { element, update, status }
   let selectedKey = sequence[0]?.artifact ?? null;
   let activeFilter = 'all';
+  let activeCategory = 'all';
+
+  // Same disclosure pattern as tab-wiki.js's own group tabs (Fontes/
+  // Entidades/Conceitos, .collection-filter) — one pill button per category,
+  // built once here since (unlike Wiki's tabs) the category list is static
+  // for this mount, not something that grows as content gets generated.
+  categoryFiltersEl.innerHTML = ['all', ...categories]
+    .map((c) => `<button class="artifact-filter ${c === 'all' ? 'active' : ''}" data-category="${escapeAttribute(c)}">${c === 'all' ? 'Todas' : escapeHtml(c)}</button>`)
+    .join('');
+  const categoryButtons = [...categoryFiltersEl.querySelectorAll('[data-category]')];
+  categoryButtons.forEach((button) => {
+    button.addEventListener('click', () => {
+      activeCategory = button.dataset.category;
+      categoryButtons.forEach((candidate) => candidate.classList.toggle('active', candidate === button));
+      renderList();
+      renderDetail();
+    });
+  });
 
   function showExportStatus(message, state = 'success') {
     exportStatusEl.hidden = false;
@@ -189,7 +236,7 @@ export async function renderArtefatosTab(container, project, { onChanged }) {
     return children.map((child) => {
       const previewPath =
         entry.collectionKind === 'folders' ? `${entry.dir}/${child.name}/${entry.itemFile}` : `${entry.dir}/${child.name}`;
-      const label = entry.collectionKind === 'folders' ? featureTitleOf(child.name) : itemTitleFromFilename(child.name);
+      const label = entry.collectionKind === 'folders' ? folderTitle(child.name) : itemTitleFromFilename(child.name);
       const itemId = entry.collectionKind === 'folders' ? featureIdOf(child.name) : child.name;
       return {
         key: `${entry.artifact}-item:${itemId}`,
@@ -224,7 +271,7 @@ export async function renderArtefatosTab(container, project, { onChanged }) {
         const featureId = featureIdOf(folder.name);
         rows.push({
           key: 'historias:' + featureId,
-          label: `Histórias — ${featureTitleOf(folder.name)}`,
+          label: `Histórias — ${folderTitle(folder.name)}`,
           entry: { artifact: 'historias', deps: ['features'] },
           featureId, // short id ("FT003") — what the workflow's own feature_id argument expects
           featureFolder: folder.name, // full folder name ("FT003-slug...") — historias/ mirrors features/'s folder naming, and only the full name is a real path
@@ -291,6 +338,7 @@ export async function renderArtefatosTab(container, project, { onChanged }) {
   function renderList() {
     const rows = rowsToRender();
     const visibleRows = rows.filter((row) => {
+      if (activeCategory !== 'all' && row.category !== activeCategory) return false;
       if (activeFilter === 'all') return true;
       return activeFilter === 'ready' ? isRowDone(row) : !isRowDone(row);
     });
@@ -409,6 +457,22 @@ export async function renderArtefatosTab(container, project, { onChanged }) {
 
     const tracker = trackers.get(row.key);
     if (tracker && tracker.status && !['completed', 'failed', 'canceled'].includes(tracker.status.state)) {
+      // While working/queued, mhl_run_status is polled every 500ms
+      // (app.go's runPollInterval) and pushes a status regardless of
+      // whether anything actually changed — onRunUpdate calls renderDetail()
+      // on every single one of those. beginCustom() below clears the pane's
+      // body outright (.innerHTML = ''), so re-appending the SAME
+      // tracker.element right after still detaches-then-reattaches it from
+      // the browser's point of view — which restarts every CSS animation
+      // inside it (run-tracker.js's orbit) before it ever got a single
+      // frame in, even though nothing here actually needed to change. If
+      // this exact element is already sitting in the pane, skip the
+      // clear+reappend entirely; run-tracker.js's own update() already
+      // repaints tracker.element in place for whatever *did* change.
+      const isActive = tracker.status.state === 'working' || tracker.status.state === 'queued';
+      const alreadyMounted = tracker.element.isConnected && tracker.element.parentElement && tracker.element.parentElement.classList.contains('doc-body');
+      if (isActive && alreadyMounted) return;
+
       const body = beginCustom(row.label);
       body.appendChild(tracker.element);
       // Modo Buddy's whole point is a human reading the draft before it's
@@ -670,7 +734,7 @@ export async function renderArtefatosTab(container, project, { onChanged }) {
       return;
     }
     body.innerHTML = `<ul class="doc-index">${folders
-      .map((f) => `<li><button class="doc-index-item" data-folder="${escapeHtml(f.name)}">${escapeHtml(featureTitleOf(f.name))}</button></li>`)
+      .map((f) => `<li><button class="doc-index-item" data-folder="${escapeHtml(f.name)}">${escapeHtml(codedHistoriaTitle(row.featureFolder, f.name))}</button></li>`)
       .join('')}</ul>`;
     body.querySelectorAll('[data-folder]').forEach((button) => {
       button.addEventListener('click', () => openHistoria(row.featureFolder, button.dataset.folder));
@@ -678,7 +742,7 @@ export async function renderArtefatosTab(container, project, { onChanged }) {
   }
 
   async function openHistoria(featureFolder, folderName) {
-    const label = featureTitleOf(folderName);
+    const label = codedHistoriaTitle(featureFolder, folderName);
     showLoading(label);
     try {
       const html = await readProjectFile(project.id, 'artifacts', `historias/${featureFolder}/${folderName}/historia.html`);
@@ -687,6 +751,7 @@ export async function renderArtefatosTab(container, project, { onChanged }) {
       beginCustom(label).innerHTML = `<p class="doc-empty">Erro ao abrir história: ${escapeHtml(String(err))}</p>`;
     }
   }
+
 
   // Keyed by project + artifact (not just artifact) so this stays correct
   // even though active-runs.js's registry is a single app-wide map shared
@@ -766,7 +831,15 @@ export async function renderArtefatosTab(container, project, { onChanged }) {
 
   function generate(row) {
     const key = activeKey(row);
-    const tracker = createRunTracker({ onCancel: () => onRunCancel(row, key) });
+    // onUpdate: Aprovar/Regenerar (run-tracker.js's own composer) resume
+    // this run directly, bypassing startAndWatch entirely — without this,
+    // their pushes only repainted the tracker widget itself, never reaching
+    // onRunUpdate's refreshDoneState()/renderList()/renderDetail(). Real bug
+    // this fixes: approving a paused run wrote the artifact correctly, but
+    // the screen kept showing the paused composer, then fell back to
+    // "pronto para gerar" on the next unrelated re-render, as if the
+    // approval had never happened.
+    const tracker = createRunTracker({ onCancel: () => onRunCancel(row, key), onUpdate: (status) => onRunUpdate(row, tracker, key, status), fillHeight: true });
     trackers.set(row.key, tracker);
     // Seed a non-null "working" status right away — App.StartRun's own
     // response is still an unresolved promise at this point, so without
@@ -775,10 +848,18 @@ export async function renderArtefatosTab(container, project, { onChanged }) {
     // back to the "Gerar" button, as if the click had done nothing.
     tracker.update({ runId: '', state: 'working' });
 
+    // buddy: true always — this screen used to let a "Modo Buddy" checkbox
+    // toggle it, but the checkbox itself (not the pause-for-review gate it
+    // controlled) was what wasn't earning its keep: dropping the checkbox
+    // without pinning buddy to true left it on discovery.mh/delivery.mh's
+    // own default (`input buddy: bool = false`), which skips the pause
+    // entirely and writes straight to artifacts/ — every generation looked
+    // "auto-approved" with no Aprovar step at all. Pinning it here keeps the
+    // review gate always on, just without a toggle to accidentally turn off.
     const args =
       workflow === 'Discovery'
-        ? { project_id: project.id, artifact: row.featureId ? 'historias' : row.key, buddy: buddyCheckbox.checked, ...(row.featureId ? { feature_id: row.featureId } : {}) }
-        : { project_id: project.id, mode: project.type, artifact: row.key, buddy: buddyCheckbox.checked };
+        ? { project_id: project.id, artifact: row.featureId ? 'historias' : row.key, buddy: true, ...(row.featureId ? { feature_id: row.featureId } : {}) }
+        : { project_id: project.id, mode: project.type, artifact: row.key, buddy: true };
 
     startAndWatch(workflow, args, (status) => onRunUpdate(row, tracker, key, status)).catch((err) =>
       onRunError(row, tracker, key, err),
@@ -798,7 +879,7 @@ export async function renderArtefatosTab(container, project, { onChanged }) {
       const key = activeKey(row);
       const runId = getActiveRun(key);
       if (!runId) continue;
-      const tracker = createRunTracker({ onCancel: () => onRunCancel(row, key) });
+      const tracker = createRunTracker({ onCancel: () => onRunCancel(row, key), onUpdate: (status) => onRunUpdate(row, tracker, key, status), fillHeight: true });
       trackers.set(row.key, tracker);
       tracker.update({ runId, state: 'working' });
       selectedKey = row.key; // jump straight to the progress the user left running

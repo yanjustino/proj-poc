@@ -5,6 +5,29 @@
 // startAndWatch/resumeAndWatch's onUpdate callback into `.update(status)`.
 import { resumeAndWatch, cancelRun } from './api.js';
 import { dotClass } from './status.js';
+// ?inline forces Vite to embed this as a base64 data: URI in the JS bundle
+// itself, instead of emitting it as a separate file for Wails' AssetServer
+// to serve by URL (the default for anything past its 4KB assetsInlineLimit,
+// which this 400KB+ illustration is way past). The image reliably failed
+// to display in the packaged app despite the exact same import pattern
+// working for the sidebar's senpai-symbol.png — the one concrete anomaly
+// found was an unusual embedded C2PA/jumb provenance chunk (stripped in
+// the file itself now, likely from whatever tool generated it), but
+// without being able to run the packaged app there's no way to confirm
+// that was really it. Inlining sidesteps the question entirely: the bytes
+// travel inside the same script that was already loading and running
+// correctly, no separate AssetServer request involved at all.
+import loadingIllustrationDark from './assets/images/senpai-loading-illustration.png?inline';
+import loadingIllustrationLight from './assets/images/senpai-loading-illustration-light.png?inline';
+
+// WORKING_MESSAGE is the friendly headline shown while a run is actually
+// executing/queued (see render()'s own working/queued branch) — feedback
+// from a real generation that looked frozen (no step change for a while,
+// especially on the Devin backend — see elapsedLine's own comment) was that
+// a bare status dot + "gerando" read as broken, not busy. This spells out
+// what's actually happening instead of leaving the reader to infer it from
+// a spinning icon alone.
+const WORKING_MESSAGE = { working: 'Aguarde! Gerando o artefato com o LLM…', queued: 'Aguarde! Na fila para começar a geração…' };
 
 export const STATE_LABEL = {
   working: 'gerando',
@@ -21,7 +44,32 @@ export const STATE_LABEL = {
 // canceling here abandons the draft rather than leaving a record of it (see
 // tab-artefatos.js's onRunCancel). Left unset, the tracker shows "cancelado"
 // itself — fine for a host (Fontes' ingest) that never actually pauses.
-export function createRunTracker({ resumeArgs = { approved: true }, onCancel } = {}) {
+//
+// onUpdate: called instead of this tracker's own local `update` for every
+// resumeAndWatch push (Aprovar/Regenerar below) — Fontes/Wiki's trackers
+// never pause, so they never hit this path and can leave it unset (falls
+// back to the local-only `update`). Artefatos MUST pass one: real bug,
+// reported in production — approving a paused run wrote the artifact to
+// disk correctly, but the screen kept showing the paused composer, then on
+// the next unrelated re-render fell back to "pronto para gerar" as if
+// nothing had happened. Root cause was exactly this gap — Aprovar only ever
+// called this widget's own `update`, which repaints `element`/`composer` in
+// place but has no way to reach the host's refreshDoneState()/renderList()/
+// renderDetail() (tab-artefatos.js's onRunUpdate), so the host's own
+// `doneNames` never learned the artifact was written and kept rendering the
+// stale "not done yet" view. Passing the host's onRunUpdate here instead
+// fixes both directions: it already calls tracker.update() as its first
+// line (same local repaint as before), then goes on to do the host-side
+// refresh — and the same fix also makes Regenerar's new draft actually
+// replace the stale preview instead of leaving the old one on screen.
+// fillHeight: Artefatos mounts a working/queued tracker as the reading
+// pane's ENTIRE body content (beginCustom() clears everything else out) —
+// the generating card should sit in the middle of that space, not stick to
+// the top like Fontes' compact per-file tracker or Wiki's inline one. Adds
+// .run-tracker-fill instead of centering .run-tracker unconditionally,
+// since those other two hosts mount it inline among other content, where
+// stretching to fill height and centering would look broken.
+export function createRunTracker({ resumeArgs = { approved: true }, onCancel, onUpdate, fillHeight = false } = {}) {
   const element = document.createElement('div');
   element.className = 'run-tracker';
   // Kept as a second, separate root (not just a child of `element`) so a
@@ -54,24 +102,81 @@ export function createRunTracker({ resumeArgs = { approved: true }, onCancel } =
   // (nothing pushes a new status until resumed), but cheap to be correct
   // about — never wipes what the user already typed.
   let feedbackText = '';
-  // tickTimer redraws the widget once a second while a run is working/
-  // queued, purely so elapsedLine below has something to advance — mhl can
-  // go a long stretch (one slow LLM call) without pushing a single status
-  // update, which otherwise reads as frozen (the exact complaint that led
-  // to this: "gerando" sitting still with no step change and, on the Devin
-  // backend, no token count either — see output/DEVIN-CLI.md, tokens_in/out
-  // stay 0 = "unavailable" for that backend, not live progress). Started/
-  // stopped from ensureTicking(), called at the end of every render() —
-  // self-correcting, so a status update that ends the run also stops the
-  // ticker without any extra bookkeeping.
+  // tickTimer advances the elapsed-time readout once a second while a run
+  // is working/queued — mhl can go a long stretch (one slow LLM call)
+  // without pushing a single status update, which otherwise reads as
+  // frozen (the exact complaint that led to this: "gerando" sitting still
+  // with no step change and, on the Devin backend, no token count either —
+  // see output/DEVIN-CLI.md, tokens_in/out stay 0 = "unavailable" for that
+  // backend, not live progress). Started/stopped from ensureTicking(),
+  // called at the end of every render() — self-correcting, so a status
+  // update that ends the run also stops the ticker without any extra
+  // bookkeeping.
+  //
+  // Deliberately does NOT call the full render() every second — the orbit
+  // animation (see render()'s isActive branch) is a subtree of plain CSS
+  // keyframe animations, which restart from frame zero every time their
+  // element is torn down and recreated. render() rebuilds `element` wholesale
+  // via innerHTML, so a naive render()-every-second here was tearing the
+  // whole orbit down and rebuilding it every tick, before most of its own
+  // animations (2.4s/2.8s/3.6s/6s/22s durations) ever completed a single
+  // cycle — it visibly never got anywhere, which read as "not animating" at
+  // all. Patching just the elapsed text node in place leaves the orbit's
+  // DOM (and its running animations) untouched.
   let tickTimer = null;
+
+  function tickElapsed() {
+    if (!status) return;
+    const seconds = elapsedSeconds(status);
+    const el = element.querySelector('[data-run-elapsed]');
+    if (el && seconds != null) el.textContent = formatDuration(seconds);
+  }
+
+  // activeSignature/lastActiveSignature: the OTHER source of the same
+  // orbit-restart bug tickElapsed above fixes only half of. App.WatchRun
+  // polls mhl_run_status every 500ms (app.go's runPollInterval) and pushes
+  // *every* tick to this tracker's update() below, whether or not anything
+  // actually changed — a heartbeat, not just real progress. update() used
+  // to call render() unconditionally on every one of those, tearing the
+  // orbit down and rebuilding it twice a second — worse than the 1s
+  // self-timer tickElapsed replaced, and enough on its own to make the
+  // animations look permanently stuck at frame zero. Comparing this
+  // signature lets update() tell a genuine change (new token count, a state
+  // transition) from a no-op heartbeat and skip the full rebuild for the
+  // latter, same as a self-timer tick. step/stepIndex/stepTotal are
+  // deliberately left out — mhl_run_status's step counter turned out to be
+  // a static graph position (how many named steps the whole merged
+  // workflow declares, e.g. Discovery's Dispatch+Gate+Done plus every
+  // artifact's own Generate/Commit pair — 19 for the whole thing,
+  // regardless of which one artifact is actually being generated), not
+  // live progress: it sat on the exact same value for an artifact's entire
+  // generation, since one Writer.generate call is one mhl step from start
+  // to finish. Was shown in the meta row and read as a moving progress
+  // indicator when it never moved — dropped for the same reason the ETA
+  // was.
+  //
+  // runId/startedAt DO need to be in here, even though neither is shown
+  // directly — real regression once step/stepIndex/stepTotal came out
+  // above: tab-artefatos.js's generate() seeds the tracker with
+  // `{runId: '', state: 'working'}` (no startedAt yet) before StartRun's
+  // own response — real runId + startedAt — lands. With only state+tokens
+  // in the signature, that seed and the first real push both hashed to the
+  // same "working, no tokens yet" string, so the fast path fired on the
+  // one push that actually mattered — elapsedSeconds() had no startedAt to
+  // work from until then, and the elapsed span never got created. Keeping
+  // runId/startedAt in the signature forces a real render on exactly that
+  // transition.
+  let lastActiveSignature = null;
+
+  function activeSignature(s) {
+    const vars = s.vars || {};
+    return [s.state, s.runId, s.startedAt, vars.tokens_in, vars.tokens_out].join('|');
+  }
 
   function ensureTicking() {
     const shouldTick = status && (status.state === 'working' || status.state === 'queued');
     if (shouldTick && !tickTimer) {
-      tickTimer = setInterval(() => {
-        if (status) render();
-      }, 1000);
+      tickTimer = setInterval(tickElapsed, 1000);
     } else if (!shouldTick && tickTimer) {
       clearInterval(tickTimer);
       tickTimer = null;
@@ -86,15 +191,17 @@ export function createRunTracker({ resumeArgs = { approved: true }, onCancel } =
     return `<span class="run-tokens">${tokensIn ?? 0} → ${tokensOut ?? 0} tokens</span>`;
   }
 
-  function elapsedLine(s) {
-    if (s.state !== 'working' && s.state !== 'queued') return '';
+  function elapsedSeconds(s) {
+    if (s.state !== 'working' && s.state !== 'queued') return null;
     const startMs = s.startedAt ? Date.parse(s.startedAt) : NaN;
-    if (Number.isNaN(startMs)) return '';
-    const totalSeconds = Math.max(0, Math.floor((Date.now() - startMs) / 1000));
+    if (Number.isNaN(startMs)) return null;
+    return Math.max(0, Math.floor((Date.now() - startMs) / 1000));
+  }
+
+  function formatDuration(totalSeconds) {
     const minutes = Math.floor(totalSeconds / 60);
     const seconds = totalSeconds % 60;
-    const label = minutes > 0 ? `${minutes}min ${seconds}s` : `${seconds}s`;
-    return `<span class="run-elapsed">${label}</span>`;
+    return minutes > 0 ? `${minutes}min ${seconds}s` : `${seconds}s`;
   }
 
   // doCancel is shared by the paused composer's own "Cancelar" (below) and
@@ -133,36 +240,87 @@ export function createRunTracker({ resumeArgs = { approved: true }, onCancel } =
     }
     const s = status;
     const label = STATE_LABEL[s.state] || s.state;
-    const stepLine =
-      s.state === 'working' && s.step
-        ? `<span class="run-step">${escapeHtml(s.step)}${s.stepTotal ? ` · passo ${s.stepIndex}/${s.stepTotal}` : ''}</span>`
-        : '';
-    const errorLine = s.state === 'failed' && s.error ? `<span class="run-error">${escapeHtml(s.error)}</span>` : '';
-    // s.reason is pause()'s own message (e.g. "revise o conteudo de 'brief'
-    // antes de gravar em artifacts/") — see mhlbridge.RunStatus.Reason's doc
-    // comment for why this was silently dropped before it.
-    const reasonLine = s.state === 'paused' && s.reason ? `<span class="run-reason">${escapeHtml(s.reason)}</span>` : '';
     const busy = busyAction !== null;
+    const isActive = s.state === 'working' || s.state === 'queued';
+    // .run-tracker-fill must track isActive on every render, not just get
+    // set once at construction — real bug this fixes: once a working run
+    // paused for Modo Buddy review, tracker.element kept the fill/center
+    // styling from its working phase, centering the now-tiny "aguarda
+    // aprovação" status line in the pane's full height and shoving the
+    // actual preview (appendPausedPreview's own content, appended as a
+    // sibling right after tracker.element — see tab-artefatos.js's
+    // renderDetail()) hundreds of pixels below the fold.
+    element.classList.toggle('run-tracker-fill', fillHeight && isActive);
     // Reachable while working/queued only — the paused state already has
     // its own Cancelar in `composer` below, pinned to the reading pane's
     // footer instead of scrolling away with `element`.
-    const cancelInline =
-      s.state === 'working' || s.state === 'queued'
-        ? `<button class="button tertiary small run-cancel-inline" ${busy ? 'disabled' : ''}>${busyAction === 'cancel' ? 'Cancelando…' : 'Cancelar'}</button>`
-        : '';
+    const cancelButtonHtml = `<button class="button tertiary small run-cancel-inline" ${busy ? 'disabled' : ''}>${busyAction === 'cancel' ? 'Cancelando…' : 'Cancelar'}</button>`;
 
-    element.innerHTML = `
-      <div class="run-status-row">
-        <span class="status-dot ${dotClass(s.state)}"></span>
-        <span class="run-label">${label}</span>
-        ${elapsedLine(s)}
-        ${stepLine}
-        ${tokensLine(s)}
-      </div>
-      ${reasonLine}
-      ${errorLine}
-      ${cancelInline}
-    `;
+    if (isActive) {
+      const seconds = elapsedSeconds(s);
+
+      const metaBits = [];
+      // data-run-elapsed: tickElapsed() (see this file's own ensureTicking
+      // comment) patches this node's text directly once a second instead of
+      // going through render() again — the ETA this line used to include
+      // (extrapolated from pace-so-far) was dropped: it read as a real
+      // estimate mhl was giving, when it was really just a guess from this
+      // widget.
+      if (seconds != null) metaBits.push(`<span data-run-elapsed>${formatDuration(seconds)}</span>`);
+      const tokens = tokensLine(s);
+      if (tokens) metaBits.push(tokens);
+
+      // The illustrated hero is Artefatos-only (fillHeight — see this
+      // file's own doc comment on that option): it's sized for being the
+      // reading pane's entire content. Reported looking absurd blown up
+      // inside Fontes' compact per-file card during ingest, which reuses
+      // this same working/queued state for something much smaller — those
+      // hosts fall through to the same plain status row every other state
+      // already uses, just with the inline Cancelar added.
+      if (fillHeight) {
+        element.innerHTML = `
+          <div class="run-generating">
+            <div class="run-orbit">
+              <img class="run-orbit-image run-orbit-image-dark" src="${loadingIllustrationDark}" alt="" />
+              <img class="run-orbit-image run-orbit-image-light" src="${loadingIllustrationLight}" alt="" />
+            </div>
+            <div class="run-generating-status">
+              <span class="run-generating-badge"><span class="run-generating-blink"></span>${escapeHtml((STATE_LABEL[s.state] || s.state).toUpperCase())}</span>
+              <strong class="run-generating-stage">${escapeHtml(WORKING_MESSAGE[s.state] || label)}</strong>
+              ${metaBits.length ? `<div class="run-generating-meta">${metaBits.join('<span class="run-generating-sep">/</span>')}</div>` : ''}
+            </div>
+          </div>
+          ${cancelButtonHtml}
+        `;
+      } else {
+        element.innerHTML = `
+          <div class="run-status-row">
+            <span class="status-dot ${dotClass(s.state)}"></span>
+            <span class="run-label">${escapeHtml(label)}</span>
+            ${metaBits.join('')}
+          </div>
+          ${cancelButtonHtml}
+        `;
+      }
+      lastActiveSignature = activeSignature(s);
+    } else {
+      lastActiveSignature = null;
+      const errorLine = s.state === 'failed' && s.error ? `<span class="run-error">${escapeHtml(s.error)}</span>` : '';
+      // s.reason is pause()'s own message (e.g. "revise o conteudo de
+      // 'brief' antes de gravar em artifacts/") — see
+      // mhlbridge.RunStatus.Reason's doc comment for why this was silently
+      // dropped before it.
+      const reasonLine = s.state === 'paused' && s.reason ? `<span class="run-reason">${escapeHtml(s.reason)}</span>` : '';
+      element.innerHTML = `
+        <div class="run-status-row">
+          <span class="status-dot ${dotClass(s.state)}"></span>
+          <span class="run-label">${label}</span>
+          ${tokensLine(s)}
+        </div>
+        ${reasonLine}
+        ${errorLine}
+      `;
+    }
 
     const cancelInlineButton = element.querySelector('.run-cancel-inline');
     if (cancelInlineButton) {
@@ -214,7 +372,7 @@ export function createRunTracker({ resumeArgs = { approved: true }, onCancel } =
         busyAction = 'approve';
         render();
         try {
-          await resumeAndWatch(s.runId, resumeArgs, (next) => update(next));
+          await resumeAndWatch(s.runId, resumeArgs, (next) => (onUpdate || update)(next));
         } catch (err) {
           busyAction = null;
           status = { ...s, state: 'failed', error: String(err) };
@@ -238,7 +396,7 @@ export function createRunTracker({ resumeArgs = { approved: true }, onCancel } =
         busyAction = 'regenerate';
         render();
         try {
-          await resumeAndWatch(s.runId, { approved: false, feedback: text }, (next) => update(next));
+          await resumeAndWatch(s.runId, { approved: false, feedback: text }, (next) => (onUpdate || update)(next));
         } catch (err) {
           busyAction = null;
           status = { ...s, state: 'failed', error: String(err) };
@@ -254,6 +412,18 @@ export function createRunTracker({ resumeArgs = { approved: true }, onCancel } =
   }
 
   function update(next) {
+    // A heartbeat: still working/queued, and nothing about it actually
+    // changed since the last full render (see activeSignature's own
+    // comment — App.WatchRun pushes one of these every 500ms regardless of
+    // real progress). Advance just the elapsed readout, exactly like
+    // tickElapsed's own self-timer tick, instead of tearing the orbit's
+    // running CSS animations down to rebuild the exact same markup.
+    const isActive = next.state === 'working' || next.state === 'queued';
+    if (isActive && lastActiveSignature !== null && activeSignature(next) === lastActiveSignature) {
+      status = next;
+      tickElapsed();
+      return;
+    }
     status = next;
     busyAction = null;
     feedbackText = '';
