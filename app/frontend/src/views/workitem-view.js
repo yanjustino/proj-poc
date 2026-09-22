@@ -70,13 +70,10 @@ export async function renderWorkItemView(container, project, { initialTab = 'art
     const tokensOut = usage.total_tokens_out || 0;
 
     // Cache tokens (Claude: cache_creation + cache_read; Codex: cache_write
-    // + cache_read, same two roles under different names; Devin: none — see
-    // workflows/shared/agents/usage.mh) get their own card, kept separate
-    // from tokensIn/tokensOut above: both CLIs report/bill them as distinct
-    // from "fresh" input, so folding them in would misrepresent what those
-    // two numbers mean. Cache is real data for 2 of the 3 agents, unlike
-    // cost (Claude-only), which is why cost is the one demoted to a tooltip
-    // detail here instead.
+    // + cache_read; Devin ATIF: cache_read only) get their own card. For
+    // ATIF/Codex the cache count is a subset of input, so this card is a
+    // breakdown for observability and must not be added to tokensIn again.
+    // Cost remains a tooltip detail because not every backend exposes it.
     const cacheCreation = usage.total_cache_creation_tokens || 0;
     const cacheRead = usage.total_cache_read_tokens || 0;
     const totalCache = cacheCreation + cacheRead;
@@ -88,7 +85,7 @@ export async function renderWorkItemView(container, project, { initialTab = 'art
           `${cacheRead.toLocaleString('pt-BR')} lidos do cache`,
           costUsd > 0 ? `custo estimado: ${costUsd.toLocaleString('pt-BR', { style: 'currency', currency: 'USD' })}` : null,
         ].filter(Boolean).join(' · ')
-      : 'Sem uso de cache registrado ainda (Devin não expõe isso)';
+      : 'Sem uso de cache registrado ainda';
 
     summaryEl.innerHTML = `
       <div class="summary-card">

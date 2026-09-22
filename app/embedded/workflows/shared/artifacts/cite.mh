@@ -55,6 +55,14 @@ export tool Cite {
     // cited in two different fragments finalized separately would get two
     // different numbers for the same source.
     //
+    // Each "[n]" also carries its own fonte as a `title` attribute, so
+    // hovering a single citation reveals what it points to without having
+    // to jump down to the Referências legend — a plain native tooltip, no
+    // extra markup or script. Safe as an attribute value as-is: fonte was
+    // already run through html.escape() by badge() above, which escapes
+    // quotes exactly like html.attr_escape() does (same escaper under the
+    // hood), so it can't break out of the double-quoted attribute.
+    //
     // "gap"/"inferência" badges are untouched: they're not a reference to
     // number, they're a signal (no source exists / this is a deduction),
     // and stay exactly where badge() put them.
@@ -82,7 +90,7 @@ export tool Cite {
             var fonte = span.substring(open.size(), span.size() - close.size())
             if (!seen.contains(fonte)) seen += [fonte]
             var n = seen.index_of(fonte) + 1
-            remaining = remaining.replace(open + fonte + close, "<sup class=\"cite-num\">[${n}]</sup>")
+            remaining = remaining.replace(open + fonte + close, "<sup class=\"cite-num\" title=\"" + fonte + "\">[${n}]</sup>")
         }
         if (seen.is_empty()) return remaining
         // fonte is already escaped (badge() did it going in) — reused as-is,
@@ -145,21 +153,21 @@ test CiteSpec {
     describe finalize_numbers_a_single_citation_and_lists_it {
         are_equal(
             Cite.finalize(Cite.note(["requisitos/FR-001"])),
-            "<p class=\"fontes\"><sup class=\"cite-num\">[1]</sup></p><h2>Referências</h2><ol class=\"cite-references\"><li>requisitos/FR-001</li></ol>"
+            "<p class=\"fontes\"><sup class=\"cite-num\" title=\"requisitos/FR-001\">[1]</sup></p><h2>Referências</h2><ol class=\"cite-references\"><li>requisitos/FR-001</li></ol>"
         )
     }
 
     describe finalize_reuses_the_same_number_for_a_repeated_source {
         are_equal(
             Cite.finalize(Cite.badges(["requisitos/FR-001", "requisitos/FR-001"])),
-            "<sup class=\"cite-num\">[1]</sup> <sup class=\"cite-num\">[1]</sup><h2>Referências</h2><ol class=\"cite-references\"><li>requisitos/FR-001</li></ol>"
+            "<sup class=\"cite-num\" title=\"requisitos/FR-001\">[1]</sup> <sup class=\"cite-num\" title=\"requisitos/FR-001\">[1]</sup><h2>Referências</h2><ol class=\"cite-references\"><li>requisitos/FR-001</li></ol>"
         )
     }
 
     describe finalize_numbers_distinct_sources_in_order_of_first_appearance {
         are_equal(
             Cite.finalize(Cite.badges(["requisitos/FR-002", "requisitos/FR-001", "requisitos/FR-002"])),
-            "<sup class=\"cite-num\">[1]</sup> <sup class=\"cite-num\">[2]</sup> <sup class=\"cite-num\">[1]</sup>" +
+            "<sup class=\"cite-num\" title=\"requisitos/FR-002\">[1]</sup> <sup class=\"cite-num\" title=\"requisitos/FR-001\">[2]</sup> <sup class=\"cite-num\" title=\"requisitos/FR-002\">[1]</sup>" +
             "<h2>Referências</h2><ol class=\"cite-references\"><li>requisitos/FR-002</li><li>requisitos/FR-001</li></ol>"
         )
     }
@@ -167,15 +175,15 @@ test CiteSpec {
     describe finalize_leaves_gap_and_inferencia_badges_alone {
         are_equal(
             Cite.finalize(Cite.badges(["gap", "inferência", "requisitos/FR-001"])),
-            "<span class=\"cite cite-gap\">gap</span> <span class=\"cite cite-inferencia\">inferência</span> <sup class=\"cite-num\">[1]</sup>" +
+            "<span class=\"cite cite-gap\">gap</span> <span class=\"cite cite-inferencia\">inferência</span> <sup class=\"cite-num\" title=\"requisitos/FR-001\">[1]</sup>" +
             "<h2>Referências</h2><ol class=\"cite-references\"><li>requisitos/FR-001</li></ol>"
         )
     }
 
-    describe finalize_escapes_a_source_id_in_the_references_list {
+    describe finalize_escapes_a_source_id_in_the_references_list_and_in_the_hover_hint {
         are_equal(
             Cite.finalize(Cite.badges(["<script>"])),
-            "<sup class=\"cite-num\">[1]</sup><h2>Referências</h2><ol class=\"cite-references\"><li>&lt;script&gt;</li></ol>"
+            "<sup class=\"cite-num\" title=\"&lt;script&gt;\">[1]</sup><h2>Referências</h2><ol class=\"cite-references\"><li>&lt;script&gt;</li></ol>"
         )
     }
 }

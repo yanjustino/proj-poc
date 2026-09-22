@@ -93,9 +93,9 @@ export function createRunTracker({ resumeArgs = { approved: true }, onCancel, on
   // is working/queued — mhl can go a long stretch (one slow LLM call)
   // without pushing a single status update, which otherwise reads as
   // frozen (the exact complaint that led to this: "gerando" sitting still
-  // with no step change and, on the Devin backend, no token count either —
-  // see output/DEVIN-CLI.md, tokens_in/out stay 0 = "unavailable" for that
-  // backend, not live progress). Started/stopped from ensureTicking(),
+  // with no step change and, on the Devin backend, token counts only becoming
+  // available after `--export` is parsed at the end of the call — see
+  // output/DEVIN-CLI.md). Started/stopped from ensureTicking(),
   // called at the end of every render() — self-correcting, so a status
   // update that ends the run also stops the ticker without any extra
   // bookkeeping.

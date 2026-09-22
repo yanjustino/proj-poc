@@ -35,20 +35,22 @@ export memory PromptLog {
 // fallback para versoes antigas do CLI que nao exponham `structured_output`.
 //
 // Toda variante de extract_* devolve exatamente as mesmas 6 chaves — mesmo
-// quando um backend nao tem o conceito (cache/custo do Devin, cache_creation
+// quando um backend nao tem o conceito (cache_creation do Devin/Codex, custo
 // do Codex) — para Writer.generate/Usage.append nunca precisar checar "esse
 // campo existe pra esse backend?" com acesso opcional; so preenche zero.
 export tool UsageParser {
-    // `devin --print` devolve apenas a resposta final. A CLI nao expoe
-    // contagem de tokens (nem de cache, nem custo) em modo nao interativo —
-    // confirmado inspecionando os logs reais da CLI em
-    // ~/.local/share/devin/cli/logs/ numa chamada de verdade (nada de
-    // token/usage/cost em nenhuma linha, nem no nivel de log padrao).
-    // Mantemos o contrato do ledger com zeros ate esse dado existir na
-    // interface oficial. O CLI pode envolver JSON em uma cerca Markdown mesmo
-    // quando instruido a nao faze-lo; removemos somente a cerca externa,
-    // preservando backticks que facam parte de campos internos.
-    extract_devin(raw: string): {
+    // `devin --print` continua devolvendo apenas a resposta final no stdout,
+    // mas `--export <path>` grava uma trajetoria ATIF com os totais em
+    // final_metrics. `prompt_tokens` ja inclui `cached_tokens`; cache e uma
+    // decomposicao para observabilidade, nao algo a somar de novo na entrada.
+    // O export nao traz cache_creation e pode nao trazer custo — esses campos
+    // continuam zero quando ausentes. Telemetria e best-effort: export ausente
+    // ou invalido nao pode invalidar uma resposta de geracao correta.
+    //
+    // A CLI pode envolver a resposta em uma cerca Markdown mesmo quando
+    // instruida a nao faze-lo; removemos somente a cerca externa, preservando
+    // backticks que facam parte de campos internos.
+    extract_devin(raw: string, exported: string): {
         tokens_in: number, tokens_out: number, content: string,
         cache_creation_tokens: number, cache_read_tokens: number, cost_usd: number
     } -> {
@@ -56,9 +58,31 @@ export tool UsageParser {
         if (content.starts_with("```json")) content = content.substring(7, content.size()).trim()
         else if (content.starts_with("```")) content = content.substring(3, content.size()).trim()
         if (content.ends_with("```")) content = content.substring(0, content.size() - 3).trim()
+
+        var tokens_in = 0
+        var tokens_out = 0
+        var cache_read_tokens = 0
+        var cost_usd = 0
+        if (!exported.trim().is_empty()) {
+            try {
+                var trajectory = json.parse(exported)
+                var metrics = trajectory.get("final_metrics", null)
+                if (metrics != null) {
+                    tokens_in = metrics.get("total_prompt_tokens", 0) ?? 0
+                    tokens_out = metrics.get("total_completion_tokens", 0) ?? 0
+                    cache_read_tokens = metrics.get("total_cached_tokens", 0) ?? 0
+                    cost_usd = metrics.get("total_cost_usd", 0) ?? 0
+                }
+            } catch (err) {
+                tokens_in = 0
+                tokens_out = 0
+                cache_read_tokens = 0
+                cost_usd = 0
+            }
+        }
         return {
-            tokens_in: 0, tokens_out: 0, content: content,
-            cache_creation_tokens: 0, cache_read_tokens: 0, cost_usd: 0
+            tokens_in: tokens_in, tokens_out: tokens_out, content: content,
+            cache_creation_tokens: 0, cache_read_tokens: cache_read_tokens, cost_usd: cost_usd
         }
     }
 
@@ -125,8 +149,8 @@ export tool UsageParser {
 }
 
 test UsageParserSpec {
-    describe keeps_devin_output_and_marks_usage_unavailable {
-        var parsed = UsageParser.extract_devin("{\"ok\":true}")
+    describe keeps_devin_output_and_marks_usage_unavailable_without_an_export {
+        var parsed = UsageParser.extract_devin("{\"ok\":true}", "")
         are_equal(parsed.tokens_in, 0)
         are_equal(parsed.tokens_out, 0)
         are_equal(parsed.content, "{\"ok\":true}")
@@ -136,8 +160,29 @@ test UsageParserSpec {
     }
 
     describe removes_only_devins_outer_markdown_fence {
-        var parsed = UsageParser.extract_devin("```json\n{\"body\":\"use ``` dentro\"}\n```\n")
+        var parsed = UsageParser.extract_devin("```json\n{\"body\":\"use ``` dentro\"}\n```\n", "")
         are_equal(parsed.content, "{\"body\":\"use ``` dentro\"}")
+    }
+
+    describe extracts_devin_totals_from_atif_without_adding_cached_tokens_twice {
+        var exported = "{\"schema_version\":\"ATIF-v1.7\",\"steps\":[" +
+            "{\"metrics\":{\"prompt_tokens\":12801,\"completion_tokens\":67,\"cached_tokens\":1472}}]," +
+            "\"final_metrics\":{\"total_prompt_tokens\":12801,\"total_completion_tokens\":67," +
+            "\"total_cached_tokens\":1472,\"total_steps\":9}}"
+        var parsed = UsageParser.extract_devin("{\"ok\":true}", exported)
+        are_equal(parsed.tokens_in, 12801)
+        are_equal(parsed.tokens_out, 67)
+        are_equal(parsed.cache_read_tokens, 1472)
+        are_equal(parsed.cache_creation_tokens, 0)
+        are_equal(parsed.cost_usd, 0)
+    }
+
+    describe keeps_the_response_when_devins_export_is_invalid {
+        var parsed = UsageParser.extract_devin("{\"ok\":true}", "not-json")
+        are_equal(parsed.content, "{\"ok\":true}")
+        are_equal(parsed.tokens_in, 0)
+        are_equal(parsed.tokens_out, 0)
+        are_equal(parsed.cache_read_tokens, 0)
     }
 
     describe extracts_claude_tokens_cache_and_cost_from_the_real_envelope_shape {

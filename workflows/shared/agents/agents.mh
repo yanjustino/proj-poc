@@ -51,6 +51,7 @@ export agent Devin {
         "--respect-workspace-trust", "false",
         "--permission-mode", "auto",
         "--prompt-file", "${prompt}",
+        "--export", "${schema}",
         "--print"
     ]
     retry: {
@@ -195,7 +196,9 @@ export tool Writer {
     // Writer e chamado por modulos importadores. `self` preserva o escopo do
     // adapter em runtime e evita que Discovery/Wiki/Delivery tentem resolver
     // um simbolo auxiliar como DevinPromptFile no proprio modulo.
-    generate_devin(instruction: string, schema: string, project_id: string): string -> {
+    generate_devin(instruction: string, schema: string, project_id: string): {
+        raw: string, exported: string
+    } -> {
         var prompt = 
         """
         ${instruction}
@@ -208,19 +211,34 @@ export tool Writer {
         
 
         // Windows limita a linha de comando criada por CreateProcess a cerca
-        // de 32K caracteres. O arquivo fica estritamente no work-item, usa
-        // UUID para chamadas concorrentes e e removido ate quando o CLI falha.
-        var path = Paths.root(Paths.ensure_valid(project_id)) + "/.devin-prompt-" + uuid.v4() + ".txt"
-        fs.write(path, prompt)
+        // de 32K caracteres. Os dois arquivos ficam estritamente no work-item,
+        // compartilham um UUID para chamadas concorrentes e sao removidos ate
+        // quando o CLI falha. O placeholder reservado `${schema}` transporta
+        // o caminho do export porque o Devin nao usa schema nativo e o MHL so
+        // interpola `${prompt}`/`${schema}` nos argumentos de um agent.
+        var id = uuid.v4()
+        var root = Paths.root(Paths.ensure_valid(project_id))
+        var prompt_path = root + "/.devin-prompt-" + id + ".txt"
+        var export_path = root + "/.devin-export-" + id + ".json"
+        fs.write(prompt_path, prompt)
         var raw = ""
+        var exported = ""
         try {
-            raw = Devin.run(prompt: path)
+            raw = Devin.run(prompt: prompt_path, schema: export_path)
+            if (fs.exists(export_path)) {
+                try {
+                    exported = fs.read(export_path)
+                } catch (err) {
+                    exported = ""
+                }
+            }
         } catch (err) {
             fail(err)
         } finally {
-            fs.delete(path)
+            fs.delete(prompt_path)
+            if (fs.exists(export_path)) fs.delete(export_path)
         }
-        return raw
+        return {raw: raw, exported: exported}
     }
 
     generate(prompt: string, schema_file: {content: string, path: string}, project_id: string, artifact: string): {
@@ -228,17 +246,24 @@ export tool Writer {
         cache_creation_tokens: number, cache_read_tokens: number, cost_usd: number
     } -> {
         var picked = AgentSelector.pick(prompt: prompt)
-        var raw = match picked {
-            nameof(Devin) -> self.generate_devin(
+        var devin_raw = ""
+        var devin_exported = ""
+        if (picked == nameof(Devin)) {
+            var devin_result = self.generate_devin(
                 instruction: prompt,
                 schema: schema_file.content,
                 project_id: project_id
             )
+            devin_raw = devin_result.raw
+            devin_exported = devin_result.exported
+        }
+        var raw = match picked {
+            nameof(Devin) -> devin_raw
             nameof(Claude) -> Claude.run(prompt: prompt, schema: schema_file.content)
             nameof(Codex) -> Codex.run(prompt: prompt, schema: schema_file.path)
         }
         var usage = match picked {
-            nameof(Devin) -> UsageParser.extract_devin(raw)
+            nameof(Devin) -> UsageParser.extract_devin(raw, devin_exported)
             nameof(Claude) -> UsageParser.extract_claude(raw)
             nameof(Codex) -> UsageParser.extract_codex(raw)
         }
@@ -287,9 +312,18 @@ agent MockCodexSchemaPath {
     args: ["exec", "--ignore-user-config", "--ignore-rules", "--output-schema", "${schema}", "${prompt}"]
 }
 
+agent MockDevinExportPath {
+    command: "echo"
+    args: ["--prompt-file", "${prompt}", "--export", "${schema}", "--print"]
+}
+
 tool MockWriter {
     generate(prompt: string, schema_file: {content: string, path: string}, project_id: string, artifact: string): string -> {
         return MockCodexSchemaPath.run(prompt: prompt, schema: schema_file.path)
+    }
+
+    generate_devin(prompt_path: string, export_path: string): string -> {
+        return MockDevinExportPath.run(prompt: prompt_path, schema: export_path)
     }
 }
 
@@ -302,5 +336,13 @@ test WriterAdapterSpec {
             artifact: "brief"
         )
         are_equal(result, "exec --ignore-user-config --ignore-rules --output-schema workflows/shared/artifacts/schemas/brief.schema.json gere o brief")
+    }
+
+    describe forwards_the_per_call_export_path_to_devin {
+        var result = MockWriter.generate_devin(
+            prompt_path: "projects/wi_1/.devin-prompt-id.txt",
+            export_path: "projects/wi_1/.devin-export-id.json"
+        )
+        are_equal(result, "--prompt-file projects/wi_1/.devin-prompt-id.txt --export projects/wi_1/.devin-export-id.json --print")
     }
 }

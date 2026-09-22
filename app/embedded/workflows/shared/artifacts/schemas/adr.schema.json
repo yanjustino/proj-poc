@@ -18,8 +18,7 @@
           "decisao_final",
           "consequencias_positivas", "consequencias_negativas",
           "opcoes_pros_contras",
-          "links",
-          "fontes"
+          "links"
         ],
         "properties": {
           "titulo": { "type": "string", "description": "Título curto da decisão (ex.: 'Usar tokenização via PSP')." },
@@ -148,12 +147,6 @@
                 "referencia": { "type": "string", "description": "Título de outra decisão desta mesma lista (ver 'titulo')." }
               }
             }
-          },
-          "fontes": {
-            "type": "array",
-            "items": { "type": "string" },
-            "minItems": 1,
-            "description": "Referências gerais que sustentam esta decisão como um todo."
           }
         }
       }

@@ -72,9 +72,9 @@ export tool AdrSchemaFile { get(): {content: string, path: string} -> {content: 
 export tool DerSchemaFile { get(): {content: string, path: string} -> {content: DerSchemaContent(), path: WorkflowsRoot.resolve("shared/artifacts/schemas/der.schema.json")} }
 export tool DiagramasSchemaFile { get(): {content: string, path: string} -> {content: DiagramasSchemaContent(), path: WorkflowsRoot.resolve("shared/artifacts/schemas/diagramas.schema.json")} }
 
-export prompt BriefBody(resumo_executivo: string, resumo_fontes: string, contexto_negocio: string, contexto_fontes: string, objetivos_tabela: string, em_escopo_lista: string, fora_escopo_lista: string, stakeholders_tabela: string, metricas_tabela: string, marcos_tabela: string, riscos_tabela: string, perguntas_lista: string, fontes_nota: string) from "templates/brief_body.html"
-export prompt AtributosBody(contexto: string, contexto_fontes: string, requisitos_tabela: string, restricoes_tabela: string, compliance_tabela: string, exclusoes_lista: string, perguntas_lista: string, fontes_nota: string) from "templates/atributos_body.html"
-export prompt RequisitosBody(contexto: string, contexto_fontes: string, funcionais_tabela: string, integracoes_tabela: string, dados_tabela: string, negocio_tabela: string, regras_tabela: string, exclusoes_lista: string, gaps_lista: string, perguntas_lista: string, fontes_nota: string) from "templates/requisitos_body.html"
+export prompt BriefBody(resumo_executivo: string, resumo_fontes: string, contexto_negocio: string, contexto_fontes: string, objetivos_tabela: string, em_escopo_lista: string, fora_escopo_lista: string, stakeholders_tabela: string, metricas_tabela: string, marcos_tabela: string, riscos_tabela: string, perguntas_lista: string) from "templates/brief_body.html"
+export prompt AtributosBody(contexto: string, contexto_fontes: string, requisitos_tabela: string, restricoes_tabela: string, compliance_tabela: string, exclusoes_lista: string, perguntas_lista: string) from "templates/atributos_body.html"
+export prompt RequisitosBody(contexto: string, contexto_fontes: string, funcionais_tabela: string, integracoes_tabela: string, dados_tabela: string, negocio_tabela: string, regras_tabela: string, exclusoes_lista: string, gaps_lista: string, perguntas_lista: string) from "templates/requisitos_body.html"
 export prompt AdrBody(
     status: string,
     contexto_e_problema: string, contexto_fontes: string,
@@ -83,18 +83,17 @@ export prompt AdrBody(
     decisao_final: string, decisao_final_fontes: string,
     consequencias_positivas_lista: string, consequencias_negativas_lista: string,
     opcoes_pros_contras: string,
-    links_lista: string,
-    fontes_nota: string
+    links_lista: string
 ) from "templates/adr_body.html"
-export prompt DerBody(modo: string, contexto: string, contexto_fontes: string, diagrama_mermaid: string, entidades_tabela: string, confirmados_tabela: string, inferidos_tabela: string, atributos_tabela: string, delta_lista: string, gaps_lista: string, questoes_lista: string, fontes_nota: string) from "templates/der_body.html"
-export prompt DiagramaBody(diagram_type: string, hierarchy_level: string, descricao: string, descricao_fontes: string, fontes_nota: string, diagrama_mermaid: string) from "templates/diagrama_body.html"
+export prompt DerBody(modo: string, contexto: string, contexto_fontes: string, diagrama_mermaid: string, entidades_tabela: string, confirmados_tabela: string, inferidos_tabela: string, atributos_tabela: string, delta_lista: string, gaps_lista: string, questoes_lista: string) from "templates/der_body.html"
+export prompt DiagramaBody(diagram_type: string, hierarchy_level: string, descricao: string, descricao_fontes: string, diagrama_mermaid: string) from "templates/diagrama_body.html"
 
 // FeatureBody/HistoriaBody sao o corpo de UM item de feature/historia — o
 // mesmo formato serve tanto pro item dentro do backlog do Discovery quanto
 // pro detalhamento final do Delivery (a diferenca entre os dois nunca esta
 // na FORMA renderizada, so em quais dados entram e onde o arquivo e gravado).
-export prompt FeatureBody(resumo: string, resumo_fontes: string, objetivo: string, objetivo_fontes: string, personas_tabela: string, em_escopo_lista: string, fora_escopo_lista: string, regras_lista: string, interacoes_lista: string, criterios_lista: string, historias_lista: string, dependencias_lista: string, dependencias_sistema_lista: string, gaps_lista: string, questoes_lista: string, fontes_nota: string) from "templates/feature_body.html"
-export prompt HistoriaBody(statement: string, statement_fontes: string, atributos_lista: string, contexto_negocio: string, contexto_fontes: string, criterios_lista: string, cenarios_gherkin: string, cenarios_fontes: string, regras_lista: string, dod_lista: string, dependencias_lista: string, fora_escopo_lista: string, exemplo_uso: string, exemplo_fontes: string, contratos_interface: string, contratos_fontes: string, questoes_lista: string, fontes_nota: string) from "templates/historia_body.html"
+export prompt FeatureBody(resumo: string, resumo_fontes: string, objetivo: string, objetivo_fontes: string, personas_tabela: string, em_escopo_lista: string, fora_escopo_lista: string, regras_lista: string, interacoes_lista: string, criterios_lista: string, historias_lista: string, dependencias_lista: string, dependencias_sistema_lista: string, gaps_lista: string, questoes_lista: string) from "templates/feature_body.html"
+export prompt HistoriaBody(statement: string, statement_fontes: string, atributos_lista: string, contexto_negocio: string, contexto_fontes: string, criterios_lista: string, cenarios_gherkin: string, cenarios_fontes: string, regras_lista: string, dod_lista: string, dependencias_lista: string, fora_escopo_lista: string, exemplo_uso: string, exemplo_fontes: string, contratos_interface: string, contratos_fontes: string, questoes_lista: string) from "templates/historia_body.html"
 
 // DependenciasBody — Discovery-only (a "dependência entre features" só faz
 // sentido quando o work-item tem um backlog de mais de uma feature; Delivery
