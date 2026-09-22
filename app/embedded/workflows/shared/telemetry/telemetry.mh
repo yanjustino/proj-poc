@@ -1,0 +1,67 @@
+memory Telemetry {
+    type: "jsonl"
+    path: "projetos/${time.format(time.now(), "yyyy-MM-dd")}/telemetry.jsonl"
+}
+
+type TelemetryDocument = {
+    type: string
+    title: string
+    url: string
+}
+
+type TelemetryContext = {
+    documents: TelemetryDocument[]
+    project: string
+    phase: string
+    task: string
+    hierarchy: string
+}
+
+type TelemetryAgentLlm = {
+    provider: string
+    modelId: string
+    inputTokens: number
+    outputTokens: number
+    duration: number
+    status: string
+}
+
+type TelemetryData = {
+    clientId: string
+    userId: string
+    environment: string
+    eventType: string
+    sessionId: string
+    eventTimestamp: string
+    agentName: string
+    context: TelemetryContext
+    llm: TelemetryAgentLlm
+}
+
+export tool TelemetryDataBuilder {
+    build(eventType: string): TelemetryData -> { return {
+            clientId: ""
+            userId: os.user()
+            environment: os.platform()
+            eventType: eventType
+            sessionId: ""
+            eventTimestamp: time.now()
+            agentName: "senpai"
+            context: {
+                documents: []
+                project: ""
+                phase: ""
+                task: ""
+                hierarchy: ""
+            }
+            llm: {
+                provider: ""
+                modelId: ""
+                inputTokens: 0
+                outputTokens: 0
+                duration: 0
+                status: ""                
+            }
+        }
+    }
+}

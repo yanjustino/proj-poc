@@ -31,11 +31,65 @@ export tool Cite {
     badges(fontes: string[]): string ->
         fontes.map((f) -> self.badge(f)).join(" ")
 
+    // A real fonte (not "gap"/"inferência") doesn't render its badge here —
+    // it can't yet know its citation number, since that depends on every
+    // OTHER citation in the whole document (same fonte cited twice must get
+    // the same number; first-seen order decides which number that is). It
+    // marks its spot instead, for finalize() to resolve once the full body
+    // is assembled — see finalize's own doc comment. Escaped immediately,
+    // same as every other LLM-sourced field (C3) — finalize() only ever
+    // moves this already-safe text around, it never escapes it again.
     badge(fonte: string): string -> {
         var normalized = fonte.to_lower().trim()
         if (normalized == "gap") return "<span class=\"cite cite-gap\">gap</span>"
         if (normalized == "inferência" || normalized == "inferencia") return "<span class=\"cite cite-inferencia\">inferência</span>"
-        return "<span class=\"cite cite-fonte\">" + html.escape(fonte) + "</span>"
+        return "<citemark>" + html.escape(fonte) + "</citemark>"
+    }
+
+    // finalize resolves every <citemark> badge() left behind in an
+    // assembled artifact body into an IEEE-style "[n]", numbered by order
+    // of first appearance (repeat citations of the same fonte reuse the
+    // same n), then appends the "Referências" legend those numbers point
+    // to. Called exactly once, over a whole artifact's finished body — see
+    // ArtifactBody's own tool comment — never on a fragment, since a fonte
+    // cited in two different fragments finalized separately would get two
+    // different numbers for the same source.
+    //
+    // "gap"/"inferência" badges are untouched: they're not a reference to
+    // number, they're a signal (no source exists / this is a deduction),
+    // and stay exactly where badge() put them.
+    //
+    // Why a literal "<citemark>...</citemark>" marker instead of resolving
+    // the number inline at badge()-time: badge() is called once per
+    // citation, in isolation, with no visibility into the rest of the
+    // document being assembled around it — it cannot know if THIS fonte
+    // already appeared earlier (reuse its number) or is appearing for the
+    // first time (mint a new one). A marker defers that decision to the one
+    // place that does see the whole picture. "<citemark>" is plain literal
+    // text this tool controls end to end (never touched by html.escape),
+    // so — unlike a control character — it needs no escape sequence and
+    // cannot collide with escaped prose: any "<"/">" a source field
+    // contributes was already turned into "&lt;"/"&gt;" before reaching
+    // here (both by badge() itself and by every other field's own
+    // html.escape() call).
+    finalize(html: string): string -> {
+        var open = "<citemark>"
+        var close = "</citemark>"
+        var seen = []
+        var remaining = html
+        while (remaining.contains(open)) {
+            var span = remaining.extract_content(from: open, to: close)
+            var fonte = span.substring(open.size(), span.size() - close.size())
+            if (!seen.contains(fonte)) seen += [fonte]
+            var n = seen.index_of(fonte) + 1
+            remaining = remaining.replace(open + fonte + close, "<sup class=\"cite-num\">[${n}]</sup>")
+        }
+        if (seen.is_empty()) return remaining
+        // fonte is already escaped (badge() did it going in) — reused as-is,
+        // not re-escaped, so "&lt;" doesn't become "&amp;lt;" here.
+        return remaining + "<h2>Referências</h2><ol class=\"cite-references\">" +
+            seen.map((fonte) -> "<li>" + fonte + "</li>").join("") +
+            "</ol>"
     }
 }
 
@@ -51,21 +105,21 @@ test CiteSpec {
         are_equal(Cite.badge("inferencia"), "<span class=\"cite cite-inferencia\">inferência</span>")
     }
 
-    describe badge_renders_a_real_reference_escaped {
-        are_equal(Cite.badge("entities/time-de-pagamentos"), "<span class=\"cite cite-fonte\">entities/time-de-pagamentos</span>")
+    describe badge_marks_a_real_reference_for_finalize_to_number_later {
+        are_equal(Cite.badge("entities/time-de-pagamentos"), "<citemark>entities/time-de-pagamentos</citemark>")
     }
 
-    describe badges_renders_one_badge_per_source_space_separated {
+    describe badges_renders_one_marker_per_source_space_separated {
         are_equal(
             Cite.badges(["requisitos", "gap"]),
-            "<span class=\"cite cite-fonte\">requisitos</span> <span class=\"cite cite-gap\">gap</span>"
+            "<citemark>requisitos</citemark> <span class=\"cite cite-gap\">gap</span>"
         )
     }
 
     describe list_renders_text_and_badges_per_item {
         are_equal(
             Cite.list([{texto: "Reduzir abandono", fontes: ["concepts/abandono-de-carrinho"]}, {texto: "Meta sem dado", fontes: ["gap"]}]),
-            "<ul><li>Reduzir abandono <span class=\"cite cite-fonte\">concepts/abandono-de-carrinho</span></li>" +
+            "<ul><li>Reduzir abandono <citemark>concepts/abandono-de-carrinho</citemark></li>" +
             "<li>Meta sem dado <span class=\"cite cite-gap\">gap</span></li></ul>"
         )
     }
@@ -73,14 +127,55 @@ test CiteSpec {
     describe list_item_with_multiple_sources_renders_multiple_badges {
         are_equal(
             Cite.list([{texto: "Requer tokenização", fontes: ["entities/time-de-pagamentos", "concepts/tokenizacao-de-cartao"]}]),
-            "<ul><li>Requer tokenização <span class=\"cite cite-fonte\">entities/time-de-pagamentos</span> <span class=\"cite cite-fonte\">concepts/tokenizacao-de-cartao</span></li></ul>"
+            "<ul><li>Requer tokenização <citemark>entities/time-de-pagamentos</citemark> <citemark>concepts/tokenizacao-de-cartao</citemark></li></ul>"
         )
     }
 
-    describe note_renders_one_badge_per_source {
+    describe note_renders_one_marker_per_source {
         are_equal(
             Cite.note(["requisitos", "gap"]),
-            "<p class=\"fontes\"><span class=\"cite cite-fonte\">requisitos</span> <span class=\"cite cite-gap\">gap</span></p>"
+            "<p class=\"fontes\"><citemark>requisitos</citemark> <span class=\"cite cite-gap\">gap</span></p>"
+        )
+    }
+
+    describe finalize_leaves_a_marker_free_body_untouched_and_appends_nothing {
+        are_equal(Cite.finalize("<p>Sem citações aqui.</p>"), "<p>Sem citações aqui.</p>")
+    }
+
+    describe finalize_numbers_a_single_citation_and_lists_it {
+        are_equal(
+            Cite.finalize(Cite.note(["requisitos/FR-001"])),
+            "<p class=\"fontes\"><sup class=\"cite-num\">[1]</sup></p><h2>Referências</h2><ol class=\"cite-references\"><li>requisitos/FR-001</li></ol>"
+        )
+    }
+
+    describe finalize_reuses_the_same_number_for_a_repeated_source {
+        are_equal(
+            Cite.finalize(Cite.badges(["requisitos/FR-001", "requisitos/FR-001"])),
+            "<sup class=\"cite-num\">[1]</sup> <sup class=\"cite-num\">[1]</sup><h2>Referências</h2><ol class=\"cite-references\"><li>requisitos/FR-001</li></ol>"
+        )
+    }
+
+    describe finalize_numbers_distinct_sources_in_order_of_first_appearance {
+        are_equal(
+            Cite.finalize(Cite.badges(["requisitos/FR-002", "requisitos/FR-001", "requisitos/FR-002"])),
+            "<sup class=\"cite-num\">[1]</sup> <sup class=\"cite-num\">[2]</sup> <sup class=\"cite-num\">[1]</sup>" +
+            "<h2>Referências</h2><ol class=\"cite-references\"><li>requisitos/FR-002</li><li>requisitos/FR-001</li></ol>"
+        )
+    }
+
+    describe finalize_leaves_gap_and_inferencia_badges_alone {
+        are_equal(
+            Cite.finalize(Cite.badges(["gap", "inferência", "requisitos/FR-001"])),
+            "<span class=\"cite cite-gap\">gap</span> <span class=\"cite cite-inferencia\">inferência</span> <sup class=\"cite-num\">[1]</sup>" +
+            "<h2>Referências</h2><ol class=\"cite-references\"><li>requisitos/FR-001</li></ol>"
+        )
+    }
+
+    describe finalize_escapes_a_source_id_in_the_references_list {
+        are_equal(
+            Cite.finalize(Cite.badges(["<script>"])),
+            "<sup class=\"cite-num\">[1]</sup><h2>Referências</h2><ol class=\"cite-references\"><li>&lt;script&gt;</li></ol>"
         )
     }
 }

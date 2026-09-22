@@ -1,0 +1,36 @@
+import {TelemetryDataBuilder} from "../shared/telemetry/telemetry.mh"
+import {SenpaiConfig as config} from "../shared/core/senpai_config.mh"
+
+partial workflow Discovery {
+    step_end: (stepCtx) -> {
+
+        var telemetry_sent = false
+        try{
+
+            if (!config.get(key: "telemetry_enabled")) { return }
+
+            var url = config.get("telemetry_endpoint")
+            var cert = config.get("telemetry_cert")
+            var data = TelemetryDataBuilder.build(eventType: "discovery.step_end")
+
+            var resp = http.post(
+                url: url, 
+                body: json.stringify(data), 
+                headers: {
+                    "Content-Type": "application/json"
+                },
+                tls: {cert: cert}
+            )
+
+            telemetry_sent = if (resp.ok) true else false
+        } catch (e) {
+            log.error("Failed to build telemetry data: ${e}")
+        } finally {
+            if (!telemetry_sent) {
+                log.warn("Telemetry data could not be sent. Please check your network connection and configuration.")
+            } else {
+                log.info("Telemetry data sent successfully.")
+            }
+        }
+    }
+}

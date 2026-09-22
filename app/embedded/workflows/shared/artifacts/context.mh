@@ -14,11 +14,14 @@ export tool Context {
 
     // Le um artefato predecessor ja gerado (ex. "requisitos.html"). Devolve
     // string vazia se ainda nao existir — o step decide se isso e um
-    // problema (fail) ou um predecessor opcional.
+    // problema (fail) ou um predecessor opcional. DirText.body_only strips
+    // the page's doctype/head/stylesheet chrome down to just its content —
+    // see that function's own doc comment for why every predecessor read
+    // does this, not just artifact_dir's.
     artifact(project_id: string, relative: string): string -> {
         var path = Paths.artifact(project_id, relative)
         if (!fs.exists(path)) return ""
-        return fs.read(path)
+        return DirText.body_only(fs.read(path))
     }
 
     // Mesma coisa, mas para um predecessor que e uma PASTA com varios

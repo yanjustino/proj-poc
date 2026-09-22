@@ -171,7 +171,23 @@ test ArtifactPreviewSpec {
     describe decisao_item_renders_standalone_with_its_own_title {
         var run = ArtifactPreview.run(inputs: {
             artifact: "decisao",
-            data: {titulo: "Usar Postgres", contexto: "ctx", decisao: "dec", consequencias: "cons", fontes: []}
+            data: {
+                titulo: "Usar Postgres",
+                status: "aceita",
+                contexto_e_problema: "ctx",
+                contexto_fontes: [],
+                fatores_decisao: [{texto: "fator", fontes: []}],
+                opcoes_consideradas: ["Postgres", "MySQL"],
+                decisao_final: {opcao_escolhida: "Postgres", justificativa: "dec", fontes: []},
+                consequencias_positivas: [{texto: "pos", fontes: []}],
+                consequencias_negativas: [{texto: "neg", fontes: []}],
+                opcoes_pros_contras: [
+                    {opcao: "Postgres", pros: [{texto: "p", fontes: []}], contras: [{texto: "c", fontes: []}]},
+                    {opcao: "MySQL", pros: [{texto: "p", fontes: []}], contras: [{texto: "c", fontes: []}]}
+                ],
+                links: [],
+                fontes: []
+            }
         })
         is_true(run.ok)
         is_true(run.vars.preview_html.contains("Usar Postgres"))

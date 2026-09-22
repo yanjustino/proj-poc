@@ -17,8 +17,44 @@ export tool DirText {
         var out = ""
         for (var file_path in dir.list(dir_path)) {
             var label = file_path.replace(base_dir + "/", "").replace(".md", "").replace(".html", "")
-            out = out + "\n\n---\n\n# " + label + "\n\n" + fs.read(file_path)
+            out = out + "\n\n---\n\n# " + label + "\n\n" + self.body_only(fs.read(file_path))
         }
         return out
+    }
+
+    // body_only strips a generated artifact page down to what's inside its
+    // <body> — the doctype/<head>/inline <style> every PageShell-rendered
+    // page carries (page_shell.prompt.md) is pure presentation, ~2KB of it
+    // repeated verbatim for every predecessor file a downstream artifact
+    // reads as context, with zero synthesis value to the LLM. Real cost:
+    // "features" reads the entire adr/ and diagramas/ folders as context —
+    // with a typical 8-11 ADRs, that's 8-11x the same stylesheet, wasted
+    // input tokens on the single heaviest step in Discovery.
+    //
+    // Falls back to the input unchanged when there's no <body> tag —
+    // wiki pages (sources/entities/concepts/answers) go through this same
+    // concat_all as plain markdown, never HTML, and must pass through
+    // untouched.
+    body_only(page: string): string -> {
+        if (!page.contains("<body>") || !page.contains("</body>")) return page
+        var span = page.extract_content(from: "<body>", to: "</body>")
+        return span.substring("<body>".size(), span.size() - "</body>".size())
+    }
+}
+
+test DirTextSpec {
+    describe body_only_strips_doctype_head_and_style_keeping_just_the_content {
+        are_equal(
+            DirText.body_only("<!doctype html><html><head><style>body{color:#000}</style></head><body><h1>ADR-001</h1><p>Contexto.</p></body></html>"),
+            "<h1>ADR-001</h1><p>Contexto.</p>"
+        )
+    }
+
+    describe body_only_passes_through_content_with_no_body_tag_unchanged {
+        are_equal(DirText.body_only("# Entidade\n\nDescrição em markdown."), "# Entidade\n\nDescrição em markdown.")
+    }
+
+    describe body_only_passes_through_an_empty_string_unchanged {
+        are_equal(DirText.body_only(""), "")
     }
 }

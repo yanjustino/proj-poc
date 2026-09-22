@@ -1,0 +1,34 @@
+// Config global do usuario (nao-ligado a nenhum project_id) — por isso mora
+// fora do Paths, que so monta caminhos sob "projects/<project_id>/...".
+// Fica em "${HOME}/.senpai/senpai-config.json", mesma convencao de diretorio
+// oculto sob o home do proprio mhl ("~/.mhl"). Usa os.home_dir() em vez de
+// os.executable(): este ultimo aponta pro binario do mhl em execucao (nao
+// serve como diretorio) e, alem disso, ainda nao existe na build de mhl
+// vendorizada pelo app (so em builds de desenvolvimento nao lancadas) — ver
+// app/embedded/README.md sobre esse tipo de descompasso de versao.
+export tool SenpaiConfig {
+
+    get(key: string): any -> {
+        if (key.is_empty()) fail("SenpaiConfig.get: key is empty")
+
+        var config_file = self.config_file()
+        self.create_if_not_exists(config_file)
+
+        var config = json.parse(fs.read(config_file))
+        return config[key]
+    }
+
+    config_file(): string -> "${os.home_dir()}/.senpai/senpai-config.json"
+
+    create_if_not_exists(config_file: string) -> {
+        if (!fs.exists(config_file)) {
+            var default_config = {
+                telemetry_enabled: false
+                telemetry_endpoint: "https://telemetry.senpai.ai/telemetry"
+                telemetry_cert: ""
+            }
+
+            fs.write(config_file, json.stringify(default_config))
+        }
+    }
+}
