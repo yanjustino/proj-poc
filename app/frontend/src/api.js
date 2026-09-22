@@ -297,9 +297,36 @@ export async function workItemPromptLog(projectId) {
 // per-artifact guess on the frontend's side, and with no side effect (never
 // writes to disk, never consumes a collection artifact's real id sequence).
 // Synchronous like WorkItem's own actions (no LLM call in this path).
-export async function artifactPreview(artifact, data) {
-  const result = await callWorkflowOnce('ArtifactPreview', { artifact, data });
-  return result.preview_html;
+//
+// Every call is serialized through artifactPreviewQueue, not fired directly
+// — mhl's own session runtime writes each pipeline's "latest" pointer to one
+// shared file per pipeline name (writeLatest, mhl-runtime's session.go); two
+// concurrent ArtifactPreview sessions race renaming their own .tmp onto it
+// and one loses with "committing latest pointer: rename ... no such file or
+// directory" (Windows: "Acesso negado") — a real upstream mhl bug (see
+// output/mhl-bug-report.md #2), fixed upstream but not yet in the version
+// vendored here. tab-artefatos.js's appendPausedPreview already retries once
+// for the N-items-in-one-row case, but that only guards its own batch — it
+// does nothing for two DIFFERENT rows each pausing around the same time
+// (exactly what "Gerar histórias pendentes" makes common: several features'
+// historias paused for review at once, each opening its own ArtifactPreview
+// session the moment its row is selected). Serializing here closes that gap
+// for every caller at once, instead of pushing the same queuing logic into
+// every call site.
+let artifactPreviewQueue = Promise.resolve();
+
+export function artifactPreview(artifact, data) {
+  const result = artifactPreviewQueue.then(() =>
+    callWorkflowOnce('ArtifactPreview', { artifact, data }).then((r) => r.preview_html),
+  );
+  // Keep the queue alive after a failure — swallowed here only so the NEXT
+  // queued call still runs; `result` (returned below) still carries this
+  // call's own real outcome to its caller.
+  artifactPreviewQueue = result.then(
+    () => {},
+    () => {},
+  );
+  return result;
 }
 
 // deleteProject removes projects/<projectId> from disk entirely — there is

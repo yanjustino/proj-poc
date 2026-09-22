@@ -122,10 +122,10 @@ function codedHistoriaTitle(featureFolderName, historiaFolderName) {
 // on the backend keeps running regardless, so on mount this checks
 // active-runs.js for anything still in flight for this project and
 // reattaches to it (watchExistingRun) instead of showing "pronto para
-// gerar" for something that's actually already underway. What's still
-// session-scoped only (lost on an app restart) is exactly that registry —
-// see active-runs.js for why it can't be reconstructed from mhl_run_list
-// alone.
+// gerar" for something that's actually already underway. That registry
+// persists across an app restart too (active-runs.js), not just a remount —
+// mhl_run_list itself can't be used to rediscover it (session-scoped), but
+// mhl_run_status can, by runId alone, once the registry hands one over.
 export async function renderArtefatosTab(container, project, { onChanged }) {
   // A generation started here keeps running on the backend regardless of
   // what the user does in the UI (see reattachActiveRuns' comment) — its
@@ -155,6 +155,7 @@ export async function renderArtefatosTab(container, project, { onChanged }) {
         <p>Explore, gere e revise os documentos deste work-item.</p>
       </div>
       <div class="artifact-map-controls">
+        <button class="button secondary small" data-generate-all-historias hidden title="Cada feature pendente dispara sua própria geração — mhl_run_start é assíncrono e o servidor já roda até 4 runs em paralelo, então isto não é uma fila sequencial.">${icon('layers', 14)} Gerar histórias pendentes</button>
         <button class="button secondary small" data-export-all title="Exportar toda a Wiki e todos os Artefatos">${icon('download', 14)} Exportar tudo</button>
         <div class="artifact-filters">
           <button class="artifact-filter active" data-filter="all">Todos</button>
@@ -174,6 +175,7 @@ export async function renderArtefatosTab(container, project, { onChanged }) {
   const categoryFiltersEl = container.querySelector('[data-category-filters]');
   const exportAllButton = container.querySelector('[data-export-all]');
   const exportStatusEl = container.querySelector('[data-export-status]');
+  const generateAllHistoriasButton = container.querySelector('[data-generate-all-historias]');
   showEmpty('Selecione um artefato para ler ou gerar.');
 
   let doneNames = new Set();
@@ -335,6 +337,44 @@ export async function renderArtefatosTab(container, project, { onChanged }) {
     return isReady(row.entry, doneNames);
   }
 
+  // pendingHistoriasRows: every per-feature "Histórias — X" row that's ready
+  // to generate, not generated yet, and not already running — exactly the
+  // set "Gerar histórias pendentes" fires generate() on. Discovery-only
+  // (Delivery's own historias is a single flat row, not one per feature —
+  // see rowsToRender's own comment on why that split exists).
+  function pendingHistoriasRows() {
+    if (workflow !== 'Discovery') return [];
+    return rowsToRender().filter((row) => row.featureId && !isRowDone(row) && !trackers.has(row.key));
+  }
+
+  // Each pending row fires its own generate() — its own mhl_run_start, not
+  // one call fanning out internally. That's deliberate, not a stopgap for a
+  // "real" parallel primitive: mhl's `spawn` needs a literal <Agent>.run(...)
+  // at the call site, but Writer.generate (agents.mh) is a tool wrapping
+  // Devin/Claude/Codex behind one adapter — spawn can't reach through that.
+  // mhl_run_start already returns immediately (the LLM call runs server-side
+  // after the response), the server already runs up to 4 runs concurrently
+  // (mhlbridge.go's maxConcurrentRuns), and firing several requests for the
+  // same pipeline at once was a real crash here before — root-caused and
+  // fixed at the transport layer (mhlbridge.go's postRPC), not by queuing
+  // client-side (see appendPausedPreview's own comment) — so N plain
+  // generate() calls already get real concurrent execution without needing
+  // spawn at all.
+  function generateAllPendingHistorias() {
+    const pending = pendingHistoriasRows();
+    if (pending.length === 0) return;
+    selectedKey = pending[0].key;
+    for (const row of pending) generate(row);
+  }
+
+  function updateGenerateAllHistoriasButton() {
+    const pending = pendingHistoriasRows();
+    generateAllHistoriasButton.hidden = pending.length === 0;
+    generateAllHistoriasButton.innerHTML = `${icon('layers', 14)} Gerar histórias pendentes (${pending.length})`;
+  }
+
+  generateAllHistoriasButton.addEventListener('click', generateAllPendingHistorias);
+
   function renderList() {
     const rows = rowsToRender();
     const visibleRows = rows.filter((row) => {
@@ -344,6 +384,7 @@ export async function renderArtefatosTab(container, project, { onChanged }) {
     });
     if (!selectedKey || !visibleRows.some((r) => r.key === selectedKey)) selectedKey = visibleRows[0]?.key ?? null;
     countEl.textContent = `${rows.length} ${rows.length === 1 ? 'item' : 'itens'}`;
+    updateGenerateAllHistoriasButton();
 
     if (visibleRows.length === 0) {
       listEl.innerHTML = '<div class="artifact-map-empty">Nenhum artefato neste filtro.</div>';

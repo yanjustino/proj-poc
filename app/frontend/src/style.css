@@ -302,35 +302,17 @@ button { cursor: pointer; }
 .run-tracker { display: flex; flex-direction: column; gap: 8px; font-size: 11px; color: var(--muted); margin-top: 6px; }
 .run-status-row { display: flex; align-items: center; gap: 8px; flex-wrap: wrap; }
 .run-tokens { font-family: var(--mono); color: var(--muted); }
-.run-error { color: var(--red); }
+.run-error-banner { display: flex; align-items: flex-start; gap: 10px; background: rgba(200, 58, 55, .12); border: 1px solid rgba(200, 58, 55, .35); border-radius: var(--radius-md); padding: 12px 14px; }
+.run-error-icon { flex: none; color: var(--red); margin-top: 1px; }
+.run-error-message { font-size: 13px; line-height: 1.5; color: var(--red); }
 .run-reason { color: var(--muted); }
-/* working/queued's own hero — a bare status dot + "gerando" read as frozen
-   on a run with no visible step change for a while (real feedback: a
-   Feature generation that looked stuck, no error, just silent). Just the
-   Senpai illustration (senpai-loading-illustration.png, swappable — see the
-   ?inline import in run-tracker.js) gently floating, no overlay on top of
-   it anymore: an earlier version pinned a small animated "reactor" at a
-   fixed % position tuned to one specific illustration's red sun, which
-   broke (floated over blank space) the moment that file was swapped for a
-   different piece of art with the sun somewhere else, or none at all. */
 .run-generating { display: flex; flex-direction: column; align-items: center; gap: 28px; text-align: center; padding: 22px 12px; }
-.run-orbit { position: relative; width: 320px; flex: none; animation: run-orbit-float 6s ease-in-out infinite; }
-.run-orbit-image { display: block; width: 100%; height: auto; opacity: .92; }
-/* Two <img>s, one shown at a time via html[data-theme] — swapped instead of
-   filtered: senpai-loading-illustration.png is shaded for this app's dark
-   default, senpai-loading-illustration-light.png is its own separate asset
-   tuned for the light theme's cream/white surfaces, so no brightness/
-   contrast hack is needed to keep either one legible. */
-.run-orbit-image-light { display: none; }
-html[data-theme='light'] .run-orbit-image-dark { display: none; }
-html[data-theme='light'] .run-orbit-image-light { display: block; }
-@keyframes run-orbit-float { 0%, 100% { transform: translateY(-3px); } 50% { transform: translateY(3px); } }
-
-.run-generating-status { display: flex; flex-direction: column; align-items: center; gap: 12px; }
+.run-generating-status { display: flex; flex-direction: column; align-items: center; gap: 10px; }
+.run-generating-icon { color: var(--amber); opacity: .85; }
 .run-generating-badge { display: inline-flex; align-items: center; gap: 8px; font-family: var(--mono); font-size: 13px; letter-spacing: .14em; text-transform: uppercase; color: var(--amber); }
 .run-generating-blink { width: 8px; height: 8px; border-radius: 50%; background: var(--amber); animation: run-generating-blink 1.2s ease-in-out infinite; }
 @keyframes run-generating-blink { 0%, 100% { opacity: 1; } 50% { opacity: .25; } }
-.run-generating-stage { font-size: 22px; font-weight: 600; color: var(--ink); max-width: 460px; }
+.run-generating-stage { font-size: 15px; font-weight: 500; color: var(--muted); max-width: 360px; }
 .run-generating-meta { display: flex; align-items: center; gap: 10px; flex-wrap: wrap; justify-content: center; font-family: var(--mono); font-size: 14px; color: var(--muted); }
 .run-generating-sep { color: var(--line); }
 
@@ -634,7 +616,7 @@ label.check input { accent-color: var(--vermilion); }
 .modal input:focus, .modal select:focus { border-color: var(--vermilion); box-shadow: 0 0 0 3px rgba(229,57,47,.13); }
 .run-feedback-input { color: var(--rice-paper); }
 .run-composer { background: var(--surface-2); }
-.run-generating-stage { color: var(--rice-paper); }
+.run-generating-stage { color: var(--muted); }
 .modal-backdrop { background: rgba(0,0,0,.7); backdrop-filter: blur(6px); }
 .modal { border-color: var(--line); border-radius: var(--radius-lg); background: var(--surface); }
 .modal h2 { color: var(--rice-paper); font: 650 24px/1.2 var(--serif); }

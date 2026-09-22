@@ -1,37 +1,61 @@
-// A tiny, module-level (session-lifetime) registry of in-flight generation
-// runs, keyed by a caller-chosen string (project_id + artifact key).
+// A registry of in-flight/paused generation runs, keyed by a caller-chosen
+// string (project_id + artifact key) — persisted to localStorage, not just
+// this module's own memory, so a run left paused for approval (Modo Buddy)
+// is still found after the app itself restarts, not only after a tab
+// remount.
 //
-// Why this exists: mhl keeps running a started workflow regardless of what
-// the UI is showing — WatchRun's Go-side polling isn't tied to any DOM
-// element, and the mhl process itself doesn't know or care whether the tab
-// that started a run is still mounted. tab-artefatos.js's own `trackers`
-// Map lives inside renderArtefatosTab's closure, so switching away from the
-// Artefatos tab (or to a different work-item) and back threw it away —
-// making a generation that was still genuinely running server-side look
-// like it had silently reset to "pending", with no way to tell the two
-// apart from the UI alone. Real user-reported symptom this fixes.
+// Why this exists: mhl keeps running — or holding paused — a started
+// workflow regardless of what the UI is showing, and regardless of whether
+// the app was even open in between: --state-dir (see app/app.go's startup)
+// makes a paused run's state survive the mhl child process being killed and
+// a new one started, and GetRunStatus can reattach to a runId from a
+// previous app session by that id alone (no session/list dependency — see
+// api.js's watchExistingRun; mhl_run_list, unlike mhl_run_status, IS scoped
+// to the current session, so it can't be used to rediscover this). The only
+// piece that was ever memory-only was this map: without it surviving a
+// restart, the frontend had no way to know which runId belonged to which
+// project+artifact, so a paused-for-approval artifact looked exactly like
+// one that had never been generated, forcing the user to redo work mhl was
+// still holding onto the whole time. Real user-reported bug this fixes.
 //
-// Why this can't just be reconstructed from mhl_run_list/mhl_run_status
-// instead: confirmed by a real spike — while a run is still "working",
-// its status has no `vars` at all (project_id/artifact only show up once a
-// run reaches "completed", as part of the workflow's own declared output).
-// There is nothing in the list of in-flight runs to say which project or
-// artifact a given runId belongs to, so the app has to remember that
-// itself, from the moment it's the one starting the run.
+// A stale entry (project deleted, run long gone from state-dir, ...)
+// self-heals the next time its Artefatos tab mounts: reattachActiveRuns'
+// watchExistingRun call fails, onRunError clears it here (tab-artefatos.js)
+// — no separate expiry logic needed.
 //
-// Session-scoped only (in-memory) — restarting the whole app still loses
-// this, same already-accepted limitation as the rest of Fase 6's run
-// tracking ("fica para depois" in the plan).
-const active = new Map();
+// localStorage failing (private window, disabled storage, ...) degrades to
+// "nothing persists" rather than throwing — reattachment across a restart
+// is a nice-to-have, not something worth crashing over.
+const STORAGE_KEY = 'senpai-active-runs';
+
+function readAll() {
+  try {
+    return JSON.parse(localStorage.getItem(STORAGE_KEY)) || {};
+  } catch {
+    return {};
+  }
+}
+
+function writeAll(all) {
+  try {
+    localStorage.setItem(STORAGE_KEY, JSON.stringify(all));
+  } catch {
+    // Degrades to "not persisted" — see this file's own doc comment.
+  }
+}
 
 export function setActiveRun(key, runId) {
-  active.set(key, runId);
+  const all = readAll();
+  all[key] = runId;
+  writeAll(all);
 }
 
 export function getActiveRun(key) {
-  return active.get(key);
+  return readAll()[key];
 }
 
 export function clearActiveRun(key) {
-  active.delete(key);
+  const all = readAll();
+  delete all[key];
+  writeAll(all);
 }

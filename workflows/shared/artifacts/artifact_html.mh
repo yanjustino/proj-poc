@@ -147,7 +147,7 @@ test ArtifactHtmlSpec {
     describe requirements_renders_columns_sources_and_escaped_values {
         are_equal(
             ArtifactHtml.requirements([{id: "FR-001", titulo: "Criar <pedido>", descricao: "Aceitar & validar", criterios_aceitacao: "Pedido persistido", prioridade: "Must", fontes: ["sources/ata"]}]),
-            "<table><thead><tr><th>ID</th><th>Título</th><th>Descrição</th><th>Critérios de aceitação</th><th>Prioridade</th><th>Fontes</th></tr></thead><tbody><tr><td>FR-001</td><td>Criar &lt;pedido&gt;</td><td>Aceitar &amp; validar</td><td>Pedido persistido</td><td>Must</td><td><span class=\"cite cite-fonte\">sources/ata</span></td></tr></tbody></table>"
+            "<table><thead><tr><th>ID</th><th>Título</th><th>Descrição</th><th>Critérios de aceitação</th><th>Prioridade</th><th>Fontes</th></tr></thead><tbody><tr><td>FR-001</td><td>Criar &lt;pedido&gt;</td><td>Aceitar &amp; validar</td><td>Pedido persistido</td><td>Must</td><td><citemark>sources/ata</citemark></td></tr></tbody></table>"
         )
     }
 
@@ -158,7 +158,7 @@ test ArtifactHtmlSpec {
                     {feature_codigo: "FT001", justificativa: "precisa do cadastro & login", fontes: ["features/FT001-cadastro"]}
                 ]}
             ]),
-            "<table><thead><tr><th>Código</th><th>Feature</th><th>Depende de</th></tr></thead><tbody><tr><td>FT002</td><td>Pagamentos</td><td><ul><li><strong>FT001</strong> — precisa do cadastro &amp; login <span class=\"cite cite-fonte\">features/FT001-cadastro</span></li></ul></td></tr></tbody></table>"
+            "<table><thead><tr><th>Código</th><th>Feature</th><th>Depende de</th></tr></thead><tbody><tr><td>FT002</td><td>Pagamentos</td><td><ul><li><strong>FT001</strong> — precisa do cadastro &amp; login <citemark>features/FT001-cadastro</citemark></li></ul></td></tr></tbody></table>"
         )
     }
 

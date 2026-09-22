@@ -5,20 +5,7 @@
 // startAndWatch/resumeAndWatch's onUpdate callback into `.update(status)`.
 import { resumeAndWatch, cancelRun } from './api.js';
 import { dotClass } from './status.js';
-// ?inline forces Vite to embed this as a base64 data: URI in the JS bundle
-// itself, instead of emitting it as a separate file for Wails' AssetServer
-// to serve by URL (the default for anything past its 4KB assetsInlineLimit,
-// which this 400KB+ illustration is way past). The image reliably failed
-// to display in the packaged app despite the exact same import pattern
-// working for the sidebar's senpai-symbol.png — the one concrete anomaly
-// found was an unusual embedded C2PA/jumb provenance chunk (stripped in
-// the file itself now, likely from whatever tool generated it), but
-// without being able to run the packaged app there's no way to confirm
-// that was really it. Inlining sidesteps the question entirely: the bytes
-// travel inside the same script that was already loading and running
-// correctly, no separate AssetServer request involved at all.
-import loadingIllustrationDark from './assets/images/senpai-loading-illustration.png?inline';
-import loadingIllustrationLight from './assets/images/senpai-loading-illustration-light.png?inline';
+import { icon } from './icons.js';
 
 // WORKING_MESSAGE is the friendly headline shown while a run is actually
 // executing/queued (see render()'s own working/queued branch) — feedback
@@ -27,7 +14,7 @@ import loadingIllustrationLight from './assets/images/senpai-loading-illustratio
 // a bare status dot + "gerando" read as broken, not busy. This spells out
 // what's actually happening instead of leaving the reader to infer it from
 // a spinning icon alone.
-const WORKING_MESSAGE = { working: 'Aguarde! Gerando o artefato com o LLM…', queued: 'Aguarde! Na fila para começar a geração…' };
+const WORKING_MESSAGE = { working: 'Só um instante, o LLM está trabalhando nisso…', queued: 'Só um instante, você está na fila para começar…' };
 
 export const STATE_LABEL = {
   working: 'gerando',
@@ -270,9 +257,9 @@ export function createRunTracker({ resumeArgs = { approved: true }, onCancel, on
       const tokens = tokensLine(s);
       if (tokens) metaBits.push(tokens);
 
-      // The illustrated hero is Artefatos-only (fillHeight — see this
-      // file's own doc comment on that option): it's sized for being the
-      // reading pane's entire content. Reported looking absurd blown up
+      // The centered generating block is Artefatos-only (fillHeight — see
+      // this file's own doc comment on that option): it's sized for being
+      // the reading pane's entire content. Reported looking absurd blown up
       // inside Fontes' compact per-file card during ingest, which reuses
       // this same working/queued state for something much smaller — those
       // hosts fall through to the same plain status row every other state
@@ -280,13 +267,10 @@ export function createRunTracker({ resumeArgs = { approved: true }, onCancel, on
       if (fillHeight) {
         element.innerHTML = `
           <div class="run-generating">
-            <div class="run-orbit">
-              <img class="run-orbit-image run-orbit-image-dark" src="${loadingIllustrationDark}" alt="" />
-              <img class="run-orbit-image run-orbit-image-light" src="${loadingIllustrationLight}" alt="" />
-            </div>
             <div class="run-generating-status">
+              <span class="run-generating-icon">${icon('clock', 26)}</span>
               <span class="run-generating-badge"><span class="run-generating-blink"></span>${escapeHtml((STATE_LABEL[s.state] || s.state).toUpperCase())}</span>
-              <strong class="run-generating-stage">${escapeHtml(WORKING_MESSAGE[s.state] || label)}</strong>
+              <span class="run-generating-stage">${escapeHtml(WORKING_MESSAGE[s.state] || label)}</span>
               ${metaBits.length ? `<div class="run-generating-meta">${metaBits.join('<span class="run-generating-sep">/</span>')}</div>` : ''}
             </div>
           </div>
@@ -305,20 +289,27 @@ export function createRunTracker({ resumeArgs = { approved: true }, onCancel, on
       lastActiveSignature = activeSignature(s);
     } else {
       lastActiveSignature = null;
-      const errorLine = s.state === 'failed' && s.error ? `<span class="run-error">${escapeHtml(s.error)}</span>` : '';
+      // A failed run used to get a plain red label buried among other
+      // status text — easy to miss, especially once metaBits/reasonLine
+      // also render. Promoted to its own bordered banner, icon + message,
+      // placed first so it's the first thing in the preview pane regardless
+      // of what else this tracker renders below it.
+      const errorLine = s.state === 'failed' && s.error
+        ? `<div class="run-error-banner" role="alert"><span class="run-error-icon">${icon('alertCircle', 18)}</span><span class="run-error-message">${escapeHtml(s.error)}</span></div>`
+        : '';
       // s.reason is pause()'s own message (e.g. "revise o conteudo de
       // 'brief' antes de gravar em artifacts/") — see
       // mhlbridge.RunStatus.Reason's doc comment for why this was silently
       // dropped before it.
       const reasonLine = s.state === 'paused' && s.reason ? `<span class="run-reason">${escapeHtml(s.reason)}</span>` : '';
       element.innerHTML = `
+        ${errorLine}
         <div class="run-status-row">
           <span class="status-dot ${dotClass(s.state)}"></span>
           <span class="run-label">${label}</span>
           ${tokensLine(s)}
         </div>
         ${reasonLine}
-        ${errorLine}
       `;
     }
 

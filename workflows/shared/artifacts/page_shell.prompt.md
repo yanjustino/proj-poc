@@ -22,6 +22,9 @@ tr:last-child td{border-bottom:none}
 .cite-fonte{background:#eef3ee;color:#2c7a4b}
 .cite-gap{background:#f6dedb;color:#a33c2e}
 .cite-inferencia{background:#eceef7;color:#39468a}
+.cite-num{font-family:ui-monospace,monospace;font-size:11px;font-weight:600;color:#2c7a4b;margin:0 1px}
+.cite-references{margin:0 0 14px;padding-left:20px;font-family:ui-monospace,monospace;font-size:12px;color:#6a6a6a}
+.cite-references li{margin-bottom:6px}
 p.fontes{margin:-4px 0 16px;line-height:2}
 </style>
 </head>

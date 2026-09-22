@@ -1,5 +1,14 @@
 // Adaptador de apresentacao compartilhado. Centraliza escaping, citacoes e
 // composicao dos templates; os workflows ficam restritos a orquestracao e I/O.
+//
+// Every function here wraps its template in Cite.finalize() — the one place
+// that turns every Cite.badge() marker placed anywhere in that body (via
+// ArtifactHtml's tables, Cite.list/note calls above, ...) into a numbered
+// "[n]" plus the "Referências" legend at the end (see cite.mh's own doc
+// comment). Called once per function, over that function's whole rendered
+// body, never partially — a fonte cited in two separately-finalized
+// fragments of what should be the same document would get two different
+// numbers for the same source.
 
 import { Cite } from "cite.mh"
 import { ArtifactHtml } from "artifact_html.mh"
@@ -9,7 +18,7 @@ import {
 } from "artifacts_common.mh"
 
 export tool ArtifactBody {
-    brief(data: any): string -> BriefBody(
+    brief(data: any): string -> Cite.finalize(BriefBody(
         resumo_executivo: html.escape(data.resumo_executivo),
         resumo_fontes: Cite.note(data.resumo_fontes),
         contexto_negocio: html.escape(data.contexto_negocio),
@@ -23,9 +32,9 @@ export tool ArtifactBody {
         riscos_tabela: ArtifactHtml.risks(data.riscos_dependencias),
         perguntas_lista: Cite.list(data.perguntas_abertas),
         fontes_nota: Cite.note(data.fontes)
-    )
+    ))
 
-    atributos(data: any): string -> AtributosBody(
+    atributos(data: any): string -> Cite.finalize(AtributosBody(
         contexto: html.escape(data.contexto),
         contexto_fontes: Cite.note(data.contexto_fontes),
         requisitos_tabela: ArtifactHtml.classified_rows(data.requisitos_nao_funcionais),
@@ -34,9 +43,9 @@ export tool ArtifactBody {
         exclusoes_lista: Cite.list(data.exclusoes),
         perguntas_lista: Cite.list(data.perguntas_abertas),
         fontes_nota: Cite.note(data.fontes)
-    )
+    ))
 
-    requisitos(data: any): string -> RequisitosBody(
+    requisitos(data: any): string -> Cite.finalize(RequisitosBody(
         contexto: html.escape(data.contexto),
         contexto_fontes: Cite.note(data.contexto_fontes),
         funcionais_tabela: ArtifactHtml.requirements(data.funcionais),
@@ -48,9 +57,9 @@ export tool ArtifactBody {
         gaps_lista: Cite.list(data.gaps),
         perguntas_lista: Cite.list(data.perguntas_abertas),
         fontes_nota: Cite.note(data.fontes)
-    )
+    ))
 
-    adr(data: any): string -> AdrBody(
+    adr(data: any): string -> Cite.finalize(AdrBody(
         status: html.escape(data.status),
         contexto_e_problema: html.escape(data.contexto_e_problema),
         contexto_fontes: Cite.note(data.contexto_fontes),
@@ -63,9 +72,9 @@ export tool ArtifactBody {
         opcoes_pros_contras: ArtifactHtml.options_pros_and_cons(data.opcoes_pros_contras),
         links_lista: ArtifactHtml.adr_links(data.links),
         fontes_nota: Cite.note(data.fontes)
-    )
+    ))
 
-    der(data: any): string -> DerBody(
+    der(data: any): string -> Cite.finalize(DerBody(
         modo: html.escape(data.modo),
         contexto: html.escape(data.contexto),
         contexto_fontes: Cite.note(data.contexto_fontes),
@@ -78,18 +87,18 @@ export tool ArtifactBody {
         gaps_lista: Cite.list(data.gaps),
         questoes_lista: Cite.list(data.questoes_abertas),
         fontes_nota: Cite.note(data.fontes)
-    )
+    ))
 
-    diagrama(data: any): string -> DiagramaBody(
+    diagrama(data: any): string -> Cite.finalize(DiagramaBody(
         diagram_type: html.escape(data.diagram_type),
         hierarchy_level: html.escape(data.hierarchy_level),
         descricao: html.escape(data.descricao),
         descricao_fontes: Cite.note(data.descricao_fontes),
         fontes_nota: Cite.note(data.fontes),
         diagrama_mermaid: html.escape(data.diagrama_mermaid)
-    )
+    ))
 
-    feature(data: any): string -> FeatureBody(
+    feature(data: any): string -> Cite.finalize(FeatureBody(
         resumo: html.escape(data.resumo),
         resumo_fontes: Cite.note(data.resumo_fontes),
         objetivo: html.escape(data.objetivo),
@@ -106,9 +115,9 @@ export tool ArtifactBody {
         gaps_lista: Cite.list(data.gaps),
         questoes_lista: Cite.list(data.questoes_abertas),
         fontes_nota: Cite.note(data.fontes)
-    )
+    ))
 
-    historia(data: any): string -> HistoriaBody(
+    historia(data: any): string -> Cite.finalize(HistoriaBody(
         statement: ArtifactHtml.story_statement(data.como, data.quero, data.para),
         statement_fontes: Cite.note(data.fontes),
         atributos_lista: ArtifactHtml.story_attributes(
@@ -134,12 +143,12 @@ export tool ArtifactBody {
         contratos_fontes: Cite.note(data.contratos_fontes),
         questoes_lista: Cite.list(data.questoes_abertas),
         fontes_nota: Cite.note(data.fontes)
-    )
+    ))
 
-    dependencias(data: any): string -> DependenciasBody(
+    dependencias(data: any): string -> Cite.finalize(DependenciasBody(
         mapa_tabela: ArtifactHtml.dependency_map(data.features),
         ordem_tabela: ArtifactHtml.execution_order(data.ordem_execucao),
         diagrama_mermaid: html.escape(data.diagrama_mermaid),
         gaps_lista: Cite.list(data.gaps)
-    )
+    ))
 }
