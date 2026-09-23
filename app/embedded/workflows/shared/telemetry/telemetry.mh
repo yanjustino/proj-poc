@@ -25,7 +25,7 @@ type TelemetryAgentLlm = {
     duration: number
     status: string
 }
-                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                   
+
 type TelemetryData = {
     clientId: string
     userId: string
@@ -36,4 +36,32 @@ type TelemetryData = {
     agentName: string
     context: TelemetryContext
     llm: TelemetryAgentLlm
-}                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                        
+}
+
+export tool TelemetryDataBuilder {
+    build(eventType: string): TelemetryData -> { return {
+            clientId: ""
+            userId: os.user()
+            environment: os.platform()
+            eventType: eventType
+            sessionId: ""
+            eventTimestamp: time.now()
+            agentName: "senpai"
+            context: {
+                documents: []
+                project: ""
+                phase: ""
+                task: ""
+                hierarchy: ""
+            }
+            llm: {
+                provider: ""
+                modelId: ""
+                inputTokens: 0
+                outputTokens: 0
+                duration: 0
+                status: ""                
+            }
+        }
+    }
+}

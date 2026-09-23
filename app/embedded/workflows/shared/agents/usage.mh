@@ -24,15 +24,6 @@ export memory PromptLog {
     path_guard: "no_traversal"
 }
 
-type UsageRecord = {
-    tokens_in: number, 
-    tokens_out: number, 
-    content: string,
-    cache_creation_tokens: number, 
-    cache_read_tokens: number, 
-    cost_usd: number
-}
-
 // Formato do envelope de --output-format json do Claude Code CLI, confirmado
 // por spike real (FASE0-ACHADOS.md §5) e reconfirmado numa chamada real
 // direta a `claude -p ... --output-format json` (fora do mhl, comparando o
@@ -59,7 +50,10 @@ export tool UsageParser {
     // A CLI pode envolver a resposta em uma cerca Markdown mesmo quando
     // instruida a nao faze-lo; removemos somente a cerca externa, preservando
     // backticks que facam parte de campos internos.
-    extract_devin(raw: string, exported: string): UsageRecord -> {
+    extract_devin(raw: string, exported: string): {
+        tokens_in: number, tokens_out: number, content: string,
+        cache_creation_tokens: number, cache_read_tokens: number, cost_usd: number
+    } -> {
         var content = raw.trim()
         if (content.starts_with("```json")) content = content.substring(7, content.size()).trim()
         else if (content.starts_with("```")) content = content.substring(3, content.size()).trim()
@@ -86,14 +80,9 @@ export tool UsageParser {
                 cost_usd = 0
             }
         }
-
         return {
-            tokens_in: tokens_in, 
-            tokens_out: tokens_out, 
-            content: content,
-            cache_creation_tokens: 0, 
-            cache_read_tokens: cache_read_tokens, 
-            cost_usd: cost_usd
+            tokens_in: tokens_in, tokens_out: tokens_out, content: content,
+            cache_creation_tokens: 0, cache_read_tokens: cache_read_tokens, cost_usd: cost_usd
         }
     }
 
@@ -105,7 +94,10 @@ export tool UsageParser {
     // input_tokens:2, cache_creation_input_tokens:21260 — a maior parte do
     // prompt vira criacao de cache, nao input "novo"; sem esses dois campos,
     // o ledger fazia parecer que a chamada quase nao usou tokens de entrada.
-    extract_claude(raw: string): UsageRecord -> {
+    extract_claude(raw: string): {
+        tokens_in: number, tokens_out: number, content: string,
+        cache_creation_tokens: number, cache_read_tokens: number, cost_usd: number
+    } -> {
         var envelope = json.parse(raw)
         var content = envelope.result
         var structured = envelope.get("structured_output", null)
@@ -129,7 +121,10 @@ export tool UsageParser {
     // exec` com os mesmos flags do agent Codex, que devolveu ambos os
     // campos junto de input_tokens/output_tokens. Nenhum custo em dolar
     // exposto por este CLI — cost_usd fica 0 aqui, nao inventado.
-    extract_codex(raw: string): UsageRecord -> {
+    extract_codex(raw: string): {
+        tokens_in: number, tokens_out: number, content: string,
+        cache_creation_tokens: number, cache_read_tokens: number, cost_usd: number
+    } -> {
         var tokens_in = 0
         var tokens_out = 0
         var cache_creation_tokens = 0
@@ -146,14 +141,9 @@ export tool UsageParser {
                 cache_creation_tokens = event.usage.cache_write_input_tokens
             }
         }
-        
         return {
-            tokens_in: tokens_in, 
-            tokens_out: tokens_out, 
-            content: content,
-            cache_creation_tokens: cache_creation_tokens, 
-            cache_read_tokens: cache_read_tokens, 
-            cost_usd: 0
+            tokens_in: tokens_in, tokens_out: tokens_out, content: content,
+            cache_creation_tokens: cache_creation_tokens, cache_read_tokens: cache_read_tokens, cost_usd: 0
         }
     }
 }
