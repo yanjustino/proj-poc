@@ -155,6 +155,24 @@ export function createRunTracker({ resumeArgs = { approved: true }, onCancel, on
   // transition.
   let lastActiveSignature = null;
 
+  // resumeAnchorMs: real bug reported in production — pause a run (Modo
+  // Buddy), close the app, come back hours later and hit Aprovar/Regenerar;
+  // the elapsed counter on the "gerando" screen that follows starts from a
+  // huge, wrong value (the screenshot: "505min 23s" on a run that had just
+  // resumed). Root cause: elapsedSeconds() below anchors on s.startedAt,
+  // which mhl sets once when the RUN first begins and never touches again
+  // across a pause/resume — correct for a run that's never paused (it IS
+  // real elapsed generation time), wrong the moment a run resumes, because
+  // startedAt still points at the original start and the elapsed math folds
+  // in the entire paused-waiting-for-a-human span (here, several hours) as
+  // if it were active work. Set to Date.now() right when Aprovar/Regenerar
+  // is clicked (see those two handlers below) — the one moment we know for
+  // certain "this active phase's real work begins now" — and preferred over
+  // s.startedAt by elapsedSeconds() from then on. Left null until a resume
+  // actually happens, so a run's first, never-paused working/queued phase
+  // is untouched and still timed from its true start.
+  let resumeAnchorMs = null;
+
   function activeSignature(s) {
     const vars = s.vars || {};
     return [s.state, s.runId, s.startedAt, vars.tokens_in, vars.tokens_out].join('|');
@@ -180,7 +198,11 @@ export function createRunTracker({ resumeArgs = { approved: true }, onCancel, on
 
   function elapsedSeconds(s) {
     if (s.state !== 'working' && s.state !== 'queued') return null;
-    const startMs = s.startedAt ? Date.parse(s.startedAt) : NaN;
+    // resumeAnchorMs (set at Aprovar/Regenerar click — see this file's own
+    // doc comment on it) takes priority over s.startedAt once a resume has
+    // happened, so a paused-for-hours run's next active phase times itself
+    // from the resume, not from the run's original start.
+    const startMs = resumeAnchorMs != null ? resumeAnchorMs : s.startedAt ? Date.parse(s.startedAt) : NaN;
     if (Number.isNaN(startMs)) return null;
     return Math.max(0, Math.floor((Date.now() - startMs) / 1000));
   }
@@ -361,6 +383,7 @@ export function createRunTracker({ resumeArgs = { approved: true }, onCancel, on
     if (approveButton) {
       approveButton.addEventListener('click', async () => {
         busyAction = 'approve';
+        resumeAnchorMs = Date.now();
         render();
         try {
           await resumeAndWatch(s.runId, resumeArgs, (next) => (onUpdate || update)(next));
@@ -385,6 +408,7 @@ export function createRunTracker({ resumeArgs = { approved: true }, onCancel, on
         const text = feedbackText.trim();
         if (!text) return;
         busyAction = 'regenerate';
+        resumeAnchorMs = Date.now();
         render();
         try {
           await resumeAndWatch(s.runId, { approved: false, feedback: text }, (next) => (onUpdate || update)(next));

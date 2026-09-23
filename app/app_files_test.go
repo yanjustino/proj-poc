@@ -202,6 +202,96 @@ func TestListProjectDir_SeedsMermaidAssetOnFirstArtifactsTouch(t *testing.T) {
 	}
 }
 
+// TestListProjectRunLogs_MissingDirReturnsEmptyArray mirrors
+// TestListProjectDir_MissingDirReturnsEmptyArray above — a work-item that
+// has never had a run's log persisted yet (no run_logs/ directory at all)
+// must list as "[]", not error.
+func TestListProjectRunLogs_MissingDirReturnsEmptyArray(t *testing.T) {
+	app, _ := newTestApp(t)
+	projectID := createTestProject(t, app, "Logs tab empty listing", "historia")
+
+	listing, err := app.ListProjectRunLogs(projectID)
+	if err != nil {
+		t.Fatalf("ListProjectRunLogs on a not-yet-created run_logs/: %v", err)
+	}
+	if strings.TrimSpace(listing) != "[]" {
+		t.Fatalf("expected \"[]\" for a missing directory, got: %s", listing)
+	}
+}
+
+// TestListProjectRunLogs_ListsPersistedRunsNewestFirst seeds two persisted
+// run logs the same way tailRunLogs itself writes them (runLogFilePath +
+// appendToFile) rather than orchestrating two real long-running generations
+// just to get files on disk, then proves ListProjectRunLogs finds both,
+// newest-modified first, with sizes that actually match what was written —
+// and that ReadPersistedRunLogs (the pair this listing exists to make
+// discoverable) reads the exact content back.
+func TestListProjectRunLogs_ListsPersistedRunsNewestFirst(t *testing.T) {
+	app, _ := newTestApp(t)
+	projectID := createTestProject(t, app, "Logs tab listing", "historia")
+
+	older, err := runLogFilePath(app.dataDir, projectID, "run-older")
+	if err != nil {
+		t.Fatalf("runLogFilePath(run-older): %v", err)
+	}
+	if err := appendToFile(older, "passo 1\n"); err != nil {
+		t.Fatalf("seed older log: %v", err)
+	}
+	time.Sleep(10 * time.Millisecond) // garante um mtime distinto do próximo
+	newer, err := runLogFilePath(app.dataDir, projectID, "run-newer")
+	if err != nil {
+		t.Fatalf("runLogFilePath(run-newer): %v", err)
+	}
+	if err := appendToFile(newer, "passo 1\npasso 2\n"); err != nil {
+		t.Fatalf("seed newer log: %v", err)
+	}
+
+	listing, err := app.ListProjectRunLogs(projectID)
+	if err != nil {
+		t.Fatalf("ListProjectRunLogs: %v", err)
+	}
+	var entries []struct {
+		RunID      string `json:"runId"`
+		SizeBytes  int64  `json:"sizeBytes"`
+		ModifiedAt string `json:"modifiedAt"`
+	}
+	if err := json.Unmarshal([]byte(listing), &entries); err != nil {
+		t.Fatalf("listing is not valid JSON: %v\n%s", err, listing)
+	}
+	if len(entries) != 2 {
+		t.Fatalf("expected 2 entries, got %d: %s", len(entries), listing)
+	}
+	if entries[0].RunID != "run-newer" || entries[1].RunID != "run-older" {
+		t.Fatalf("expected newest-first order [run-newer, run-older], got [%s, %s]", entries[0].RunID, entries[1].RunID)
+	}
+	if entries[0].SizeBytes == 0 || entries[1].SizeBytes == 0 {
+		t.Fatalf("expected non-zero sizes, got: %s", listing)
+	}
+	for _, e := range entries {
+		if _, err := time.Parse(time.RFC3339, e.ModifiedAt); err != nil {
+			t.Errorf("modifiedAt %q is not RFC3339: %v", e.ModifiedAt, err)
+		}
+	}
+
+	content, err := app.ReadPersistedRunLogs(projectID, "run-newer")
+	if err != nil {
+		t.Fatalf("ReadPersistedRunLogs(run-newer): %v", err)
+	}
+	if content != "passo 1\npasso 2\n" {
+		t.Fatalf("ReadPersistedRunLogs(run-newer) = %q, want the seeded content", content)
+	}
+}
+
+// TestListProjectRunLogs_RejectsInvalidProjectID is the same malicious-input
+// discipline TestProjectFileAccess_RejectsPathTraversal below requires of
+// every project-scoped file accessor.
+func TestListProjectRunLogs_RejectsInvalidProjectID(t *testing.T) {
+	app, _ := newTestApp(t)
+	if _, err := app.ListProjectRunLogs("../escape"); err == nil {
+		t.Fatal(`ListProjectRunLogs("../escape") succeeded, want a rejection`)
+	}
+}
+
 // TestProjectFileAccess_RejectsPathTraversal is the malicious-input
 // counterpart required by this project's own testing convention (see
 // workflows/shared/core/paths.mh) — every one of these must fail closed, never

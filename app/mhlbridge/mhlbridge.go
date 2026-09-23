@@ -475,6 +475,36 @@ func (c *Client) RunList(ctx context.Context) (json.RawMessage, error) {
 	return structuredContentOf(result)
 }
 
+// ActiveRuns calls RunList and decodes it (confirmed shape, live spike
+// against `mhl serve mcp --http`: {"runs": [...]}, each entry the same
+// fields RunStatus already models) down to just the runs that are actually
+// executing right now — !Terminal(), i.e. state "working" or "queued". A
+// "paused" run (Modo Buddy, or the ordinary pause-for-review between
+// Discovery/Delivery artifacts) is deliberately excluded: nothing is
+// running for it, so it's safe to kill and respawn the mhl process under
+// it. This is what SetAgent calls to refuse switching backends out from
+// under a run whose in-flight LLM call would otherwise just be killed —
+// see SetAgent's own comment.
+func (c *Client) ActiveRuns(ctx context.Context) ([]RunStatus, error) {
+	raw, err := c.RunList(ctx)
+	if err != nil {
+		return nil, err
+	}
+	var parsed struct {
+		Runs []RunStatus `json:"runs"`
+	}
+	if err := json.Unmarshal(raw, &parsed); err != nil {
+		return nil, fmt.Errorf("mhlbridge: decode mhl_run_list: %w", err)
+	}
+	var active []RunStatus
+	for _, run := range parsed.Runs {
+		if !run.Terminal() {
+			active = append(active, run)
+		}
+	}
+	return active, nil
+}
+
 // RunLogs calls mhl_run_logs, returning the run's retained step/log() output
 // since the given cursor (`since` — pass "" for the start; feed back the
 // response's own `nextSince` to continue). Shape ({text, nextSince,

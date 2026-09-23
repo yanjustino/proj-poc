@@ -373,6 +373,12 @@ label.check input { accent-color: var(--blue); width: 15px; height: 15px; }
 .llm-call-block h5 { margin: 0 0 6px; font-size: 10px; text-transform: uppercase; letter-spacing: .04em; color: var(--muted); }
 .llm-call-block pre { margin: 0; padding: 0; border: 0; white-space: pre-wrap; word-break: break-word; font-family: var(--mono); font-size: 11px; line-height: 1.6; color: #55534b; max-height: 260px; overflow: auto; }
 
+/* Logs tab — per-project version of the same run-list/detail layout as the
+   sidebar's Logs screen above, sized to sit inside a work-item's scrollable
+   tab content instead of claiming the full viewport height. */
+.project-logs { display: flex; gap: 16px; height: 60vh; min-height: 420px; }
+.project-logs-panel .logs-output { white-space: pre-wrap; word-break: break-word; font-family: var(--mono); font-size: 11px; line-height: 1.6; color: #55534b; }
+
 /* One button family for the whole app — replaces the old .btn/.pill-btn/
    .doc-action split (docs/design-system-senpai.html §05/§11: those three
    were the same control with three different resting looks and no shared

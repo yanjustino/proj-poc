@@ -1,9 +1,11 @@
 package main
 
 import (
+	"context"
 	"encoding/json"
 	"os"
 	"testing"
+	"time"
 )
 
 func TestSettingsRoundTrips(t *testing.T) {
@@ -121,6 +123,46 @@ func TestApp_SetAgent_RejectsAnUnknownAgentWithoutPersistingOrReconnecting(t *te
 	}
 	if app.mhl != previousMHL {
 		t.Error("a rejected SetAgent reconnected the bridge anyway — it should have failed before touching it")
+	}
+}
+
+// TestApp_SetAgent_RefusesWhileARunIsActive is the regression test for the
+// fragility this guard exists to close: SetAgent used to reconnect
+// unconditionally, and reconnecting kills the mhl child process outright
+// (mhlbridge.Client.Stop -> terminate, no graceful drain) — so switching
+// backends while a work-item generation was actually executing (state
+// "working"/"queued") killed that in-flight LLM call with nothing to
+// recover it automatically. Starts a real run via app.mhl.RunStart (not
+// StartRun/WatchRun — this needs the raw pre-poll status, the instant after
+// mhl_run_start answers and before the step executor has necessarily
+// finished) and asserts SetAgent refuses it in exactly that window.
+func TestApp_SetAgent_RefusesWhileARunIsActive(t *testing.T) {
+	app, _ := newTestApp(t)
+	ctx := context.Background()
+
+	status, err := app.mhl.RunStart(ctx, "WorkItem", map[string]any{"action": "list"})
+	if err != nil {
+		t.Fatalf("RunStart: %v", err)
+	}
+	if status.Terminal() {
+		t.Skipf("run %s was already terminal (%q) by the time RunStart returned — nothing to assert, this workflow finished too fast to catch mid-flight", status.RunID, status.State)
+	}
+	previousMHL := app.mhl
+
+	if _, err := app.SetAgent("claude"); err == nil {
+		t.Fatalf("SetAgent(claude) succeeded while run %s was still %q, want it refused", status.RunID, status.State)
+	}
+	if app.mhl != previousMHL {
+		t.Error("SetAgent reconnected the bridge anyway while a run was active — it should have refused before touching it")
+	}
+
+	// Drain the run so it doesn't leak past the test, then confirm the all-
+	// clear: once nothing is active, switching must work again.
+	if _, err := app.mhl.PollRunStatus(ctx, status.RunID, 50*time.Millisecond, nil); err != nil {
+		t.Fatalf("PollRunStatus (draining %s): %v", status.RunID, err)
+	}
+	if _, err := app.SetAgent("claude"); err != nil {
+		t.Fatalf("SetAgent(claude) after the run finished: %v", err)
 	}
 }
 

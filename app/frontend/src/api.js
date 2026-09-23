@@ -93,6 +93,19 @@ export async function setAgent(agent) {
   return parseJSON(await App.SetAgent(agent), 'SetAgent');
 }
 
+// showWarningDialog raises a native OS dialog (see app.go's ShowWarningDialog
+// doc comment for why: window.alert() silently no-ops in this app's macOS
+// webview). Returns nothing — best-effort, never throws, so a caller can
+// fire it from a catch block without another try/catch around it.
+export async function showWarningDialog(title, message) {
+  try {
+    await App.ShowWarningDialog(title, message);
+  } catch {
+    // Nothing sensible to do if even the native dialog call fails — the
+    // caller already has the real error via its own message/log.
+  }
+}
+
 export async function listDevinModels() {
   return parseJSON(await App.ListDevinModels(), 'ListDevinModels');
 }
@@ -115,6 +128,16 @@ export async function getRunLogs(runId, since) {
 // an error, if this run was never persisted.
 export async function getPersistedRunLogs(projectId, runId) {
   return App.ReadPersistedRunLogs(projectId, runId);
+}
+
+// listProjectRunLogs lists every run this project has a persisted log for
+// (see app.go's ListProjectRunLogs), newest-modified first — the index a
+// per-project Logs tab lists from, since mhl_run_list only ever knows about
+// the current app session's own runs and forgets everything the moment the
+// app restarts or reconnects. Feed an entry's runId into
+// getPersistedRunLogs above to read its content.
+export async function listProjectRunLogs(projectId) {
+  return parseJSON(await App.ListProjectRunLogs(projectId), 'ListProjectRunLogs');
 }
 
 // getRunProjectId returns the project_id StartRun associated with runId, or

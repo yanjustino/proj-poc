@@ -5,6 +5,7 @@
 import { Paths } from "../shared/core/paths.mh"
 import { Writer } from "../shared/agents/agents.mh"
 import { Context } from "../shared/artifacts/context.mh"
+import { ArtifactData } from "../shared/artifacts/artifact_data.mh"
 import { ArtifactBody } from "../shared/artifacts/artifact_body.mh"
 import { PageShell, ArtifactMeta } from "../shared/artifacts/page_shell.mh"
 import {
@@ -35,6 +36,7 @@ partial workflow Discovery {
             body: body,
             meta: ArtifactMeta.line(time.format(time.now(), "yyyy-MM-dd HH:mm"), "artifacts/brief.html", self.tokens_in, self.tokens_out)
         )
+        ArtifactData.write(project_id, "brief.html", data)
         fs.write(Paths.artifact(project_id, "brief.html"), rendered)
         self.discovery_result = {artifact: "brief", path: "artifacts/brief.html"}
         goto Done
@@ -55,7 +57,7 @@ partial workflow Discovery {
         self.tokens_out = response.tokens_out
         var raw = response.content
         self.pending_data = json.parse(raw)
-        
+
         goto Gate
     }
 
@@ -67,6 +69,7 @@ partial workflow Discovery {
             body: body,
             meta: ArtifactMeta.line(time.format(time.now(), "yyyy-MM-dd HH:mm"), "artifacts/atributos.html", self.tokens_in, self.tokens_out)
         )
+        ArtifactData.write(project_id, "atributos.html", data)
         fs.write(Paths.artifact(project_id, "atributos.html"), rendered)
         self.discovery_result = {artifact: "atributos", path: "artifacts/atributos.html"}
         goto Done
@@ -95,6 +98,7 @@ partial workflow Discovery {
             body: body,
             meta: ArtifactMeta.line(time.format(time.now(), "yyyy-MM-dd HH:mm"), "artifacts/requisitos.html", self.tokens_in, self.tokens_out)
         )
+        ArtifactData.write(project_id, "requisitos.html", data)
         fs.write(Paths.artifact(project_id, "requisitos.html"), rendered)
         self.discovery_result = {artifact: "requisitos", path: "artifacts/requisitos.html"}
         goto Done

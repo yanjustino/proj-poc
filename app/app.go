@@ -259,16 +259,57 @@ func (a *App) GetAgent() string {
 // (the panel's normal "is mhl up" state), since switching agents always
 // reconnects; a bad agent value is the one real error case, returned before
 // anything is persisted or reconnected.
+//
+// Reconnecting kills the current mhl process outright (mhlbridge.Client.Stop
+// -> terminate, no graceful drain) — anything it was doing dies with it. If
+// that's a work-item's LLM call actually in flight (state "working"/
+// "queued", not "paused" waiting on a review), that call is wasted and the
+// run is left interrupted for the user to notice and mhl_run_resume by
+// hand. So this refuses to switch while any run is active rather than
+// letting a routine backend swap silently interrupt a generation someone
+// else in the app started — checked against mhl itself (ActiveRuns), not
+// just this session's own WatchRun bookkeeping, since a run can be
+// in-flight without the UI currently polling it. If the check itself fails
+// (bridge already unhealthy), that's exactly what "Reconectar" is for, so
+// this fails open and logs rather than blocking the one way to recover.
 func (a *App) SetAgent(agent string) (string, error) {
 	agent = strings.ToLower(strings.TrimSpace(agent))
 	if !validAgents[agent] {
 		return "", fmt.Errorf("agente desconhecido: %q (use codex | claude | devin)", agent)
+	}
+	if a.mhl != nil {
+		if active, err := a.mhl.ActiveRuns(a.ctx); err != nil {
+			log.Printf("mhl bridge: check active runs before SetAgent: %v", err)
+		} else if len(active) > 0 {
+			return "", fmt.Errorf(
+				"não é possível trocar o agente agora: %d execução(ões) em andamento — aguarde pausar/terminar ou cancele antes de trocar",
+				len(active),
+			)
+		}
 	}
 	if err := saveSettings(appSettings{Agent: agent, DevinModel: a.devinModel}); err != nil {
 		log.Printf("mhl bridge: save agent setting: %v", err)
 	}
 	a.agent = agent
 	return a.ReconnectMCP()
+}
+
+// ShowWarningDialog raises a native, blocking OS dialog (NSAlert on macOS,
+// via runtime.MessageDialog) — window.alert() in the frontend does NOT do
+// this: Wails' webview on macOS (WKWebView) never wires up the JS
+// alert/confirm/prompt delegate, so a plain window.alert() call silently
+// no-ops instead of raising anything, confirmed against this exact build
+// (SetAgent's rejection message went nowhere until this existed). Frontend
+// callers that need a rejection actually seen — not just logged or tucked
+// into a small status line easy to miss — call this instead.
+func (a *App) ShowWarningDialog(title, message string) {
+	if _, err := runtime.MessageDialog(a.ctx, runtime.MessageDialogOptions{
+		Type:    runtime.WarningDialog,
+		Title:   title,
+		Message: message,
+	}); err != nil {
+		log.Printf("ShowWarningDialog: %v", err)
+	}
 }
 
 type devinModel struct {
@@ -819,6 +860,66 @@ func (a *App) ReadPersistedRunLogs(projectID string, runID string) (string, erro
 		return "", fmt.Errorf("ler logs persistidos: %w", err)
 	}
 	return string(content), nil
+}
+
+// projectRunLogEntry describes one persisted run log file under
+// projects/<projectID>/run_logs/ (see tailRunLogs/runLogFilePath) — just
+// enough to list and pick one, the content itself comes from
+// ReadPersistedRunLogs(projectID, RunID).
+type projectRunLogEntry struct {
+	RunID      string `json:"runId"`
+	SizeBytes  int64  `json:"sizeBytes"`
+	ModifiedAt string `json:"modifiedAt"`
+}
+
+// ListProjectRunLogs lists every run this project has a persisted log for
+// (projects/<projectID>/run_logs/*.log), newest-modified first. Real gap
+// this closes: ReadPersistedRunLogs could already read a log back once you
+// had its runID, but nothing let the UI discover which runIDs a project
+// even has one for — mhl_run_list only knows about the CURRENT mhl
+// process's own session (gone the moment the app restarts, SetAgent
+// reconnects, or you just navigate away and back), so a run's log was
+// reachable only for as long as its live progress screen happened to stay
+// open. This reads the filesystem directly instead, so it survives all of
+// that — exactly the "aba de logs dentro de cada projeto" a project needs
+// to keep its history browsable. Returns an empty array, not an error, if
+// no run has ever been persisted for this project yet.
+func (a *App) ListProjectRunLogs(projectID string) (string, error) {
+	dir, err := a.projectRootDir(projectID, "run_logs", []string{"run_logs"})
+	if err != nil {
+		return "", err
+	}
+	entries, err := os.ReadDir(dir)
+	if err != nil {
+		if os.IsNotExist(err) {
+			return "[]", nil
+		}
+		return "", fmt.Errorf("list project run logs: %w", err)
+	}
+	logs := make([]projectRunLogEntry, 0, len(entries))
+	for _, entry := range entries {
+		if entry.IsDir() || !strings.HasSuffix(entry.Name(), ".log") {
+			continue
+		}
+		info, err := entry.Info()
+		if err != nil {
+			// Best-effort listing — an entry that vanished or errored
+			// between ReadDir and Info() (e.g. deleted concurrently) is
+			// just skipped, not a reason to fail the whole list.
+			continue
+		}
+		logs = append(logs, projectRunLogEntry{
+			RunID:      strings.TrimSuffix(entry.Name(), ".log"),
+			SizeBytes:  info.Size(),
+			ModifiedAt: info.ModTime().UTC().Format(time.RFC3339),
+		})
+	}
+	sort.Slice(logs, func(i, j int) bool { return logs[i].ModifiedAt > logs[j].ModifiedAt })
+	body, err := json.Marshal(logs)
+	if err != nil {
+		return "", fmt.Errorf("encode run log listing: %w", err)
+	}
+	return string(body), nil
 }
 
 func decodeArguments(argumentsJSON string) (map[string]any, error) {

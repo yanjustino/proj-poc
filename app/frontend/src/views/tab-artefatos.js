@@ -297,7 +297,14 @@ export async function renderArtefatosTab(container, project, { onChanged }) {
       if (entry.artifact === 'historias' && project.level === 'discovery') continue;
       if (entry.dir) {
         const node = byName[entry.dir];
-        if (node && node.children && node.children.length > 0) doneNames.add(entry.artifact);
+        const children = node && node.children ? node.children : [];
+        const hasCommittedDocument =
+          entry.collectionKind === 'folders'
+            ? children.some((child) =>
+                child.isDir && (child.children || []).some((file) => !file.isDir && file.name === entry.itemFile),
+              )
+            : children.some((child) => !child.isDir && child.name.endsWith('.html'));
+        if (hasCommittedDocument) doneNames.add(entry.artifact);
       } else if (entry.path && byName[entry.path]) {
         doneNames.add(entry.artifact);
       }
@@ -308,7 +315,17 @@ export async function renderArtefatosTab(container, project, { onChanged }) {
       if (entry.artifact === 'historias' && project.level === 'discovery') continue; // Delivery-only flat historias; Discovery's own is the per-feature index below
       const node = byName[entry.dir];
       const children = node && node.children ? node.children : [];
-      collectionChildren[entry.artifact] = entry.collectionKind === 'folders' ? children.filter((c) => c.isDir) : children.filter((c) => !c.isDir);
+      // Every generated document now has a semantic .json sibling for LLM
+      // context and a visual .html sibling for the UI. Collections must only
+      // expose HTML rows, otherwise each ADR/diagram would appear twice and
+      // clicking the JSON row would try to render data as a document.
+      collectionChildren[entry.artifact] =
+        entry.collectionKind === 'folders'
+          ? children.filter(
+              (c) =>
+                c.isDir && (c.children || []).some((file) => !file.isDir && file.name === entry.itemFile),
+            )
+          : children.filter((c) => !c.isDir && c.name.endsWith('.html'));
     }
     const historiasNode = byName.historias;
     historiasDoneFeatureIds = new Set();
@@ -320,7 +337,14 @@ export async function renderArtefatosTab(container, project, { onChanged }) {
         // never match, so a per-feature "Histórias — X" row could never be
         // marked done even with real histórias already on disk: every
         // completed/approved generation fell straight back to "Gerar".
-        if (child.isDir && child.children && child.children.length > 0) historiasDoneFeatureIds.add(featureIdOf(child.name));
+        const hasCommittedHistoria =
+          child.isDir &&
+          (child.children || []).some(
+            (storyFolder) =>
+              storyFolder.isDir &&
+              (storyFolder.children || []).some((file) => !file.isDir && file.name === 'historia.html'),
+          );
+        if (hasCommittedHistoria) historiasDoneFeatureIds.add(featureIdOf(child.name));
       }
     }
   }
@@ -768,7 +792,10 @@ export async function renderArtefatosTab(container, project, { onChanged }) {
       beginCustom(row.label).innerHTML = `<p class="doc-empty">Erro ao listar histórias: ${escapeHtml(String(err))}</p>`;
       return;
     }
-    const folders = nodes.filter((n) => n.isDir);
+    const folders = nodes.filter(
+      (n) =>
+        n.isDir && (n.children || []).some((file) => !file.isDir && file.name === 'historia.html'),
+    );
     const body = beginCustom(row.label);
     if (folders.length === 0) {
       body.innerHTML = '<p class="doc-empty">Nenhuma história gerada ainda.</p>';
@@ -777,10 +804,9 @@ export async function renderArtefatosTab(container, project, { onChanged }) {
     // Each item's "Como ..., quero ..., para ..." comes from its own
     // historia.html (ArtifactHtml.story_statement renders it as the doc's
     // one <blockquote> — see workflows/shared/artifacts/artifact_html.mh).
-    // There's no lighter-weight metadata file for it, so this reads every
-    // história's full HTML up front instead of only on click — fine at this
-    // list's size (one feature's histórias, typically single digits) and
-    // done in parallel; a folder whose read fails still shows its title.
+    // Read the rendered HTML because the index previews exactly the wording
+    // presented to the user. The adjacent JSON is deliberately reserved for
+    // LLM context; a folder whose HTML read fails still shows its title.
     const items = await Promise.all(folders.map(async (f) => ({
       folder: f.name,
       title: codedHistoriaTitle(row.featureFolder, f.name),

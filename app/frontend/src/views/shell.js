@@ -6,6 +6,7 @@ import {
   reconnectMCP,
   getAgent,
   setAgent,
+  showWarningDialog,
   listDevinModels,
   getDevinModel,
   setDevinModel,
@@ -239,6 +240,7 @@ export async function mountShell(root) {
     LogFrontendError(`refreshDevinModels: failed: ${err && err.stack ? err.stack : err}`).catch(() => {});
   });
   agentSelectEl.addEventListener('change', async () => {
+    const previous = await getAgent().catch(() => '');
     const chosen = agentSelectEl.value;
     agentSelectEl.disabled = true;
     reconnecting = true;
@@ -248,7 +250,24 @@ export async function mountShell(root) {
       renderMcpStatus(next);
       await refreshDevinModels();
     } catch (err) {
-      renderMcpStatus({ ready: false, error: String(err) });
+      // SetAgent refuses to swap while a run is active (see app.go) rather
+      // than silently killing it — nothing actually changed backend-side,
+      // so the picker must not keep showing `chosen` as if it had.
+      agentSelectEl.value = previous || AGENT_OPTIONS[0].value;
+      // The sidebar status line alone was too easy to miss — it's a small,
+      // low-key indicator people read as "is mhl up", not as feedback on
+      // the click they just made, so a rejection buried there went
+      // unnoticed. A plain window.alert() doesn't fix that here: Wails'
+      // macOS webview never wires up the JS alert dialog, so it silently
+      // no-ops (confirmed against this build) — showWarningDialog goes
+      // through app.go's native runtime.MessageDialog instead, which
+      // actually raises something the user sees.
+      showWarningDialog('Não foi possível trocar o agente', String(err));
+      // Nothing was actually touched — SetAgent refused before reconnecting
+      // — so restore the real, still-current status instead of the
+      // fabricated ready:false above, which would wrongly read as "the
+      // bridge just broke" when it never moved.
+      renderMcpStatus(await mcpStatus().catch((statusErr) => ({ ready: false, error: String(statusErr) })));
       LogFrontendError(`setAgent: failed: ${err && err.stack ? err.stack : err}`).catch(() => {});
     } finally {
       reconnecting = false;

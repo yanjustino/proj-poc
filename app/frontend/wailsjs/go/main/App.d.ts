@@ -35,6 +35,8 @@ export function ListIngestedRaw(arg1:string):Promise<string>;
 
 export function ListProjectDir(arg1:string,arg2:string,arg3:string):Promise<string>;
 
+export function ListProjectRunLogs(arg1:string):Promise<string>;
+
 export function ListRuns():Promise<string>;
 
 export function ListWorkflows():Promise<string>;
@@ -58,6 +60,8 @@ export function SelectRawFiles():Promise<string>;
 export function SetAgent(arg1:string):Promise<string>;
 
 export function SetDevinModel(arg1:string):Promise<string>;
+
+export function ShowWarningDialog(arg1:string,arg2:string):Promise<void>;
 
 export function StartRun(arg1:string,arg2:string):Promise<string>;
 

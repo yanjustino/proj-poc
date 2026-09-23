@@ -3,6 +3,7 @@ import { sequenceFor } from '../artifacts.js';
 import { renderFontesTab } from './tab-fontes.js';
 import { renderWikiTab } from './tab-wiki.js';
 import { renderArtefatosTab } from './tab-artefatos.js';
+import { renderLogsTab } from './tab-logs.js';
 import { showEmpty as showEmptyReadingPane } from '../reading-pane.js';
 import { openConfirmDeleteModal } from './confirm-delete-modal.js';
 import { icon } from '../icons.js';
@@ -30,6 +31,7 @@ export async function renderWorkItemView(container, project, { initialTab = 'art
       <button class="tab-btn" data-tab="fontes">Fontes</button>
       <button class="tab-btn" data-tab="wiki">Wiki</button>
       <button class="tab-btn" data-tab="artefatos">Artefatos</button>
+      <button class="tab-btn" data-tab="logs">Logs</button>
     </div>
     <div data-tab-content></div>
   `;
@@ -130,6 +132,9 @@ export async function renderWorkItemView(container, project, { initialTab = 'art
       disposeTab = await renderFontesTab(tabContent, project, handlers);
     } else if (tab === 'wiki') {
       disposeTab = await renderWikiTab(tabContent, project);
+    } else if (tab === 'logs') {
+      showEmptyReadingPane('A aba Logs não usa a coluna de leitura — o painel de execuções fica aqui ao lado.');
+      disposeTab = await renderLogsTab(tabContent, project);
     } else {
       disposeTab = await renderArtefatosTab(tabContent, project, handlers);
     }

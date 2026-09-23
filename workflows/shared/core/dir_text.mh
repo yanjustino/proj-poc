@@ -1,9 +1,8 @@
 // tool DirText — concatena todo o conteudo de texto de um diretorio, um
 // arquivo apos o outro, com um separador + cabecalho de proveniencia. Usado
-// por WikiContext (wiki/entities, wiki/concepts, ...) e por Context
-// (artifacts/adr, artifacts/diagramas) sempre que o "predecessor" de um
-// artefato e uma pasta com varios itens, nao um unico arquivo — evita
-// duplicar o mesmo laco fs.read em dois tools (C7).
+// por WikiContext (wiki/entities, wiki/concepts, ...) para texto generico.
+// `concat_artifacts` e a variante de Context para predecessores estruturados
+// em pastas (artifacts/adr, artifacts/diagramas).
 //
 // `base_dir` e removido do cabecalho de cada arquivo, virando uma referencia
 // curta e estavel (ex. "entities/time-de-pagamentos", "adr/ADR-001-titulo")
@@ -22,14 +21,37 @@ export tool DirText {
         return out
     }
 
-    // body_only strips a generated artifact page down to what's inside its
-    // <body> — the doctype/<head>/inline <style> every PageShell-rendered
-    // page carries (page_shell.prompt.md) is pure presentation, ~2KB of it
-    // repeated verbatim for every predecessor file a downstream artifact
-    // reads as context, with zero synthesis value to the LLM. Real cost:
-    // "features" reads the entire adr/ and diagramas/ folders as context —
-    // with a typical 8-11 ADRs, that's 8-11x the same stylesheet, wasted
-    // input tokens on the single heaviest step in Discovery.
+    // Variante para colecoes de artefatos, onde cada documento novo possui
+    // um par .json + .html. Envia somente o JSON ao LLM; para documentos
+    // legados sem JSON, preserva o fallback ao body do HTML. Um JSON orfao
+    // sem o HTML correspondente e ignorado porque o HTML e o marcador de
+    // disponibilidade do artefato (ArtifactData grava JSON primeiro).
+    concat_artifacts(dir_path: string, base_dir: string): string -> {
+        if (!dir.exists(dir_path)) return ""
+        var out = ""
+        for (var file_path in dir.list(dir_path)) {
+            if (file_path.ends_with(".json")) {
+                var html_path = file_path.substring(0, file_path.size() - 5) + ".html"
+                if (fs.exists(html_path)) {
+                    var label = file_path.replace(base_dir + "/", "").replace(".json", "")
+                    out = out + "\n\n---\n\n# " + label + "\n\n" + fs.read(file_path)
+                }
+            } else if (file_path.ends_with(".html")) {
+                var json_path = file_path.substring(0, file_path.size() - 5) + ".json"
+                if (!fs.exists(json_path)) {
+                    var label = file_path.replace(base_dir + "/", "").replace(".html", "")
+                    out = out + "\n\n---\n\n# " + label + "\n\n" + self.body_only(fs.read(file_path))
+                }
+            }
+        }
+        return out
+    }
+
+    // body_only strips a generated legacy artifact page down to what's
+    // inside its <body> — the doctype/<head>/inline <style> every
+    // PageShell-rendered page carries (page_shell.prompt.md) is pure
+    // presentation. New artifacts use their adjacent JSON for LLM context;
+    // this remains as the backward-compatible fallback for old projects.
     //
     // Falls back to the input unchanged when there's no <body> tag —
     // wiki pages (sources/entities/concepts/answers) go through this same

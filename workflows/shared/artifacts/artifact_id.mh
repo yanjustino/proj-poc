@@ -2,10 +2,11 @@
 // pasta (id + slug). E trabalho deterministico (C3): a LLM nunca decide um
 // id ou conta quantas features ja existem — sempre este tool.
 //
-// O contador vive no proprio sistema de arquivos (dir.list().size() da
-// pasta-alvo) em vez de um `memory` a parte — nao ha risco de o contador
-// dessincronizar do que realmente existe em disco, e nao precisa de mais um
-// arquivo de estado pra manter consistente.
+// O contador vive no proprio sistema de arquivos em vez de um `memory` a
+// parte — nao ha risco de dessincronizar do que realmente existe em disco.
+// Pastas contam como um item (features/historias); em colecoes planas, so o
+// .html conta, pois o .json adjacente e a representacao semantica do mesmo
+// artefato e nao um segundo item.
 
 import { Paths } from "../core/paths.mh"
 import { Slug } from "../core/slug.mh"
@@ -18,7 +19,11 @@ export tool ArtifactId {
 
     count_existing(dir_path: string): number -> {
         if (!dir.exists(dir_path)) return 0
-        return dir.list(dir_path).size()
+        var count = 0
+        for (var entry in dir.list(dir_path)) {
+            if (dir.exists(entry) || entry.ends_with(".html")) count = count + 1
+        }
+        return count
     }
 
     pad3(n: number): string -> {

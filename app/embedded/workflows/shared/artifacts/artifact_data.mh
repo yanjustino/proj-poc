@@ -1,0 +1,37 @@
+// Persistencia da representacao estruturada de um artefato. O JSON e a
+// fonte semantica consumida por artefatos posteriores; o HTML de mesmo nome
+// continua sendo a projecao visual exibida/exportada pelo app.
+//
+// O workflow grava o JSON antes do HTML. Context considera o HTML o marcador
+// de disponibilidade e so le o JSON quando os dois existem; assim, na
+// primeira geracao, um JSON escrito sem seu HTML ainda nao vira contexto.
+
+import { Paths } from "../core/paths.mh"
+
+export tool ArtifactData {
+    json_relative(html_relative: string): string -> {
+        if (!html_relative.ends_with(".html")) {
+            fail("caminho de artefato deve terminar em .html: '" + html_relative + "'")
+        }
+        return html_relative.substring(0, html_relative.size() - 5) + ".json"
+    }
+
+    write(project_id: string, html_relative: string, data: any) ->
+        fs.write(Paths.artifact(project_id, self.json_relative(html_relative)), json.stringify(data))
+}
+
+test ArtifactDataSpec {
+    describe maps_html_artifact_paths_to_adjacent_json_paths {
+        are_equal(ArtifactData.json_relative("brief.html"), "brief.json")
+        are_equal(ArtifactData.json_relative("features/FT001-checkout/feature.html"), "features/FT001-checkout/feature.json")
+    }
+
+    describe rejects_a_non_html_artifact_path {
+        try {
+            ArtifactData.json_relative("brief.md")
+            is_true(false)
+        } catch (err) {
+            is_true(err.contains("deve terminar em .html"))
+        }
+    }
+}

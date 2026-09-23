@@ -8,20 +8,21 @@
 import { Paths } from "../core/paths.mh"
 import { WikiContext } from "../wiki/wiki_context.mh"
 import { DirText } from "../core/dir_text.mh"
+import { ArtifactData } from "artifact_data.mh"
 
 export tool Context {
     wiki(project_id: string): string -> WikiContext.all_pages(project_id)
 
-    // Le um artefato predecessor ja gerado (ex. "requisitos.html"). Devolve
-    // string vazia se ainda nao existir — o step decide se isso e um
-    // problema (fail) ou um predecessor opcional. DirText.body_only strips
-    // the page's doctype/head/stylesheet chrome down to just its content —
-    // see that function's own doc comment for why every predecessor read
-    // does this, not just artifact_dir's.
+    // Le um artefato predecessor ja gerado (ex. "requisitos.html"). O HTML
+    // continua sendo o marcador de commit e a projecao visual do frontend,
+    // mas o contexto do LLM prefere o JSON estruturado adjacente. Artefatos
+    // legados sem JSON continuam funcionando pelo fallback ao body do HTML.
     artifact(project_id: string, relative: string): string -> {
-        var path = Paths.artifact(project_id, relative)
-        if (!fs.exists(path)) return ""
-        return DirText.body_only(fs.read(path))
+        var html_path = Paths.artifact(project_id, relative)
+        if (!fs.exists(html_path)) return ""
+        var json_path = Paths.artifact(project_id, ArtifactData.json_relative(relative))
+        if (fs.exists(json_path)) return fs.read(json_path)
+        return DirText.body_only(fs.read(html_path))
     }
 
     // Mesma coisa, mas para um predecessor que e uma PASTA com varios
@@ -29,5 +30,5 @@ export tool Context {
     // nao existir ou nao tiver nenhum arquivo ainda. Cabecalho de cada item
     // vira uma referencia curta relativa a artifacts/ (ex. "adr/ADR-001-x").
     artifact_dir(project_id: string, relative_dir: string): string ->
-        DirText.concat_all(Paths.artifact(project_id, relative_dir), Paths.artifacts_dir(project_id))
+        DirText.concat_artifacts(Paths.artifact(project_id, relative_dir), Paths.artifacts_dir(project_id))
 }

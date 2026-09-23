@@ -70,6 +70,10 @@ export function ListProjectDir(arg1, arg2, arg3) {
   return window['go']['main']['App']['ListProjectDir'](arg1, arg2, arg3);
 }
 
+export function ListProjectRunLogs(arg1) {
+  return window['go']['main']['App']['ListProjectRunLogs'](arg1);
+}
+
 export function ListRuns() {
   return window['go']['main']['App']['ListRuns']();
 }
@@ -116,6 +120,10 @@ export function SetAgent(arg1) {
 
 export function SetDevinModel(arg1) {
   return window['go']['main']['App']['SetDevinModel'](arg1);
+}
+
+export function ShowWarningDialog(arg1, arg2) {
+  return window['go']['main']['App']['ShowWarningDialog'](arg1, arg2);
 }
 
 export function StartRun(arg1, arg2) {

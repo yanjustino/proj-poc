@@ -6,6 +6,7 @@
 import { Paths } from "../shared/core/paths.mh"
 import { Writer } from "../shared/agents/agents.mh"
 import { Context } from "../shared/artifacts/context.mh"
+import { ArtifactData } from "../shared/artifacts/artifact_data.mh"
 import { ArtifactBody } from "../shared/artifacts/artifact_body.mh"
 import { ArtifactId } from "../shared/artifacts/artifact_id.mh"
 import { PageShell, ArtifactMeta } from "../shared/artifacts/page_shell.mh"
@@ -88,8 +89,8 @@ partial workflow Discovery {
                 diagramas_content: diagramas_content,
                 feedback_content: FeedbackBlock.render(pending_feedback)
             ),
-            schema_file: FeaturesSchemaFile.get(), 
-            project_id: project_id, 
+            schema_file: FeaturesSchemaFile.get(),
+            project_id: project_id,
             artifact: self.current_artifact
         )
 
@@ -116,7 +117,9 @@ partial workflow Discovery {
                 meta: ArtifactMeta.line(time.format(time.now(), "yyyy-MM-dd HH:mm"), "artifacts/features/" + folder + "/feature.html", self.tokens_in, self.tokens_out)
             )
             dir.create(Paths.artifact(project_id, "features/" + folder))
-            fs.write(Paths.artifact(project_id, "features/" + folder + "/feature.html"), rendered)
+            var relative = "features/" + folder + "/feature.html"
+            ArtifactData.write(project_id, relative, feature)
+            fs.write(Paths.artifact(project_id, relative), rendered)
             written += [folder]
         }
 
@@ -171,6 +174,7 @@ partial workflow Discovery {
             body: body,
             meta: ArtifactMeta.line(time.format(time.now(), "yyyy-MM-dd HH:mm"), "artifacts/dependencias.html", self.tokens_in, self.tokens_out)
         )
+        ArtifactData.write(project_id, "dependencias.html", data)
         fs.write(Paths.artifact(project_id, "dependencias.html"), rendered)
         self.discovery_result = {artifact: "dependencias", path: "artifacts/dependencias.html"}
         goto Done
@@ -199,14 +203,14 @@ partial workflow Discovery {
         var feature_dir = data.feature_dir
         var historias_base = Paths.artifact(project_id, "historias/" + feature_dir)
         var written = []
-        
+
         dir.create(historias_base)
-        
+
         for (var historia in data.historias) {
             var id = ArtifactId.next_historia_id(project_id, feature_dir)
             var folder = ArtifactId.folder_name(id, historia.titulo)
             var body = ArtifactBody.historia(historia)
-        
+
             var rendered = PageShell(
                 title: html.escape(id + " — " + historia.titulo),
                 body: body,
@@ -219,7 +223,9 @@ partial workflow Discovery {
             )
 
             dir.create(historias_base + "/" + folder)
-            fs.write(historias_base + "/" + folder + "/historia.html", rendered)
+            var relative = "historias/" + feature_dir + "/" + folder + "/historia.html"
+            ArtifactData.write(project_id, relative, historia)
+            fs.write(Paths.artifact(project_id, relative), rendered)
             written += [folder]
         }
         self.discovery_result = {artifact: "historias", feature_id: feature_id, written: written}

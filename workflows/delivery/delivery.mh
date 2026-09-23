@@ -6,6 +6,7 @@
 import { Paths } from "../shared/core/paths.mh"
 import { Writer } from "../shared/agents/agents.mh"
 import { Context } from "../shared/artifacts/context.mh"
+import { ArtifactData } from "../shared/artifacts/artifact_data.mh"
 import { Slug } from "../shared/core/slug.mh"
 import { ArtifactId } from "../shared/artifacts/artifact_id.mh"
 import { PageShell, ArtifactMeta } from "../shared/artifacts/page_shell.mh"
@@ -195,6 +196,7 @@ workflow Delivery {
             body: body,
             meta: ArtifactMeta.line(time.format(time.now(), "yyyy-MM-dd HH:mm"), "artifacts/brief.html", tokens_in, tokens_out)
         )
+        ArtifactData.write(project_id, "brief.html", data)
         fs.write(Paths.artifact(project_id, "brief.html"), rendered)
         delivery_result = {artifact: "brief", path: "artifacts/brief.html"}
         goto Done
@@ -233,6 +235,7 @@ workflow Delivery {
             body: body,
             meta: ArtifactMeta.line(time.format(time.now(), "yyyy-MM-dd HH:mm"), "artifacts/requisitos.html", tokens_in, tokens_out)
         )
+        ArtifactData.write(project_id, "requisitos.html", data)
         fs.write(Paths.artifact(project_id, "requisitos.html"), rendered)
         delivery_result = {artifact: "requisitos", path: "artifacts/requisitos.html"}
         goto Done
@@ -271,7 +274,9 @@ workflow Delivery {
                 body: body,
                 meta: ArtifactMeta.line(time.format(time.now(), "yyyy-MM-dd HH:mm"), "artifacts/adr/" + folder + ".html", tokens_in, tokens_out)
             )
-            fs.write(Paths.artifact(project_id, "adr/" + folder + ".html"), rendered)
+            var relative = "adr/" + folder + ".html"
+            ArtifactData.write(project_id, relative, decision)
+            fs.write(Paths.artifact(project_id, relative), rendered)
             written += [folder]
         }
         delivery_result = {artifact: "adr", written: written}
@@ -306,6 +311,7 @@ workflow Delivery {
             body: body,
             meta: ArtifactMeta.line(time.format(time.now(), "yyyy-MM-dd HH:mm"), "artifacts/der.html", tokens_in, tokens_out)
         )
+        ArtifactData.write(project_id, "der.html", data)
         fs.write(Paths.artifact(project_id, "der.html"), rendered)
         delivery_result = {artifact: "der", path: "artifacts/der.html"}
         goto Done
@@ -343,7 +349,9 @@ workflow Delivery {
                 body: body,
                 meta: ArtifactMeta.line(time.format(time.now(), "yyyy-MM-dd HH:mm"), "artifacts/diagramas/" + slug + ".html", tokens_in, tokens_out)
             )
-            fs.write(Paths.artifact(project_id, "diagramas/" + slug + ".html"), rendered)
+            var relative = "diagramas/" + slug + ".html"
+            ArtifactData.write(project_id, relative, diagrama)
+            fs.write(Paths.artifact(project_id, relative), rendered)
             written += [slug]
         }
         delivery_result = {artifact: "diagramas", written: written}
@@ -354,7 +362,7 @@ workflow Delivery {
     // historia) — unico artefato que nao existe em Discovery. So 'requisitos'
     // e obrigatorio; adr/der/diagramas entram como contexto se existirem, mas
     // nunca bloqueiam (sao "opcional" na sequencia do protocolo original).
-    step FinalGenerate {                                            
+    step FinalGenerate {
         current_artifact = mode
         var requisitos_content = Context.artifact(project_id, "requisitos.html")
         if (requisitos_content.is_empty()) fail("gere 'requisitos' antes de '" + mode + "'")
@@ -417,6 +425,7 @@ workflow Delivery {
             body: body,
             meta: ArtifactMeta.line(time.format(time.now(), "yyyy-MM-dd HH:mm"), "artifacts/" + out_path, tokens_in, tokens_out)
         )
+        ArtifactData.write(project_id, out_path, data)
         fs.write(Paths.artifact(project_id, out_path), rendered)
         delivery_result = {artifact: mode, path: "artifacts/" + out_path}
         goto Done
@@ -458,7 +467,9 @@ workflow Delivery {
                 meta: ArtifactMeta.line(time.format(time.now(), "yyyy-MM-dd HH:mm"), "artifacts/historias/" + folder + "/historia.html", tokens_in, tokens_out)
             )
             dir.create(historias_base + "/" + folder)
-            fs.write(historias_base + "/" + folder + "/historia.html", rendered)
+            var relative = "historias/" + folder + "/historia.html"
+            ArtifactData.write(project_id, relative, historia)
+            fs.write(Paths.artifact(project_id, relative), rendered)
             written += [folder]
         }
         delivery_result = {artifact: "historias", written: written}

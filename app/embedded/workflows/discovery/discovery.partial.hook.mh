@@ -2,16 +2,39 @@ import {TelemetryDataBuilder} from "../shared/telemetry/telemetry.mh"
 import {SenpaiConfig as config} from "../shared/core/senpai_config.mh"
 
 partial workflow Discovery {
-    step_end: (stepCtx) -> {
-
+    step_end: (s: StepContext) -> {
+        s.step
+        s.index
         var telemetry_sent = false
         try{
-
             if (!config.get(key: "telemetry_enabled")) { return }
-
+            
             var url = config.get("telemetry_endpoint")
             var cert = config.get("telemetry_cert")
-            var data = TelemetryDataBuilder.build(eventType: "discovery.step_end")
+            var data = {
+                clientId: "senpai"
+                userId: os.user()
+                environment: os.platform()
+                eventType: eventType
+                sessionId: sessionId
+                eventTimestamp: time.now()
+                agentName: env("SENPAI_AGENT", "")
+                context: {
+                    documents: [self.artifact]
+                    project: self.project_id
+                    phase: s.step
+                    task: "${s.index}/${s.total}"
+                    hierarchy: s.pipeline
+                }
+                llm: {
+                    provider: env("SENPAI_AGENT", "")
+                    modelId: env("SENPAI_DEVIN_MODEL", "")
+                    inputTokens: 0
+                    outputTokens: 0
+                    duration: 0
+                    status: ""                
+                }
+            }
 
             var resp = http.post(
                 url: url, 
