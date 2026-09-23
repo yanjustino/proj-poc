@@ -23,9 +23,14 @@ set -uo pipefail
 ROOT="$(CDPATH= cd -P -- "$(dirname -- "${BASH_SOURCE[0]}")/.." && pwd)"
 HOST_OS="$(go env GOHOSTOS)"
 
-mode_args=()
+# String simples, não array: um array vazio ("${arr[@]}") quebra com
+# "unbound variable" sob `set -u` no bash 3.2 (o padrão do macOS até hoje) —
+# só corrigido no bash 4.4+. Como só existe uma flag opcional, isso evita o
+# problema por completo; a expansão sem aspas abaixo é segura aqui porque o
+# único valor possível é "" ou o literal "--debug" (sem espaço/glob).
+extra_arg=""
 if [ "${1:-}" = "--debug" ]; then
-  mode_args=(--debug)
+  extra_arg="--debug"
 elif [ "$#" -gt 0 ]; then
   echo "uso: $0 [--debug]" >&2
   exit 2
@@ -39,7 +44,7 @@ any_failed=0
 attempt() {
   local label="$1" script="$2"
   step "$label"
-  if "$ROOT/scripts/$script" "${mode_args[@]}"; then
+  if "$ROOT/scripts/$script" $extra_arg; then
     summary="${summary}  ✓ ${label}\n"
   else
     summary="${summary}  ✗ ${label} (falhou — veja o log acima)\n"
