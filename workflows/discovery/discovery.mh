@@ -24,8 +24,16 @@ partial workflow Discovery {
     input feature_id: string = "" // obrigatorio (valor) so para artifact:"historias"
     input buddy: bool = false
     input approved: bool = false
-    // Passado no resume junto com approved:false (Modo Buddy's "Solicitar
-    // mudancas" — reading-pane.js/tab-artefatos.js), nunca em StartRun.
+    // Dois pontos de entrada: no resume junto com approved:false (Modo
+    // Buddy's "Solicitar mudancas" numa run ainda pausada) OU direto no
+    // StartRun (tab-artefatos.js's "Solicitar mudanca" num artefato JA
+    // aprovado — sem run pausada pra dar resume, so um StartRun novo).
+    // Dispatch (abaixo) consome esse segundo caso antes do primeiro
+    // *Generate; sem isso, um StartRun com feedback preenchido cairia no
+    // Gate igual a qualquer outro, que so reconhece feedback vindo de um
+    // resume — o primeiro *Generate ignoraria o comentario, e so a
+    // chamada seguinte (o loop-back do proprio Gate) o usaria, custando
+    // uma chamada de LLM inteira a mais por nada.
     input feedback: string = ""
 
     var discovery_result = null
@@ -83,6 +91,16 @@ partial workflow Discovery {
 
     entry step Dispatch {
         project_id = Paths.ensure_valid(project_id)
+        // Um StartRun novo com feedback preenchido (ver input feedback's
+        // comentario acima) consome o comentario aqui, antes do primeiro
+        // *Generate — marcando feedback_consumed:true agora faz o Gate
+        // (mais abaixo) pular o proprio loop-back dele quando chegar la
+        // pela primeira vez, entao isto custa exatamente UMA chamada de
+        // LLM (ja informada pelo comentario), nao duas.
+        if (buddy && !approved && !feedback.is_empty()) {
+            feedback_consumed = true
+            pending_feedback = feedback
+        }
         goto GenerateRouter(artifact)
     }
 

@@ -59,3 +59,19 @@ export function clearActiveRun(key) {
   delete all[key];
   writeAll(all);
 }
+
+// listActiveRunsForProject returns every {key, runId} this registry holds
+// whose key starts with "<projectId>:" — every other caller here only ever
+// deals with one key at a time (its own artifact), but workitem-view.js's
+// summary needs to know about every run tied to a project at once, from
+// any tab, to show a single "what's the pipeline doing right now" card.
+// Entries are read-only here — a stale one (run long finished/gone) is the
+// caller's job to notice (a failed GetRunStatus) and filter out, not this
+// module's to guess at or clear; tab-artefatos.js's own reattach flow
+// already owns clearing a truly dead entry once it mounts.
+export function listActiveRunsForProject(projectId) {
+  const prefix = `${projectId}:`;
+  return Object.entries(readAll())
+    .filter(([key]) => key.startsWith(prefix))
+    .map(([key, runId]) => ({ key, runId }));
+}

@@ -105,7 +105,22 @@ partial workflow Discovery {
     step FeaturesCommit {
         var data = self.pending_data
         var written = []
-        dir.create(Paths.artifact(project_id, "features"))
+        var features_dir = Paths.artifact(project_id, "features")
+        // *Generate sempre devolve o LOTE INTEIRO atual, nunca um delta —
+        // uma regeneracao ("Solicitar mudanca" num features/ ja aprovado,
+        // tab-artefatos.js) precisa SUBSTITUIR o lote antigo, nao somar a
+        // ele. Sem isto, ArtifactId.next_feature_id (que so conta pastas ja
+        // existentes) continuava cunhando FT00N novos em cima dos antigos —
+        // duplicando em vez de regenerar. Zerar historias/ junto (nao so
+        // features/) e o que fecha a lacuna de verdade: os historias/ de
+        // uma feature antiga ficam orfaos no instante em que essa feature
+        // deixa de existir com aquele id/pasta — iam continuar em disco
+        // como lixo pra sempre, sem nenhuma feature atual apontando pra
+        // eles.
+        if (dir.exists(features_dir)) dir.delete(features_dir)
+        var historias_dir = Paths.artifact(project_id, "historias")
+        if (dir.exists(historias_dir)) dir.delete(historias_dir)
+        dir.create(features_dir)
 
         for (var feature in data.features) {
             var id = ArtifactId.next_feature_id(project_id)
@@ -204,6 +219,12 @@ partial workflow Discovery {
         var historias_base = Paths.artifact(project_id, "historias/" + feature_dir)
         var written = []
 
+        // Mesmo motivo do wipe em FeaturesCommit: *Generate devolve o lote
+        // inteiro de historias DESSA feature, nao um delta — uma
+        // regeneracao (linha "Histórias — X", tab-artefatos.js) precisa
+        // substituir, nao somar (ArtifactId.next_historia_id so conta o que
+        // ja existe nesta pasta).
+        if (dir.exists(historias_base)) dir.delete(historias_base)
         dir.create(historias_base)
 
         for (var historia in data.historias) {

@@ -1,0 +1,59 @@
+---
+sidebar_position: 2
+title: Primeiro work-item
+description: Crie um work-item, ingira fontes e gere seu primeiro artefato.
+---
+
+import {AppMockup} from '@site/src/components/ProductTour';
+
+# Seu primeiro work-item
+
+Este guia percorre o ciclo completo usando uma Oportunidade como exemplo.
+
+## 1. Crie o work-item
+
+Clique em **＋** na barra lateral, informe um nome que identifique o problema e escolha o tipo:
+
+| Tipo | Quando usar |
+| --- | --- |
+| **Oportunidade** | O problema ainda será refinado em atributos, decisões, features e histórias. |
+| **Feature** | A capacidade já é conhecida e precisa ser detalhada para Delivery. |
+| **História** | O escopo é pontual e será refinado diretamente como história. |
+
+O work-item define o pipeline e mantém fontes, wiki, artefatos e logs isolados.
+
+## 2. Adicione as fontes
+
+Abra **Fontes**, clique em **Adicionar** e escolha arquivos `.txt`, `.md` ou `.pdf`. Use materiais que representem evidências reais: visão do produto, entrevistas, regras, métricas e restrições técnicas.
+
+<AppMockup screen="fontes" />
+
+Depois, execute a ingestão dos itens pendentes. A wiki é atualizada incrementalmente; adicionar uma fonte não exige recriar todo o projeto.
+
+## 3. Confira a wiki
+
+Na aba **Wiki**, navegue por fontes, entidades, conceitos e respostas arquivadas. Faça perguntas para explorar o contexto ou execute a verificação de consistência antes de gerar artefatos.
+
+Preste atenção a itens marcados como **gap** ou **inferência**: eles são bons candidatos para validação com produto, engenharia ou stakeholders.
+
+## 4. Gere na ordem indicada
+
+Abra **Artefatos**. Um cartão disponível tem todas as dependências necessárias; um cartão bloqueado informa o que ainda precisa ser gerado.
+
+Em uma Oportunidade, comece pelo **Brief**. O mapa libera os próximos documentos à medida que os anteriores são aprovados.
+
+## 5. Revise antes de salvar
+
+Leia a proposta no painel lateral. Você pode:
+
+- **Aprovar e salvar**, quando o conteúdo estiver correto;
+- **Solicitar alterações**, descrevendo o ajuste esperado;
+- navegar para outra área sem perder a execução que continua em andamento.
+
+## 6. Exporte o resultado
+
+Use **Exportar tudo** no mapa de artefatos para copiar a wiki e os documentos do work-item. Também é possível exportar documentos individuais pela visualização.
+
+:::tip Qualidade da entrada
+Prefira fontes objetivas, atualizadas e com contexto suficiente. Quando houver conflito entre documentos, registre a decisão antes de seguir para artefatos dependentes.
+:::

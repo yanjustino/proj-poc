@@ -258,11 +258,32 @@ export async function renderArtefatosTab(container, project, { onChanged }) {
   // a browsable index instead of flattening here (see renderHistoriasIndex's
   // comment for why), so it's built separately below rather than through the
   // generic path.
+  // hasActiveGroupRegeneration: true while a collection artifact (adr/
+  // diagramas/features/Delivery's historias) is being regenerated as a
+  // WHOLE batch — "Solicitar mudança" fired from inside one of its already-
+  // approved items (buildRequestChangesComposer, via canonicalGroupRow).
+  // rowsToRender() checks this to temporarily stop expanding that
+  // collection into per-item rows while it's true: the group's own row key
+  // (entry.artifact, e.g. "adr") is exactly what the regeneration's tracker
+  // is keyed under (generate() uses row.key as the trackers Map key), so
+  // without this check that in-flight tracker would have no row to attach
+  // to in currentRow()/renderDetail() — rowsToRender() would only ever
+  // offer the OLD per-item rows, none of them keyed "adr". Deliberately
+  // excludes a terminal tracker (completed/failed/canceled): once the
+  // regeneration is done, this must go back to false so the collection
+  // returns to its normal always-expanded-when-done view — a completed
+  // tracker sitting in `trackers` forever (never deleted, see onRunUpdate)
+  // would otherwise pin this true permanently after the very first use.
+  function hasActiveGroupRegeneration(artifact) {
+    const tracker = trackers.get(artifact);
+    return Boolean(tracker && tracker.status && !['completed', 'failed', 'canceled'].includes(tracker.status.state));
+  }
+
   function rowsToRender() {
     const rows = [];
     for (const entry of sequence) {
       if (entry.artifact === 'historias' && project.level === 'discovery') continue;
-      if (entry.collectionKind && doneNames.has(entry.artifact)) {
+      if (entry.collectionKind && doneNames.has(entry.artifact) && !hasActiveGroupRegeneration(entry.artifact)) {
         rows.push(...buildItemRows(entry));
         continue;
       }
@@ -415,8 +436,18 @@ export async function renderArtefatosTab(container, project, { onChanged }) {
       return;
     }
 
+    // visibleRows is already grouped by category in array order — every
+    // *_SEQUENCE in artifacts.js declares same-category entries contiguously,
+    // and buildItemRows()/the per-feature "Histórias — X" push both expand
+    // in place without disturbing that order — so a header only needs to
+    // fire when this row's category differs from the row right before it,
+    // no separate grouping/sorting pass needed.
     listEl.innerHTML = visibleRows
-      .map((row) => {
+      .map((row, index) => {
+        const headerHtml =
+          index === 0 || row.category !== visibleRows[index - 1].category
+            ? `<div class="artifact-group-header"><h3>${escapeHtml(row.category || labelFor(row.entry.artifact))}</h3></div>`
+            : '';
         const tracker = trackers.get(row.key);
         const done = isRowDone(row);
         const ready = isRowReady(row);
@@ -445,6 +476,7 @@ export async function renderArtefatosTab(container, project, { onChanged }) {
               ? 'feature'
               : 'discovery';
         return `
+          ${headerHtml}
           <article class="artifact-card ${kindClass} ${row.key === 'brief' ? 'featured' : ''} ${row.key === selectedKey ? 'selected' : ''} ${!done ? 'pending' : ''}">
             <button class="artifact-card-main" data-key="${escapeHtml(row.key)}" ${!ready && !done && !state ? 'disabled' : ''} title="${escapeHtml(statusText)}">
               <span class="artifact-card-kind"><i>${icon(ARTIFACT_ICONS[artifactName] || 'fileText', 14)}</i>${escapeHtml(row.category || labelFor(artifactName))}</span>
@@ -746,6 +778,170 @@ export async function renderArtefatosTab(container, project, { onChanged }) {
     return wrap;
   }
 
+  // canRequestChanges: whether an already-approved row can offer "Solicitar
+  // mudança" (see buildRequestChangesComposer below). Excludes an expanded
+  // collection item (row.groupKey — e.g. one ADR out of several) and a
+  // still-pending collection group row: the underlying *Generate for adr/
+  // diagramas/features/historias(Delivery) always produces the WHOLE batch
+  // in one call, never a single item, and once done a collection's group
+  // row (row.key === entry.artifact) no longer exists in rowsToRender() at
+  // all — buildItemRows replaces it with per-item rows, so there'd be
+  // nowhere for currentRow()/renderDetail() to find an in-flight tracker
+  // keyed by that artifact name. Every single-document row (brief/
+  // atributos/requisitos/der/the Delivery final doc) and Discovery's
+  // per-feature "Histórias — X" row (row.featureId — its own key survives
+  // regardless of done state, see rowsToRender's unconditional push for it)
+  // don't have that problem, so those are exactly what's supported here.
+  // downstreamOf walks `sequence`'s own `deps` graph forward — every
+  // artifact that depends on `artifact`, directly or transitively (e.g.
+  // "requisitos" → adr → features → dependencias, so
+  // downstreamOf('requisitos') includes all three). This IS the dependency
+  // matrix (artifacts.js's own doc comment: extracted straight from the
+  // workflows' fail() gates) read in reverse.
+  function downstreamOf(artifact) {
+    const result = new Set();
+    let frontier = new Set([artifact]);
+    while (frontier.size > 0) {
+      const next = new Set();
+      for (const entry of sequence) {
+        if (result.has(entry.artifact) || frontier.has(entry.artifact)) continue;
+        if (entry.deps.some((dep) => frontier.has(dep))) {
+          result.add(entry.artifact);
+          next.add(entry.artifact);
+        }
+      }
+      frontier = next;
+    }
+    return [...result];
+  }
+
+  // downstreamWarningFor tells you what's ALREADY generated downstream of
+  // `artifact` — the general case of the matrix (see this tab's own commit
+  // history / the conversation that led here): unlike features→histórias
+  // (which gets auto-wiped together, because features/ recycling its own
+  // FT00N ids on regeneration would otherwise silently reattach old,
+  // mismatched histórias under a NEW feature that just happens to land on
+  // the same id — a correctness bug, not just staleness), every OTHER
+  // dependency relationship in the matrix has no such id-collision risk:
+  // regenerating requisitos doesn't corrupt an already-committed ADR, it
+  // just makes it stale relative to the new requisitos. Auto-deleting
+  // those across the board would be a large, silent blast radius (redoing
+  // requisitos could wipe ADR/DER/Diagramas/Features/Dependencias/
+  // Histórias in one click) — so this only WARNS, listing what exists
+  // downstream and was generated from the version about to change,
+  // leaving the actual regeneration decision to the person reading it.
+  //
+  // Discovery's per-feature "historias" isn't its own `sequence` entry (see
+  // artifacts.js's own comment on why), so it's checked separately here via
+  // historiasDoneFeatureIds whenever "features" itself is in the downstream
+  // set (or IS the artifact in question).
+  function downstreamWarningFor(artifact) {
+    const downstream = downstreamOf(artifact);
+    const labels = downstream.filter((name) => doneNames.has(name)).map(labelFor);
+    if (
+      workflow === 'Discovery' &&
+      (artifact === 'features' || downstream.includes('features')) &&
+      historiasDoneFeatureIds.size > 0
+    ) {
+      labels.push('Histórias');
+    }
+    if (labels.length === 0) return '';
+    const verb = labels.length > 1 ? 'foram gerados' : 'foi gerado';
+    return `${labels.join(', ')} ${verb} a partir da versão atual — considere regenerá-los também depois desta mudança.`;
+  }
+
+  // canonicalGroupRow reconstructs the plain group-level row an expanded
+  // item's row.groupKey points back to — same shape rowsToRender() builds
+  // for a collection entry before doneNames marks it done (row.entry is
+  // already that same collection entry object, shared with every one of
+  // its item rows — see buildItemRows). This is the row "Solicitar
+  // mudança" actually targets when fired from inside one item: the
+  // underlying *Generate for adr/diagramas/features/historias(Delivery)
+  // always produces the WHOLE batch in one call, never a single item, so
+  // there's no such thing as regenerating just one ADR — only "regenerate
+  // every decision in this ADR batch, informed by this comment".
+  function canonicalGroupRow(row) {
+    return { key: row.groupKey, label: labelFor(row.groupKey), entry: row.entry, category: row.category };
+  }
+
+  // canRequestChanges: whether THIS exact row is a single document that can
+  // be regenerated directly (feedback -> that same row). An expanded
+  // collection item (row.groupKey set) is handled separately in
+  // renderPreview via canonicalGroupRow — it still gets the composer, just
+  // targeting the group, with an explicit note about the batch scope.
+  function canRequestChanges(row) {
+    return !row.groupKey && !row.entry.collectionKind;
+  }
+
+  // buildRequestChangesComposer lets you ask for changes to an artifact
+  // that's ALREADY approved and written to artifacts/ — the same feedback
+  // mechanism Modo Buddy's "Solicitar mudanças" already offers while a run
+  // is still paused for review, just reachable after the fact too. Real gap
+  // this closes: once approved, there was previously no way back into the
+  // conversation for that artifact short of deleting it and starting the
+  // whole generation over. Fires a brand-new generate() with `feedback`
+  // attached — discovery.mh/delivery.mh's Dispatch step consumes it before
+  // the first *Generate call (see that input's own comment), so this costs
+  // exactly one LLM call, informed by the comment from the very first
+  // attempt, then pauses for review like any other generation (buddy stays
+  // true) rather than the two calls a Gate-driven loop-back would cost if
+  // this piggybacked on that path instead of a fresh run.
+  //
+  // `targetRow` (optional) is what actually gets regenerated when it
+  // differs from the row currently on screen — an expanded collection item
+  // (row.groupKey set) passes its own canonicalGroupRow() here, since
+  // there's no such thing as regenerating just that one item (see
+  // canonicalGroupRow's own comment); `note` is shown above the textarea to
+  // make that batch scope explicit instead of silently surprising whoever
+  // regenerates "one ADR" and gets all of them rewritten.
+  function buildRequestChangesComposer(row, { targetRow = row, note = '' } = {}) {
+    // `note` renders as its own amber banner ABOVE the composer card, not
+    // squeezed inside it as small muted text — matches the reference the
+    // user pointed at (Claude Code's own "used 86% of your weekly limit"
+    // banner sitting right above its message input): a warning worth
+    // noticing needs its own visual weight, separate from the input it
+    // sits above, not buried as a caption easy to skim past. Both pieces
+    // still travel as one element (setFooter only takes one), wrapped in
+    // .run-composer-warning-wrap.
+    const wrap = document.createElement('div');
+    wrap.className = 'run-composer-warning-wrap';
+
+    if (note) {
+      const warning = document.createElement('div');
+      warning.className = 'run-composer-warning';
+      warning.setAttribute('role', 'alert');
+      warning.innerHTML = `
+        <span class="run-composer-warning-icon">${icon('alertCircle', 16)}</span>
+        <span class="run-composer-warning-message">${escapeHtml(note)}</span>
+        <button class="run-composer-warning-dismiss" aria-label="Dispensar aviso" title="Dispensar">${icon('x', 14)}</button>
+      `;
+      warning.querySelector('.run-composer-warning-dismiss').addEventListener('click', () => warning.remove());
+      wrap.appendChild(warning);
+    }
+
+    const composer = document.createElement('div');
+    composer.className = 'run-composer';
+    composer.innerHTML = `
+      <textarea class="run-feedback-input" placeholder="Pedir uma mudança neste artefato já aprovado — a próxima geração considera isto."></textarea>
+      <div class="run-composer-actions" style="justify-content: flex-end;">
+        <button class="button secondary small" data-submit>Solicitar mudança</button>
+      </div>
+    `;
+    const textarea = composer.querySelector('textarea');
+    const button = composer.querySelector('[data-submit]');
+    button.addEventListener('click', () => {
+      const text = textarea.value.trim();
+      if (!text) return;
+      button.disabled = true;
+      textarea.disabled = true;
+      selectedKey = targetRow.key; // jump the view to the regeneration that's about to start
+      generate(targetRow, text);
+    });
+    wrap.appendChild(composer);
+
+    return wrap;
+  }
+
   // renderPreview shows a single generated document — either one of the
   // simple, always-one-document entries (brief/atributos/requisitos/der/the
   // Delivery "final" doc, via entry.path) or one member of an expanded
@@ -768,6 +964,26 @@ export async function renderArtefatosTab(container, project, { onChanged }) {
       return;
     }
     showHtmlDoc(row.label, html, { mermaid: hasMermaidDiagram(html), inlineMermaid });
+    if (canRequestChanges(row)) {
+      setFooter(buildRequestChangesComposer(row, { note: downstreamWarningFor(row.key) }));
+    } else if (row.groupKey) {
+      // One item out of a collection (an ADR, a diagram, a feature, a
+      // história) — the composer still shows here (real gap this closes:
+      // ADRs/Diagramas/Histórias had no path back into the conversation at
+      // all before this), it just regenerates the WHOLE batch this item
+      // belongs to, not this item alone — see canonicalGroupRow's comment
+      // for why that's the only thing *Generate can actually do.
+      const notes = [
+        `Isto regenera todo o lote de "${labelFor(row.groupKey)}", não só este item.`,
+        downstreamWarningFor(row.groupKey),
+      ].filter(Boolean);
+      setFooter(
+        buildRequestChangesComposer(row, {
+          targetRow: canonicalGroupRow(row),
+          note: notes.join(' '),
+        }),
+      );
+    }
   }
 
   // renderHistoriasIndex is the one collection that gets a browsable index
@@ -824,6 +1040,11 @@ export async function renderArtefatosTab(container, project, { onChanged }) {
     body.querySelectorAll('[data-folder]').forEach((button) => {
       button.addEventListener('click', () => openHistoria(row.featureFolder, button.dataset.folder));
     });
+    // Regenerates the WHOLE per-feature batch (HistoriasGenerate produces
+    // every história for this feature in one call, same as the initial
+    // generation) — canRequestChanges(row) doesn't gate this one (its
+    // synthetic entry has no collectionKind), it's fine on its own terms.
+    setFooter(buildRequestChangesComposer(row));
   }
 
   // storyStatementOf reads one história's rendered HTML and pulls out the
@@ -929,7 +1150,13 @@ export async function renderArtefatosTab(container, project, { onChanged }) {
     if (selectedKey === row.key) renderDetail();
   }
 
-  function generate(row) {
+  // feedback (optional): non-empty when this generate() is really "Solicitar
+  // mudança" on an already-approved row (buildRequestChangesComposer above)
+  // rather than a first-time "Gerar" — forwarded to StartRun as-is;
+  // discovery.mh/delivery.mh's Dispatch step is what actually consumes it
+  // before the first *Generate call (see that input's own comment for why
+  // that matters — one LLM call informed from the start, not two).
+  function generate(row, feedback) {
     const key = activeKey(row);
     // onUpdate: Aprovar/Regenerar (run-tracker.js's own composer) resume
     // this run directly, bypassing startAndWatch entirely — without this,
@@ -958,8 +1185,8 @@ export async function renderArtefatosTab(container, project, { onChanged }) {
     // review gate always on, just without a toggle to accidentally turn off.
     const args =
       workflow === 'Discovery'
-        ? { project_id: project.id, artifact: row.featureId ? 'historias' : row.key, buddy: true, ...(row.featureId ? { feature_id: row.featureId } : {}) }
-        : { project_id: project.id, mode: project.type, artifact: row.key, buddy: true };
+        ? { project_id: project.id, artifact: row.featureId ? 'historias' : row.key, buddy: true, ...(row.featureId ? { feature_id: row.featureId } : {}), ...(feedback ? { feedback } : {}) }
+        : { project_id: project.id, mode: project.type, artifact: row.key, buddy: true, ...(feedback ? { feedback } : {}) };
 
     startAndWatch(workflow, args, (status) => onRunUpdate(row, tracker, key, status)).catch((err) =>
       onRunError(row, tracker, key, err),
@@ -975,10 +1202,10 @@ export async function renderArtefatosTab(container, project, { onChanged }) {
   // fresh tracker + event subscription to each instead of letting it look
   // like nothing is happening.
   function reattachActiveRuns() {
-    for (const row of rowsToRender()) {
+    function reattach(row) {
       const key = activeKey(row);
       const runId = getActiveRun(key);
-      if (!runId) continue;
+      if (!runId) return;
       const tracker = createRunTracker({ onCancel: () => onRunCancel(row, key), onUpdate: (status) => onRunUpdate(row, tracker, key, status), fillHeight: true });
       trackers.set(row.key, tracker);
       tracker.update({ runId, state: 'working' });
@@ -986,6 +1213,28 @@ export async function renderArtefatosTab(container, project, { onChanged }) {
       watchExistingRun(runId, (status) => onRunUpdate(row, tracker, key, status)).catch((err) =>
         onRunError(row, tracker, key, err),
       );
+    }
+
+    // Collection-level regenerations ("Solicitar mudança" fired from inside
+    // an already-approved item — see hasActiveGroupRegeneration/
+    // canonicalGroupRow) are keyed by the collection's OWN artifact name
+    // (e.g. "adr"), which rowsToRender() doesn't offer as a row at all once
+    // the collection is done, UNLESS a tracker for that exact key already
+    // exists — that's the whole point of hasActiveGroupRegeneration. On a
+    // fresh mount `trackers` starts empty, so the loop below (which only
+    // ever iterates rowsToRender()'s CURRENT output) would never even look
+    // up activeKey for that collection and silently fail to reattach a
+    // regeneration still running from before this remount. Running this
+    // pass first, against every collectionKind entry's own group-level row
+    // directly, means by the time the loop below calls rowsToRender() the
+    // collection is already correctly un-expanded back to its group row.
+    for (const entry of sequence) {
+      if (!entry.collectionKind || !doneNames.has(entry.artifact)) continue;
+      reattach({ key: entry.artifact, label: labelFor(entry.artifact), entry, category: entry.category });
+    }
+
+    for (const row of rowsToRender()) {
+      reattach(row);
     }
   }
 

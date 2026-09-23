@@ -1,0 +1,56 @@
+---
+sidebar_position: 1
+title: Visão geral
+description: Conheça o Senpai Refiner e o fluxo que transforma fontes em artefatos rastreáveis.
+slug: /intro
+---
+
+import ProductTour from '@site/src/components/ProductTour';
+
+# Do contexto à entrega
+
+O **Senpai Refiner** é uma aplicação desktop que transforma documentos de negócio e engenharia em uma wiki rastreável e em artefatos estruturados de Discovery e Delivery.
+
+Ele organiza o trabalho em **work-items**, extrai conhecimento das fontes, ajuda a gerar documentos em uma sequência coerente e mantém uma etapa humana de revisão antes de salvar cada resultado.
+
+<ProductTour />
+
+## O fluxo em uma frase
+
+**Fontes → Wiki → Artefatos → Revisão → Exportação**
+
+1. Crie uma Oportunidade, Feature ou História.
+2. Adicione documentos `.txt`, `.md` ou `.pdf`.
+3. Faça a ingestão para construir uma wiki própria do work-item.
+4. Gere os artefatos liberados pelo mapa de dependências.
+5. Revise, aprove ou solicite alterações.
+6. Exporte a wiki e os documentos aprovados.
+
+## Para quem o Senpai foi pensado
+
+- Pessoas de produto que precisam transformar evidências em escopo claro.
+- Engenharia e arquitetura que precisam registrar requisitos, decisões e modelos.
+- Times que querem manter a origem das informações visível durante a geração com LLM.
+- Lideranças que precisam acompanhar progresso, consumo e histórico de execução.
+
+## Princípios do produto
+
+### Contexto antes de geração
+
+O LLM recebe o conhecimento estruturado da wiki e os artefatos anteriores relevantes, não apenas uma coleção solta de arquivos.
+
+### Humano no controle
+
+Um documento gerado é uma proposta. Ele só é persistido depois de aprovação, e pode voltar para uma nova rodada com orientações específicas.
+
+### Rastreabilidade explícita
+
+As saídas podem apontar fontes, lacunas e inferências. Isso ajuda a separar o que está documentado do que ainda precisa ser validado.
+
+### Duas representações, dois usos
+
+Os artefatos novos são mantidos em JSON estruturado para contexto semântico dos LLMs e em HTML para apresentação no aplicativo e exportação.
+
+:::tip Próximo passo
+Comece pela [instalação](./primeiros-passos/instalacao) e depois acompanhe a criação do [primeiro work-item](./primeiros-passos/primeiro-work-item).
+:::

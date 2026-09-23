@@ -48,7 +48,13 @@ partial workflow Discovery {
     step AdrCommit {
         var data = self.pending_data
         var written = []
-        dir.create(Paths.artifact(project_id, "adr"))
+        var adr_dir = Paths.artifact(project_id, "adr")
+        // *Generate devolve o lote inteiro de decisoes, nao um delta — uma
+        // regeneracao ("Solicitar mudanca" num adr/ ja aprovado,
+        // tab-artefatos.js) precisa substituir, nao somar (ArtifactId.
+        // next_adr_id so conta ADRs ja existentes).
+        if (dir.exists(adr_dir)) dir.delete(adr_dir)
+        dir.create(adr_dir)
         for (var decision in data.decisions) {
             var id = ArtifactId.next_adr_id(project_id)
             var folder = ArtifactId.folder_name(id, decision.titulo)
@@ -134,7 +140,18 @@ partial workflow Discovery {
     step DiagramasCommit {
         var data = self.pending_data
         var written = []
-        dir.create(Paths.artifact(project_id, "diagramas"))
+        var diagramas_dir = Paths.artifact(project_id, "diagramas")
+        // *Generate devolve o lote inteiro de diagramas, nao um delta — uma
+        // regeneracao ("Solicitar mudanca" num diagramas/ ja aprovado,
+        // tab-artefatos.js) precisa substituir, nao somar. Diferente de
+        // adr/features (que usam ArtifactId sequencial), o nome de arquivo
+        // aqui e so o slug do titulo — sem o wipe, um diagrama cujo titulo
+        // mudou na regeneracao vira um arquivo NOVO ao lado do antigo
+        // (slug diferente), e um cujo titulo ficou igual sobrescreve o
+        // antigo silenciosamente; nenhum dos dois casos limpa o que nao
+        // deveria mais existir.
+        if (dir.exists(diagramas_dir)) dir.delete(diagramas_dir)
+        dir.create(diagramas_dir)
         for (var diagrama in data.diagramas) {
             var slug = Slug.from_title(diagrama.titulo)
             var body = ArtifactBody.diagrama(diagrama)

@@ -75,8 +75,16 @@ workflow Delivery {
     input artifact: string    // brief | requisitos | adr | der | diagramas | feature | historia | historias
     input buddy: bool = false
     input approved: bool = false
-    // Passado no resume junto com approved:false (Modo Buddy's "Solicitar
-    // mudancas" — reading-pane.js/tab-artefatos.js), nunca em StartRun.
+    // Dois pontos de entrada: no resume junto com approved:false (Modo
+    // Buddy's "Solicitar mudancas" numa run ainda pausada) OU direto no
+    // StartRun (tab-artefatos.js's "Solicitar mudanca" num artefato JA
+    // aprovado — sem run pausada pra dar resume, so um StartRun novo).
+    // Dispatch (abaixo) consome esse segundo caso antes do primeiro
+    // *Generate; sem isso, um StartRun com feedback preenchido cairia no
+    // Gate igual a qualquer outro, que so reconhece feedback vindo de um
+    // resume — o primeiro *Generate ignoraria o comentario, e so a
+    // chamada seguinte (o loop-back do proprio Gate) o usaria, custando
+    // uma chamada de LLM inteira a mais por nada.
     input feedback: string = ""
 
     var delivery_result = null
@@ -107,6 +115,17 @@ workflow Delivery {
     step Dispatch {
         project_id = Paths.ensure_valid(project_id)
         if (mode != "feature" && mode != "historia") fail("mode invalido: '" + mode + "' (use feature | historia)")
+
+        // Um StartRun novo com feedback preenchido (ver input feedback's
+        // comentario acima) consome o comentario aqui, antes do primeiro
+        // *Generate — marcando feedback_consumed:true agora faz o Gate
+        // (mais abaixo) pular o proprio loop-back dele quando chegar la
+        // pela primeira vez, entao isto custa exatamente UMA chamada de
+        // LLM (ja informada pelo comentario), nao duas.
+        if (buddy && !approved && !feedback.is_empty()) {
+            feedback_consumed = true
+            pending_feedback = feedback
+        }
 
         if (artifact == "brief") goto BriefGenerate
         if (artifact == "requisitos") goto RequisitosGenerate
@@ -455,6 +474,11 @@ workflow Delivery {
     step HistoriasCommit {
         var data = pending_data
         var historias_base = Paths.artifact(project_id, "historias")
+        // *Generate devolve o lote inteiro de historias, nao um delta — uma
+        // regeneracao ("Solicitar mudanca" num historias/ ja aprovado,
+        // tab-artefatos.js) precisa substituir, nao somar (ArtifactId.
+        // next_historia_id so conta historias ja existentes).
+        if (dir.exists(historias_base)) dir.delete(historias_base)
         dir.create(historias_base)
         var written = []
         for (var historia in data.historias) {

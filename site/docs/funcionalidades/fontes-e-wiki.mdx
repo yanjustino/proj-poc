@@ -1,0 +1,42 @@
+---
+sidebar_position: 2
+title: Fontes e Wiki
+description: Transforme documentos em conhecimento navegável, consultável e rastreável.
+---
+
+import {AppMockup} from '@site/src/components/ProductTour';
+
+# Fontes e Wiki
+
+As fontes registram a evidência original. A wiki organiza o que foi extraído delas para que as próximas gerações recebam contexto mais preciso.
+
+<AppMockup screen="wiki" />
+
+## Fontes aceitas
+
+| Formato | Uso típico |
+| --- | --- |
+| `.md` | Visões, RFCs, especificações e notas estruturadas. |
+| `.txt` | Transcrições, anotações e conteúdo textual simples. |
+| `.pdf` | Relatórios, pesquisas, propostas e documentos externos. |
+
+Os arquivos são copiados para o armazenamento local do work-item. Depois, a ingestão extrai unidades de conhecimento e atualiza os índices da wiki.
+
+## Como a wiki se organiza
+
+- **Fontes:** representação navegável do conteúdo ingerido.
+- **Entidades:** pessoas, sistemas, grupos e objetos relevantes.
+- **Conceitos:** definições, regras e relações encontradas no material.
+- **Respostas:** perguntas já respondidas e arquivadas para consulta futura.
+
+## Consultar e verificar
+
+Use perguntas para explorar o contexto sem alterar os artefatos. A verificação de consistência ajuda a encontrar informações incompatíveis, ausentes ou ambíguas antes que elas se propaguem.
+
+## Rastreabilidade
+
+Uma afirmação pode se apoiar em uma ou mais fontes. Quando o contexto não é suficiente, o resultado deve expor a lacuna em vez de apresentá-la como fato. Inferências continuam úteis, mas devem permanecer identificáveis.
+
+:::tip Rotina recomendada
+Faça uma verificação da wiki depois de adicionar um lote importante de fontes e antes de iniciar o pipeline de artefatos.
+:::

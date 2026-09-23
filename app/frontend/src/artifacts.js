@@ -116,3 +116,81 @@ export function featureTitleOf(folderName) {
   const dash = folderName.indexOf('-');
   return dash === -1 ? folderName : folderName.slice(dash + 1).replace(/-/g, ' ');
 }
+
+// computeCategoryProgress groups sequenceFor(project) by `category` and
+// counts how many entries in each already have a generated file, given a
+// listProjectDir(project.id, 'artifacts', '') tree — feeds
+// workitem-view.js's "progresso por fase" summary card. Mirrors
+// tab-artefatos.js's own refreshDoneState() "is this entry done" rule (a
+// collection dir needs at least one committed child; a single-file entry
+// needs its exact path) as a second, small, read-only implementation
+// rather than sharing that file's larger tracker/run bookkeeping, which
+// this has no need to touch.
+//
+// Discovery's per-feature "historias" isn't its own sequence entry (see
+// DISCOVERY_SEQUENCE's own comment on why) — folded in here as its own
+// unit count under the "Features" category, one per feature folder that
+// has committed at least one história, out of every feature folder that
+// exists. This is also what fixes the old flat "doneCount/expectedCount"
+// count entirely ignoring histórias in its denominator.
+export function computeCategoryProgress(project, artifactNodes) {
+  const sequence = sequenceFor(project);
+  const byName = Object.fromEntries(artifactNodes.map((n) => [n.name, n]));
+
+  function isDone(entry) {
+    if (entry.dir) {
+      const node = byName[entry.dir];
+      const children = node && node.children ? node.children : [];
+      return entry.collectionKind === 'folders'
+        ? children.some((child) => child.isDir && (child.children || []).some((file) => !file.isDir && file.name === entry.itemFile))
+        : children.some((child) => !child.isDir && child.name.endsWith('.html'));
+    }
+    if (entry.path) return Boolean(byName[entry.path]);
+    return false;
+  }
+
+  const order = [];
+  const byCategory = new Map();
+  function bucketFor(category) {
+    if (!byCategory.has(category)) {
+      byCategory.set(category, { category, done: 0, total: 0 });
+      order.push(category);
+    }
+    return byCategory.get(category);
+  }
+
+  for (const entry of sequence) {
+    const bucket = bucketFor(entry.category);
+    bucket.total += 1;
+    if (isDone(entry)) bucket.done += 1;
+  }
+
+  if (project.level === 'discovery') {
+    const featuresNode = byName.features;
+    const featureFolders = featuresNode && featuresNode.children ? featuresNode.children.filter((c) => c.isDir) : [];
+    if (featureFolders.length > 0) {
+      const historiasNode = byName.historias;
+      const historiasChildren = historiasNode && historiasNode.children ? historiasNode.children : [];
+      const doneFeatureFolderNames = new Set(
+        historiasChildren
+          .filter(
+            (child) =>
+              child.isDir &&
+              (child.children || []).some(
+                (storyFolder) =>
+                  storyFolder.isDir && (storyFolder.children || []).some((file) => !file.isDir && file.name === 'historia.html'),
+              ),
+          )
+          .map((child) => child.name),
+      );
+      const bucket = bucketFor('Features');
+      bucket.total += featureFolders.length;
+      bucket.done += featureFolders.filter((f) => doneFeatureFolderNames.has(f.name)).length;
+    }
+  }
+
+  const byCategoryList = order.map((c) => byCategory.get(c));
+  const doneCount = byCategoryList.reduce((sum, c) => sum + c.done, 0);
+  const totalCount = byCategoryList.reduce((sum, c) => sum + c.total, 0);
+  return { byCategory: byCategoryList, doneCount, totalCount };
+}

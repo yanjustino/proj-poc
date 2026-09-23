@@ -1,0 +1,44 @@
+---
+sidebar_position: 4
+title: Revisão e rastreabilidade
+description: Aprove propostas, solicite alterações e confirme a origem das informações.
+---
+
+import {AppMockup} from '@site/src/components/ProductTour';
+
+# Revisão e rastreabilidade
+
+O resultado de uma geração não é gravado imediatamente. Primeiro, o Senpai apresenta uma versão proposta para revisão.
+
+<AppMockup screen="revisao" />
+
+## Aprovar
+
+Use **Aprovar e salvar** quando o documento representar corretamente o contexto e tiver detalhe suficiente para o próximo passo. A aprovação persiste as versões JSON e HTML e pode liberar novos cartões no mapa.
+
+## Solicitar alterações
+
+Descreva o ajuste de forma verificável. Exemplos:
+
+- “Separe os requisitos funcionais dos requisitos de segurança.”
+- “Não assuma que todos os clientes têm cartão salvo; registre isso como gap.”
+- “Inclua a origem de cada atributo de qualidade.”
+
+O Senpai envia a orientação junto ao contexto da rodada, gera uma nova proposta e mantém a decisão final com você.
+
+## Ver fontes
+
+Use as referências exibidas no documento para voltar ao material original. A marcação de origem é especialmente importante para:
+
+- requisitos regulatórios;
+- restrições arquiteturais;
+- números e metas;
+- decisões atribuídas a stakeholders;
+- conflitos entre documentos.
+
+## Gap e inferência
+
+- **Gap:** informação necessária que não foi encontrada nas fontes.
+- **Inferência:** conclusão plausível produzida a partir do contexto, mas não declarada diretamente.
+
+Não transforme esses itens silenciosamente em fatos. Valide-os, adicione uma nova fonte quando possível e regenere o documento afetado.

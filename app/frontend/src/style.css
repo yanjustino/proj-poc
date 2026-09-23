@@ -167,6 +167,47 @@ button { cursor: pointer; }
 .ring:after { content: ''; position: absolute; inset: 4px; background: var(--surface); border-radius: 50%; }
 .ring i { z-index: 1; font-style: normal; color: var(--ink); }
 
+/* Progresso por fase — cabeçalho igual aos outros cards (ícone/contagem/ring)
+   seguido de uma mini-barra por categoria do workflow (artifacts.js's
+   computeCategoryProgress), em vez de só um número total. */
+.summary-card-progress { flex-direction: column; align-items: stretch; gap: 10px; }
+.summary-progress-head { display: flex; align-items: center; gap: 12px; }
+.summary-progress-bars { display: flex; flex-direction: column; gap: 7px; }
+.summary-progress-row { display: grid; grid-template-columns: 148px 1fr auto; align-items: center; gap: 10px; }
+/* .summary-progress-bars prefix (not just the bare class) on purpose: two
+   later, more specific ".summary-card span" rules (color/font-size, see
+   further down this file) would otherwise win the cascade over a bare
+   ".summary-progress-label"/".summary-progress-count" — same specificity
+   tier (one class + one element beats one class alone) regardless of
+   which comes first in the file. */
+.summary-progress-bars .summary-progress-label { font-size: 13px; color: var(--ink); overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+.summary-progress-bar { height: 7px; border-radius: 4px; background: var(--line); overflow: hidden; }
+.summary-progress-bar i { display: block; height: 100%; background: var(--green); border-radius: 4px; font-style: normal; }
+.summary-progress-bars .summary-progress-count { font-size: 13px; color: var(--ink); font-family: var(--mono); }
+
+/* Estágio do pipeline — card clicável (leva pra aba Artefatos) que muda de
+   cor conforme o que está rolando agora: âmbar enquanto há algo
+   gerando/na fila ou pausado aguardando revisão, neutro quando não há
+   nenhuma execução ativa. */
+.summary-card-clickable { cursor: pointer; transition: border-color .15s, box-shadow .15s; }
+.summary-card-clickable:hover { border-color: var(--blue); box-shadow: 0 0 0 2px var(--blue-soft); }
+.summary-card-stage-working .summary-icon,
+.summary-card-stage-queued .summary-icon,
+.summary-card-stage-paused .summary-icon { color: var(--amber); background: rgba(210, 139, 38, .16); }
+.summary-card-stage-working,
+.summary-card-stage-queued,
+.summary-card-stage-paused { border-color: rgba(210, 139, 38, .4); }
+
+/* Consumo de tokens — mesma estrutura de cabeçalho + corpo do card de
+   progresso (.summary-card-progress: ícone + título em cima, linhas
+   embaixo), pra deixar claro que os números que seguem são "Uso de
+   tokens" — antes o card não tinha nenhum título, só um ícone genérico e
+   os números direto, o que não dizia a que eles se referiam. */
+.summary-tokens-stack { display: flex; flex-direction: column; gap: 7px; }
+.summary-tokens-row { display: flex; align-items: center; gap: 8px; }
+.summary-tokens-row svg { flex: none; opacity: .85; }
+.summary-tokens-row b { line-height: 1; }
+
 .tabs { display: flex; gap: 4px; border-bottom: 1px solid var(--line); margin-bottom: 18px; }
 .tab-btn { border: 0; background: transparent; padding: 9px 14px; font-size: 12px; font-weight: 600; color: var(--muted); border-bottom: 2px solid transparent; }
 .tab-btn.active { color: var(--blue-deep); border-bottom-color: var(--blue); }
@@ -196,6 +237,14 @@ button { cursor: pointer; }
 .artifact-filter.active { background: var(--ink); border-color: var(--ink); color: var(--surface); }
 .artifact-card-grid { display: grid; grid-template-columns: repeat(auto-fit, minmax(190px, 1fr)); gap: 11px; align-items: stretch; }
 .artifact-map-empty { grid-column: 1 / -1; border: 1px dashed var(--line); border-radius: 14px; padding: 34px 20px; text-align: center; color: var(--muted); font-size: 12px; }
+/* One per category, spanning the whole grid — separates the flat card list
+   into the same groups the summary's "progresso por fase" card already
+   uses (artifacts.js's `category` field), so a work-item with many
+   artifacts reads as sections instead of one undifferentiated wall of
+   cards. */
+.artifact-group-header { grid-column: 1 / -1; margin: 14px 0 -3px; }
+.artifact-group-header:first-child { margin-top: 0; }
+.artifact-group-header h3 { margin: 0; padding-bottom: 7px; border-bottom: 1px solid var(--line); font-size: 11px; font-weight: 600; text-transform: uppercase; letter-spacing: .07em; color: var(--muted); }
 .artifact-card { min-height: 158px; border: 1px solid var(--line); border-radius: 15px; background: var(--surface); display: flex; flex-direction: column; overflow: hidden; position: relative; transition: transform .18s ease, box-shadow .18s ease, border-color .18s ease; }
 .artifact-card:hover { transform: translateY(-2px); border-color: #cbc7bb; box-shadow: var(--shadow); }
 .artifact-card.selected { border-color: var(--ink); box-shadow: 0 0 0 1px var(--ink); }
@@ -332,10 +381,16 @@ button { cursor: pointer; }
    block of the scrolling document. */
 .run-composer { display: flex; flex-direction: column; gap: 6px; border: 1px solid var(--line); border-radius: var(--radius-lg); background: var(--surface); box-shadow: var(--soft-shadow); padding: 10px 12px 8px; transition: border-color .15s; }
 .run-composer:focus-within { border-color: var(--blue); }
-.run-feedback-input { width: 100%; min-height: 40px; max-height: 200px; resize: vertical; border: 0; background: transparent; color: var(--ink); padding: 2px; font-size: 12px; font-family: var(--sans); outline: none; }
+.run-feedback-input { width: 100%; min-height: 80px; max-height: 240px; resize: vertical; border: 0; background: transparent; color: var(--ink); padding: 2px; font-size: 12px; font-family: var(--sans); outline: none; }
 .run-feedback-input::placeholder { color: var(--muted); }
 .run-composer-actions { display: flex; align-items: center; justify-content: space-between; gap: 8px; padding-top: 6px; border-top: 1px solid var(--line); }
 .run-composer-actions-right { display: flex; align-items: center; gap: 8px; }
+.run-composer-warning-wrap { display: flex; flex-direction: column; gap: 8px; }
+.run-composer-warning { display: flex; align-items: flex-start; gap: 10px; background: rgba(210, 139, 38, .12); border: 1px solid rgba(210, 139, 38, .35); border-radius: var(--radius-md); padding: 10px 12px; }
+.run-composer-warning-icon { flex: none; color: var(--amber); margin-top: 1px; }
+.run-composer-warning-message { flex: 1 1 auto; font-size: 12px; line-height: 1.5; color: var(--amber); }
+.run-composer-warning-dismiss { flex: none; border: 0; background: transparent; color: var(--amber); opacity: .7; cursor: pointer; padding: 2px; line-height: 0; }
+.run-composer-warning-dismiss:hover { opacity: 1; }
 label.check { display: inline-flex; align-items: center; gap: 6px; font-size: 11px; color: var(--muted); }
 label.check input { accent-color: var(--blue); width: 15px; height: 15px; }
 

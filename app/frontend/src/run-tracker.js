@@ -371,7 +371,7 @@ export function createRunTracker({ resumeArgs = { approved: true }, onCancel, on
         <div class="run-composer-actions">
           <button class="button tertiary small run-cancel" ${busy ? 'disabled' : ''}>${busyAction === 'cancel' ? 'Cancelando…' : 'Cancelar'}</button>
           <div class="run-composer-actions-right">
-            <button class="button secondary small run-feedback-submit" ${busy ? 'disabled' : ''}>${busyAction === 'regenerate' ? 'Enviando…' : 'Regenerar'}</button>
+            <button class="button secondary small run-feedback-submit" ${busy ? 'disabled' : ''}>${busyAction === 'regenerate' ? 'Enviando…' : 'Regerar'}</button>
           </div>
         </div>
       `;
