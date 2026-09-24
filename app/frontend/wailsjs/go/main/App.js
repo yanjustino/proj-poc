@@ -34,6 +34,10 @@ export function GetAgent() {
   return window['go']['main']['App']['GetAgent']();
 }
 
+export function GetDevinCostSummary() {
+  return window['go']['main']['App']['GetDevinCostSummary']();
+}
+
 export function GetDevinModel() {
   return window['go']['main']['App']['GetDevinModel']();
 }
@@ -118,8 +122,8 @@ export function SetAgent(arg1) {
   return window['go']['main']['App']['SetAgent'](arg1);
 }
 
-export function SetDevinModel(arg1) {
-  return window['go']['main']['App']['SetDevinModel'](arg1);
+export function SetDevinModel(arg1, arg2) {
+  return window['go']['main']['App']['SetDevinModel'](arg1, arg2);
 }
 
 export function ShowWarningDialog(arg1, arg2) {

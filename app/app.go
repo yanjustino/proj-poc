@@ -62,7 +62,8 @@ type App struct {
 	// devinModel is passed to the workflow as SENPAI_DEVIN_MODEL. It is kept
 	// independently from agent so a user's choice survives switching away
 	// from Devin and back.
-	devinModel string
+	devinModel       string
+	devinCostSummary string
 
 	// emit sends one event to the frontend. Defaults to a real
 	// runtime.EventsEmit(a.ctx, ...) call in startup(), but stays a field
@@ -149,6 +150,7 @@ func (a *App) startup(ctx context.Context) {
 	settings := loadSettings()
 	a.agent = settings.Agent
 	a.devinModel = settings.DevinModel
+	a.devinCostSummary = settings.DevinCostSummary
 
 	if err := a.connectBridge(); err != nil {
 		log.Printf("mhl bridge: failed to start: %v", err)
@@ -166,7 +168,10 @@ func (a *App) startup(ctx context.Context) {
 // startup() and ReconnectMCP() spawn a bridge from, so the two can't drift
 // into starting it with different arguments.
 func (a *App) connectBridge() error {
-	client, err := mhlbridge.Start(a.ctx, a.mhlPath, a.workflowsDir, a.stateDir, a.dataDir, a.codexCwdDir, a.agent, a.devinModel)
+	client, err := mhlbridge.Start(
+		a.ctx, a.mhlPath, a.workflowsDir, a.stateDir, a.dataDir, a.codexCwdDir,
+		a.agent, a.devinModel, devinPricingJSON(a.devinModel, a.devinCostSummary),
+	)
 	if err != nil {
 		return err
 	}
@@ -287,7 +292,9 @@ func (a *App) SetAgent(agent string) (string, error) {
 			)
 		}
 	}
-	if err := saveSettings(appSettings{Agent: agent, DevinModel: a.devinModel}); err != nil {
+	if err := saveSettings(appSettings{
+		Agent: agent, DevinModel: a.devinModel, DevinCostSummary: a.devinCostSummary,
+	}); err != nil {
 		log.Printf("mhl bridge: save agent setting: %v", err)
 	}
 	a.agent = agent
@@ -328,6 +335,58 @@ type devinModelsResponse struct {
 			CostSummary string `json:"cost_summary"`
 		} `json:"variants"`
 	} `json:"families"`
+}
+
+type devinPricing struct {
+	ModelID                  string  `json:"model_id"`
+	Summary                  string  `json:"summary"`
+	InputUSDPerMillion       float64 `json:"input_usd_per_million"`
+	CachedInputUSDPerMillion float64 `json:"cached_input_usd_per_million"`
+	OutputUSDPerMillion      float64 `json:"output_usd_per_million"`
+}
+
+// cost_summary is currently the only machine-readable pricing reference
+// exposed by `devin models list --format json`. Accept only its complete,
+// explicit token-price shape: a partial or future shape must become "sem
+// estimativa", never a plausible-looking calculation with guessed rates.
+var devinCostSummaryPattern = regexp.MustCompile(
+	`(?i)^\s*\$([0-9]+(?:\.[0-9]+)?)\s*/\s*1M\s+Input\s*(?:·|\|)\s*` +
+		`\$([0-9]+(?:\.[0-9]+)?)\s*/\s*1M\s+Cached\s+input\s*(?:·|\|)\s*` +
+		`\$([0-9]+(?:\.[0-9]+)?)\s*/\s*1M\s+Output\s*$`,
+)
+
+func parseDevinPricing(model, summary string) (devinPricing, bool) {
+	match := devinCostSummaryPattern.FindStringSubmatch(strings.TrimSpace(summary))
+	if len(match) != 4 {
+		return devinPricing{}, false
+	}
+	rates := make([]float64, 3)
+	for i := range rates {
+		value, err := strconv.ParseFloat(match[i+1], 64)
+		if err != nil || value < 0 {
+			return devinPricing{}, false
+		}
+		rates[i] = value
+	}
+	return devinPricing{
+		ModelID:                  model,
+		Summary:                  strings.TrimSpace(summary),
+		InputUSDPerMillion:       rates[0],
+		CachedInputUSDPerMillion: rates[1],
+		OutputUSDPerMillion:      rates[2],
+	}, true
+}
+
+func devinPricingJSON(model, summary string) string {
+	pricing, ok := parseDevinPricing(model, summary)
+	if !ok {
+		return ""
+	}
+	data, err := json.Marshal(pricing)
+	if err != nil {
+		return ""
+	}
+	return string(data)
 }
 
 // ListDevinModels asks the authenticated Devin CLI which models are available
@@ -392,20 +451,36 @@ func (a *App) GetDevinModel() string {
 	return a.devinModel
 }
 
-// SetDevinModel persists the exact model_uid returned by ListDevinModels and
-// restarts mhl because its environment is fixed when the process starts.
-func (a *App) SetDevinModel(model string) (string, error) {
+// GetDevinCostSummary lets the picker detect a pricing change (and upgrades
+// settings written before pricing was persisted). The frontend re-applies the
+// already-selected model only when this snapshot differs from the current CLI
+// listing, which refreshes the bridge environment without reconnecting on
+// every startup unnecessarily.
+func (a *App) GetDevinCostSummary() string {
+	return a.devinCostSummary
+}
+
+// SetDevinModel persists the exact model_uid and cost_summary returned by
+// ListDevinModels, then restarts mhl because its environment is fixed when
+// the process starts. The summary is only accepted as a pricing reference if
+// parseDevinPricing recognizes the full format; otherwise calls are recorded
+// explicitly as having no estimate.
+func (a *App) SetDevinModel(model, costSummary string) (string, error) {
 	model = strings.TrimSpace(model)
+	costSummary = strings.TrimSpace(costSummary)
 	if model == "" {
 		return "", fmt.Errorf("modelo do Devin não pode ser vazio")
 	}
-	if strings.ContainsAny(model, "\x00\r\n") {
+	if strings.ContainsAny(model, "\x00\r\n") || strings.ContainsRune(costSummary, '\x00') {
 		return "", fmt.Errorf("modelo do Devin inválido")
 	}
-	if err := saveSettings(appSettings{Agent: a.agent, DevinModel: model}); err != nil {
+	if err := saveSettings(appSettings{
+		Agent: a.agent, DevinModel: model, DevinCostSummary: costSummary,
+	}); err != nil {
 		return "", fmt.Errorf("salvar modelo do Devin: %w", err)
 	}
 	a.devinModel = model
+	a.devinCostSummary = costSummary
 	return a.ReconnectMCP()
 }
 

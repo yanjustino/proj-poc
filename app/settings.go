@@ -12,12 +12,13 @@ import (
 // hard-coding what that default is, so the two never drift apart.
 var validAgents = map[string]bool{"": true, "codex": true, "claude": true, "devin": true}
 
-// appSettings is this app's own (not mhl's) persisted preferences —
-// currently just which LLM backend Writer.generate uses, but a struct
-// rather than a bare string so a later setting doesn't need a new file.
+// appSettings is this app's own (not mhl's) persisted preferences: the LLM
+// backend, the selected Devin model and the pricing snapshot published for
+// that selection.
 type appSettings struct {
-	Agent      string `json:"agent,omitempty"`
-	DevinModel string `json:"devin_model,omitempty"`
+	Agent            string `json:"agent,omitempty"`
+	DevinModel       string `json:"devin_model,omitempty"`
+	DevinCostSummary string `json:"devin_cost_summary,omitempty"`
 }
 
 // settingsFilePath is <senpaiBaseDir>/settings.json — a sibling of state/,

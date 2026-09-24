@@ -10,8 +10,9 @@ import { listActiveRunsForProject } from '../active-runs.js';
 import { STATE_LABEL } from '../run-tracker.js';
 import { dotClass } from '../status.js';
 import { icon } from '../icons.js';
+import { summarizeCost } from '../cost.js';
 
-const LEVEL_LABEL = { discovery: 'Oportunidade · Discovery', delivery: 'Feature/História · Delivery' };
+const LEVEL_LABEL = { discovery: 'Oportunidade · Discovery', delivery: 'Feature/Enabler/História · Delivery' };
 
 // renderWorkItemView mounts the hero + summary cards + tab switcher for one
 // work-item into `container`. `initialTab` lets the "criar work-item" flow
@@ -109,16 +110,14 @@ export async function renderWorkItemView(container, project, { initialTab = 'art
     // never added on top — see workItemUsage's own summarize_usage in
     // actions.mh. cacheRead specifically is the part of that input that was
     // served from cache instead of freshly reprocessed, so cacheRead /
-    // tokensIn reads as "how much of the input didn't have to be paid for
-    // in full" — worded as a share of input, not a dollar claim, since the
-    // actual price differential between a fresh/cached token isn't
-    // something this app knows per backend.
+    // tokensIn reads as "how much of the input came from cache". It remains
+    // a token share rather than a dollar claim because a project can contain
+    // calls from different backends and pricing sources.
     const cacheCreation = usage.total_cache_creation_tokens || 0;
     const cacheRead = usage.total_cache_read_tokens || 0;
     const totalCache = cacheCreation + cacheRead;
-    const costUsd = usage.total_cost_usd || 0;
+    const cost = summarizeCost(usage);
     const cacheSharePct = tokensIn > 0 ? Math.round((cacheRead / tokensIn) * 100) : 0;
-    const costLabel = costUsd.toLocaleString('pt-BR', { style: 'currency', currency: 'USD' });
     // Cost gets its own visible row (below) now — the tooltip keeps just
     // the cache creation/read split, detail that doesn't earn a whole row
     // of its own the way cost does.
@@ -179,7 +178,7 @@ export async function renderWorkItemView(container, project, { initialTab = 'art
           <div class="summary-tokens-row">${icon('arrowDown', 13)}<b>${tokensIn.toLocaleString('pt-BR')}</b><span>entrada</span></div>
           <div class="summary-tokens-row">${icon('arrowUp', 13)}<b>${tokensOut.toLocaleString('pt-BR')}</b><span>saída</span></div>
           ${totalCache > 0 ? `<div class="summary-tokens-row">${icon('layers', 13)}<b>${cacheSharePct}%</b><span>do input veio do cache</span></div>` : ''}
-          ${costUsd > 0 ? `<div class="summary-tokens-row">${icon('dollarSign', 13)}<b>${costLabel}</b><span>custo estimado</span></div>` : ''}
+          <div class="summary-tokens-row">${icon('dollarSign', 13)}<b>${escapeHtml(cost.value)}</b><span>${escapeHtml(cost.label)}</span></div>
         </div>
       </div>
     `;

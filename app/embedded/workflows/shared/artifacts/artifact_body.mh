@@ -92,50 +92,83 @@ export tool ArtifactBody {
         diagrama_mermaid: html.escape(data.diagrama_mermaid)
     ))
 
-    feature(data: any): string -> Cite.finalize(FeatureBody(
-        resumo: html.escape(data.resumo),
-        resumo_fontes: Cite.note(data.resumo_fontes),
-        objetivo: html.escape(data.objetivo),
-        objetivo_fontes: Cite.note(data.objetivo_fontes),
-        personas_tabela: ArtifactHtml.feature_personas(data.personas),
-        em_escopo_lista: Cite.list(data.em_escopo),
-        fora_escopo_lista: Cite.list(data.fora_escopo),
-        regras_lista: Cite.list(data.regras_negocio),
-        interacoes_lista: Cite.list(data.interacoes_entidades_dados),
-        criterios_lista: Cite.list(data.criterios_aceite),
-        historias_lista: Cite.list(data.historias_propostas),
-        dependencias_lista: Cite.list(data.dependencias_integridade),
-        dependencias_sistema_lista: Cite.list(data.dependencias_sistema),
-        gaps_lista: Cite.list(data.gaps),
-        questoes_lista: Cite.list(data.questoes_abertas)
-    ))
+    feature(data: any): string -> {
+        // Checkpoints anteriores a classificacao Feature/Enabler nao tem
+        // estes seis campos. Eles continuam aprovaveis: o antigo contrato
+        // so gerava features de negocio, e objetivo era a melhor hipotese
+        // de beneficio disponivel naquele formato.
+        var tipo_item = data?.tipo_item ?? "feature_negocio"
+        var subtipo_enabler = data?.subtipo_enabler ?? "nao_aplicavel"
+        var classificacao_fontes = data?.classificacao_fontes ?? data.resumo_fontes
+        var hipotese_beneficio = data?.hipotese_beneficio ?? data.objetivo
+        var hipotese_beneficio_fontes = data?.hipotese_beneficio_fontes ?? data.objetivo_fontes
+        var itens_habilitados = data?.itens_habilitados ?? []
 
-    historia(data: any): string -> Cite.finalize(HistoriaBody(
-        statement: ArtifactHtml.story_statement(data.como, data.quero, data.para),
-        statement_fontes: Cite.note(data.fontes),
-        atributos_lista: ArtifactHtml.story_attributes(
-            data.work_item_type,
-            data.story_type,
-            data.subclassification,
-            data.nature,
-            data.specialty,
-            data.fontes
-        ),
-        contexto_negocio: html.escape(data.contexto_negocio),
-        contexto_fontes: Cite.note(data.contexto_fontes),
-        criterios_lista: Cite.list(data.criterios_aceite),
-        cenarios_gherkin: html.escape(data.cenarios_gherkin),
-        cenarios_fontes: Cite.note(data.cenarios_fontes),
-        regras_lista: Cite.list(data.regras_negocio),
-        dod_lista: Cite.list(data.definition_of_done),
-        dependencias_lista: Cite.list(data.dependencias_impedimentos),
-        fora_escopo_lista: Cite.list(data.fora_escopo),
-        exemplo_uso: html.escape(data.exemplo_uso),
-        exemplo_fontes: Cite.note(data.exemplo_fontes),
-        contratos_interface: html.escape(data.contratos_interface),
-        contratos_fontes: Cite.note(data.contratos_fontes),
-        questoes_lista: Cite.list(data.questoes_abertas)
-    ))
+        return Cite.finalize(FeatureBody(
+            classificacao_lista: ArtifactHtml.feature_classification(tipo_item, subtipo_enabler, classificacao_fontes),
+            hipotese_beneficio: html.escape(hipotese_beneficio),
+            hipotese_beneficio_fontes: Cite.note(hipotese_beneficio_fontes),
+            itens_habilitados_lista: Cite.list(itens_habilitados),
+            resumo: html.escape(data.resumo),
+            resumo_fontes: Cite.note(data.resumo_fontes),
+            objetivo: html.escape(data.objetivo),
+            objetivo_fontes: Cite.note(data.objetivo_fontes),
+            personas_tabela: ArtifactHtml.feature_personas(data.personas),
+            em_escopo_lista: Cite.list(data.em_escopo),
+            fora_escopo_lista: Cite.list(data.fora_escopo),
+            regras_lista: Cite.list(data.regras_negocio),
+            interacoes_lista: Cite.list(data.interacoes_entidades_dados),
+            criterios_lista: Cite.list(data.criterios_aceite),
+            historias_lista: Cite.list(data.historias_propostas),
+            dependencias_lista: Cite.list(data.dependencias_integridade),
+            dependencias_sistema_lista: Cite.list(data.dependencias_sistema),
+            gaps_lista: Cite.list(data.gaps),
+            questoes_lista: Cite.list(data.questoes_abertas)
+        ))
+    }
+
+    historia(data: any): string -> {
+        // O schema antigo ja possuia story_type, mas toda historia ainda
+        // usava Como/Quero/Para. A ausencia dos novos campos tecnicos e o
+        // discriminador confiavel para manter essa apresentacao.
+        var legacy_story = data?.resultado_tecnico == null && data?.habilita == null && data?.evidenciado_por == null
+        var story_type = if (legacy_story) "historia_usuario" else (data?.story_type ?? "historia_usuario")
+
+        return Cite.finalize(HistoriaBody(
+            statement: ArtifactHtml.story_statement(
+                story_type,
+                data.como,
+                data.quero,
+                data.para,
+                data?.resultado_tecnico ?? "",
+                data?.habilita ?? "",
+                data?.evidenciado_por ?? ""
+            ),
+            statement_fontes: Cite.note(data.fontes),
+            atributos_lista: ArtifactHtml.story_attributes(
+                data.work_item_type,
+                story_type,
+                data.subclassification,
+                data.nature,
+                data.specialty,
+                data.fontes
+            ),
+            contexto_negocio: html.escape(data.contexto_negocio),
+            contexto_fontes: Cite.note(data.contexto_fontes),
+            criterios_lista: Cite.list(data.criterios_aceite),
+            cenarios_gherkin: html.escape(data.cenarios_gherkin),
+            cenarios_fontes: Cite.note(data.cenarios_fontes),
+            regras_lista: Cite.list(data.regras_negocio),
+            dod_lista: Cite.list(data.definition_of_done),
+            dependencias_lista: Cite.list(data.dependencias_impedimentos),
+            fora_escopo_lista: Cite.list(data.fora_escopo),
+            exemplo_uso: html.escape(data.exemplo_uso),
+            exemplo_fontes: Cite.note(data.exemplo_fontes),
+            contratos_interface: html.escape(data.contratos_interface),
+            contratos_fontes: Cite.note(data.contratos_fontes),
+            questoes_lista: Cite.list(data.questoes_abertas)
+        ))
+    }
 
     dependencias(data: any): string -> Cite.finalize(DependenciasBody(
         mapa_tabela: ArtifactHtml.dependency_map(data.features),

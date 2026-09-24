@@ -21,7 +21,7 @@
 // normaliza o conteudo (`UsageParser`/`StructuredOutput`) explicitamente,
 // depois de receber essa string de volta — nenhum lugar mágico "ve" nada.
 
-import { Usage, UsageParser, PromptLog } from "usage.mh"
+import { Usage, UsageParser, UsageCost, PromptLog } from "usage.mh"
 import { StructuredOutput } from "structured_output.mh"
 import { WorkflowsRoot } from "../core/workflows_root.mh"
 import { Paths } from "../core/paths.mh"
@@ -243,7 +243,8 @@ export tool Writer {
 
     generate(prompt: string, schema_file: {content: string, path: string}, project_id: string, artifact: string): {
         content: string, tokens_in: number, tokens_out: number,
-        cache_creation_tokens: number, cache_read_tokens: number, cost_usd: number
+        cache_creation_tokens: number, cache_read_tokens: number,
+        cost_usd: number, cost_source: string
     } -> {
         var picked = AgentSelector.pick(prompt: prompt)
         var devin_raw = ""
@@ -267,6 +268,7 @@ export tool Writer {
             nameof(Claude) -> UsageParser.extract_claude(raw)
             nameof(Codex) -> UsageParser.extract_codex(raw)
         }
+        var cost = UsageCost.resolve(usage: usage, backend: picked)
 
         Usage.append({
             artifact: artifact,
@@ -274,7 +276,10 @@ export tool Writer {
             tokens_out: usage.tokens_out,
             cache_creation_tokens: usage.cache_creation_tokens,
             cache_read_tokens: usage.cache_read_tokens,
-            cost_usd: usage.cost_usd,
+            cost_usd: cost.cost_usd,
+            cost_source: cost.cost_source,
+            cost_model: cost.cost_model,
+            cost_pricing_reference: cost.cost_pricing_reference,
         })
 
         // `raw` (nao `usage.content`) de proposito: e a resposta crua do CLI,
@@ -293,7 +298,10 @@ export tool Writer {
             tokens_out: usage.tokens_out,
             cache_creation_tokens: usage.cache_creation_tokens,
             cache_read_tokens: usage.cache_read_tokens,
-            cost_usd: usage.cost_usd,
+            cost_usd: cost.cost_usd,
+            cost_source: cost.cost_source,
+            cost_model: cost.cost_model,
+            cost_pricing_reference: cost.cost_pricing_reference,
         })
 
         return {
@@ -302,7 +310,8 @@ export tool Writer {
             tokens_out: usage.tokens_out,
             cache_creation_tokens: usage.cache_creation_tokens,
             cache_read_tokens: usage.cache_read_tokens,
-            cost_usd: usage.cost_usd,
+            cost_usd: cost.cost_usd,
+            cost_source: cost.cost_source,
         }
     }
 }

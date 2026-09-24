@@ -15,10 +15,14 @@ func TestSettingsRoundTrips(t *testing.T) {
 		t.Fatalf("loadSettings() before any save = %+v, want zero value", got)
 	}
 
-	if err := saveSettings(appSettings{Agent: "devin", DevinModel: "swe-1-6"}); err != nil {
+	want := appSettings{
+		Agent: "devin", DevinModel: "swe-1-6",
+		DevinCostSummary: "$0.5 / 1M Input · $0.2 / 1M Cached input · $2.5 / 1M Output",
+	}
+	if err := saveSettings(want); err != nil {
 		t.Fatalf("saveSettings: %v", err)
 	}
-	if got := loadSettings(); got != (appSettings{Agent: "devin", DevinModel: "swe-1-6"}) {
+	if got := loadSettings(); got != want {
 		t.Errorf("loadSettings() = %+v, want agent and Devin model preserved", got)
 	}
 }
@@ -28,7 +32,7 @@ func TestParseDevinModelsFlattensFamilies(t *testing.T) {
 		"families": [{
 			"family_label": "SWE-1.6",
 			"variants": [
-				{"model_uid": "swe-1-6", "label": "SWE-1.6"},
+				{"model_uid": "swe-1-6", "label": "SWE-1.6", "cost_summary": "$0.5 / 1M Input · $0.2 / 1M Cached input · $2.5 / 1M Output"},
 				{"model_uid": "swe-1-6-fast", "label": "SWE-1.6 Fast"}
 			]
 		}]
@@ -38,6 +42,30 @@ func TestParseDevinModelsFlattensFamilies(t *testing.T) {
 	}
 	if len(models) != 2 || models[1].ID != "swe-1-6-fast" || models[1].FamilyLabel != "SWE-1.6" {
 		t.Fatalf("parseDevinModels() = %+v, want flattened variants with family labels", models)
+	}
+	if models[0].CostSummary != "$0.5 / 1M Input · $0.2 / 1M Cached input · $2.5 / 1M Output" {
+		t.Errorf("parseDevinModels() dropped cost_summary: %+v", models[0])
+	}
+}
+
+func TestParseDevinPricingAcceptsTheCLIPriceShape(t *testing.T) {
+	pricing, ok := parseDevinPricing(
+		"swe-1-6",
+		"$0.5 / 1M Input · $0.2 / 1M Cached input · $2.5 / 1M Output",
+	)
+	if !ok {
+		t.Fatal("parseDevinPricing rejected the shape returned by devin models list")
+	}
+	if pricing.ModelID != "swe-1-6" || pricing.InputUSDPerMillion != 0.5 || pricing.CachedInputUSDPerMillion != 0.2 || pricing.OutputUSDPerMillion != 2.5 {
+		t.Fatalf("parseDevinPricing() = %+v", pricing)
+	}
+}
+
+func TestParseDevinPricingRejectsPartialOrUnknownPricing(t *testing.T) {
+	for _, summary := range []string{"", "$0.5 / 1M Input", "Included in plan"} {
+		if _, ok := parseDevinPricing("swe-1-6", summary); ok {
+			t.Errorf("parseDevinPricing(%q) succeeded; want no estimate", summary)
+		}
 	}
 }
 
@@ -170,15 +198,22 @@ func TestApp_SetDevinModelPersistsAndReconnects(t *testing.T) {
 	app, _ := newTestApp(t)
 	previousMHL := app.mhl
 
-	statusJSON, err := app.SetDevinModel("swe-1-6-fast")
+	costSummary := "$0.5 / 1M Input · $0.2 / 1M Cached input · $2.5 / 1M Output"
+	statusJSON, err := app.SetDevinModel("swe-1-6-fast", costSummary)
 	if err != nil {
 		t.Fatalf("SetDevinModel: %v", err)
 	}
 	if app.GetDevinModel() != "swe-1-6-fast" {
 		t.Errorf("GetDevinModel() = %q, want swe-1-6-fast", app.GetDevinModel())
 	}
+	if app.GetDevinCostSummary() != costSummary {
+		t.Errorf("GetDevinCostSummary() = %q, want %q", app.GetDevinCostSummary(), costSummary)
+	}
 	if got := loadSettings().DevinModel; got != "swe-1-6-fast" {
 		t.Errorf("persisted DevinModel = %q, want swe-1-6-fast", got)
+	}
+	if got := loadSettings().DevinCostSummary; got != costSummary {
+		t.Errorf("persisted DevinCostSummary = %q, want %q", got, costSummary)
 	}
 	if app.mhl == previousMHL {
 		t.Error("SetDevinModel did not reconnect the bridge")

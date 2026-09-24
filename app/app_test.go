@@ -169,6 +169,135 @@ func TestRunLifecycle_WorkItem(t *testing.T) {
 	}
 }
 
+// TestApprovalRecoveryCommitsPendingDraftWithoutLLM covers the fresh-run
+// path used when mhl refuses an old checkpoint because the workflow
+// definition changed. The reviewed pending_data is sent to the current
+// Delivery definition, which must go directly from Dispatch to Commit: no
+// agent call, no regeneration, and the original token metadata is retained.
+// The fixture deliberately uses the Feature schema from before Enablers were
+// introduced, proving that a pending draft survives both pipeline and schema
+// evolution.
+func TestApprovalRecoveryCommitsPendingDraftWithoutLLM(t *testing.T) {
+	app, _ := newTestApp(t)
+
+	createBody, err := app.StartRun("WorkItem", `{"action":"create","name":"Approval recovery","item_type":"feature"}`)
+	if err != nil {
+		t.Fatalf("StartRun(WorkItem create): %v", err)
+	}
+	created := pollUntilTerminal(t, app, requireField(t, createBody, "runId"), 10*time.Second)
+	projectID := requireNestedField(t, created, "vars", "project", "id")
+
+	draft := map[string]any{
+		// No tipo_item, hipotese_beneficio or itens_habilitados: those fields
+		// did not exist in the pipeline definition that produced this draft.
+		"resumo":                     "Feature recuperada sem regeneração",
+		"resumo_fontes":              []any{"gap"},
+		"objetivo":                   "Preservar o conteúdo do checkpoint antigo.",
+		"objetivo_fontes":            []any{"gap"},
+		"personas":                   []any{},
+		"em_escopo":                  []any{},
+		"fora_escopo":                []any{},
+		"regras_negocio":             []any{},
+		"interacoes_entidades_dados": []any{},
+		"criterios_aceite": []any{
+			map[string]any{"texto": "O documento aprovado é persistido.", "fontes": []any{"gap"}},
+		},
+		"historias_propostas":      []any{},
+		"dependencias_integridade": []any{},
+		"dependencias_sistema":     []any{},
+		"gaps":                     []any{},
+		"questoes_abertas":         []any{},
+	}
+	args, err := json.Marshal(map[string]any{
+		"project_id":          projectID,
+		"mode":                "feature",
+		"artifact":            "feature",
+		"approved":            true,
+		"approval_data":       draft,
+		"approval_tokens_in":  321,
+		"approval_tokens_out": 45,
+	})
+	if err != nil {
+		t.Fatalf("marshal recovery args: %v", err)
+	}
+	recoveryBody, err := app.StartRun("Delivery", string(args))
+	if err != nil {
+		t.Fatalf("StartRun(Delivery approval recovery): %v", err)
+	}
+	final := pollUntilTerminal(t, app, requireField(t, recoveryBody, "runId"), 10*time.Second)
+	if state := requireField(t, final, "state"); state != "completed" {
+		t.Fatalf("approval recovery state = %q, want completed: %s", state, final)
+	}
+
+	htmlPath := filepath.Join(app.DataDir(), "projects", projectID, "artifacts", "feature.html")
+	html, err := os.ReadFile(htmlPath)
+	if err != nil {
+		t.Fatalf("read recovered feature: %v", err)
+	}
+	if !strings.Contains(string(html), "Feature recuperada sem regeneração") ||
+		!strings.Contains(string(html), "Feature de negócio") ||
+		!strings.Contains(string(html), "321 → 45 tokens") {
+		t.Fatalf("recovered feature did not preserve legacy content/token metadata: %s", html)
+	}
+	if _, err := os.Stat(filepath.Join(app.DataDir(), "projects", projectID, "prompt_log.jsonl")); !os.IsNotExist(err) {
+		t.Fatalf("approval recovery unexpectedly invoked an LLM (prompt log stat error: %v)", err)
+	}
+
+	createOpportunityBody, err := app.StartRun("WorkItem", `{"action":"create","name":"Discovery approval recovery","item_type":"oportunidade"}`)
+	if err != nil {
+		t.Fatalf("StartRun(WorkItem opportunity create): %v", err)
+	}
+	createdOpportunity := pollUntilTerminal(t, app, requireField(t, createOpportunityBody, "runId"), 10*time.Second)
+	opportunityID := requireNestedField(t, createdOpportunity, "vars", "project", "id")
+
+	discoveryDraft := map[string]any{
+		"resumo_executivo":    "Brief recuperado em outra sessão",
+		"resumo_fontes":       []any{"gap"},
+		"contexto_negocio":    "Contexto preservado.",
+		"contexto_fontes":     []any{"gap"},
+		"objetivos":           []any{},
+		"em_escopo":           []any{},
+		"fora_escopo":         []any{},
+		"stakeholders":        []any{},
+		"metricas_sucesso":    []any{},
+		"cronograma_marcos":   []any{},
+		"riscos_dependencias": []any{},
+		"perguntas_abertas":   []any{},
+	}
+	discoveryArgs, err := json.Marshal(map[string]any{
+		"project_id":          opportunityID,
+		"artifact":            "brief",
+		"approved":            true,
+		"approval_data":       discoveryDraft,
+		"approval_tokens_in":  98,
+		"approval_tokens_out": 7,
+	})
+	if err != nil {
+		t.Fatalf("marshal Discovery recovery args: %v", err)
+	}
+	discoveryRecoveryBody, err := app.StartRun("Discovery", string(discoveryArgs))
+	if err != nil {
+		t.Fatalf("StartRun(Discovery approval recovery): %v", err)
+	}
+	discoveryFinal := pollUntilTerminal(t, app, requireField(t, discoveryRecoveryBody, "runId"), 10*time.Second)
+	if state := requireField(t, discoveryFinal, "state"); state != "completed" {
+		t.Fatalf("Discovery approval recovery state = %q, want completed: %s", state, discoveryFinal)
+	}
+
+	discoveryHTMLPath := filepath.Join(app.DataDir(), "projects", opportunityID, "artifacts", "brief.html")
+	discoveryHTML, err := os.ReadFile(discoveryHTMLPath)
+	if err != nil {
+		t.Fatalf("read recovered Discovery brief: %v", err)
+	}
+	if !strings.Contains(string(discoveryHTML), "Brief recuperado em outra sessão") ||
+		!strings.Contains(string(discoveryHTML), "98 → 7 tokens") {
+		t.Fatalf("recovered Discovery brief did not preserve pending content/token metadata: %s", discoveryHTML)
+	}
+	if _, err := os.Stat(filepath.Join(app.DataDir(), "projects", opportunityID, "prompt_log.jsonl")); !os.IsNotExist(err) {
+		t.Fatalf("Discovery approval recovery unexpectedly invoked an LLM (prompt log stat error: %v)", err)
+	}
+}
+
 // TestModoBuddyPauseResume_WikiIngest exercises the one path Fase 5 exists
 // for that TestRunLifecycle_WorkItem's free workflow can't reach: a real
 // pause()/mhl_run_resume round trip, through the bridge, with a real `devin`

@@ -26,6 +26,11 @@ tr:last-child td{border-bottom:none}
 .cite-references{margin:0 0 14px;padding-left:20px;font-family:ui-monospace,monospace;font-size:12px;color:#6a6a6a}
 .cite-references li{margin-bottom:6px}
 p.fontes{margin:-4px 0 16px;line-height:2}
+.item-classification{display:flex;align-items:center;gap:8px;flex-wrap:wrap}
+.item-kind{display:inline-block;font-family:ui-monospace,monospace;font-size:11px;font-weight:700;letter-spacing:.04em;text-transform:uppercase;padding:4px 9px;border-radius:999px}
+.item-kind-business{background:#e5f5eb;color:#28724e}
+.item-kind-enabler{background:#e9e8f7;color:#4b4691}
+.item-kind-subtype{background:#f1efe8;color:#625f55}
 </style>
 </head>
 <body>

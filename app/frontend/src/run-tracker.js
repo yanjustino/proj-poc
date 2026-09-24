@@ -56,7 +56,7 @@ export const STATE_LABEL = {
 // .run-tracker-fill instead of centering .run-tracker unconditionally,
 // since those other two hosts mount it inline among other content, where
 // stretching to fill height and centering would look broken.
-export function createRunTracker({ resumeArgs = { approved: true }, onCancel, onUpdate, fillHeight = false } = {}) {
+export function createRunTracker({ resumeArgs = { approved: true }, onCancel, onUpdate, onApprove, fillHeight = false } = {}) {
   const element = document.createElement('div');
   element.className = 'run-tracker';
   // Kept as a second, separate root (not just a child of `element`) so a
@@ -386,6 +386,14 @@ export function createRunTracker({ resumeArgs = { approved: true }, onCancel, on
         resumeAnchorMs = Date.now();
         render();
         try {
+          // Artefatos can approve a reviewed pending_data through a fresh
+          // commit-only run (onApprove), decoupling publication from the
+          // exact pipeline definition that originally produced the draft.
+          // Other tracker hosts retain the ordinary resume behavior.
+          if (onApprove) {
+            await onApprove(s);
+            return;
+          }
           await resumeAndWatch(s.runId, resumeArgs, (next) => (onUpdate || update)(next));
         } catch (err) {
           busyAction = null;

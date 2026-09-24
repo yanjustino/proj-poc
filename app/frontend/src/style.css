@@ -206,7 +206,7 @@ button { cursor: pointer; }
 .summary-tokens-stack { display: flex; flex-direction: column; gap: 7px; }
 .summary-tokens-row { display: flex; align-items: center; gap: 8px; }
 .summary-tokens-row svg { flex: none; opacity: .85; }
-.summary-tokens-row b { line-height: 1; }
+.summary-tokens-row b { line-height: 1; white-space: nowrap; }
 
 .tabs { display: flex; gap: 4px; border-bottom: 1px solid var(--line); margin-bottom: 18px; }
 .tab-btn { border: 0; background: transparent; padding: 9px 14px; font-size: 12px; font-weight: 600; color: var(--muted); border-bottom: 2px solid transparent; }

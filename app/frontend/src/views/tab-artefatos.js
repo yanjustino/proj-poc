@@ -2,9 +2,11 @@ import {
   artifactPreview,
   exportProject,
   exportProjectFile,
+  getRunStatus,
   isFullyTerminal,
   listProjectDir,
   readProjectFile,
+  cancelRun,
   startAndWatch,
   watchExistingRun,
 } from '../api.js';
@@ -15,6 +17,7 @@ import { beginCustom, buildDocFrame, showHtmlDoc, showEmpty, showAction, showLoa
 import { setActiveRun, getActiveRun, clearActiveRun } from '../active-runs.js';
 import { dotClass } from '../status.js';
 import { icon } from '../icons.js';
+import { approvalRecoveryArgs, waitForRecoveryTerminal } from '../checkpoint-recovery.js';
 
 const LABELS = {
   brief: 'Brief',
@@ -23,10 +26,10 @@ const LABELS = {
   adr: 'ADRs',
   der: 'DER',
   diagramas: 'Diagramas C4',
-  features: 'Features',
+  features: 'Backlog da solução',
   dependencias: 'Mapa de dependências',
   historias: 'Histórias',
-  feature: 'Detalhamento da feature',
+  feature: 'Detalhamento da feature / enabler',
   historia: 'Detalhamento da história',
 };
 
@@ -41,10 +44,10 @@ const ARTIFACT_DESCRIPTIONS = {
   adr: 'Escolhas arquiteturais registradas com contexto e consequências.',
   der: 'Entidades, atributos e relacionamentos essenciais do domínio.',
   diagramas: 'Visões dos componentes, limites e principais fluxos do sistema.',
-  features: 'Capacidades de negócio conectadas aos requisitos e objetivos.',
-  dependencias: 'Grafo de dependências entre features e ordem de execução sugerida.',
+  features: 'Features de negócio e enablers conectados aos requisitos e objetivos.',
+  dependencias: 'Grafo de dependências entre itens do backlog e ordem de execução sugerida.',
   historias: 'Histórias detalhadas para implementação e validação.',
-  feature: 'Detalhamento funcional da entrega e seus critérios de aceite.',
+  feature: 'Detalhamento da entrega, classificação e critérios de aceite.',
   historia: 'Comportamento esperado, regras e critérios de aceite da história.',
 };
 
@@ -55,7 +58,7 @@ const ARTIFACT_ICONS = {
 
 function descriptionFor(row) {
   if (row.groupKey) return `Documento da coleção ${labelFor(row.entry.artifact)}.`;
-  if (row.featureId) return `Histórias vinculadas à feature ${row.featureId}.`;
+  if (row.featureId) return `Histórias vinculadas ao item ${row.featureId}.`;
   return ARTIFACT_DESCRIPTIONS[row.entry.artifact] || 'Documento gerado a partir do contexto do work-item.';
 }
 
@@ -298,7 +301,7 @@ export async function renderArtefatosTab(container, project, { onChanged }) {
           entry: { artifact: 'historias', deps: ['features'] },
           featureId, // short id ("FT003") — what the workflow's own feature_id argument expects
           featureFolder: folder.name, // full folder name ("FT003-slug...") — historias/ mirrors features/'s folder naming, and only the full name is a real path
-          category: 'Features',
+          category: 'Backlog da solução',
         });
       }
     }
@@ -1150,6 +1153,63 @@ export async function renderArtefatosTab(container, project, { onChanged }) {
     if (selectedKey === row.key) renderDetail();
   }
 
+  // Approval is a publication command over the reviewed pending_data, not a
+  // request to continue executing the old pipeline. Always start the current
+  // workflow in its commit-only path; this works for both unchanged and old
+  // checkpoints and never gives mhl a chance to invalidate the draft merely
+  // because the pipeline definition changed between sessions.
+  async function approvePendingDocument(row, tracker, key, pausedStatus) {
+    const args = approvalRecoveryArgs({
+      workflow,
+      projectId: project.id,
+      projectType: project.type,
+      row,
+      status: pausedStatus,
+    });
+    let finalStatus = null;
+    try {
+      const started = await startAndWatch(workflow, args, (status) => {
+        finalStatus = status;
+        onRunUpdate(row, tracker, key, status);
+      });
+      const replacementRunId = started?.runId || finalStatus?.runId || '';
+      finalStatus = await waitForRecoveryTerminal({
+        runId: replacementRunId,
+        initialStatus: finalStatus || started,
+        getStatus: getRunStatus,
+        onUpdate: (status) => onRunUpdate(row, tracker, key, status),
+      });
+    } catch (recoveryError) {
+      // Keep the original paused run discoverable after a remount: it still
+      // owns the only durable copy of pending_data if the fresh Commit failed
+      // before writing the artifact.
+      setActiveRun(key, pausedStatus.runId);
+      throw recoveryError;
+    }
+
+    if (!finalStatus || finalStatus.state !== 'completed') {
+      setActiveRun(key, pausedStatus.runId);
+      throw new Error(finalStatus?.error || 'Não foi possível persistir o documento pendente com o workflow atual.');
+    }
+
+    // The replacement run committed successfully. The incompatible paused
+    // checkpoint is now superseded and can be retired best-effort; approval
+    // itself must stay successful even if old-state cleanup is unavailable.
+    cancelRun(pausedStatus.runId).catch(() => {});
+    return true;
+  }
+
+  function createArtifactTracker(row, key) {
+    let tracker;
+    tracker = createRunTracker({
+      onCancel: () => onRunCancel(row, key),
+      onUpdate: (status) => onRunUpdate(row, tracker, key, status),
+      onApprove: (pausedStatus) => approvePendingDocument(row, tracker, key, pausedStatus),
+      fillHeight: true,
+    });
+    return tracker;
+  }
+
   // feedback (optional): non-empty when this generate() is really "Solicitar
   // mudança" on an already-approved row (buildRequestChangesComposer above)
   // rather than a first-time "Gerar" — forwarded to StartRun as-is;
@@ -1166,7 +1226,7 @@ export async function renderArtefatosTab(container, project, { onChanged }) {
     // the screen kept showing the paused composer, then fell back to
     // "pronto para gerar" on the next unrelated re-render, as if the
     // approval had never happened.
-    const tracker = createRunTracker({ onCancel: () => onRunCancel(row, key), onUpdate: (status) => onRunUpdate(row, tracker, key, status), fillHeight: true });
+    const tracker = createArtifactTracker(row, key);
     trackers.set(row.key, tracker);
     // Seed a non-null "working" status right away — App.StartRun's own
     // response is still an unresolved promise at this point, so without
@@ -1206,7 +1266,7 @@ export async function renderArtefatosTab(container, project, { onChanged }) {
       const key = activeKey(row);
       const runId = getActiveRun(key);
       if (!runId) return;
-      const tracker = createRunTracker({ onCancel: () => onRunCancel(row, key), onUpdate: (status) => onRunUpdate(row, tracker, key, status), fillHeight: true });
+      const tracker = createArtifactTracker(row, key);
       trackers.set(row.key, tracker);
       tracker.update({ runId, state: 'working' });
       selectedKey = row.key; // jump straight to the progress the user left running

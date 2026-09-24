@@ -20,10 +20,11 @@ import { ArtifactSchema, FeedbackBlock, HistoriasInstruction, HistoriasSchemaFil
 // HistoriasSchemaFile ja sao compartilhados (artifacts_common.mh) porque
 // "quebrar uma feature em historias" e a mesma operacao nos dois workflows.
 // Sem `wiki_content` (ver comentario acima de AdrInstruction em
-// artifacts_common.mh) — features deriva de requisitos/adr/der/diagramas ja
-// sintetizados, nao da wiki bruta.
+// artifacts_common.mh) — o backlog deriva de atributos/requisitos/adr/der/
+// diagramas ja sintetizados, nao da wiki bruta.
 prompt FeaturesInstruction(
     schema_conventions: prompt,
+    atributos_content: string,
     requisitos_content: string,
     adr_content: string,
     der_content: string,
@@ -41,7 +42,7 @@ tool FeaturesSchemaFile {
 }
 
 // dependencias e Discovery-only pelo mesmo motivo que features e: so um
-// backlog com mais de uma feature tem dependencia ENTRE features pra
+// backlog com mais de um item tem dependencias ENTRE itens pra
 // mapear. `features_content` chega ja com o codigo FT00N real de cada uma
 // no cabecalho (montado abaixo, em DependenciasGenerate, do mesmo jeito que
 // DirText.concat_all monta pra adr/diagramas — so que feito na mao aqui
@@ -65,11 +66,15 @@ tool DependenciasSchemaFile {
 }
 
 partial workflow Discovery {
+
     step FeaturesGenerate {
         self.current_artifact = "features"
 
         var requisitos_content = Context.artifact(project_id, "requisitos.html")
         if (requisitos_content.is_empty()) fail("gere 'requisitos' antes de 'features'")
+
+        var atributos_content = Context.artifact(project_id, "atributos.html")
+        if (atributos_content.is_empty()) fail("gere 'atributos' antes de 'features'")
 
         var adr_content = Context.artifact_dir(project_id, "adr")
         if (adr_content.is_empty()) fail("gere 'adr' antes de 'features'")
@@ -83,6 +88,7 @@ partial workflow Discovery {
         var response = Writer.generate(
             prompt: FeaturesInstruction(
                 schema_conventions: ArtifactSchema(),
+                atributos_content: atributos_content,
                 requisitos_content: requisitos_content,
                 adr_content: adr_content,
                 der_content: der_content,

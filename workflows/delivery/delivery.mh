@@ -75,6 +75,12 @@ workflow Delivery {
     input artifact: string    // brief | requisitos | adr | der | diagramas | feature | historia | historias
     input buddy: bool = false
     input approved: bool = false
+    // Caminho de recuperacao equivalente ao de Discovery: permite aprovar o
+    // pending_data de um checkpoint antigo sem restaurar aquela definicao e
+    // sem executar outra chamada de LLM.
+    input approval_data: any = null
+    input approval_tokens_in: number = 0
+    input approval_tokens_out: number = 0
     // Dois pontos de entrada: no resume junto com approved:false (Modo
     // Buddy's "Solicitar mudancas" numa run ainda pausada) OU direto no
     // StartRun (tab-artefatos.js's "Solicitar mudanca" num artefato JA
@@ -115,6 +121,27 @@ workflow Delivery {
     step Dispatch {
         project_id = Paths.ensure_valid(project_id)
         if (mode != "feature" && mode != "historia") fail("mode invalido: '" + mode + "' (use feature | historia)")
+
+        if (approved && approval_data != null) {
+            pending_data = approval_data
+            tokens_in = approval_tokens_in
+            tokens_out = approval_tokens_out
+            current_artifact = artifact
+            if (artifact == "brief") goto BriefCommit
+            if (artifact == "requisitos") goto RequisitosCommit
+            if (artifact == "adr") goto AdrCommit
+            if (artifact == "der") goto DerCommit
+            if (artifact == "diagramas") goto DiagramasCommit
+            if (artifact == "feature" || artifact == "historia") {
+                if (artifact != mode) fail("artifact '" + artifact + "' nao bate com mode '" + mode + "'")
+                goto FinalCommit
+            }
+            if (artifact == "historias") {
+                if (mode != "feature") fail("'historias' so existe quando mode=\"feature\"")
+                goto HistoriasCommit
+            }
+            fail("artefato desconhecido para aprovacao: '" + artifact + "'")
+        }
 
         // Um StartRun novo com feedback preenchido (ver input feedback's
         // comentario acima) consome o comentario aqui, antes do primeiro

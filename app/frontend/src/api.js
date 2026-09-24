@@ -114,8 +114,12 @@ export async function getDevinModel() {
   return App.GetDevinModel();
 }
 
-export async function setDevinModel(model) {
-  return parseJSON(await App.SetDevinModel(model), 'SetDevinModel');
+export async function getDevinCostSummary() {
+  return App.GetDevinCostSummary();
+}
+
+export async function setDevinModel(model, costSummary) {
+  return parseJSON(await App.SetDevinModel(model, costSummary || ''), 'SetDevinModel');
 }
 
 export async function getRunLogs(runId, since) {

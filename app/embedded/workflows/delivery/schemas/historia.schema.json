@@ -1,1 +1,50 @@
-{"$defs":{"sourcedText":{"type":"object","additionalProperties":false,"required":["texto","fontes"],"properties":{"texto":{"type":"string"},"fontes":{"type":"array","items":{"type":"string"},"minItems":1}}}},"type":"object","additionalProperties":false,"required":["como","quero","para","fontes","work_item_type","story_type","subclassification","nature","specialty","contexto_negocio","contexto_fontes","criterios_aceite","cenarios_gherkin","cenarios_fontes","regras_negocio","definition_of_done","dependencias_impedimentos","fora_escopo","exemplo_uso","exemplo_fontes","contratos_interface","contratos_fontes","questoes_abertas"],"properties":{"como":{"type":"string"},"quero":{"type":"string"},"para":{"type":"string"},"fontes":{"type":"array","items":{"type":"string"},"minItems":1},"work_item_type":{"type":"string"},"story_type":{"type":"string"},"subclassification":{"type":"string"},"nature":{"type":"string"},"specialty":{"type":"string"},"contexto_negocio":{"type":"string"},"contexto_fontes":{"type":"array","items":{"type":"string"},"minItems":1},"criterios_aceite":{"type":"array","minItems":1,"items":{"$ref":"#/$defs/sourcedText"}},"cenarios_gherkin":{"type":"string"},"cenarios_fontes":{"type":"array","items":{"type":"string"},"minItems":1},"regras_negocio":{"type":"array","items":{"$ref":"#/$defs/sourcedText"}},"definition_of_done":{"type":"array","items":{"$ref":"#/$defs/sourcedText"}},"dependencias_impedimentos":{"type":"array","items":{"$ref":"#/$defs/sourcedText"}},"fora_escopo":{"type":"array","items":{"$ref":"#/$defs/sourcedText"}},"exemplo_uso":{"type":"string"},"exemplo_fontes":{"type":"array","items":{"type":"string"},"minItems":1},"contratos_interface":{"type":"string"},"contratos_fontes":{"type":"array","items":{"type":"string"},"minItems":1},"questoes_abertas":{"type":"array","items":{"$ref":"#/$defs/sourcedText"}}}}
+{
+  "$defs": {
+    "sourcedText": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": ["texto", "fontes"],
+      "properties": {
+        "texto": {"type": "string"},
+        "fontes": {"type": "array", "items": {"type": "string"}, "minItems": 1}
+      }
+    }
+  },
+  "type": "object",
+  "additionalProperties": false,
+  "required": [
+    "como", "quero", "para", "resultado_tecnico", "habilita", "evidenciado_por", "fontes", "work_item_type",
+    "story_type", "subclassification", "nature", "specialty", "contexto_negocio", "contexto_fontes",
+    "criterios_aceite", "cenarios_gherkin", "cenarios_fontes", "regras_negocio", "definition_of_done",
+    "dependencias_impedimentos", "fora_escopo", "exemplo_uso", "exemplo_fontes", "contratos_interface",
+    "contratos_fontes", "questoes_abertas"
+  ],
+  "properties": {
+    "como": {"type": "string"},
+    "quero": {"type": "string"},
+    "para": {"type": "string"},
+    "resultado_tecnico": {"type": "string"},
+    "habilita": {"type": "string"},
+    "evidenciado_por": {"type": "string"},
+    "fontes": {"type": "array", "items": {"type": "string"}, "minItems": 1},
+    "work_item_type": {"type": "string", "enum": ["historia"]},
+    "story_type": {"type": "string", "enum": ["historia_usuario", "historia_habilitadora", "spike"]},
+    "subclassification": {"type": "string"},
+    "nature": {"type": "string", "enum": ["funcional", "tecnica", "pesquisa"]},
+    "specialty": {"type": "string"},
+    "contexto_negocio": {"type": "string"},
+    "contexto_fontes": {"type": "array", "items": {"type": "string"}, "minItems": 1},
+    "criterios_aceite": {"type": "array", "minItems": 1, "items": {"$ref": "#/$defs/sourcedText"}},
+    "cenarios_gherkin": {"type": "string"},
+    "cenarios_fontes": {"type": "array", "items": {"type": "string"}, "minItems": 1},
+    "regras_negocio": {"type": "array", "items": {"$ref": "#/$defs/sourcedText"}},
+    "definition_of_done": {"type": "array", "items": {"$ref": "#/$defs/sourcedText"}},
+    "dependencias_impedimentos": {"type": "array", "items": {"$ref": "#/$defs/sourcedText"}},
+    "fora_escopo": {"type": "array", "items": {"$ref": "#/$defs/sourcedText"}},
+    "exemplo_uso": {"type": "string"},
+    "exemplo_fontes": {"type": "array", "items": {"type": "string"}, "minItems": 1},
+    "contratos_interface": {"type": "string"},
+    "contratos_fontes": {"type": "array", "items": {"type": "string"}, "minItems": 1},
+    "questoes_abertas": {"type": "array", "items": {"$ref": "#/$defs/sourcedText"}}
+  }
+}

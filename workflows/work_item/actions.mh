@@ -95,9 +95,23 @@ export tool WorkItemActions {
             cache_creation_tokens: line.value?.cache_creation_tokens ?? 0,
             cache_read_tokens: line.value?.cache_read_tokens ?? 0,
             cost_usd: line.value?.cost_usd ?? 0,
+            cost_source: self.cost_source(line.value),
+            cost_model: line.value?.cost_model ?? "",
+            cost_pricing_reference: line.value?.cost_pricing_reference ?? "",
             at: line.ts,
         })
         return entries.sort_by((entry) -> entry.at)
+    }
+
+    // Linhas antigas nao tinham cost_source. Um custo positivo nelas so
+    // podia ter vindo do total_cost_usd do Claude; zero era tambem o
+    // placeholder usado por Devin/Codex quando nao havia custo. Preserva a
+    // informacao que de fato existe sem converter esse zero legado em valor
+    // informado.
+    cost_source(entry: any): string -> {
+        var source = entry?.cost_source ?? ""
+        if (source == "reported" || source == "estimated" || source == "unavailable") return source
+        return if ((entry?.cost_usd ?? 0) > 0) "reported" else "unavailable"
     }
 
     level_for(item_type: string): string -> {
@@ -117,16 +131,17 @@ export tool WorkItemActions {
     // throws "field not found" on a genuinely missing key (confirmed —
     // mhl's field access isn't forgiving the way a dynamic language's is).
     // `entry?.x` reads it as null instead of throwing when absent, `?? 0`
-    // turns that null into the same zero a *current* Devin-generated line
-    // already uses — an old line and a Devin line end up indistinguishable
-    // here, which is correct: both really do mean "no cache/cost data for
-    // this call".
+    // turns that null into zero. `cost_source`, however, keeps absence
+    // distinguishable from an actual reported cost of US$ 0.
     summarize_usage(lines: any[]): any -> {
         var total_in = 0
         var total_out = 0
         var total_cache_creation = 0
         var total_cache_read = 0
         var total_cost_usd = 0
+        var cost_reported_count = 0
+        var cost_estimated_count = 0
+        var cost_unavailable_count = 0
         var by_artifact = []
 
         for (var line in lines) {
@@ -134,11 +149,15 @@ export tool WorkItemActions {
             var cache_creation = entry?.cache_creation_tokens ?? 0
             var cache_read = entry?.cache_read_tokens ?? 0
             var cost_usd = entry?.cost_usd ?? 0
+            var cost_source = self.cost_source(entry)
             total_in = total_in + entry.tokens_in
             total_out = total_out + entry.tokens_out
             total_cache_creation = total_cache_creation + cache_creation
             total_cache_read = total_cache_read + cache_read
             total_cost_usd = total_cost_usd + cost_usd
+            if (cost_source == "reported") cost_reported_count = cost_reported_count + 1
+            else if (cost_source == "estimated") cost_estimated_count = cost_estimated_count + 1
+            else cost_unavailable_count = cost_unavailable_count + 1
             by_artifact += [{
                 artifact: entry.artifact,
                 tokens_in: entry.tokens_in,
@@ -146,6 +165,9 @@ export tool WorkItemActions {
                 cache_creation_tokens: cache_creation,
                 cache_read_tokens: cache_read,
                 cost_usd: cost_usd,
+                cost_source: cost_source,
+                cost_model: entry?.cost_model ?? "",
+                cost_pricing_reference: entry?.cost_pricing_reference ?? "",
                 at: line.ts
             }]
         }
@@ -156,6 +178,9 @@ export tool WorkItemActions {
             total_cache_creation_tokens: total_cache_creation,
             total_cache_read_tokens: total_cache_read,
             total_cost_usd: total_cost_usd,
+            cost_reported_count: cost_reported_count,
+            cost_estimated_count: cost_estimated_count,
+            cost_unavailable_count: cost_unavailable_count,
             by_artifact: by_artifact
         }
     }
@@ -218,17 +243,22 @@ test WorkItemActionsSpec {
         are_equal(result.by_artifact[0].cache_creation_tokens, 0)
         are_equal(result.by_artifact[0].cache_read_tokens, 0)
         are_equal(result.by_artifact[0].cost_usd, 0)
+        are_equal(result.cost_unavailable_count, 1)
+        are_equal(result.by_artifact[0].cost_source, "unavailable")
     }
 
     describe sums_cache_tokens_and_cost_across_lines_that_do_have_them {
         var result = WorkItemActions.summarize_usage([
             {value: {
                 artifact: "brief", tokens_in: 2, tokens_out: 4,
-                cache_creation_tokens: 21260, cache_read_tokens: 0, cost_usd: 0.128202
+                cache_creation_tokens: 21260, cache_read_tokens: 0,
+                cost_usd: 0.128202, cost_source: "reported"
             }, ts: "t1"},
             {value: {
                 artifact: "requisitos", tokens_in: 3, tokens_out: 6,
-                cache_creation_tokens: 0, cache_read_tokens: 21260, cost_usd: 0.0421
+                cache_creation_tokens: 0, cache_read_tokens: 21260,
+                cost_usd: 0.0421, cost_source: "estimated",
+                cost_model: "swe-1-6", cost_pricing_reference: "$0.5 / 1M Input"
             }, ts: "t2"}
         ])
         are_equal(result.total_cache_creation_tokens, 21260)
@@ -236,12 +266,19 @@ test WorkItemActionsSpec {
         are_equal(result.total_cost_usd, 0.170302)
         are_equal(result.by_artifact[0].cache_creation_tokens, 21260)
         are_equal(result.by_artifact[1].cache_read_tokens, 21260)
+        are_equal(result.cost_reported_count, 1)
+        are_equal(result.cost_estimated_count, 1)
+        are_equal(result.cost_unavailable_count, 0)
+        are_equal(result.by_artifact[1].cost_model, "swe-1-6")
     }
 
     describe summarizes_empty_usage {
         var result = WorkItemActions.summarize_usage([])
         are_equal(result.total_tokens_in, 0)
         are_equal(result.total_tokens_out, 0)
+        are_equal(result.cost_reported_count, 0)
+        are_equal(result.cost_estimated_count, 0)
+        are_equal(result.cost_unavailable_count, 0)
         are_equal(result.by_artifact, [])
     }
 
@@ -249,7 +286,8 @@ test WorkItemActionsSpec {
         var result = WorkItemActions.format_prompt_log([
             {value: {
                 artifact: "requisitos", backend: "Claude", prompt: "gere os requisitos", response: "{...}",
-                tokens_in: 7, tokens_out: 3, cache_creation_tokens: 21260, cache_read_tokens: 0, cost_usd: 0.12
+                tokens_in: 7, tokens_out: 3, cache_creation_tokens: 21260, cache_read_tokens: 0,
+                cost_usd: 0.12, cost_source: "reported"
             }, ts: "2026-01-01T11:00:00Z"},
             {value: {
                 artifact: "brief", backend: "Codex", prompt: "gere o brief", response: "{...}",
@@ -259,7 +297,9 @@ test WorkItemActionsSpec {
         are_equal(result.size(), 2)
         are_equal(result[0].artifact, "brief")
         are_equal(result[0].backend, "Codex")
+        are_equal(result[0].cost_source, "unavailable")
         are_equal(result[1].artifact, "requisitos")
+        are_equal(result[1].cost_source, "reported")
     }
 
     // Mesma logica de an_old_line_with_no_cache_or_cost_fields_summarizes_as_zero_not_an_error
@@ -271,6 +311,7 @@ test WorkItemActionsSpec {
         are_equal(result[0].cache_creation_tokens, 0)
         are_equal(result[0].cache_read_tokens, 0)
         are_equal(result[0].cost_usd, 0)
+        are_equal(result[0].cost_source, "unavailable")
     }
 
     // Reproduz um caso real: um work-item com linhas do ingest da wiki

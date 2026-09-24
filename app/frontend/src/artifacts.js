@@ -32,13 +32,13 @@ export const DISCOVERY_SEQUENCE = [
   { artifact: 'diagramas', deps: ['requisitos', 'atributos'], dir: 'diagramas', collectionKind: 'files', category: 'Diagramas' },
   // der is real context for features when present, but never blocks it —
   // deliberately left out of `deps` (see discovery.mh's FeaturesGenerate).
-  { artifact: 'features', deps: ['requisitos', 'adr', 'diagramas'], dir: 'features', collectionKind: 'folders', itemFile: 'feature.html', category: 'Features' },
+  { artifact: 'features', deps: ['atributos', 'requisitos', 'adr', 'diagramas'], dir: 'features', collectionKind: 'folders', itemFile: 'feature.html', category: 'Backlog da solução' },
   // dependencias reads every feature already committed under features/ (see
   // discovery.partial.backlog.mh's DependenciasGenerate) — an LLM call, not
   // a client-side guess, replacing an earlier from-scratch heuristic that
   // tried to fuzzy-match feature titles in tab-artefatos.js and got it
   // wrong often enough to be worse than nothing.
-  { artifact: 'dependencias', deps: ['features'], path: 'dependencias.html', category: 'Features' },
+  { artifact: 'dependencias', deps: ['features'], path: 'dependencias.html', category: 'Backlog da solução' },
   // historias has no fixed `deps` entry here — it's per-feature and only
   // exists once `features` produced at least one folder; see
   // artifactsForProject()/listFeatureIds() below.

@@ -17,7 +17,7 @@ export function openNewWorkItemModal() {
         <label for="wi-type">Tipo</label>
         <select id="wi-type">
           <option value="oportunidade">Oportunidade (Discovery)</option>
-          <option value="feature">Feature (Delivery)</option>
+          <option value="feature">Feature ou enabler (Delivery)</option>
           <option value="historia">História (Delivery)</option>
         </select>
         <div class="modal-error" data-error hidden></div>

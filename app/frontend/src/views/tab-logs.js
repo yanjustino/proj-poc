@@ -13,6 +13,7 @@ import { listProjectRunLogs, getPersistedRunLogs, getRunStatus, workItemPromptLo
 import { dotClass } from '../status.js';
 import { STATE_LABEL } from '../run-tracker.js';
 import { icon } from '../icons.js';
+import { callCostNote } from '../cost.js';
 
 const LIST_POLL_MS = 5000;
 const CONTENT_POLL_MS = 2500;
@@ -167,7 +168,7 @@ export async function renderLogsTab(container, project) {
       <h4>Chamadas de LLM${artifact ? ` · ${escapeHtml(artifact)}` : ' · todo o projeto'}</h4>
       ${calls
         .map((entry, index) => {
-          const costNote = entry.cost_usd ? ` · US$ ${Number(entry.cost_usd).toFixed(4)}` : '';
+          const costNote = callCostNote(entry);
           return `
           <details class="logs-step-group" ${openAttr(index, index === lastIndex)}>
             <summary>

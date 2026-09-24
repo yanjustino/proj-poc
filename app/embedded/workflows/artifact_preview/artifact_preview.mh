@@ -73,7 +73,7 @@ workflow ArtifactPreview {
     }
 
     step Feature {
-        preview_html = PageShell(title: "Detalhamento da feature", body: ArtifactBody.feature(data), meta: "Rascunho — ainda não gravado")
+        preview_html = PageShell(title: "Detalhamento do item de backlog", body: ArtifactBody.feature(data), meta: "Rascunho — ainda não gravado")
         goto Done
     }
 
@@ -132,7 +132,7 @@ workflow ArtifactPreview {
         for (var feature in data.features) {
             body = body + "<h2>" + html.escape(feature.titulo) + "</h2>" + ArtifactBody.feature(feature)
         }
-        preview_html = PageShell(title: "Features", body: body, meta: "Rascunho — ainda não gravado")
+        preview_html = PageShell(title: "Backlog da solução", body: body, meta: "Rascunho — ainda não gravado")
         goto Done
     }
 
@@ -228,6 +228,58 @@ test ArtifactPreviewSpec {
         is_true(run.vars.preview_html.contains("Mapa de Dependências"))
         is_true(run.vars.preview_html.contains("FT002"))
         is_true(run.vars.preview_html.contains("graph LR"))
+    }
+
+    describe enabler_feature_renders_classification_benefit_and_enabled_items {
+        var run = ArtifactPreview.run(inputs: {
+            artifact: "feature",
+            data: {
+                tipo_item: "enabler",
+                subtipo_enabler: "infraestrutura",
+                classificacao_fontes: ["requisitos/IR-001"],
+                hipotese_beneficio: "Reduzir o tempo para validar entregas.",
+                hipotese_beneficio_fontes: ["requisitos/IR-001"],
+                itens_habilitados: [{texto: "Cadastro de clientes", fontes: ["requisitos/FR-001"]}],
+                resumo: "Caminho mínimo de entrega automatizada.",
+                resumo_fontes: ["requisitos/IR-001"],
+                objetivo: "Disponibilizar build e deploy verificáveis.",
+                objetivo_fontes: ["requisitos/IR-001"],
+                personas: [], em_escopo: [], fora_escopo: [], regras_negocio: [],
+                interacoes_entidades_dados: [],
+                criterios_aceite: [{texto: "Deploy validado por smoke test.", fontes: ["requisitos/IR-001"]}],
+                historias_propostas: [], dependencias_integridade: [], dependencias_sistema: [], gaps: [], questoes_abertas: []
+            }
+        })
+        is_true(run.ok)
+        is_true(run.vars.preview_html.contains("item-kind-enabler"))
+        is_true(run.vars.preview_html.contains(">infraestrutura</span>"))
+        is_true(run.vars.preview_html.contains("Cadastro de clientes"))
+    }
+
+    describe enabling_story_renders_a_technical_statement_instead_of_como_quero_para {
+        var run = ArtifactPreview.run(inputs: {
+            artifact: "historia",
+            data: {
+                como: "", quero: "", para: "",
+                resultado_tecnico: "Deploy automatizado em homologação",
+                habilita: "Cadastro de clientes",
+                evidenciado_por: "Smoke test executado com sucesso",
+                fontes: ["features/FT001-fundacao"],
+                work_item_type: "historia", story_type: "historia_habilitadora",
+                subclassification: "infraestrutura", nature: "tecnica", specialty: "plataforma",
+                contexto_negocio: "A entrega precisa de um ambiente verificável.",
+                contexto_fontes: ["features/FT001-fundacao"],
+                criterios_aceite: [{texto: "Pipeline implanta a versão.", fontes: ["features/FT001-fundacao"]}],
+                cenarios_gherkin: "", cenarios_fontes: ["gap"], regras_negocio: [],
+                definition_of_done: [], dependencias_impedimentos: [], fora_escopo: [],
+                exemplo_uso: "", exemplo_fontes: ["gap"], contratos_interface: "", contratos_fontes: ["gap"],
+                questoes_abertas: []
+            }
+        })
+        is_true(run.ok)
+        is_true(run.vars.preview_html.contains("Resultado técnico:"))
+        is_true(run.vars.preview_html.contains("Smoke test executado com sucesso"))
+        is_false(run.vars.preview_html.contains("<strong>Como</strong>"))
     }
 
     describe unknown_artifact_fails_before_touching_anything {

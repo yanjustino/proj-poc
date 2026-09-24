@@ -17,6 +17,8 @@ export function ExportProjectFile(arg1:string,arg2:string,arg3:string):Promise<s
 
 export function GetAgent():Promise<string>;
 
+export function GetDevinCostSummary():Promise<string>;
+
 export function GetDevinModel():Promise<string>;
 
 export function GetRunLogs(arg1:string,arg2:string):Promise<string>;
@@ -59,7 +61,7 @@ export function SelectRawFiles():Promise<string>;
 
 export function SetAgent(arg1:string):Promise<string>;
 
-export function SetDevinModel(arg1:string):Promise<string>;
+export function SetDevinModel(arg1:string,arg2:string):Promise<string>;
 
 export function ShowWarningDialog(arg1:string,arg2:string):Promise<void>;
 

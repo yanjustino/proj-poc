@@ -39,11 +39,34 @@ func TestMHLBridge_ConcurrentCallsOnTheSharedSessionNeverFail(t *testing.T) {
 			go func(i int) {
 				defer wg.Done()
 				data := map[string]any{
-					"titulo":        fmt.Sprintf("Decisao %d", i),
-					"contexto":      "ctx",
-					"decisao":       "dec",
-					"consequencias": "cons",
-					"fontes":        []string{"gap"},
+					"titulo":              fmt.Sprintf("Decisao %d", i),
+					"status":              "aceita",
+					"contexto_e_problema": "ctx",
+					"contexto_fontes":     []string{"gap"},
+					"fatores_decisao": []any{
+						map[string]any{"texto": "fator", "fontes": []string{"gap"}},
+					},
+					"opcoes_consideradas": []string{"A", "B"},
+					"decisao_final": map[string]any{
+						"opcao_escolhida": "A",
+						"justificativa":   "dec",
+						"fontes":          []string{"gap"},
+					},
+					"consequencias_positivas": []any{
+						map[string]any{"texto": "pos", "fontes": []string{"gap"}},
+					},
+					"consequencias_negativas": []any{
+						map[string]any{"texto": "neg", "fontes": []string{"gap"}},
+					},
+					"opcoes_pros_contras": []any{
+						map[string]any{
+							"opcao":   "A",
+							"pros":    []any{map[string]any{"texto": "p", "fontes": []string{"gap"}}},
+							"contras": []any{map[string]any{"texto": "c", "fontes": []string{"gap"}}},
+						},
+					},
+					"links":  []any{},
+					"fontes": []string{"gap"},
 				}
 				status, err := app.mhl.RunStart(ctx, "ArtifactPreview", map[string]any{
 					"artifact": "decisao",

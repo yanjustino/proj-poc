@@ -34,25 +34,29 @@ export memory PromptLog {
 // Windows. Preferimos o objeto validado e mantemos `result` apenas como
 // fallback para versoes antigas do CLI que nao exponham `structured_output`.
 //
-// Toda variante de extract_* devolve exatamente as mesmas 6 chaves — mesmo
+// Toda variante de extract_* devolve exatamente as mesmas chaves — mesmo
 // quando um backend nao tem o conceito (cache_creation do Devin/Codex, custo
 // do Codex) — para Writer.generate/Usage.append nunca precisar checar "esse
-// campo existe pra esse backend?" com acesso opcional; so preenche zero.
+// campo existe pra esse backend?" com acesso opcional. `cost_source` separa
+// um custo realmente informado de zero usado como placeholder; sem isso nao
+// seria possivel aplicar com seguranca o fallback de preco do modelo.
 export tool UsageParser {
     // `devin --print` continua devolvendo apenas a resposta final no stdout,
     // mas `--export <path>` grava uma trajetoria ATIF com os totais em
     // final_metrics. `prompt_tokens` ja inclui `cached_tokens`; cache e uma
     // decomposicao para observabilidade, nao algo a somar de novo na entrada.
-    // O export nao traz cache_creation e pode nao trazer custo — esses campos
-    // continuam zero quando ausentes. Telemetria e best-effort: export ausente
-    // ou invalido nao pode invalidar uma resposta de geracao correta.
+    // O export nao traz cache_creation e pode nao trazer custo. Ausencia de
+    // custo fica marcada separadamente para UsageCost tentar a referencia do
+    // modelo; telemetria ausente ou invalida nao pode invalidar uma resposta
+    // de geracao correta.
     //
     // A CLI pode envolver a resposta em uma cerca Markdown mesmo quando
     // instruida a nao faze-lo; removemos somente a cerca externa, preservando
     // backticks que facam parte de campos internos.
     extract_devin(raw: string, exported: string): {
         tokens_in: number, tokens_out: number, content: string,
-        cache_creation_tokens: number, cache_read_tokens: number, cost_usd: number
+        cache_creation_tokens: number, cache_read_tokens: number,
+        usage_available: bool, cost_usd: number, cost_source: string
     } -> {
         var content = raw.trim()
         if (content.starts_with("```json")) content = content.substring(7, content.size()).trim()
@@ -63,6 +67,8 @@ export tool UsageParser {
         var tokens_out = 0
         var cache_read_tokens = 0
         var cost_usd = 0
+        var usage_available = false
+        var cost_source = "unavailable"
         if (!exported.trim().is_empty()) {
             try {
                 var trajectory = json.parse(exported)
@@ -71,18 +77,26 @@ export tool UsageParser {
                     tokens_in = metrics.get("total_prompt_tokens", 0) ?? 0
                     tokens_out = metrics.get("total_completion_tokens", 0) ?? 0
                     cache_read_tokens = metrics.get("total_cached_tokens", 0) ?? 0
-                    cost_usd = metrics.get("total_cost_usd", 0) ?? 0
+                    usage_available = true
+                    var reported_cost = metrics.get("total_cost_usd", null)
+                    if (reported_cost != null) {
+                        cost_usd = reported_cost
+                        cost_source = "reported"
+                    }
                 }
             } catch (err) {
                 tokens_in = 0
                 tokens_out = 0
                 cache_read_tokens = 0
                 cost_usd = 0
+                usage_available = false
+                cost_source = "unavailable"
             }
         }
         return {
             tokens_in: tokens_in, tokens_out: tokens_out, content: content,
-            cache_creation_tokens: 0, cache_read_tokens: cache_read_tokens, cost_usd: cost_usd
+            cache_creation_tokens: 0, cache_read_tokens: cache_read_tokens,
+            usage_available: usage_available, cost_usd: cost_usd, cost_source: cost_source
         }
     }
 
@@ -96,19 +110,23 @@ export tool UsageParser {
     // o ledger fazia parecer que a chamada quase nao usou tokens de entrada.
     extract_claude(raw: string): {
         tokens_in: number, tokens_out: number, content: string,
-        cache_creation_tokens: number, cache_read_tokens: number, cost_usd: number
+        cache_creation_tokens: number, cache_read_tokens: number,
+        usage_available: bool, cost_usd: number, cost_source: string
     } -> {
         var envelope = json.parse(raw)
         var content = envelope.result
         var structured = envelope.get("structured_output", null)
         if (structured != null) content = json.stringify(structured)
+        var reported_cost = envelope.get("total_cost_usd", null)
         return {
             tokens_in: envelope.usage.input_tokens,
             tokens_out: envelope.usage.output_tokens,
             content: content,
             cache_creation_tokens: envelope.usage.cache_creation_input_tokens,
             cache_read_tokens: envelope.usage.cache_read_input_tokens,
-            cost_usd: envelope.total_cost_usd,
+            usage_available: true,
+            cost_usd: reported_cost ?? 0,
+            cost_source: if (reported_cost != null) "reported" else "unavailable",
         }
     }
 
@@ -123,13 +141,15 @@ export tool UsageParser {
     // exposto por este CLI — cost_usd fica 0 aqui, nao inventado.
     extract_codex(raw: string): {
         tokens_in: number, tokens_out: number, content: string,
-        cache_creation_tokens: number, cache_read_tokens: number, cost_usd: number
+        cache_creation_tokens: number, cache_read_tokens: number,
+        usage_available: bool, cost_usd: number, cost_source: string
     } -> {
         var tokens_in = 0
         var tokens_out = 0
         var cache_creation_tokens = 0
         var cache_read_tokens = 0
         var content = ""
+        var usage_available = false
         for (var event in json.parse_lines(raw)) {
             if (event.type == "item.completed" && event.item.type == "agent_message") {
                 content = event.item.text
@@ -139,11 +159,82 @@ export tool UsageParser {
                 tokens_out = event.usage.output_tokens
                 cache_read_tokens = event.usage.cached_input_tokens
                 cache_creation_tokens = event.usage.cache_write_input_tokens
+                usage_available = true
             }
         }
         return {
             tokens_in: tokens_in, tokens_out: tokens_out, content: content,
-            cache_creation_tokens: cache_creation_tokens, cache_read_tokens: cache_read_tokens, cost_usd: 0
+            cache_creation_tokens: cache_creation_tokens, cache_read_tokens: cache_read_tokens,
+            usage_available: usage_available, cost_usd: 0, cost_source: "unavailable"
+        }
+    }
+}
+
+// Resolve a procedencia do custo sem misturar "zero informado" com
+// "informacao ausente". A execucao sempre vence. Somente quando ela nao
+// informa total_cost_usd o Devin pode usar a fotografia de precos do modelo
+// selecionado, validada pelo app antes de entrar em SENPAI_DEVIN_PRICING.
+// Outros backends ficam sem estimativa quando nao reportam o proprio custo.
+export tool UsageCost {
+    resolve(usage: any, backend: string): {
+        cost_usd: number, cost_source: string, cost_model: string,
+        cost_pricing_reference: string
+    } -> {
+        var model_id = if (backend == "Devin") env("SENPAI_DEVIN_MODEL", "") else ""
+        var pricing = if (backend == "Devin") env("SENPAI_DEVIN_PRICING", "") else ""
+        return self.resolve_with_pricing(
+            usage: usage,
+            backend: backend,
+            model_id: model_id,
+            pricing_json: pricing
+        )
+    }
+
+    resolve_with_pricing(usage: any, backend: string, model_id: string, pricing_json: string): {
+        cost_usd: number, cost_source: string, cost_model: string,
+        cost_pricing_reference: string
+    } -> {
+        if (usage.cost_source == "reported") {
+            return {
+                cost_usd: usage.cost_usd,
+                cost_source: "reported",
+                cost_model: model_id,
+                cost_pricing_reference: ""
+            }
+        }
+        if (!usage.usage_available || backend != "Devin" || pricing_json.trim().is_empty()) {
+            return {
+                cost_usd: 0,
+                cost_source: "unavailable",
+                cost_model: model_id,
+                cost_pricing_reference: ""
+            }
+        }
+
+        try {
+            var pricing = json.parse(pricing_json)
+            var cached_input = usage.cache_read_tokens
+            if (cached_input < 0) cached_input = 0
+            if (cached_input > usage.tokens_in) cached_input = usage.tokens_in
+            var fresh_input = usage.tokens_in - cached_input
+            var estimated = (
+                fresh_input * pricing.input_usd_per_million +
+                cached_input * pricing.cached_input_usd_per_million +
+                usage.tokens_out * pricing.output_usd_per_million
+            ) / 1000000
+            return {
+                cost_usd: estimated,
+                cost_source: "estimated",
+                cost_model: pricing.get("model_id", model_id) ?? model_id,
+                cost_pricing_reference: pricing.get("summary", "") ?? ""
+            }
+        } catch (err) {
+            return {
+                cost_usd: 0,
+                cost_source: "unavailable",
+                cost_model: model_id,
+                cost_pricing_reference: ""
+            }
         }
     }
 }
@@ -157,6 +248,8 @@ test UsageParserSpec {
         are_equal(parsed.cache_creation_tokens, 0)
         are_equal(parsed.cache_read_tokens, 0)
         are_equal(parsed.cost_usd, 0)
+        are_equal(parsed.usage_available, false)
+        are_equal(parsed.cost_source, "unavailable")
     }
 
     describe removes_only_devins_outer_markdown_fence {
@@ -175,6 +268,56 @@ test UsageParserSpec {
         are_equal(parsed.cache_read_tokens, 1472)
         are_equal(parsed.cache_creation_tokens, 0)
         are_equal(parsed.cost_usd, 0)
+        are_equal(parsed.usage_available, true)
+        are_equal(parsed.cost_source, "unavailable")
+    }
+
+    describe prefers_even_a_reported_zero_over_a_model_price_estimate {
+        var usage = UsageParser.extract_devin(
+            "{\"ok\":true}",
+            "{\"final_metrics\":{\"total_prompt_tokens\":1000,\"total_completion_tokens\":200,\"total_cached_tokens\":400,\"total_cost_usd\":0}}"
+        )
+        var cost = UsageCost.resolve_with_pricing(
+            usage: usage,
+            backend: "Devin",
+            model_id: "swe-1-6",
+            pricing_json: "{\"model_id\":\"swe-1-6\",\"summary\":\"reference\",\"input_usd_per_million\":0.5,\"cached_input_usd_per_million\":0.2,\"output_usd_per_million\":2.5}"
+        )
+        are_equal(cost.cost_usd, 0)
+        are_equal(cost.cost_source, "reported")
+        are_equal(cost.cost_pricing_reference, "")
+    }
+
+    describe estimates_from_selected_model_prices_when_devin_does_not_report_cost {
+        var usage = UsageParser.extract_devin(
+            "{\"ok\":true}",
+            "{\"final_metrics\":{\"total_prompt_tokens\":1000,\"total_completion_tokens\":200,\"total_cached_tokens\":400}}"
+        )
+        var cost = UsageCost.resolve_with_pricing(
+            usage: usage,
+            backend: "Devin",
+            model_id: "swe-1-6",
+            pricing_json: "{\"model_id\":\"swe-1-6\",\"summary\":\"$0.5 / 1M Input\",\"input_usd_per_million\":0.5,\"cached_input_usd_per_million\":0.2,\"output_usd_per_million\":2.5}"
+        )
+        are_equal(cost.cost_usd, 0.00088)
+        are_equal(cost.cost_source, "estimated")
+        are_equal(cost.cost_model, "swe-1-6")
+        are_equal(cost.cost_pricing_reference, "$0.5 / 1M Input")
+    }
+
+    describe marks_cost_unavailable_when_neither_execution_nor_model_has_pricing {
+        var usage = UsageParser.extract_devin(
+            "{\"ok\":true}",
+            "{\"final_metrics\":{\"total_prompt_tokens\":1000,\"total_completion_tokens\":200,\"total_cached_tokens\":400}}"
+        )
+        var cost = UsageCost.resolve_with_pricing(
+            usage: usage,
+            backend: "Devin",
+            model_id: "unknown",
+            pricing_json: ""
+        )
+        are_equal(cost.cost_usd, 0)
+        are_equal(cost.cost_source, "unavailable")
     }
 
     describe keeps_the_response_when_devins_export_is_invalid {

@@ -9,6 +9,7 @@ import {
   showWarningDialog,
   listDevinModels,
   getDevinModel,
+  getDevinCostSummary,
   setDevinModel,
   appVersion,
 } from '../api.js';
@@ -203,7 +204,11 @@ export async function mountShell(root) {
     devinModelSelectEl.innerHTML = '<option value="">Carregando…</option>';
     devinModelCostEl.textContent = '';
     try {
-      const [models, selected] = await Promise.all([listDevinModels(), getDevinModel()]);
+      const [models, selected, savedCostSummary] = await Promise.all([
+        listDevinModels(),
+        getDevinModel(),
+        getDevinCostSummary(),
+      ]);
       devinModelsById = new Map(models.map((model) => [model.id, model]));
       const groups = new Map();
       models.forEach((model) => {
@@ -225,6 +230,11 @@ export async function mountShell(root) {
       devinModelSelectEl.value = models.some((model) => model.id === selected) ? selected : '';
       devinModelSelectEl.disabled = false;
       updateDevinModelCost();
+      const selectedModel = devinModelsById.get(selected);
+      if (selectedModel && selectedModel.costSummary !== savedCostSummary) {
+        const next = await setDevinModel(selected, selectedModel.costSummary || '');
+        renderMcpStatus(next);
+      }
     } catch (err) {
       devinModelSelectEl.innerHTML = '<option value="">Não foi possível listar</option>';
       LogFrontendError(`listDevinModels: failed: ${err && err.stack ? err.stack : err}`).catch(() => {});
@@ -283,7 +293,8 @@ export async function mountShell(root) {
     reconnecting = true;
     renderMcpStatus({ ready: false, error: 'Trocando modelo do Devin…' });
     try {
-      const next = await setDevinModel(chosen);
+      const selectedModel = devinModelsById.get(chosen);
+      const next = await setDevinModel(chosen, selectedModel?.costSummary || '');
       renderMcpStatus(next);
     } catch (err) {
       renderMcpStatus({ ready: false, error: String(err) });

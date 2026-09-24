@@ -10,6 +10,7 @@ import { listRuns, getRunLogs, getRunStatus, getRunProjectId, workItemPromptLog 
 import { dotClass } from '../status.js';
 import { STATE_LABEL } from '../run-tracker.js';
 import { icon } from '../icons.js';
+import { callCostNote } from '../cost.js';
 
 const RUN_LIST_POLL_MS = 4000;
 const LOG_POLL_MS = 1500;
@@ -217,7 +218,7 @@ export function renderLogsView(container) {
       <h4>Chamadas de LLM · ${escapeHtml(cache.artifact)}</h4>
       ${cache.llmCalls
         .map((entry, index) => {
-          const costNote = entry.cost_usd ? ` · US$ ${Number(entry.cost_usd).toFixed(4)}` : '';
+          const costNote = callCostNote(entry);
           return `
           <details class="logs-step-group" ${openAttr(cache.llmOpenStates, index, index === lastIndex)}>
             <summary>

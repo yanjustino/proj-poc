@@ -13,8 +13,8 @@ O Senpai organiza o trabalho por **Oportunidade**, **Feature** ou **História**,
 - Ingestão de fontes em `.txt`, `.md` e `.pdf`.
 - Wiki incremental organizada em fontes, entidades, conceitos e respostas arquivadas.
 - Consulta e verificação de consistência da wiki com apoio de LLM.
-- Geração guiada de brief, requisitos, ADRs, DER, diagramas, features e histórias.
-- Revisão dos artefatos, solicitação de alterações e aprovação antes da gravação.
+- Geração guiada de brief, requisitos, ADRs, DER, diagramas, features de negócio, enablers e histórias.
+- Revisão dos artefatos, solicitação de alterações e aprovação antes da gravação, inclusive após reiniciar o app ou atualizar a definição do pipeline.
 - Rastreabilidade por fonte, incluindo marcações explícitas de `gap` e `inferência`.
 - Diagramas Mermaid renderizados também fora do aplicativo, sem dependência de rede.
 - JSON estruturado como contexto semântico dos LLMs e HTML como apresentação no frontend.
@@ -36,11 +36,13 @@ O Senpai organiza o trabalho por **Oportunidade**, **Feature** ou **História**,
 
 | Tipo | Pipeline |
 | --- | --- |
-| Oportunidade | Brief → Atributos de qualidade → Requisitos → ADRs / DER / Diagramas → Features → Dependências → Histórias |
-| Feature | Brief opcional → Requisitos → ADRs / DER / Diagramas → Detalhamento da feature → Histórias |
+| Oportunidade | Brief → Atributos de qualidade → Requisitos → ADRs / DER / Diagramas → Backlog da solução (features e enablers) → Dependências → Histórias |
+| Feature | Brief opcional → Requisitos → ADRs / DER / Diagramas → Detalhamento da feature ou enabler → Histórias |
 | História | Brief opcional → Requisitos → ADRs / DER / Diagramas → Detalhamento da história |
 
 ADRs, DER e diagramas podem ser opcionais em alguns fluxos de Delivery. A interface informa quais dependências são obrigatórias antes de cada geração.
+
+No backlog da solução, uma `feature_negocio` representa valor percebido diretamente por usuário ou stakeholder. Um `enabler` representa trabalho de exploração, arquitetura, infraestrutura ou conformidade que habilita entregas próximas. Ambos ocupam o mesmo nível e usam o mesmo mapa de dependências; histórias podem ser classificadas como `historia_usuario`, `historia_habilitadora` ou `spike`.
 
 ## Arquitetura
 
@@ -55,6 +57,12 @@ flowchart LR
 ```
 
 Em produção, o backend de LLM suportado é o **Devin CLI**. O código contém adaptadores auxiliares para outros agentes usados no desenvolvimento, mas eles não são dependências obrigatórias do produto.
+
+O ledger registra custo em dólar com procedência explícita. Se a execução
+informar `total_cost_usd`, esse valor prevalece; caso contrário, o Senpai usa
+as tarifas de entrada, cache e saída publicadas para o modelo selecionado por
+`devin models list --format json`. Sem nenhuma das duas fontes, a interface
+mostra **sem estimativa** em vez de tratar a ausência como custo zero.
 
 Cada tipo de resposta estruturada possui um contrato em JSON Schema. O adaptador normaliza a saída e o workflow faz o parse do JSON antes da renderização. Cada artefato novo é persistido em duas representações:
 

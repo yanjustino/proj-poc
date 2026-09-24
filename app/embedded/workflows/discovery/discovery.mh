@@ -24,6 +24,14 @@ partial workflow Discovery {
     input feature_id: string = "" // obrigatorio (valor) so para artifact:"historias"
     input buddy: bool = false
     input approved: bool = false
+    // Caminho de recuperacao para um rascunho pausado cujo checkpoint foi
+    // criado por outra definicao do pipeline. A UI envia exatamente o
+    // pending_data ja revisado; Dispatch pula a geracao e entra no Commit da
+    // versao atual. `null` mantem o fluxo normal e nunca e preenchido pela
+    // LLM.
+    input approval_data: any = null
+    input approval_tokens_in: number = 0
+    input approval_tokens_out: number = 0
     // Dois pontos de entrada: no resume junto com approved:false (Modo
     // Buddy's "Solicitar mudancas" numa run ainda pausada) OU direto no
     // StartRun (tab-artefatos.js's "Solicitar mudanca" num artefato JA
@@ -91,6 +99,16 @@ partial workflow Discovery {
 
     entry step Dispatch {
         project_id = Paths.ensure_valid(project_id)
+        if (approved && approval_data != null) {
+            if (artifact == "historias" && feature_id.is_empty()) {
+                fail("'feature_id' e obrigatorio para aprovar artifact: \"historias\"")
+            }
+            pending_data = approval_data
+            tokens_in = approval_tokens_in
+            tokens_out = approval_tokens_out
+            current_artifact = artifact
+            goto CommitRouter(artifact)
+        }
         // Um StartRun novo com feedback preenchido (ver input feedback's
         // comentario acima) consome o comentario aqui, antes do primeiro
         // *Generate — marcando feedback_consumed:true agora faz o Gate

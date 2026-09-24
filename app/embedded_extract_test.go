@@ -55,7 +55,7 @@ func TestExtractVendoredWorkflows_IsARealRunnableTree(t *testing.T) {
 
 	ctx, cancel := context.WithCancel(context.Background())
 	defer cancel()
-	client, err := mhlbridge.Start(ctx, mhlPath, workflowsDir, "", t.TempDir(), "", "", "")
+	client, err := mhlbridge.Start(ctx, mhlPath, workflowsDir, "", t.TempDir(), "", "", "", "")
 	if err != nil {
 		t.Fatalf("mhlbridge.Start against the extracted embedded workflows dir: %v", err)
 	}

@@ -153,7 +153,10 @@ type rpcError struct {
 // (App.SetAgent's job: save the new value, then call ReconnectMCP).
 // devinModel, when non-empty, is exported as SENPAI_DEVIN_MODEL and becomes
 // the value passed to `devin --model` by workflows/shared/agents/agents.mh.
-func Start(ctx context.Context, mhlPath, workflowsDir, stateDir, dataDir, codexCwdDir, agent, devinModel string) (*Client, error) {
+// devinPricingJSON is a validated snapshot of that model's token rates from
+// `devin models list`; the workflow uses it only when the execution itself
+// does not report total_cost_usd.
+func Start(ctx context.Context, mhlPath, workflowsDir, stateDir, dataDir, codexCwdDir, agent, devinModel, devinPricingJSON string) (*Client, error) {
 	// A previous mhl child can still be running here — not from another
 	// live instance (each Start() picks its own fresh port below), but from
 	// THIS app's own last run ending abruptly: a killed debug session, a
@@ -201,6 +204,9 @@ func Start(ctx context.Context, mhlPath, workflowsDir, stateDir, dataDir, codexC
 	}
 	if devinModel != "" {
 		env = append(env, "SENPAI_DEVIN_MODEL="+devinModel)
+	}
+	if devinPricingJSON != "" {
+		env = append(env, "SENPAI_DEVIN_PRICING="+devinPricingJSON)
 	}
 	cmd.Env = enrichedEnv(ctx, env)
 	var stderr bytes.Buffer

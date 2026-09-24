@@ -72,8 +72,22 @@ export tool ArtifactHtml {
         "<table><thead><tr><th>Persona</th><th>Papel</th><th>Interação</th><th>Fontes</th></tr></thead><tbody>" +
         items.map((x) -> "<tr><td>" + html.escape(x.persona) + "</td><td>" + html.escape(x.papel) + "</td><td>" + html.escape(x.interacao) + "</td><td>" + Cite.badges(x.fontes) + "</td></tr>").join("") + "</tbody></table>"
 
-    story_statement(como: string, quero: string, para: string): string ->
-        "<blockquote><strong>Como</strong> " + html.escape(como) + ", <strong>quero</strong> " + html.escape(quero) + ", <strong>para</strong> " + html.escape(para) + ".</blockquote>"
+    feature_classification(tipo_item: string, subtipo_enabler: string, fontes: string[]): string -> {
+        var kind_label = if (tipo_item == "enabler") "Enabler" else "Feature de negócio"
+        var kind_class = if (tipo_item == "enabler") " item-kind-enabler" else " item-kind-business"
+        var subtype = if (tipo_item == "enabler") "<span class=\"item-kind item-kind-subtype\">" + html.escape(subtipo_enabler) + "</span>" else ""
+        return "<p class=\"item-classification\"><span class=\"item-kind" + kind_class + "\">" + kind_label + "</span>" + subtype + " " + Cite.badges(fontes) + "</p>"
+    }
+
+    story_statement(story_type: string, como: string, quero: string, para: string, resultado_tecnico: string, habilita: string, evidenciado_por: string): string -> {
+        if (story_type == "historia_usuario") {
+            return "<blockquote><strong>Como</strong> " + html.escape(como) + ", <strong>quero</strong> " + html.escape(quero) + ", <strong>para</strong> " + html.escape(para) + ".</blockquote>"
+        }
+        var label = if (story_type == "spike") "Pergunta de investigação" else "Resultado técnico"
+        return "<blockquote><strong>" + label + ":</strong> " + html.escape(resultado_tecnico) +
+            "<br><strong>Habilita:</strong> " + html.escape(habilita) +
+            "<br><strong>Evidenciado por:</strong> " + html.escape(evidenciado_por) + "</blockquote>"
+    }
 
     story_attributes(work_item_type: string, story_type: string, subclassification: string, nature: string, specialty: string, fontes: string[]): string ->
         Cite.list([
@@ -112,7 +126,7 @@ export tool ArtifactHtml {
     // "—" (not an empty cell) for a feature with no dependencies, so an
     // intentional "nothing here" reads differently from a rendering bug.
     dependency_map(items: {feature_codigo: string, feature_titulo: string, depende_de: {feature_codigo: string, justificativa: string, fontes: string[]}[]}[]): string ->
-        "<table><thead><tr><th>Código</th><th>Feature</th><th>Depende de</th></tr></thead><tbody>" +
+        "<table><thead><tr><th>Código</th><th>Item de backlog</th><th>Depende de</th></tr></thead><tbody>" +
         items.map((x) -> "<tr><td>" + html.escape(x.feature_codigo) + "</td><td>" + html.escape(x.feature_titulo) + "</td><td>" +
             (if (x.depende_de.is_empty()) "—" else
                 "<ul>" + x.depende_de.map((d) -> "<li><strong>" + html.escape(d.feature_codigo) + "</strong> — " + html.escape(d.justificativa) + " " + Cite.badges(d.fontes) + "</li>").join("") + "</ul>"
@@ -132,15 +146,28 @@ export tool ArtifactHtml {
             rows = rows + "<tr><td>${n}</td><td>" + html.escape(x.feature_codigo) + "</td><td>" + html.escape(x.feature_titulo) + "</td></tr>"
             n = n + 1
         }
-        return "<table><thead><tr><th>#</th><th>Código</th><th>Feature</th></tr></thead><tbody>" + rows + "</tbody></table>"
+        return "<table><thead><tr><th>#</th><th>Código</th><th>Item de backlog</th></tr></thead><tbody>" + rows + "</tbody></table>"
     }
 }
 
 test ArtifactHtmlSpec {
     describe story_statement_escapes_all_llm_fields {
         are_equal(
-            ArtifactHtml.story_statement("<Admin>", "usar & revisar", "evitar \"falhas\""),
+            ArtifactHtml.story_statement("historia_usuario", "<Admin>", "usar & revisar", "evitar \"falhas\"", "", "", ""),
             "<blockquote><strong>Como</strong> &lt;Admin&gt;, <strong>quero</strong> usar &amp; revisar, <strong>para</strong> evitar &#34;falhas&#34;.</blockquote>"
+        )
+    }
+
+    describe enabler_statement_uses_technical_outcome_without_a_fake_persona {
+        are_equal(
+            ArtifactHtml.story_statement("historia_habilitadora", "", "", "", "Deploy <automatizado>", "FT001 & FT002", "smoke test"),
+            "<blockquote><strong>Resultado técnico:</strong> Deploy &lt;automatizado&gt;<br><strong>Habilita:</strong> FT001 &amp; FT002<br><strong>Evidenciado por:</strong> smoke test</blockquote>"
+        )
+    }
+
+    describe spike_statement_names_the_investigation_question {
+        is_true(
+            ArtifactHtml.story_statement("spike", "", "", "", "Qual banco usar?", "ADR-001", "benchmark").contains("Pergunta de investigação")
         )
     }
 
@@ -158,14 +185,14 @@ test ArtifactHtmlSpec {
                     {feature_codigo: "FT001", justificativa: "precisa do cadastro & login", fontes: ["features/FT001-cadastro"]}
                 ]}
             ]),
-            "<table><thead><tr><th>Código</th><th>Feature</th><th>Depende de</th></tr></thead><tbody><tr><td>FT002</td><td>Pagamentos</td><td><ul><li><strong>FT001</strong> — precisa do cadastro &amp; login <citemark>features/FT001-cadastro</citemark></li></ul></td></tr></tbody></table>"
+            "<table><thead><tr><th>Código</th><th>Item de backlog</th><th>Depende de</th></tr></thead><tbody><tr><td>FT002</td><td>Pagamentos</td><td><ul><li><strong>FT001</strong> — precisa do cadastro &amp; login <citemark>features/FT001-cadastro</citemark></li></ul></td></tr></tbody></table>"
         )
     }
 
     describe dependency_map_shows_a_dash_for_a_feature_with_no_dependencies {
         are_equal(
             ArtifactHtml.dependency_map([{feature_codigo: "FT001", feature_titulo: "Cadastro", depende_de: []}]),
-            "<table><thead><tr><th>Código</th><th>Feature</th><th>Depende de</th></tr></thead><tbody><tr><td>FT001</td><td>Cadastro</td><td>—</td></tr></tbody></table>"
+            "<table><thead><tr><th>Código</th><th>Item de backlog</th><th>Depende de</th></tr></thead><tbody><tr><td>FT001</td><td>Cadastro</td><td>—</td></tr></tbody></table>"
         )
     }
 
@@ -175,7 +202,7 @@ test ArtifactHtmlSpec {
                 {feature_codigo: "FT001", feature_titulo: "Cadastro"},
                 {feature_codigo: "FT002", feature_titulo: "Pagamentos"},
             ]),
-            "<table><thead><tr><th>#</th><th>Código</th><th>Feature</th></tr></thead><tbody><tr><td>1</td><td>FT001</td><td>Cadastro</td></tr><tr><td>2</td><td>FT002</td><td>Pagamentos</td></tr></tbody></table>"
+            "<table><thead><tr><th>#</th><th>Código</th><th>Item de backlog</th></tr></thead><tbody><tr><td>1</td><td>FT001</td><td>Cadastro</td></tr><tr><td>2</td><td>FT002</td><td>Pagamentos</td></tr></tbody></table>"
         )
     }
 
