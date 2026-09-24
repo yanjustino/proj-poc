@@ -104,6 +104,101 @@ export function missingDeps(entry, doneNames) {
   return entry.deps.filter((dep) => !doneNames.has(dep));
 }
 
+// STALE_EPSILON_MS guards against flagging an artifact stale purely from
+// filesystem timestamp granularity or clock jitter between two writes that
+// are really part of the same moment (some filesystems only keep 1s
+// resolution) — a dependency has to be measurably newer than the artifact
+// that reads it, not just newer by a rounding error.
+const STALE_EPSILON_MS = 2000;
+
+// latestMtimeOf reads the "when was this artifact actually last touched"
+// timestamp for one sequence entry out of a listProjectDir() tree
+// (byName === Object.fromEntries(nodes.map(n => [n.name, n])), same shape
+// refreshDoneState() in tab-artefatos.js already builds). A single-file
+// entry (entry.path) uses that file's own mtime; a collection entry
+// (entry.dir) uses the MAX mtime across its committed children, never the
+// directory inode's own mtime — a dir's mtime only reflects entries being
+// added/removed/renamed inside it, not a child file being rewritten in
+// place, so a regenerated ADR batch could otherwise look unchanged. Returns
+// null when the artifact doesn't exist yet (doneNames already gates entries
+// this is called for, but this stays defensive so a caller never has to
+// double-check).
+function latestMtimeOf(entry, byName) {
+  if (entry.dir) {
+    const node = byName[entry.dir];
+    const children = node && node.children ? node.children : [];
+    let latest = null;
+    for (const child of children) {
+      // Mirrors refreshDoneState()'s own committed-document rule: a
+      // 'folders' collection's real content is itemFile inside each child
+      // folder (the folder itself is never touched again after creation),
+      // a 'files' collection's real content is each child file directly.
+      const files =
+        entry.collectionKind === 'folders'
+          ? (child.children || []).filter((f) => !f.isDir && f.name === entry.itemFile)
+          : child.isDir
+            ? []
+            : [child];
+      for (const file of files) {
+        if (!file.modifiedAt) continue;
+        const t = Date.parse(file.modifiedAt);
+        if (!Number.isNaN(t) && (latest === null || t > latest)) latest = t;
+      }
+    }
+    return latest;
+  }
+  if (entry.path) {
+    const node = byName[entry.path];
+    if (!node || !node.modifiedAt) return null;
+    const t = Date.parse(node.modifiedAt);
+    return Number.isNaN(t) ? null : t;
+  }
+  return null;
+}
+
+// computeStaleness is the dependency-staleness matrix: for every entry in
+// `sequence` that's already generated (doneNames), it checks whether any of
+// its OWN deps (artifacts.js's own dependency graph, the same one
+// isReady()/missingDeps() read) was touched more recently than this entry
+// itself — i.e. this entry was built from an older version of that
+// dependency and is now out of sync with it. This is deliberately about
+// real timestamps, not "does a downstream artifact merely exist" (the
+// earlier, broader warning tab-artefatos.js's downstreamWarningFor used to
+// give): right after a normal first pass — brief, then atributos/
+// requisitos, then adr/der/diagramas, then features, then dependencias, each
+// generated strictly after the one before it — every entry is always NEWER
+// than its own deps, so nothing here comes out stale. Staleness only shows
+// up once a predecessor is genuinely regenerated (via "Solicitar mudança")
+// after its dependents already exist, which is exactly the case worth
+// flagging.
+//
+// Returns a Map keyed by artifact name -> { stale: boolean, staleDeps:
+// string[] } (staleDeps names exactly which dependency is newer, for a
+// precise tooltip instead of a generic "something changed").
+export function computeStaleness(sequence, doneNames, byName) {
+  const mtimeByArtifact = new Map();
+  for (const entry of sequence) {
+    if (!doneNames.has(entry.artifact)) continue;
+    mtimeByArtifact.set(entry.artifact, latestMtimeOf(entry, byName));
+  }
+
+  const result = new Map();
+  for (const entry of sequence) {
+    if (!doneNames.has(entry.artifact)) continue;
+    const ownMtime = mtimeByArtifact.get(entry.artifact);
+    const staleDeps = [];
+    if (ownMtime !== null) {
+      for (const dep of entry.deps) {
+        if (!doneNames.has(dep)) continue;
+        const depMtime = mtimeByArtifact.get(dep);
+        if (depMtime !== null && depMtime - ownMtime > STALE_EPSILON_MS) staleDeps.push(dep);
+      }
+    }
+    result.set(entry.artifact, { stale: staleDeps.length > 0, staleDeps });
+  }
+  return result;
+}
+
 // featureIdOf extracts the feature_id ArtifactId.find_feature_dir expects
 // (the prefix before the first "-") from a folder name like
 // "FT001-nome-da-feature".

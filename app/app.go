@@ -1260,11 +1260,20 @@ func (a *App) ListIngestedRaw(projectID string) (string, error) {
 }
 
 // projectFileNode is one entry of the tree ListProjectDir returns.
+// ModifiedAt (RFC3339, UTC) is the file's own mtime — for a directory it's
+// the directory inode's mtime, not a rollup of its children, so callers that
+// need "when was this artifact last touched" for a collection (adr/,
+// diagramas/, features/, historias/) must take the max ModifiedAt across its
+// own children instead of trusting the dir node's value (see
+// artifacts.js's computeStaleness, the one caller that does this — it's the
+// dependency-staleness matrix behind each artifact card's "desatualizado"
+// indicator).
 type projectFileNode struct {
-	Name     string             `json:"name"`
-	Path     string             `json:"path"`
-	IsDir    bool               `json:"isDir"`
-	Children []*projectFileNode `json:"children,omitempty"`
+	Name       string             `json:"name"`
+	Path       string             `json:"path"`
+	IsDir      bool               `json:"isDir"`
+	ModifiedAt string             `json:"modifiedAt,omitempty"`
+	Children   []*projectFileNode `json:"children,omitempty"`
 }
 
 // ListProjectDir lists projects/<projectID>/<root>/<relative> recursively as
@@ -1319,6 +1328,13 @@ func listDirTree(dir string, relPrefix string) ([]*projectFileNode, error) {
 			relPath = relPrefix + "/" + name
 		}
 		node := &projectFileNode{Name: name, Path: relPath, IsDir: entry.IsDir()}
+		if info, err := entry.Info(); err == nil {
+			// Best-effort, same as ListProjectRunLogs above — a file that
+			// vanished between ReadDir and Info() (rare, but possible with a
+			// generation writing concurrently) just gets no timestamp rather
+			// than failing the whole tree.
+			node.ModifiedAt = info.ModTime().UTC().Format(time.RFC3339)
+		}
 		if entry.IsDir() {
 			children, err := listDirTree(filepath.Join(dir, name), relPath)
 			if err != nil {

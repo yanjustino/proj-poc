@@ -10,7 +10,7 @@ import {
   startAndWatch,
   watchExistingRun,
 } from '../api.js';
-import { sequenceFor, isReady, missingDeps, featureIdOf, featureTitleOf } from '../artifacts.js';
+import { sequenceFor, isReady, missingDeps, featureIdOf, featureTitleOf, computeStaleness } from '../artifacts.js';
 import { createRunTracker } from '../run-tracker.js';
 import { inlineMermaid, hasMermaidDiagram } from '../mermaid-inline.js';
 import { beginCustom, buildDocFrame, showHtmlDoc, showEmpty, showAction, showLoading, setFooter, setToolbarAction } from '../reading-pane.js';
@@ -190,6 +190,11 @@ export async function renderArtefatosTab(container, project, { onChanged }) {
   // needs zero new code here, just its own entry in artifacts.js.
   let collectionChildren = {};
   let historiasDoneFeatureIds = new Set();
+  // staleness: artifacts.js's computeStaleness() output — artifact name ->
+  // { stale, staleDeps } — real mtimes, not "does a downstream artifact
+  // merely exist" (see that function's own comment). Drives both the
+  // per-card "desatualizado" badge and downstreamWarningFor's note below.
+  let staleness = new Map();
   const trackers = new Map(); // key -> { element, update, status }
   let selectedKey = sequence[0]?.artifact ?? null;
   let activeFilter = 'all';
@@ -371,6 +376,7 @@ export async function renderArtefatosTab(container, project, { onChanged }) {
         if (hasCommittedHistoria) historiasDoneFeatureIds.add(featureIdOf(child.name));
       }
     }
+    staleness = computeStaleness(sequence, doneNames, byName);
   }
 
   function isRowDone(row) {
@@ -383,6 +389,19 @@ export async function renderArtefatosTab(container, project, { onChanged }) {
     if (row.groupKey) return true;
     if (row.featureId) return true; // features already done, per rowsToRender's gating
     return isReady(row.entry, doneNames);
+  }
+
+  // staleInfoFor reads the dependency-staleness matrix (computeStaleness,
+  // artifacts.js) for the artifact this row represents — an expanded
+  // collection item (row.groupKey) shares its group's staleness, since
+  // there's no such thing as regenerating just one item (same reasoning as
+  // canonicalGroupRow). Per-feature "Histórias — X" rows (row.featureId)
+  // aren't in `sequence` at all (see artifacts.js's own comment on why) so
+  // they have no entry here — left out rather than guessed at.
+  function staleInfoFor(row) {
+    if (row.featureId) return null;
+    const artifact = row.groupKey || row.entry.artifact;
+    return staleness.get(artifact) || null;
   }
 
   // pendingHistoriasRows: every per-feature "Histórias — X" row that's ready
@@ -478,13 +497,31 @@ export async function renderArtefatosTab(container, project, { onChanged }) {
             : ['features', 'feature', 'historias', 'historia'].includes(artifactName)
               ? 'feature'
               : 'discovery';
+        // Only flag stale once this row is actually done and settled — not
+        // mid-regeneration ('working'/'queued'/'paused'), since a fresh
+        // generation is exactly what clears staleness and showing the badge
+        // while that's still in flight would just be noise. Bug fixed here:
+        // an earlier version checked `!state` for this, but `state` is
+        // ALWAYS truthy once `done` is true (falls back to 'completed' right
+        // above when there's no tracker) — so that condition could never be
+        // true and the badge never rendered on any card, only ever showing
+        // up in the composer's own note (which reads staleness directly,
+        // not through this render path) — caught from a screenshot showing
+        // the "atributos" composer correctly warning about ADR, but the ADR
+        // card itself carrying no visible mark at all.
+        const inFlight = state === 'working' || state === 'queued' || state === 'paused';
+        const stale = done && !inFlight ? staleInfoFor(row) : null;
+        const staleTitle = stale?.stale
+          ? `Desatualizado: ${stale.staleDeps.map(labelFor).join(', ')} ${stale.staleDeps.length > 1 ? 'foram regenerados' : 'foi regenerado'} depois deste artefato.`
+          : '';
         return `
           ${headerHtml}
-          <article class="artifact-card ${kindClass} ${row.key === 'brief' ? 'featured' : ''} ${row.key === selectedKey ? 'selected' : ''} ${!done ? 'pending' : ''}">
+          <article class="artifact-card ${kindClass} ${row.key === 'brief' ? 'featured' : ''} ${row.key === selectedKey ? 'selected' : ''} ${!done ? 'pending' : ''} ${stale?.stale ? 'stale' : ''}">
             <button class="artifact-card-main" data-key="${escapeHtml(row.key)}" ${!ready && !done && !state ? 'disabled' : ''} title="${escapeHtml(statusText)}">
               <span class="artifact-card-kind"><i>${icon(ARTIFACT_ICONS[artifactName] || 'fileText', 14)}</i>${escapeHtml(row.category || labelFor(artifactName))}</span>
               <strong>${escapeHtml(row.label)}</strong>
               <span class="artifact-card-description">${escapeHtml(descriptionFor(row))}</span>
+              ${stale?.stale ? `<span class="artifact-card-stale" title="${escapeAttribute(staleTitle)}">${icon('alertCircle', 12)} Desatualizado</span>` : ''}
             </button>
             <footer class="artifact-card-foot">
               <span class="status-dot ${dot}"></span><span>${escapeHtml(statusText)}</span>
@@ -818,29 +855,41 @@ export async function renderArtefatosTab(container, project, { onChanged }) {
     return [...result];
   }
 
-  // downstreamWarningFor tells you what's ALREADY generated downstream of
-  // `artifact` — the general case of the matrix (see this tab's own commit
-  // history / the conversation that led here): unlike features→histórias
-  // (which gets auto-wiped together, because features/ recycling its own
-  // FT00N ids on regeneration would otherwise silently reattach old,
-  // mismatched histórias under a NEW feature that just happens to land on
-  // the same id — a correctness bug, not just staleness), every OTHER
-  // dependency relationship in the matrix has no such id-collision risk:
-  // regenerating requisitos doesn't corrupt an already-committed ADR, it
-  // just makes it stale relative to the new requisitos. Auto-deleting
-  // those across the board would be a large, silent blast radius (redoing
-  // requisitos could wipe ADR/DER/Diagramas/Features/Dependencias/
-  // Histórias in one click) — so this only WARNS, listing what exists
-  // downstream and was generated from the version about to change,
-  // leaving the actual regeneration decision to the person reading it.
+  // downstreamWarningFor used to list EVERY already-generated artifact
+  // downstream of `artifact`, unconditionally — which meant it fired on
+  // every single view of an approved document with any downstream content
+  // at all, even right after a normal first pass where nothing is actually
+  // out of sync yet (brief generated, then requisitos, then adr, each
+  // strictly after the one before it — nothing stale, but the composer
+  // warned anyway, every time). Real gap that caused, reported directly:
+  // the composer sits in the footer of every approved-artifact preview
+  // (renderPreview), not just when someone is about to submit a change, so
+  // that blanket note read as noise rather than signal. Now it only lists
+  // what's ALREADY stale (artifacts.js's computeStaleness, real mtimes —
+  // the same matrix behind each card's own "Desatualizado" badge, see
+  // staleInfoFor) — i.e. `artifact` was already regenerated more recently
+  // than that downstream artifact, on some earlier edit, and nobody's
+  // caught up yet. In the common case (freshly generated, nothing stale)
+  // this returns '' and the composer shows no note at all; the forward-
+  // looking "editing this WILL make downstream stale" concern is now
+  // handled by the fact that submitting this edit bumps `artifact`'s own
+  // mtime, so on the very next render every genuinely-affected downstream
+  // card lights up its own badge — right where the person will actually go
+  // looking, not as upfront speculation before they've even decided to
+  // submit.
   //
   // Discovery's per-feature "historias" isn't its own `sequence` entry (see
-  // artifacts.js's own comment on why), so it's checked separately here via
-  // historiasDoneFeatureIds whenever "features" itself is in the downstream
-  // set (or IS the artifact in question).
+  // artifacts.js's own comment on why) so it has no staleness entry to read
+  // — its own inclusion here stays unconditional on `historiasDoneFeatureIds`
+  // whenever "features" is involved, same as before this change, because
+  // that one is a distinct, already-justified warning about an id-collision
+  // risk (features/ recycling its own FT00N ids on regeneration could
+  // silently reattach old, mismatched histórias under a new feature that
+  // lands on the same id — a correctness concern, not just staleness), not
+  // part of the generic blanket-note problem this function otherwise fixes.
   function downstreamWarningFor(artifact) {
     const downstream = downstreamOf(artifact);
-    const labels = downstream.filter((name) => doneNames.has(name)).map(labelFor);
+    const labels = downstream.filter((name) => doneNames.has(name) && staleness.get(name)?.stale).map(labelFor);
     if (
       workflow === 'Discovery' &&
       (artifact === 'features' || downstream.includes('features')) &&
@@ -849,8 +898,8 @@ export async function renderArtefatosTab(container, project, { onChanged }) {
       labels.push('Histórias');
     }
     if (labels.length === 0) return '';
-    const verb = labels.length > 1 ? 'foram gerados' : 'foi gerado';
-    return `${labels.join(', ')} ${verb} a partir da versão atual — considere regenerá-los também depois desta mudança.`;
+    const verb = labels.length > 1 ? 'estão desatualizados' : 'está desatualizado';
+    return `${labels.join(', ')} ${verb} em relação a uma versão mais recente de uma dependência — considere regenerá-los.`;
   }
 
   // canonicalGroupRow reconstructs the plain group-level row an expanded
