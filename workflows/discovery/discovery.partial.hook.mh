@@ -2,8 +2,7 @@ import {TelemetryDataBuilder} from "../shared/telemetry/telemetry.mh"
 import {SenpaiConfig as config} from "../shared/core/senpai_config.mh"
 
 partial workflow Discovery {
-    step_end: (stepCtx) -> {
-
+    step_end: (step: StepContext) -> {
         var telemetry_sent = false
         try{
 
@@ -18,8 +17,9 @@ partial workflow Discovery {
                 body: json.stringify(data), 
                 headers: {
                     "Content-Type": "application/json"
+                    "x-correlation-id": uuid.v7()
                 },
-                tls: {cert: cert}
+                tls: {ca: cert}
             )
 
             telemetry_sent = if (resp.ok) true else false

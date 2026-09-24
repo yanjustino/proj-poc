@@ -1,11 +1,15 @@
 #!/usr/bin/env bash
 # Roda os 3 builds de plataforma (build-windows.sh/build-linux.sh/
-# build-macos.sh) e imprime um resumo no final. Windows cruza sistema
-# operacional (via MinGW, ver build-windows.sh) e por isso sempre é
-# tentado; Linux e macOS não cruzam — cada um só é tentado quando este
-# próprio script já está rodando naquele SO, e é marcado como "pulado" (não
-# como falha) nos outros casos, já que não há como satisfazer esse
-# requisito daqui.
+# build-macos.sh) e imprime um resumo no final. Windows sempre é tentado
+# (cruza SO via MinGW, ver build-windows.sh) e Linux também sempre é
+# tentado — build-linux.sh cruza SO sozinho via Docker quando o host não é
+# Linux (ver scripts/docker/linux-build.Dockerfile), então só falha de
+# verdade se nem Linux nativo nem Docker estiverem disponíveis; o "pulado"
+# nesse caso vira uma falha normal no resumo, não um skip. macOS é o único
+# que continua sem alternativa nenhuma — Cocoa/WebKit não builda dentro de
+# um container Linux de jeito nenhum — então esse sim só é tentado quando
+# este próprio script já está rodando em macOS, e aparece como "pulado" (não
+# como falha) nos outros casos.
 #
 # Uso:
 #   ./scripts/build-all-sos.sh
@@ -14,7 +18,7 @@
 #
 # Saída: a soma das saídas de cada script individual —
 #   dist/windows-amd64/senpai-app.exe
-#   dist/linux-amd64/senpai-app      (só rodando em Linux)
+#   dist/linux-amd64/senpai-app      (nativo, ou via Docker se o host não for Linux)
 #   dist/darwin-arm64/senpai-app.app (só rodando em macOS)
 set -uo pipefail
 # Deliberadamente sem -e: uma plataforma falhando não deve impedir as
@@ -60,12 +64,7 @@ skip() {
 }
 
 attempt "Windows x64" build-windows.sh
-
-if [ "$HOST_OS" = "linux" ]; then
-  attempt "Linux x64" build-linux.sh
-else
-  skip "Linux x64" "precisa rodar num host Linux — bindings GTK/WebKitGTK do Wails não cruzam SO"
-fi
+attempt "Linux x64" build-linux.sh
 
 if [ "$HOST_OS" = "darwin" ]; then
   attempt "macOS arm64" build-macos.sh
