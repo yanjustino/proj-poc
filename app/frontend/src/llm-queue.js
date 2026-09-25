@@ -14,28 +14,56 @@ import { startAndWatch, isFullyTerminal } from './api.js';
 // Capping LLM runs here, below mhl's own cap, keeps slots free for the quick
 // runs. A paused run holds no mhl slot (also measured), so a draft waiting
 // for review releases its slot the moment it pauses.
+//
+// On top of that, at most ONE run per pipeline at a time: two concurrent
+// sessions of the same pipeline can collide on mhl's shared "latest" pointer
+// file (see api.js's callWorkflowOnce — an upstream mhl bug, "Acesso negado"
+// on Windows), and two Discovery generations at once (several features'
+// histórias) are exactly that. Different pipelines — a Discovery generation
+// alongside a Wiki ingest — still run in parallel.
 export const MAX_CONCURRENT_LLM_RUNS = 2;
 
 let running = 0;
-const waiters = []; // resolve functions, FIFO
+const busyPipelines = new Set();
+const waiters = []; // { pipeline, grant }, FIFO
 
-// acquireLlmSlot resolves with a release() once a slot is free. release() is
+function canRun(pipeline) {
+  return running < MAX_CONCURRENT_LLM_RUNS && !busyPipelines.has(pipeline);
+}
+
+// Starts every waiter that can run now, oldest first — skipping (not
+// blocking on) one whose pipeline is still busy, so a queued Wiki ingest
+// isn't held up behind a line of Discovery generations.
+function dispatch() {
+  for (let i = 0; i < waiters.length && running < MAX_CONCURRENT_LLM_RUNS; ) {
+    if (canRun(waiters[i].pipeline)) {
+      const [waiter] = waiters.splice(i, 1);
+      waiter.grant();
+    } else {
+      i += 1;
+    }
+  }
+}
+
+// acquireLlmSlot resolves with a release() once a slot is free for
+// `pipeline` (the workflow name: Discovery, Delivery, Wiki). release() is
 // idempotent — callers release on the first of paused/terminal/error.
-export function acquireLlmSlot() {
+export function acquireLlmSlot(pipeline) {
   return new Promise((resolve) => {
     const grant = () => {
       running += 1;
+      busyPipelines.add(pipeline);
       let released = false;
       resolve(() => {
         if (released) return;
         released = true;
         running -= 1;
-        const next = waiters.shift();
-        if (next) next();
+        busyPipelines.delete(pipeline);
+        dispatch();
       });
     };
-    if (running < MAX_CONCURRENT_LLM_RUNS) grant();
-    else waiters.push(grant);
+    waiters.push({ pipeline, grant });
+    dispatch();
   });
 }
 
@@ -92,7 +120,7 @@ export function enqueueLlmRun(key, workflow, args) {
   jobs.set(key, job);
   notify(key, job.status);
 
-  acquireLlmSlot().then((release) => {
+  acquireLlmSlot(workflow).then((release) => {
     if (job.canceled) {
       release();
       return;

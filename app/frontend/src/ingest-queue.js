@@ -117,7 +117,7 @@ async function runOne(projectId, state, name) {
   notify(state, { type: 'status', name, status: state.running.status });
   // Ingest calls an LLM too — it shares llm-queue.js's cap with artifact
   // generations, so a batch of sources can't take every mhl slot either.
-  const release = await acquireLlmSlot();
+  const release = await acquireLlmSlot('Wiki');
   state.running = { name, status: { runId: '', state: 'working' } };
   notify(state, { type: 'status', name, status: state.running.status });
 

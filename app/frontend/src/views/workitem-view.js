@@ -13,6 +13,7 @@ import { dotClass } from '../status.js';
 import { icon } from '../icons.js';
 import { summarizeCost } from '../cost.js';
 import { formatDurationShort, formatRelativeTime } from '../time-format.js';
+import { LogFrontendError } from '../../wailsjs/go/main/App';
 
 const LEVEL_LABEL = { discovery: 'Oportunidade · Discovery', delivery: 'Feature/Enabler/História · Delivery' };
 
@@ -30,7 +31,27 @@ const LEVEL_LABEL = { discovery: 'Oportunidade · Discovery', delivery: 'Feature
 // as alimentam (duração em usage.jsonl, eventos em activity.jsonl): um
 // work-item mais antigo mostra "—" em vez de um zero enganoso, e o tooltip
 // avisa quando só parte das chamadas tem duração registrada.
-function productivityCardHtml(p, unavailable = false) {
+// failureNote: null when the source refreshed fine; otherwise what to tell
+// the person — whether the card is showing an older reading or nothing at
+// all — plus the real error (tooltip), which is also written to app.log.
+// The reason used to be a fixed "o servidor mhl não respondeu", shown even
+// when mhl was answering fine and the call had failed for another reason.
+function failureNote(result, lastGood, what) {
+  if (result.status !== 'rejected') return null;
+  const reason = String(result.reason?.message || result.reason || 'erro desconhecido');
+  LogFrontendError(`resumo do projeto: falha ao atualizar ${what}: ${reason}`).catch(() => {});
+  return {
+    text: lastGood ? 'não atualizado — mostrando a última leitura' : 'indisponível no momento',
+    reason,
+  };
+}
+
+function failureRowHtml(failure) {
+  if (!failure) return '';
+  return `<div class="summary-tokens-row summary-unavailable" title="${escapeHtml(failure.reason)}">${icon('alertCircle', 13)}<span>${escapeHtml(failure.text)}</span></div>`;
+}
+
+function productivityCardHtml(p, failure = null) {
   const hasTiming = p && p.timed_calls > 0;
   const hasCycles = p && p.cycle_samples > 0;
   const hasReviews = p && p.review_samples > 0;
@@ -56,7 +77,7 @@ function productivityCardHtml(p, unavailable = false) {
         <div class="summary-tokens-row">${icon('refreshCw', 13)}<b>${hasCycles ? formatDurationShort(p.avg_cycle_seconds) : '—'}</b><span>ciclo médio até aprovação</span></div>
         <div class="summary-tokens-row">${icon('eye', 13)}<b>${hasReviews ? formatDurationShort(p.avg_review_seconds) : '—'}</b><span>espera média pela revisão</span></div>
         <div class="summary-tokens-row">${icon('checkCircle', 13)}<b>${firstPass}</b><span>aprovados de primeira</span></div>
-        ${unavailable ? `<div class="summary-tokens-row summary-unavailable">${icon('alertCircle', 13)}<span>indisponível — o servidor mhl não respondeu</span></div>` : ''}
+        ${failureRowHtml(failure)}
       </div>
     </div>
   `;
@@ -126,6 +147,13 @@ export async function renderWorkItemView(container, project, { initialTab = 'art
     return { state: chosen.state, count, artifact: vars.artifact || vars.current_artifact || null };
   }
 
+  // Last successful reading of each mhl-backed source, for this work-item.
+  // A failed refresh keeps showing these (flagged as not refreshed) instead
+  // of wiping the card — a single transient failure used to blank both
+  // cards until the next refresh happened to succeed.
+  let lastUsage = null;
+  let lastProductivity = null;
+
   async function refreshSummary() {
     const emptyUsage = { total_tokens_in: 0, total_tokens_out: 0, total_cache_creation_tokens: 0, total_cache_read_tokens: 0, total_cost_usd: 0 };
     // Each source fails on its own. This used to be one Promise.all whose
@@ -146,11 +174,13 @@ export async function renderWorkItemView(container, project, { initialTab = 'art
     const artifactNodes = valueOf(0, []);
     const rawNodes = valueOf(1, []);
     const ingestedNames = valueOf(2, []);
-    const usage = valueOf(3, emptyUsage);
     const stage = valueOf(4, { state: null, count: 0 });
-    const productivity = valueOf(5, null);
-    const usageUnavailable = results[3].status === 'rejected';
-    const productivityUnavailable = results[5].status === 'rejected';
+    if (results[3].status === 'fulfilled') lastUsage = results[3].value;
+    if (results[5].status === 'fulfilled') lastProductivity = results[5].value;
+    const usage = lastUsage ?? emptyUsage;
+    const productivity = lastProductivity;
+    const usageFailure = failureNote(results[3], lastUsage, 'uso de tokens');
+    const productivityFailure = failureNote(results[5], lastProductivity, 'produtividade');
 
     const { byCategory, doneCount, totalCount } = computeCategoryProgress(project, artifactNodes);
 
@@ -224,7 +254,7 @@ export async function renderWorkItemView(container, project, { initialTab = 'art
           <div class="summary-tokens-row">${icon('zap', 13)}<b>${escapeHtml(lastActivity)}</b><span>última atividade</span></div>
         </div>
       </div>
-      ${productivityCardHtml(productivity, productivityUnavailable)}
+      ${productivityCardHtml(productivity, productivityFailure)}
       <div class="summary-card summary-card-progress summary-card-tokens" title="${escapeHtml(tokensTitle)}">
         <div class="summary-progress-head">
           <span class="summary-icon">${icon('layers', 16)}</span>
@@ -235,7 +265,7 @@ export async function renderWorkItemView(container, project, { initialTab = 'art
           <div class="summary-tokens-row">${icon('arrowUp', 13)}<b>${tokensOut.toLocaleString('pt-BR')}</b><span>saída</span></div>
           ${totalCache > 0 ? `<div class="summary-tokens-row">${icon('layers', 13)}<b>${cacheSharePct}%</b><span>do input veio do cache</span></div>` : ''}
           <div class="summary-tokens-row">${icon('dollarSign', 13)}<b>${escapeHtml(cost.value)}</b><span>${escapeHtml(cost.label)}</span></div>
-          ${usageUnavailable ? `<div class="summary-tokens-row summary-unavailable">${icon('alertCircle', 13)}<span>uso indisponível — o servidor mhl não respondeu</span></div>` : ''}
+          ${failureRowHtml(usageFailure)}
         </div>
       </div>
     `;

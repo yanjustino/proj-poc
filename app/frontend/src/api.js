@@ -346,35 +346,9 @@ export async function workItemChangesLog(projectId) {
 // writes to disk, never consumes a collection artifact's real id sequence).
 // Synchronous like WorkItem's own actions (no LLM call in this path).
 //
-// Every call is serialized through artifactPreviewQueue, not fired directly
-// — mhl's own session runtime writes each pipeline's "latest" pointer to one
-// shared file per pipeline name (writeLatest, mhl-runtime's session.go); two
-// concurrent ArtifactPreview sessions race renaming their own .tmp onto it
-// and one loses with "committing latest pointer: rename ... no such file or
-// directory" (Windows: "Acesso negado") — a real upstream mhl bug (see
-// output/mhl-bug-report.md #2), fixed upstream but not yet in the version
-// vendored here. tab-artefatos.js's appendPausedPreview already retries once
-// for the N-items-in-one-row case, but that only guards its own batch — it
-// does nothing for two DIFFERENT rows each pausing around the same time
-// (exactly what "Gerar histórias pendentes" makes common: several features'
-// historias paused for review at once, each opening its own ArtifactPreview
-// session the moment its row is selected). Serializing here closes that gap
-// for every caller at once, instead of pushing the same queuing logic into
-// every call site.
-let artifactPreviewQueue = Promise.resolve();
-
+// Serialized like every callWorkflowOnce call — see that function.
 export function artifactPreview(artifact, data) {
-  const result = artifactPreviewQueue.then(() =>
-    callWorkflowOnce('ArtifactPreview', { artifact, data }).then((r) => r.preview_html),
-  );
-  // Keep the queue alive after a failure — swallowed here only so the NEXT
-  // queued call still runs; `result` (returned below) still carries this
-  // call's own real outcome to its caller.
-  artifactPreviewQueue = result.then(
-    () => {},
-    () => {},
-  );
-  return result;
+  return callWorkflowOnce('ArtifactPreview', { artifact, data }).then((r) => r.preview_html);
 }
 
 // deleteProject removes projects/<projectId> from disk entirely — there is
@@ -402,10 +376,38 @@ export async function deleteProject(projectId) {
 // (StartRun/GetRunStatus), not the separate events subsystem. Reserve
 // startAndWatch/EventsOn for Wiki/Discovery/Delivery, which genuinely need
 // live progress and can pause (Modo Buddy).
+//
+// Calls are serialized PER WORKFLOW (one in flight per pipeline name, FIFO).
+// mhl's own session runtime writes each pipeline's "latest" pointer to one
+// shared file per pipeline name (writeLatest, mhl-runtime's session.go); two
+// concurrent sessions of the same pipeline race renaming their own .tmp onto
+// it and one loses with "committing latest pointer: rename ... no such file
+// or directory" (Windows: "Acesso negado") — a real upstream mhl bug (see
+// output/mhl-bug-report.md #2), fixed upstream but not yet in the version
+// vendored here. Only ArtifactPreview used to be queued; the project
+// summary then started firing WorkItem "usage" and "productivity" together
+// on every refresh, and one of the two intermittently failed — the cards
+// flipped to "indisponível" with mhl perfectly healthy.
 const CALL_TIMEOUT_MS = 15000;
 const POLL_INTERVAL_MS = 150;
+const workflowQueues = new Map(); // workflow -> tail promise of its queue
 
-async function callWorkflowOnce(workflow, args) {
+function callWorkflowOnce(workflow, args) {
+  const previous = workflowQueues.get(workflow) ?? Promise.resolve();
+  const result = previous.then(() => runWorkflowOnce(workflow, args));
+  // Keep the queue alive after a failure — the NEXT call still runs; the
+  // caller still gets this call's own outcome through `result`.
+  workflowQueues.set(
+    workflow,
+    result.then(
+      () => {},
+      () => {},
+    ),
+  );
+  return result;
+}
+
+async function runWorkflowOnce(workflow, args) {
   let status = await parseJSON(await App.StartRun(workflow, JSON.stringify(args)), 'StartRun');
   const deadline = Date.now() + CALL_TIMEOUT_MS;
 
