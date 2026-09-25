@@ -10,7 +10,7 @@ import {
   startAndWatch,
   watchExistingRun,
 } from '../api.js';
-import { sequenceFor, isReady, missingDeps, featureIdOf, featureTitleOf, computeStaleness } from '../artifacts.js';
+import { sequenceFor, isReady, missingDeps, featureIdOf, featureTitleOf, computeStaleness, latestMtimeOf } from '../artifacts.js';
 import { createRunTracker } from '../run-tracker.js';
 import { inlineMermaid, hasMermaidDiagram } from '../mermaid-inline.js';
 import { beginCustom, buildDocFrame, showHtmlDoc, showEmpty, showAction, showLoading, setFooter, setToolbarAction } from '../reading-pane.js';
@@ -18,6 +18,7 @@ import { setActiveRun, getActiveRun, clearActiveRun } from '../active-runs.js';
 import { dotClass } from '../status.js';
 import { icon } from '../icons.js';
 import { approvalRecoveryArgs, waitForRecoveryTerminal } from '../checkpoint-recovery.js';
+import { formatRelativeTime } from '../time-format.js';
 
 const LABELS = {
   brief: 'Brief',
@@ -55,6 +56,34 @@ const ARTIFACT_ICONS = {
   brief: 'zap', atributos: 'checkCircle', requisitos: 'fileText', adr: 'layers', der: 'inbox',
   diagramas: 'maximize', features: 'layers', dependencias: 'layers', historias: 'fileText', feature: 'layers', historia: 'fileText',
 };
+
+// ENABLER_SUBTYPE_LABELS: pt-BR display names for a feature's own
+// subtipo_enabler enum (workflows/discovery/schemas/features.schema.json,
+// mirrored in workflows/delivery/schemas/feature.schema.json for Delivery's
+// single "final" feature doc) — "nao_aplicavel" (the default for a
+// feature_negocio, or an old checkpoint predating this field — see
+// artifact_body.mh's ArtifactBody.feature) is deliberately left out, it
+// means "no subtype", not a fourth kind of enabler.
+const ENABLER_SUBTYPE_LABELS = {
+  exploracao: 'Exploração',
+  arquitetura: 'Arquitetura',
+  infraestrutura: 'Infraestrutura',
+  conformidade: 'Conformidade',
+};
+
+// classificationLabelOf turns a {tipoItem, subtipoEnabler} pair (see
+// loadFeatureClassifications below) into the pt-BR label the card/table
+// shows — "Feature de negócio", "Enabler", or "Enabler — Arquitetura" once
+// a subtype is set. Same wording ArtifactHtml.feature_classification
+// (workflows/shared/artifacts/artifact_html.mh) already renders INSIDE the
+// generated document itself — kept in sync by hand since that's mhl-side
+// template code this app can't import, not duplicated by accident.
+function classificationLabelOf(classification) {
+  if (!classification) return null;
+  if (classification.tipoItem !== 'enabler') return 'Feature de negócio';
+  const sub = classification.subtipoEnabler !== 'nao_aplicavel' ? ENABLER_SUBTYPE_LABELS[classification.subtipoEnabler] : null;
+  return sub ? `Enabler — ${sub}` : 'Enabler';
+}
 
 function descriptionFor(row) {
   if (row.groupKey) return `Documento da coleção ${labelFor(row.entry.artifact)}.`;
@@ -114,6 +143,7 @@ function codedHistoriaTitle(featureFolderName, historiaFolderName) {
   return `${featureIdOf(featureFolderName)}-${featureIdOf(historiaFolderName)} — ${featureTitleOf(historiaFolderName)}`;
 }
 
+
 // renderArtefatosTab owns only the middle-column artifact map — a
 // dependency-gated card grid with live status dots. Whatever is
 // selected (a live generation, a "gerar" call-to-action, or a finished
@@ -160,16 +190,21 @@ export async function renderArtefatosTab(container, project, { onChanged }) {
       <div class="artifact-map-controls">
         <button class="button secondary small" data-generate-all-historias hidden title="Cada feature pendente dispara sua própria geração — mhl_run_start é assíncrono e o servidor já roda até 4 runs em paralelo, então isto não é uma fila sequencial.">${icon('layers', 14)} Gerar histórias pendentes</button>
         <button class="button secondary small" data-export-all title="Exportar toda a Wiki e todos os Artefatos">${icon('download', 14)} Exportar tudo</button>
+        <div class="view-toggle" data-view-toggle>
+          <button class="view-toggle-btn" data-view="cards" title="Ver como cards">${icon('grid', 15)}</button>
+          <button class="view-toggle-btn" data-view="table" title="Ver como tabela">${icon('list', 15)}</button>
+        </div>
         <div class="artifact-filters">
           <button class="artifact-filter active" data-filter="all">Todos</button>
           <button class="artifact-filter" data-filter="ready">Prontos</button>
           <button class="artifact-filter" data-filter="pending">Pendentes</button>
+          <button class="artifact-filter" data-filter="stale">Desatualizados</button>
         </div>
       </div>
     </div>
     <div class="artifact-category-filters" data-category-filters></div>
     <div class="export-status" data-export-status hidden></div>
-    <div class="artifact-card-grid" data-list></div>
+    <div class="list-area" data-list></div>
   `;
 
   const listEl = container.querySelector('[data-list]');
@@ -179,7 +214,38 @@ export async function renderArtefatosTab(container, project, { onChanged }) {
   const exportAllButton = container.querySelector('[data-export-all]');
   const exportStatusEl = container.querySelector('[data-export-status]');
   const generateAllHistoriasButton = container.querySelector('[data-generate-all-historias]');
+  const viewButtons = [...container.querySelectorAll('[data-view]')];
   showEmpty('Selecione um artefato para ler ou gerar.');
+
+  // viewMode: 'table' (default) or 'cards' — table is the default because a
+  // work-item with every category filled out (Discovery: Brief, Atributos,
+  // Requisitos, N ADRs, DER, N Diagramas, N Features, Dependências, N
+  // Histórias per feature) makes the card grid tall enough that scanning
+  // for one specific document, or for which ones are stale, means a lot of
+  // scrolling — a real complaint once artifact volume grew; the dense table
+  // is what most work-items should land on first, cards stay one click
+  // away for whoever prefers browsing tiles. Persisted (not per-mount only)
+  // since it's a standing preference, same reasoning as shell.js's theme
+  // toggle; localStorage failing (private window, disabled storage, ...)
+  // just degrades to always defaulting back to 'table'.
+  let viewMode = 'table';
+  try {
+    if (localStorage.getItem('senpai-artifact-view') === 'cards') viewMode = 'cards';
+  } catch {
+    // Degrades to 'table' — see comment above.
+  }
+  viewButtons.forEach((button) => button.classList.toggle('active', button.dataset.view === viewMode));
+  function setViewMode(mode) {
+    viewMode = mode;
+    try {
+      localStorage.setItem('senpai-artifact-view', mode);
+    } catch {
+      // Not persisted this time — still applies for the rest of this mount.
+    }
+    viewButtons.forEach((button) => button.classList.toggle('active', button.dataset.view === mode));
+    renderList();
+  }
+  viewButtons.forEach((button) => button.addEventListener('click', () => setViewMode(button.dataset.view)));
 
   let doneNames = new Set();
   // One entry per collection-type artifact (adr/diagramas/features/Delivery's
@@ -195,6 +261,24 @@ export async function renderArtefatosTab(container, project, { onChanged }) {
   // merely exist" (see that function's own comment). Drives both the
   // per-card "desatualizado" badge and downstreamWarningFor's note below.
   let staleness = new Map();
+  // lastByName: the raw listProjectDir() tree from the most recent
+  // refreshDoneState() call, keyed by top-level name — kept around (not
+  // just used locally inside that function) so the table view's "Última
+  // geração" column can call artifacts.js's own latestMtimeOf() directly,
+  // the exact same function computeStaleness() uses, instead of a second
+  // implementation that could quietly disagree with it.
+  let lastByName = {};
+  // featureClassifications: folder name (Discovery, e.g. "FT001-checkout")
+  // or the fixed key 'feature' (Delivery's single "final" doc, mode ===
+  // 'feature') -> {tipoItem, subtipoEnabler} — populated by
+  // loadFeatureClassifications() below. Unlike doneNames/staleness (derived
+  // straight from the listProjectDir() tree refreshDoneState() already
+  // fetches), this needs each feature's own feature.json read individually
+  // — tipo_item/subtipo_enabler aren't filesystem metadata, they're inside
+  // the generated document's data — so it's populated separately,
+  // fire-and-forget, instead of blocking refreshDoneState() on N extra
+  // reads every time it runs.
+  let featureClassifications = new Map();
   const trackers = new Map(); // key -> { element, update, status }
   let selectedKey = sequence[0]?.artifact ?? null;
   let activeFilter = 'all';
@@ -248,6 +332,16 @@ export async function renderArtefatosTab(container, project, { onChanged }) {
         entry.collectionKind === 'folders' ? `${entry.dir}/${child.name}/${entry.itemFile}` : `${entry.dir}/${child.name}`;
       const label = entry.collectionKind === 'folders' ? folderTitle(child.name) : itemTitleFromFilename(child.name);
       const itemId = entry.collectionKind === 'folders' ? featureIdOf(child.name) : child.name;
+      // modifiedAt: this exact item's own timestamp for the table view's
+      // "Última geração" column — a 'folders' collection's real content is
+      // itemFile INSIDE the child folder (the folder itself is only ever
+      // touched at creation, same reasoning as artifacts.js's own
+      // latestMtimeOf), a 'files' collection's real content is the child
+      // file directly.
+      const modifiedAt =
+        entry.collectionKind === 'folders'
+          ? (child.children || []).find((f) => !f.isDir && f.name === entry.itemFile)?.modifiedAt
+          : child.modifiedAt;
       return {
         key: `${entry.artifact}-item:${itemId}`,
         label,
@@ -255,6 +349,13 @@ export async function renderArtefatosTab(container, project, { onChanged }) {
         groupKey: entry.artifact,
         category: entry.category,
         previewPath,
+        modifiedAt,
+        // folderName: the real on-disk folder ("FT001-checkout", not just
+        // "FT001") — only classificationFor's features lookup needs it
+        // (featureClassifications is keyed by this, see loadFeatureClassifications),
+        // left undefined for a 'files' collection (adr/diagramas) where
+        // there's no folder at all.
+        folderName: entry.collectionKind === 'folders' ? child.name : undefined,
       };
     });
   }
@@ -297,7 +398,25 @@ export async function renderArtefatosTab(container, project, { onChanged }) {
       }
       rows.push({ key: entry.artifact, label: labelFor(entry.artifact), entry, category: entry.category });
     }
-    if (project.level === 'discovery' && doneNames.has('features')) {
+    // Gated on !hasActiveGroupRegeneration('features') the same as the
+    // Features cards themselves above (entry.collectionKind branch) — real
+    // bug this fixes: while Features is mid-regeneration (its own cards
+    // already collapsed into one progress row), these per-feature
+    // "Histórias — X" rows used to keep showing anyway, still built from
+    // the OLD collectionChildren.features (doneNames.has('features') stays
+    // true until Commit actually replaces features/ on disk). *Generate
+    // always returns the WHOLE batch fresh — no guarantee the new one has
+    // the same count, order, or ids as the old one (FeaturesCommit wipes
+    // features/ and features/historias/ together and mints IDs from
+    // scratch, see that step's own comment) — so every row on screen during
+    // that window pointed at a feature identity about to be replaced or
+    // gone entirely: clicking "Gerar" on one mid-regeneration would target
+    // a feature_id that might not even exist once the batch lands.
+    // Reported directly: 17 features regenerating, 17 "Histórias" rows
+    // sitting there orphaned the whole time. Once the regeneration finishes
+    // (or was never running), doneNames/collectionChildren are fresh and
+    // this rebuilds from the CURRENT features — no separate cleanup needed.
+    if (project.level === 'discovery' && doneNames.has('features') && !hasActiveGroupRegeneration('features')) {
       for (const folder of collectionChildren.features || []) {
         const featureId = featureIdOf(folder.name);
         rows.push({
@@ -321,6 +440,7 @@ export async function renderArtefatosTab(container, project, { onChanged }) {
       nodes = [];
     }
     const byName = Object.fromEntries(nodes.map((n) => [n.name, n]));
+    lastByName = byName;
     doneNames = new Set();
     for (const entry of sequence) {
       if (entry.artifact === 'historias' && project.level === 'discovery') continue;
@@ -377,6 +497,65 @@ export async function renderArtefatosTab(container, project, { onChanged }) {
       }
     }
     staleness = computeStaleness(sequence, doneNames, byName);
+    // Fire-and-forget, deliberately not awaited by refreshDoneState() itself
+    // — see loadFeatureClassifications' own comment for why this needs its
+    // own reads instead of piggybacking on the tree above.
+    loadFeatureClassifications();
+  }
+
+  // loadFeatureClassifications reads each feature's own feature.json (the
+  // semantic sibling ArtifactData.write puts next to feature.html — see
+  // that file's own doc comment) to get tipo_item/subtipo_enabler for the
+  // "Enabler"/"Feature de negócio" label on its card/row (classificationFor
+  // below). Discovery has one per folder under features/; Delivery has
+  // exactly one, at the fixed path "feature.json", only when this
+  // work-item's own mode is "feature" (mode "historia" has no such doc at
+  // all). Each read fails independently (its own .catch swallowing the
+  // error, not a shared try/catch around the whole batch) — one missing or
+  // unreadable feature.json (an old checkpoint from before this field
+  // existed, say) must not blank out every other feature's label, it just
+  // leaves that one without a badge. Re-renders the list once done, guarded
+  // by `active` the same way every other async callback in this file is —
+  // this can still be in flight after the user's navigated away from this
+  // tab entirely.
+  async function loadFeatureClassifications() {
+    const jobs = [];
+    const next = new Map();
+    function load(key, jsonPath) {
+      jobs.push(
+        readProjectFile(project.id, 'artifacts', jsonPath)
+          .then((raw) => {
+            const data = JSON.parse(raw);
+            next.set(key, { tipoItem: data?.tipo_item === 'enabler' ? 'enabler' : 'feature_negocio', subtipoEnabler: data?.subtipo_enabler ?? 'nao_aplicavel' });
+          })
+          .catch(() => {}),
+      );
+    }
+    if (project.level === 'discovery') {
+      for (const folder of collectionChildren.features || []) load(folder.name, `features/${folder.name}/feature.json`);
+    } else if (project.type === 'feature' && doneNames.has('feature')) {
+      load('feature', 'feature.json');
+    }
+    if (jobs.length === 0) {
+      featureClassifications = next;
+      return;
+    }
+    await Promise.all(jobs);
+    if (!active) return;
+    featureClassifications = next;
+    renderList();
+  }
+
+  // classificationFor reads featureClassifications for the row this is —
+  // Discovery's expanded Features rows (row.folderName, buildItemRows) and
+  // Delivery's single "final" feature doc (mode === 'feature', its own row
+  // has no groupKey/featureId, just entry.artifact === 'feature'). Every
+  // other row (ADRs, Diagramas, Histórias, Delivery's "historia" doc, ...)
+  // has no classification at all — returns null rather than guessing.
+  function classificationFor(row) {
+    if (row.groupKey === 'features' && row.folderName) return featureClassifications.get(row.folderName) ?? null;
+    if (!row.groupKey && !row.featureId && row.entry.artifact === 'feature') return featureClassifications.get('feature') ?? null;
+    return null;
   }
 
   function isRowDone(row) {
@@ -402,6 +581,34 @@ export async function renderArtefatosTab(container, project, { onChanged }) {
     if (row.featureId) return null;
     const artifact = row.groupKey || row.entry.artifact;
     return staleness.get(artifact) || null;
+  }
+
+  // staleStatusFor is what actually gates the "Desatualizado" badge and the
+  // "Desatualizados" filter (single source of truth for both, so they can
+  // never disagree about which rows count): staleInfoFor's real-mtime data,
+  // but only once the row is done AND settled — not mid-regeneration
+  // ('working'/'queued'/'paused'), since a fresh generation is exactly what
+  // clears staleness and flagging it while that's still in flight would
+  // just be noise.
+  function staleStatusFor(row) {
+    if (!isRowDone(row)) return null;
+    const tracker = trackers.get(row.key);
+    const state = tracker && tracker.status ? tracker.status.state : 'completed';
+    if (state === 'working' || state === 'queued' || state === 'paused') return null;
+    return staleInfoFor(row);
+  }
+
+  // lastGeneratedAt: epoch-ms (or null) for the table view's "Última
+  // geração" column — an expanded collection item (buildItemRows) already
+  // carries its OWN exact modifiedAt; every other row falls back to
+  // artifacts.js's latestMtimeOf against the last refreshDoneState() tree
+  // (same source staleness itself reads, so this can't disagree with it).
+  // A per-feature "Histórias — X" row (row.featureId) has no single file of
+  // its own to point at — left as null (rendered "—") rather than guessed.
+  function lastGeneratedAt(row) {
+    if (row.modifiedAt) return Date.parse(row.modifiedAt);
+    if (row.featureId || !isRowDone(row)) return null;
+    return latestMtimeOf(row.entry, lastByName);
   }
 
   // pendingHistoriasRows: every per-feature "Histórias — X" row that's ready
@@ -442,22 +649,109 @@ export async function renderArtefatosTab(container, project, { onChanged }) {
 
   generateAllHistoriasButton.addEventListener('click', generateAllPendingHistorias);
 
-  function renderList() {
-    const rows = rowsToRender();
-    const visibleRows = rows.filter((row) => {
-      if (activeCategory !== 'all' && row.category !== activeCategory) return false;
-      if (activeFilter === 'all') return true;
-      return activeFilter === 'ready' ? isRowDone(row) : !isRowDone(row);
-    });
-    if (!selectedKey || !visibleRows.some((r) => r.key === selectedKey)) selectedKey = visibleRows[0]?.key ?? null;
-    countEl.textContent = `${rows.length} ${rows.length === 1 ? 'item' : 'itens'}`;
-    updateGenerateAllHistoriasButton();
+  // rowViewModel computes every derived value a rendered row needs (status
+  // text/dot, whether it can be generated/exported right now, its card
+  // "kind" color, its staleness) ONCE, shared by both cardHtml and
+  // tableRowHtml below — the two views must never quietly disagree about
+  // which row is stale, ready, or done, and a single shared computation is
+  // what guarantees that instead of relying on two hand-kept-in-sync copies.
+  function rowViewModel(row) {
+    const tracker = trackers.get(row.key);
+    const done = isRowDone(row);
+    const ready = isRowReady(row);
+    const state = tracker && tracker.status ? tracker.status.state : done ? 'completed' : null;
+    const dot = state ? dotClass(state) : '';
+    const statusText = state
+      ? state === 'completed'
+        ? 'gerado'
+        : state
+      : ready
+        ? 'pronto para gerar'
+        : `depende de: ${missingDeps(row.entry, doneNames).map(labelFor).join(', ')}`;
+    // Only exactly the "pronto para gerar" case (ready, not done, no tracker
+    // running/failed) gets the inline button — a failed/paused row already
+    // has its own action in the reading pane (Tentar novamente / Aprovar e
+    // continuar), right next to the content that explains why.
+    const showGenerate = ready && !done && !state;
+    const clickable = ready || done || Boolean(state);
+    const exportPath = done ? row.previewPath || row.entry.path : '';
+    const artifactName = row.entry.artifact;
+    const kindClass = ['adr', 'der'].includes(artifactName)
+      ? 'decision'
+      : artifactName === 'diagramas'
+        ? 'diagram'
+        : ['features', 'feature', 'historias', 'historia'].includes(artifactName)
+          ? 'feature'
+          : 'discovery';
+    const stale = staleStatusFor(row);
+    const staleTitle = stale?.stale
+      ? `Desatualizado: ${stale.staleDeps.map(labelFor).join(', ')} ${stale.staleDeps.length > 1 ? 'foram regenerados' : 'foi regenerado'} depois deste artefato.`
+      : '';
+    // updateTarget: the row "Atualizar" fires generate() on, only once this
+    // row is both stale AND actually regenerable (updateTargetFor — null
+    // for the synthetic per-feature "Histórias — X" row, which never gets a
+    // staleness verdict in the first place, so this is mostly just the same
+    // guard canRequestChanges/canonicalGroupRow already apply elsewhere).
+    const updateTarget = stale?.stale ? updateTargetFor(row) : null;
+    const classification = classificationFor(row);
+    const classificationLabel = classificationLabelOf(classification);
+    return { done, ready, state, dot, statusText, showGenerate, clickable, exportPath, artifactName, kindClass, stale, staleTitle, updateTarget, classification, classificationLabel };
+  }
 
-    if (visibleRows.length === 0) {
-      listEl.innerHTML = '<div class="artifact-map-empty">Nenhum artefato neste filtro.</div>';
-      return;
-    }
+  function cardHtml(row, vm) {
+    return `
+      <article class="artifact-card ${vm.kindClass} ${row.key === 'brief' ? 'featured' : ''} ${row.key === selectedKey ? 'selected' : ''} ${!vm.done ? 'pending' : ''} ${vm.stale?.stale ? 'stale' : ''}">
+        <button class="artifact-card-main" data-key="${escapeHtml(row.key)}" ${!vm.clickable ? 'disabled' : ''} title="${escapeHtml(vm.statusText)}">
+          <span class="artifact-card-kind"><i>${icon(ARTIFACT_ICONS[vm.artifactName] || 'fileText', 14)}</i>${escapeHtml(row.category || labelFor(vm.artifactName))}</span>
+          <strong>${escapeHtml(row.label)}</strong>
+          ${vm.classificationLabel ? `<span class="artifact-card-classification ${vm.classification.tipoItem === 'enabler' ? 'enabler' : 'business'}">${escapeHtml(vm.classificationLabel)}</span>` : ''}
+          <span class="artifact-card-description">${escapeHtml(descriptionFor(row))}</span>
+          ${vm.stale?.stale ? `<span class="artifact-card-stale" title="${escapeAttribute(vm.staleTitle)}">${icon('alertCircle', 12)} Desatualizado</span>` : ''}
+        </button>
+        <footer class="artifact-card-foot">
+          <span class="status-dot ${vm.dot}"></span><span>${escapeHtml(vm.statusText)}</span>
+          <div class="artifact-card-foot-actions">
+            ${vm.exportPath ? `<button class="artifact-card-export" data-export-file="${escapeAttribute(vm.exportPath)}" title="Exportar ${escapeAttribute(row.label)}">${icon('download', 12)} Exportar</button>` : ''}
+            ${vm.updateTarget ? `<button class="artifact-card-update" data-update="${escapeHtml(row.key)}" title="Regenerar ${escapeAttribute(row.label)} a partir da versão atual da dependência">${icon('refreshCw', 12)} Atualizar</button>` : ''}
+            ${vm.showGenerate ? `<button class="artifact-card-generate" data-generate="${escapeHtml(row.key)}" title="Gerar ${escapeHtml(row.label)}">Gerar →</button>` : ''}
+          </div>
+        </footer>
+      </article>
+    `;
+  }
 
+  // tableRowHtml: the dense alternative to cardHtml for a work-item whose
+  // artifact volume grew past what a scrolling card grid scans well — one
+  // row per artifact, sortable-at-a-glance by category/status/recency
+  // instead of a grid of tiles. `data-key` only appears when the row is
+  // actually clickable (mirrors cardHtml's `disabled` button — a `<tr>` has
+  // no native disabled state, so the click listener below simply never
+  // attaches to an unclickable one instead).
+  function tableRowHtml(row, vm) {
+    const when = formatRelativeTime(lastGeneratedAt(row));
+    return `
+      <tr class="data-row ${row.key === selectedKey ? 'selected' : ''} ${!vm.done ? 'pending' : ''} ${vm.stale?.stale ? 'stale' : ''} ${!vm.clickable ? 'not-ready' : ''}" ${vm.clickable ? `data-key="${escapeHtml(row.key)}"` : ''} title="${escapeHtml(vm.statusText)}">
+        <td class="data-row-dot"><span class="status-dot ${vm.dot}"></span></td>
+        <td class="data-row-name">
+          <i>${icon(ARTIFACT_ICONS[vm.artifactName] || 'fileText', 14)}</i>
+          <span>${escapeHtml(row.label)}</span>
+          ${vm.stale?.stale ? `<span class="artifact-card-stale" title="${escapeAttribute(vm.staleTitle)}">${icon('alertCircle', 12)} Desatualizado</span>` : ''}
+        </td>
+        <td class="data-row-classification">${vm.classificationLabel ? `<span class="artifact-card-classification ${vm.classification.tipoItem === 'enabler' ? 'enabler' : 'business'}">${escapeHtml(vm.classificationLabel)}</span>` : ''}</td>
+        <td class="data-row-category">${escapeHtml(row.category || labelFor(vm.artifactName))}</td>
+        <td class="data-row-status">${escapeHtml(vm.statusText)}</td>
+        <td class="data-row-when">${escapeHtml(when)}</td>
+        <td class="data-row-actions">
+          ${vm.exportPath ? `<button class="artifact-card-export" data-export-file="${escapeAttribute(vm.exportPath)}" title="Exportar ${escapeAttribute(row.label)}">${icon('download', 12)}</button>` : ''}
+          ${vm.updateTarget ? `<button class="artifact-card-update" data-update="${escapeHtml(row.key)}" title="Regenerar ${escapeAttribute(row.label)} a partir da versão atual da dependência">${icon('refreshCw', 12)} Atualizar</button>` : ''}
+          ${vm.showGenerate ? `<button class="artifact-card-generate" data-generate="${escapeHtml(row.key)}" title="Gerar ${escapeHtml(row.label)}">Gerar →</button>` : ''}
+        </td>
+      </tr>
+    `;
+  }
+
+  function renderCards(visibleRows) {
+    listEl.className = 'list-area artifact-card-grid';
     // visibleRows is already grouped by category in array order — every
     // *_SEQUENCE in artifacts.js declares same-category entries contiguously,
     // and buildItemRows()/the per-feature "Histórias — X" push both expand
@@ -470,72 +764,62 @@ export async function renderArtefatosTab(container, project, { onChanged }) {
           index === 0 || row.category !== visibleRows[index - 1].category
             ? `<div class="artifact-group-header"><h3>${escapeHtml(row.category || labelFor(row.entry.artifact))}</h3></div>`
             : '';
-        const tracker = trackers.get(row.key);
-        const done = isRowDone(row);
-        const ready = isRowReady(row);
-        const state = tracker && tracker.status ? tracker.status.state : done ? 'completed' : null;
-        const dot = state ? dotClass(state) : '';
-        const statusText = state
-          ? state === 'completed'
-            ? 'gerado'
-            : state
-          : ready
-            ? 'pronto para gerar'
-            : `depende de: ${missingDeps(row.entry, doneNames).map(labelFor).join(', ')}`;
-        // Only exactly the "pronto para gerar" case (ready, not done, no
-        // tracker running/failed) gets the inline button — a failed/paused
-        // row already has its own action in the reading pane (Tentar
-        // novamente / Aprovar e continuar), right next to the content that
-        // explains why.
-        const showGenerate = ready && !done && !state;
-        const exportPath = done ? row.previewPath || row.entry.path : '';
-        const artifactName = row.entry.artifact;
-        const kindClass = ['adr', 'der'].includes(artifactName)
-          ? 'decision'
-          : artifactName === 'diagramas'
-            ? 'diagram'
-            : ['features', 'feature', 'historias', 'historia'].includes(artifactName)
-              ? 'feature'
-              : 'discovery';
-        // Only flag stale once this row is actually done and settled — not
-        // mid-regeneration ('working'/'queued'/'paused'), since a fresh
-        // generation is exactly what clears staleness and showing the badge
-        // while that's still in flight would just be noise. Bug fixed here:
-        // an earlier version checked `!state` for this, but `state` is
-        // ALWAYS truthy once `done` is true (falls back to 'completed' right
-        // above when there's no tracker) — so that condition could never be
-        // true and the badge never rendered on any card, only ever showing
-        // up in the composer's own note (which reads staleness directly,
-        // not through this render path) — caught from a screenshot showing
-        // the "atributos" composer correctly warning about ADR, but the ADR
-        // card itself carrying no visible mark at all.
-        const inFlight = state === 'working' || state === 'queued' || state === 'paused';
-        const stale = done && !inFlight ? staleInfoFor(row) : null;
-        const staleTitle = stale?.stale
-          ? `Desatualizado: ${stale.staleDeps.map(labelFor).join(', ')} ${stale.staleDeps.length > 1 ? 'foram regenerados' : 'foi regenerado'} depois deste artefato.`
-          : '';
-        return `
-          ${headerHtml}
-          <article class="artifact-card ${kindClass} ${row.key === 'brief' ? 'featured' : ''} ${row.key === selectedKey ? 'selected' : ''} ${!done ? 'pending' : ''} ${stale?.stale ? 'stale' : ''}">
-            <button class="artifact-card-main" data-key="${escapeHtml(row.key)}" ${!ready && !done && !state ? 'disabled' : ''} title="${escapeHtml(statusText)}">
-              <span class="artifact-card-kind"><i>${icon(ARTIFACT_ICONS[artifactName] || 'fileText', 14)}</i>${escapeHtml(row.category || labelFor(artifactName))}</span>
-              <strong>${escapeHtml(row.label)}</strong>
-              <span class="artifact-card-description">${escapeHtml(descriptionFor(row))}</span>
-              ${stale?.stale ? `<span class="artifact-card-stale" title="${escapeAttribute(staleTitle)}">${icon('alertCircle', 12)} Desatualizado</span>` : ''}
-            </button>
-            <footer class="artifact-card-foot">
-              <span class="status-dot ${dot}"></span><span>${escapeHtml(statusText)}</span>
-              ${exportPath ? `<button class="artifact-card-export" data-export-file="${escapeAttribute(exportPath)}" title="Exportar ${escapeAttribute(row.label)}">${icon('download', 12)} Exportar</button>` : ''}
-              ${showGenerate ? `<button class="artifact-card-generate" data-generate="${escapeHtml(row.key)}" title="Gerar ${escapeHtml(row.label)}">Gerar →</button>` : ''}
-            </footer>
-          </article>
-        `;
+        return headerHtml + cardHtml(row, rowViewModel(row));
       })
       .join('');
+  }
 
-    listEl.querySelectorAll('.artifact-card-main').forEach((button) => {
-      button.addEventListener('click', () => {
-        selectedKey = button.dataset.key;
+  function renderTable(visibleRows) {
+    listEl.className = 'list-area data-table-wrap';
+    listEl.innerHTML = `
+      <table class="data-table">
+        <thead>
+          <tr>
+            <th></th>
+            <th>Nome</th>
+            <th>Classificação</th>
+            <th>Categoria</th>
+            <th>Status</th>
+            <th>Última geração</th>
+            <th>Ações</th>
+          </tr>
+        </thead>
+        <tbody>
+          ${visibleRows.map((row) => tableRowHtml(row, rowViewModel(row))).join('')}
+        </tbody>
+      </table>
+    `;
+  }
+
+  function renderList() {
+    const rows = rowsToRender();
+    const visibleRows = rows.filter((row) => {
+      if (activeCategory !== 'all' && row.category !== activeCategory) return false;
+      if (activeFilter === 'all') return true;
+      if (activeFilter === 'stale') return Boolean(staleStatusFor(row)?.stale);
+      return activeFilter === 'ready' ? isRowDone(row) : !isRowDone(row);
+    });
+    if (!selectedKey || !visibleRows.some((r) => r.key === selectedKey)) selectedKey = visibleRows[0]?.key ?? null;
+    countEl.textContent = `${rows.length} ${rows.length === 1 ? 'item' : 'itens'}`;
+    updateGenerateAllHistoriasButton();
+
+    if (visibleRows.length === 0) {
+      listEl.className = 'list-area';
+      listEl.innerHTML = '<div class="artifact-map-empty">Nenhum artefato neste filtro.</div>';
+      return;
+    }
+
+    if (viewMode === 'table') renderTable(visibleRows);
+    else renderCards(visibleRows);
+
+    // [data-key] is the row's own click target — cardHtml's <button> or
+    // tableRowHtml's <tr> — so this one listener covers both views; a
+    // row that isn't clickable (rowViewModel's `clickable`) simply carries
+    // no data-key at all in table mode, or a real `disabled` button in card
+    // mode, so neither ever reaches here.
+    listEl.querySelectorAll('[data-key]').forEach((el) => {
+      el.addEventListener('click', () => {
+        selectedKey = el.dataset.key;
         renderList();
         renderDetail();
       });
@@ -553,6 +837,24 @@ export async function renderArtefatosTab(container, project, { onChanged }) {
         // showing whatever was open before).
         selectedKey = row.key;
         generate(row);
+      });
+    });
+
+    // "Atualizar" is a plain re-generation, no feedback text — the one-click
+    // counterpart to "Solicitar mudança" for the specific case this button
+    // only ever appears in (rowViewModel's `updateTarget`, gated on
+    // staleStatusFor): the artifact is demonstrably out of sync with a
+    // dependency that changed after it was built, so "just regenerate it
+    // from the current context" needs no explanation typed in — unlike a
+    // genuine content edit, which still goes through the composer.
+    listEl.querySelectorAll('[data-update]').forEach((button) => {
+      button.addEventListener('click', (event) => {
+        event.stopPropagation();
+        const row = rowsToRender().find((r) => r.key === button.dataset.update);
+        const target = row && updateTargetFor(row);
+        if (!target) return;
+        selectedKey = target.key;
+        generate(target);
       });
     });
 
@@ -923,6 +1225,22 @@ export async function renderArtefatosTab(container, project, { onChanged }) {
   // targeting the group, with an explicit note about the batch scope.
   function canRequestChanges(row) {
     return !row.groupKey && !row.entry.collectionKind;
+  }
+
+  // updateTargetFor: which row a stale row's own "Atualizar" button
+  // (rowViewModel's `updateTarget`, rendered in cardHtml/tableRowHtml)
+  // actually regenerates — same target resolution "Solicitar mudança"
+  // already uses (a plain single-doc row regenerates itself; an expanded
+  // collection item regenerates its whole batch via canonicalGroupRow,
+  // since *Generate never produces just one item — see that function's own
+  // comment). Returns null for a row that can't be regenerated at all (the
+  // synthetic per-feature "Histórias — X" row, or a still-collapsed
+  // collection group row) — staleInfoFor/staleStatusFor already return null
+  // for the first case, so this mostly just guards the second.
+  function updateTargetFor(row) {
+    if (canRequestChanges(row)) return row;
+    if (row.groupKey) return canonicalGroupRow(row);
+    return null;
   }
 
   // buildRequestChangesComposer lets you ask for changes to an artifact

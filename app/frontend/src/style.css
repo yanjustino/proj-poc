@@ -203,7 +203,16 @@ button { cursor: pointer; }
    embaixo), pra deixar claro que os números que seguem são "Uso de
    tokens" — antes o card não tinha nenhum título, só um ícone genérico e
    os números direto, o que não dizia a que eles se referiam. */
-.summary-tokens-stack { display: flex; flex-direction: column; gap: 7px; }
+/* flex:1 1 auto + justify-content:space-between: the tokens card sits in
+   the same CSS grid row as "progresso por fase" (.summary — no explicit
+   align-items, so grid's own default of "stretch" makes every card in the
+   row match the tallest one's height). With more rows than this card
+   naturally needs, that tallest-card height left the 3-4 token rows
+   clumped at the top with a slab of empty space below them — this instead
+   grows the stack to fill whatever height the grid gives the card and
+   spreads its own rows evenly across it, so the card reads as filled
+   regardless of how tall its grid row ends up being. */
+.summary-tokens-stack { display: flex; flex-direction: column; gap: 7px; flex: 1 1 auto; justify-content: space-between; }
 .summary-tokens-row { display: flex; align-items: center; gap: 8px; }
 .summary-tokens-row svg { flex: none; opacity: .85; }
 .summary-tokens-row b { line-height: 1; white-space: nowrap; }
@@ -235,8 +244,64 @@ button { cursor: pointer; }
 .artifact-category-filters { display: flex; gap: 5px; margin: 0 0 12px; overflow-x: auto; }
 .artifact-filter:hover { border-color: #c9c5ba; color: var(--ink); }
 .artifact-filter.active { background: var(--ink); border-color: var(--ink); color: var(--surface); }
+/* Cards vs. table — added once a work-item's full artifact volume (Brief,
+   Atributos, Requisitos, N ADRs, DER, N Diagramas, N Features, Dependências,
+   N Histórias per feature) made the card grid tall enough that scanning for
+   one specific document meant a lot of scrolling, then reused for Fontes
+   and Wiki once the same complaint applied there. Generic names (.view-*,
+   .data-*), not .artifact-*, because tab-fontes.js and tab-wiki.js use them
+   too — only tab-artefatos.js's row modifiers (.stale, .classification, its
+   own "Última geração") are inherently artifact-specific; the table shell
+   itself isn't. Same pill-group shape as .artifact-filters/.collection-filter
+   right next to it, just icon-only and exclusive (exactly one of the two is
+   ever "active"). */
+.view-toggle { display: flex; gap: 2px; padding: 2px; border: 1px solid var(--line); border-radius: 999px; background: var(--surface); }
+.view-toggle-btn { display: grid; place-items: center; width: 28px; height: 24px; border: 0; border-radius: 999px; background: transparent; color: var(--muted); }
+.view-toggle-btn:hover { color: var(--ink); }
+.view-toggle-btn.active { background: var(--ink); color: var(--surface); }
 .artifact-card-grid { display: grid; grid-template-columns: repeat(auto-fit, minmax(190px, 1fr)); gap: 11px; align-items: stretch; }
 .artifact-map-empty { grid-column: 1 / -1; border: 1px dashed var(--line); border-radius: 14px; padding: 34px 20px; text-align: center; color: var(--muted); font-size: 12px; }
+/* .data-table-wrap/.data-table: the dense alternative to a card grid — one
+   row per item instead of one tile, sortable-at-a-glance by whatever columns
+   that tab gives it. Deliberately flat (no per-category group-header rows
+   the way tab-artefatos.js's card grid has, see .artifact-group-header) —
+   a category-like column goes inline instead, which keeps a large table
+   scannable without extra spanning rows breaking up sticky scrolling. */
+.data-table-wrap { overflow-x: auto; border: 1px solid var(--line); border-radius: 12px; }
+.data-table { width: 100%; border-collapse: collapse; font-size: 12px; }
+.data-table thead th { text-align: left; padding: 9px 12px; font: 600 10px var(--mono); text-transform: uppercase; letter-spacing: .06em; color: var(--muted); background: var(--surface-2); border-bottom: 1px solid var(--line); white-space: nowrap; }
+.data-row { border-bottom: 1px solid var(--line); cursor: pointer; }
+/* A table whose rows aren't themselves clickable (Fontes' table view — only
+   its own "Ingerir" button does anything, there's no detail pane to open) —
+   .data-row's default cursor:pointer would otherwise imply the whole row is
+   actionable when it isn't. */
+.data-row.static { cursor: default; }
+.data-row.static:hover { background: transparent; }
+.data-row:last-child { border-bottom: 0; }
+.data-row:hover { background: var(--surface-2); }
+.data-row.selected { background: var(--blue-soft); }
+.data-row.not-ready { cursor: not-allowed; opacity: .55; }
+/* Same signal as .artifact-card.stale's border, adapted to a row: an inset
+   left accent instead of an all-around border, so it reads at a glance down
+   a scrolled column without needing the badge text itself to be visible.
+   Only tab-artefatos.js's rows ever carry this modifier. */
+.data-row.stale { box-shadow: inset 3px 0 0 var(--amber); }
+.data-row td { padding: 8px 12px; vertical-align: middle; color: var(--ink); white-space: nowrap; }
+.data-row-dot { width: 20px; }
+.data-row-name { display: flex; align-items: center; gap: 8px; font-weight: 600; white-space: normal; }
+.data-row-name i { display: grid; place-items: center; color: var(--muted); font-style: normal; }
+.data-row-name .artifact-card-stale { margin: 0; }
+.data-row-category, .data-row-status, .data-row-when { color: var(--muted); font: 500 11px var(--mono); }
+/* .data-row-feedback: the one column so far whose content is genuinely
+   free-text and can run long (tab-mudancas.js's own request text) — unlike
+   every other .data-row cell, which stays short enough for the default
+   white-space:nowrap, this one needs to wrap normally or a long request
+   would silently overflow/clip instead of being readable. */
+.data-row-feedback { color: var(--ink); white-space: normal; }
+.data-row-actions { display: flex; justify-content: flex-end; gap: 4px; }
+.data-row-actions button { border: 0; background: transparent; color: var(--blue-deep); font: 600 11px var(--sans); padding: 3px 6px; }
+.data-row-actions button:hover { color: var(--ink); }
+.data-row-actions button:disabled { opacity: .5; cursor: wait; }
 /* One per category, spanning the whole grid — separates the flat card list
    into the same groups the summary's "progresso por fase" card already
    uses (artifacts.js's `category` field), so a work-item with many
@@ -267,12 +332,42 @@ button { cursor: pointer; }
    it explicitly (title attribute carries which dependency triggered it). */
 .artifact-card.stale { border-color: rgba(210,139,38,.45); }
 .artifact-card-stale { display: inline-flex; align-items: center; gap: 5px; margin-top: 8px; padding: 3px 8px; border-radius: 999px; background: rgba(210,139,38,.12); color: var(--amber); font: 600 10px var(--sans); }
+/* .artifact-card-classification: a feature/enabler's own tipo_item —
+   "Feature de negócio" or "Enabler" (with its subtipo_enabler appended once
+   set, e.g. "Enabler — Arquitetura") — read from feature.json, the same
+   classification ArtifactHtml.feature_classification already prints inside
+   the generated document itself (workflows/shared/artifacts/artifact_html.mh),
+   just surfaced one level up so it's visible without opening every card.
+   Reuses this file's existing "feature"/"diagram" card-kind colors (green /
+   violet) rather than inventing a third palette — not var(--amber), which
+   already means "desatualizado" on this same card and would read as a
+   second warning instead of a neutral classification. */
+.artifact-card-classification { display: inline-flex; align-items: center; margin-top: 4px; padding: 2px 8px; border-radius: 999px; font: 600 10px var(--sans); }
+.artifact-card-classification.business { background: #e5f5eb; color: #28724e; }
+.artifact-card-classification.enabler { background: #eeebff; color: #6551af; }
+.data-row-classification { white-space: nowrap; }
 .artifact-card-foot { min-height: 38px; display: flex; align-items: center; gap: 7px; margin: 0 15px; padding: 10px 0 12px; color: var(--muted); font: 500 9px var(--mono); border-top: 1px solid #f0eee8; }
-.artifact-card-generate { margin-left: auto; border: 0; background: transparent; padding: 3px 0 3px 6px; color: var(--blue-deep); font: 600 10px var(--sans); }
+/* .artifact-card-foot-actions: groups whichever of Exportar/Atualizar/Gerar
+   apply to this row and pushes the group as a whole to the right — the
+   buttons themselves used to carry their own margin-left:auto, which
+   worked while at most one of them ever rendered at a time (export XOR
+   generate). Once a stale, already-done row could show BOTH Exportar and
+   Atualizar together, two independent auto margins split the free space
+   between them instead of just grouping — a visible gap opening up between
+   the two buttons instead of them sitting together at the edge. A single
+   wrapper with the auto margin (buttons inside it keeping only their own
+   gap) fixes that regardless of how many of the three end up rendering.
+   The table view's own action cell doesn't need this — .data-row-actions
+   already right-aligns via justify-content on itself, not per-button
+   margins. */
+.artifact-card-foot-actions { margin-left: auto; display: flex; align-items: center; gap: 7px; }
+.artifact-card-generate { border: 0; background: transparent; padding: 3px 0 3px 6px; color: var(--blue-deep); font: 600 10px var(--sans); }
 .artifact-card-generate:hover { color: var(--ink); }
-.artifact-card-export { margin-left: auto; border: 0; background: transparent; color: var(--blue-deep); padding: 3px 0 3px 6px; display: inline-flex; align-items: center; gap: 5px; font: 600 10px var(--sans); }
+.artifact-card-export { border: 0; background: transparent; color: var(--blue-deep); padding: 3px 0 3px 6px; display: inline-flex; align-items: center; gap: 5px; font: 600 10px var(--sans); }
 .artifact-card-export:hover { color: var(--ink); }
 .artifact-card-export:disabled { opacity: .5; cursor: wait; }
+.artifact-card-update { border: 0; background: transparent; color: var(--amber); padding: 3px 0 3px 6px; display: inline-flex; align-items: center; gap: 5px; font: 600 10px var(--sans); }
+.artifact-card-update:hover { color: var(--ink); }
 .export-status { margin: -5px 0 14px; padding: 10px 12px; border: 1px solid rgba(46,139,104,.3); border-radius: var(--radius-md); background: rgba(46,139,104,.1); color: #47a880; font-size: 12px; line-height: 1.4; overflow-wrap: anywhere; }
 .export-status.error { border-color: rgba(200,58,55,.3); background: rgba(200,58,55,.1); color: #e45c58; }
 .export-status[hidden] { display: none; }
@@ -435,14 +530,24 @@ label.check input { accent-color: var(--blue); width: 15px; height: 15px; }
 .logs-llm-calls .logs-step-group { margin-bottom: 6px; }
 .llm-call-body { display: grid; gap: 1px; background: var(--line); border-top: 1px solid var(--line); }
 .llm-call-block { background: var(--surface); padding: 10px 12px; }
-.llm-call-block h5 { margin: 0 0 6px; font-size: 10px; text-transform: uppercase; letter-spacing: .04em; color: var(--muted); }
+.llm-call-block-head { display: flex; align-items: center; justify-content: space-between; gap: 8px; margin: 0 0 6px; }
+.llm-call-block-head h5 { margin: 0; font-size: 10px; text-transform: uppercase; letter-spacing: .04em; color: var(--muted); }
+.llm-call-block-head .button { padding: 2px 8px; font-size: 10px; }
 .llm-call-block pre { margin: 0; padding: 0; border: 0; white-space: pre-wrap; word-break: break-word; font-family: var(--mono); font-size: 11px; line-height: 1.6; color: #55534b; max-height: 260px; overflow: auto; }
 
-/* Logs tab — per-project version of the same run-list/detail layout as the
-   sidebar's Logs screen above, sized to sit inside a work-item's scrollable
-   tab content instead of claiming the full viewport height. */
-.project-logs { display: flex; gap: 16px; height: 60vh; min-height: 420px; }
-.project-logs-panel .logs-output { white-space: pre-wrap; word-break: break-word; font-family: var(--mono); font-size: 11px; line-height: 1.6; color: #55534b; }
+/* Logs tab — per-project version, a full-width table (one row per run) with
+   each row expanding a second, nested row right below it instead of the
+   sidebar's Logs screen's separate run-list/detail-panel split above. */
+.logs-tab-head { display: flex; align-items: flex-end; justify-content: space-between; gap: 16px; margin: 2px 0 15px; }
+.logs-tab-head h2 { margin: 0; font-size: 17px; letter-spacing: -.02em; }
+.logs-tab-head p { margin: 5px 0 0; color: var(--muted); font-size: 11px; }
+.logs-chevron { display: inline-flex; color: var(--muted); transition: transform .15s ease; }
+.logs-chevron.open { transform: rotate(180deg); }
+.logs-detail-row td { padding: 0; }
+.logs-detail-row:hover { background: transparent; } /* a linha de detalhe não é clicável — não deve responder como se fosse */
+.logs-detail { padding: 14px; border-top: 1px solid var(--line); background: var(--bg-0); display: flex; flex-direction: column; gap: 10px; }
+.logs-detail-head { display: flex; align-items: center; justify-content: space-between; gap: 12px; }
+.logs-detail .logs-output { white-space: pre-wrap; word-break: break-word; font-family: var(--mono); font-size: 11px; line-height: 1.6; color: #55534b; padding: 0; background: transparent; }
 
 /* One button family for the whole app — replaces the old .btn/.pill-btn/
    .doc-action split (docs/design-system-senpai.html §05/§11: those three
@@ -725,7 +830,7 @@ html, body { font-size: 15px; }
 .artifact-card-description, .source-card > p,
 .wiki-page-card button > span:not(.wiki-page-kind) { font-size: 13px; }
 .artifact-card-foot, .source-card > footer, .wiki-page-card footer { font-size: 11px; }
-.artifact-card-generate, .artifact-card-export, .source-card-action { font-size: 12px; }
+.artifact-card-generate, .artifact-card-export, .artifact-card-update, .source-card-action { font-size: 12px; }
 .doc-title, .doc-pending-item-title { font-size: 15px; }
 .doc-type { font-size: 11px; }
 .doc-empty, .doc-index-item { font-size: 15px; }

@@ -9,21 +9,22 @@
 // filesystem index instead, so a project's history stays reachable exactly
 // where you'd look for it: on the project, not on a session that already
 // ended.
+//
+// One full-width table, one row per run — clicking a row expands a second,
+// nested row right below it (raw log + LLM calls for that run), instead of
+// a narrow sidebar list driving a separate detail panel. Loads once on
+// mount and stays put until the person clicks "Atualizar" or expands a row
+// for the first time — no interval-based polling anywhere in this file.
+// Real complaint this replaces a fix for: the previous version polled the
+// run list every 5s, the open run's content every 2.5s and every LLM call
+// for the whole project every 8s, all independently — on a work-item with
+// many runs the screen never held still long enough to read, and there was
+// no way to just stop it short of leaving the tab.
 import { listProjectRunLogs, getPersistedRunLogs, getRunStatus, workItemPromptLog } from '../api.js';
 import { dotClass } from '../status.js';
 import { STATE_LABEL } from '../run-tracker.js';
 import { icon } from '../icons.js';
 import { callCostNote } from '../cost.js';
-
-const LIST_POLL_MS = 5000;
-const CONTENT_POLL_MS = 2500;
-// LLM calls come from a separate source (prompt_log.jsonl, via the WorkItem
-// workflow's own "prompt_log" action — see workItemPromptLog) than the
-// run_logs/ step trace above, and fetching it spins up a real mhl_run_start
-// under the hood (see workItemPromptLog's own doc comment) — cheap, but not
-// free the way a plain array read would be, so this polls on its own much
-// slower cadence instead of piggybacking on LIST_POLL_MS/CONTENT_POLL_MS.
-const LLM_CALLS_POLL_MS = 8000;
 
 function formatDate(iso) {
   if (!iso) return '';
@@ -45,132 +46,193 @@ function escapeHtml(text) {
   div.textContent = text ?? '';
   return div.innerHTML;
 }
+function escapeAttribute(text) {
+  return escapeHtml(text).replaceAll('"', '&quot;').replaceAll("'", '&#39;');
+}
+
+// copyToClipboard: one "Copiado!" feedback flash shared by every copy
+// button on this tab (the whole-log copy and every per-call prompt/
+// resposta copy) — the button's own label is the only state that changes,
+// so the flash reverts cleanly even with several buttons on screen at once.
+function copyToClipboard(button, text) {
+  navigator.clipboard
+    .writeText(text)
+    .then(() => {
+      const original = button.textContent;
+      button.textContent = 'Copiado!';
+      setTimeout(() => {
+        button.textContent = original;
+      }, 1500);
+    })
+    .catch(() => {
+      // Sem permissão de clipboard: o texto continua selecionável na tela.
+    });
+}
 
 export async function renderLogsTab(container, project) {
   container.innerHTML = `
-    <div class="project-logs">
-      <div class="logs-runs project-logs-runs">
-        <div class="logs-runs-head">
-          <h3>Execuções</h3>
-          <button class="icon-btn" data-refresh aria-label="Atualizar lista" title="Atualizar lista">${icon('download', 14)}</button>
-        </div>
-        <div class="list logs-run-list" data-run-list><p class="empty-nav">Carregando…</p></div>
+    <div class="logs-tab-head">
+      <div>
+        <h2>Logs</h2>
+        <p>Execuções registradas para este work-item — clique numa linha para ver o log completo e as chamadas de LLM.</p>
       </div>
-      <div class="logs-panel project-logs-panel">
-        <div class="logs-panel-head">
-          <div class="logs-panel-meta" data-meta>Selecione uma execução à esquerda.</div>
-          <button class="button tertiary small" data-copy disabled>Copiar</button>
-        </div>
-        <div class="logs-llm-calls" data-llm-calls hidden></div>
-        <pre class="logs-output project-logs-output" data-content></pre>
-      </div>
+      <button class="button secondary small" data-refresh>${icon('download', 14)} Atualizar</button>
     </div>
+    <div class="list-area" data-list><p class="empty-nav">Carregando…</p></div>
   `;
 
-  const runListEl = container.querySelector('[data-run-list]');
-  const metaEl = container.querySelector('[data-meta]');
-  const contentEl = container.querySelector('[data-content]');
-  const llmCallsEl = container.querySelector('[data-llm-calls]');
-  const copyButton = container.querySelector('[data-copy]');
+  const listEl = container.querySelector('[data-list]');
   const refreshButton = container.querySelector('[data-refresh]');
 
   let entries = [];
-  let selectedRunId = null;
-  // liveStatus: best-effort mhl_run_status for whichever entry is selected —
-  // present only while this process's own mhl session still knows about
-  // that runId (a run it started this session, still active or recently
-  // finished). null for anything older or from a past session; the entry
-  // still reads fine from disk either way, it just shows no status dot.
-  let liveStatus = null;
-  let statusExhausted = false; // stop asking once we've confirmed mhl doesn't know this run
-  let listTimer = null;
-  let contentTimer = null;
-  let llmCallsTimer = null;
-  let lastContentLength = -1;
   // llmCalls: every prompt/response call recorded for the WHOLE project
-  // (workItemPromptLog has no runId to filter by — see that function's own
-  // doc comment), oldest first as the API returns it. Filtered down to the
-  // selected run's own artifact when liveStatus happens to know one (same
-  // best-effort proxy logs-view.js's ensureLlmCalls uses); shown unfiltered
-  // otherwise, which is still correct — just less precise — for an old run
-  // mhl no longer tracks.
+  // (workItemPromptLog has no runId to filter by — see below), fetched once
+  // per mount/refresh, then filtered per expanded row using that row's own
+  // best-effort artifact (from a one-time getRunStatus call — see
+  // expandRow). Fetching it spins up a real mhl_run_start under the hood
+  // (workItemPromptLog's own doc comment) — cheap, but not free, which is
+  // exactly why this only happens on mount/refresh now, never on a timer.
   let llmCalls = [];
-  const llmOpenStates = new Map(); // índice -> aberto/fechado, sobrevive a um re-render (ver applyOpenOverrides)
+  // detailCache: runId -> {loading, content, artifact, error} — populated
+  // lazily, the first time a row expands, and kept until the next manual
+  // refresh (expandedRunId itself persists across a re-render, e.g. after
+  // "Atualizar", but its cached detail is dropped so it reloads fresh).
+  const detailCache = new Map();
+  let expandedRunId = null;
+  const llmOpenStates = new Map(); // "runId:index" -> aberto/fechado, sobrevive a um re-render
 
-  function renderList() {
+  function render() {
     if (entries.length === 0) {
-      runListEl.innerHTML = '<p class="empty-nav">Nenhum log registrado ainda para este work-item.</p>';
+      listEl.className = 'list-area';
+      listEl.innerHTML = '<div class="collection-map-empty">Nenhum log registrado ainda para este work-item.</div>';
       return;
     }
-    runListEl.innerHTML = entries
-      .map(
-        (entry) => `
-        <button class="list-item ${entry.runId === selectedRunId ? 'active' : ''}" data-run-id="${escapeHtml(entry.runId)}">
-          <span><strong>${escapeHtml(formatDate(entry.modifiedAt))}</strong><small>${escapeHtml(entry.runId)} · ${formatSize(entry.sizeBytes)}</small></span>
-        </button>
-      `,
-      )
-      .join('');
-    runListEl.querySelectorAll('[data-run-id]').forEach((button) => {
-      button.addEventListener('click', () => selectRun(button.dataset.runId));
+    listEl.className = 'list-area data-table-wrap';
+    listEl.innerHTML = `
+      <table class="data-table">
+        <thead>
+          <tr>
+            <th></th>
+            <th>Execução</th>
+            <th>Quando</th>
+            <th></th>
+          </tr>
+        </thead>
+        <tbody>
+          ${entries.map((entry) => rowHtml(entry)).join('')}
+        </tbody>
+      </table>
+    `;
+
+    listEl.querySelectorAll('[data-run-id]').forEach((row) => {
+      row.addEventListener('click', () => toggleRow(row.dataset.runId));
     });
+
+    if (expandedRunId) renderDetailInto(expandedRunId);
   }
 
-  function renderMeta() {
-    if (!selectedRunId) {
-      metaEl.textContent = 'Selecione uma execução à esquerda.';
+  function rowHtml(entry) {
+    const expanded = entry.runId === expandedRunId;
+    return `
+      <tr class="data-row ${expanded ? 'selected' : ''}" data-run-id="${escapeHtml(entry.runId)}" title="${escapeHtml(entry.runId)}">
+        <td class="data-row-dot"><span class="status-dot" data-status-dot></span></td>
+        <td class="data-row-name"><span>${escapeHtml(entry.runId)}</span></td>
+        <td class="data-row-when">${escapeHtml(formatDate(entry.modifiedAt))} · ${formatSize(entry.sizeBytes)}</td>
+        <td class="data-row-actions"><i class="logs-chevron ${expanded ? 'open' : ''}">${icon('arrowDown', 14)}</i></td>
+      </tr>
+      <tr class="logs-detail-row" data-detail-for="${escapeHtml(entry.runId)}" ${expanded ? '' : 'hidden'}>
+        <td colspan="4"><div class="logs-detail" data-detail-body></div></td>
+      </tr>
+    `;
+  }
+
+  // toggleRow expands `runId`'s nested row (collapsing whatever else was
+  // open — one at a time, same as the old single-selection panel) or
+  // collapses it back if it was already the open one. Loads its detail on
+  // the way in, exactly once, unless a prior load already cached it.
+  async function toggleRow(runId) {
+    expandedRunId = expandedRunId === runId ? null : runId;
+    render();
+    if (expandedRunId) await loadDetail(expandedRunId);
+  }
+
+  async function loadDetail(runId) {
+    if (detailCache.has(runId)) {
+      renderDetailInto(runId);
       return;
     }
-    const entry = entries.find((e) => e.runId === selectedRunId);
-    const dot = liveStatus ? `<span class="status-dot ${dotClass(liveStatus.state)}" title="${escapeHtml(STATE_LABEL[liveStatus.state] || liveStatus.state)}"></span>` : '';
-    const when = entry ? formatDate(entry.modifiedAt) : '';
-    metaEl.innerHTML = `${dot}<strong>${escapeHtml(selectedRunId)}</strong><span class="logs-run-id">${escapeHtml(when)}</span>`;
-  }
+    detailCache.set(runId, { loading: true });
+    renderDetailInto(runId);
 
-  // applyOpenOverrides/openAttr: same "remember what the reader toggled by
-  // hand across a rebuild" pattern as logs-view.js's own versions (not
-  // shared — that file doesn't export them, and this tab's needs are
-  // simple enough not to justify pulling them into a shared module for
-  // one caller).
-  function applyOpenOverrides(root) {
-    root.querySelectorAll('details').forEach((el, index) => {
-      el.addEventListener('toggle', () => llmOpenStates.set(index, el.open));
+    const [contentResult, statusResult] = await Promise.allSettled([getPersistedRunLogs(project.id, runId), getRunStatus(runId)]);
+    if (expandedRunId !== runId) return; // colapsado (ou trocou de linha) antes da resposta chegar
+
+    detailCache.set(runId, {
+      loading: false,
+      content: contentResult.status === 'fulfilled' ? contentResult.value : '',
+      contentError: contentResult.status === 'rejected' ? String(contentResult.reason) : null,
+      // status pode genuinamente não existir (runId de uma sessão antiga do
+      // mhl, ou de antes do último restart do app) — sem problema, o log
+      // persistido continua acessível; só perde o filtro de "Chamadas de
+      // LLM" por artefato, que cai pro fallback (mostra tudo).
+      status: statusResult.status === 'fulfilled' ? statusResult.value : null,
     });
+    renderDetailInto(runId);
+    updateStatusDot(runId);
   }
 
-  function openAttr(index, defaultOpen) {
-    const open = llmOpenStates.has(index) ? llmOpenStates.get(index) : defaultOpen;
-    return open ? 'open' : '';
+  function updateStatusDot(runId) {
+    const detail = detailCache.get(runId);
+    const row = listEl.querySelector(`tr.data-row[data-run-id="${cssEscape(runId)}"]`);
+    const dotEl = row?.querySelector('[data-status-dot]');
+    if (!dotEl) return;
+    dotEl.className = `status-dot ${detail?.status ? dotClass(detail.status.state) : ''}`;
+    if (detail?.status) dotEl.title = STATE_LABEL[detail.status.state] || detail.status.state;
   }
 
-  // artifactFilter resolves which artifact (if any) to narrow llmCalls
-  // down to, from the selected entry's best-effort liveStatus.
-  function artifactFilter() {
-    const vars = liveStatus?.vars || {};
-    return vars.artifact ?? vars.current_artifact ?? null;
-  }
-
-  function renderLlmCalls() {
-    if (llmCalls.length === 0) {
-      llmCallsEl.hidden = true;
-      llmCallsEl.innerHTML = '';
+  function renderDetailInto(runId) {
+    const body = listEl.querySelector(`tr.logs-detail-row[data-detail-for="${cssEscape(runId)}"] [data-detail-body]`);
+    if (!body) return;
+    const detail = detailCache.get(runId);
+    if (!detail || detail.loading) {
+      body.innerHTML = '<p class="empty-nav">Carregando…</p>';
       return;
     }
-    const artifact = artifactFilter();
+
+    const artifact = detail.status?.vars?.artifact ?? detail.status?.vars?.current_artifact ?? null;
     const calls = artifact ? llmCalls.filter((entry) => entry.artifact === artifact) : llmCalls;
-    llmCallsEl.hidden = false;
+
+    body.innerHTML = `
+      <div class="logs-detail-head">
+        <span class="logs-run-id">${escapeHtml(runId)}</span>
+        <button class="button tertiary small" data-copy-log>Copiar log</button>
+      </div>
+      ${llmCallsHtml(runId, calls, artifact)}
+      <pre class="logs-output">${escapeHtml(detail.contentError ? `Erro ao carregar log: ${detail.contentError}` : detail.content || '(sem saída registrada)')}</pre>
+    `;
+
+    body.querySelector('[data-copy-log]').addEventListener('click', (event) => {
+      event.stopPropagation();
+      copyToClipboard(event.currentTarget, detail.content || '');
+    });
+    wireLlmCallCopyButtons(body, runId, calls);
+  }
+
+  function llmCallsHtml(runId, calls, artifact) {
+    if (llmCalls.length === 0) return '';
     if (calls.length === 0) {
-      llmCallsEl.innerHTML = `<h4>Chamadas de LLM${artifact ? ` · ${escapeHtml(artifact)}` : ''}</h4><p class="empty-nav">Nenhuma chamada registrada ainda para este artefato.</p>`;
-      return;
+      return `<h4>Chamadas de LLM${artifact ? ` · ${escapeHtml(artifact)}` : ''}</h4><p class="empty-nav">Nenhuma chamada registrada ainda para este artefato.</p>`;
     }
     const lastIndex = calls.length - 1;
-    llmCallsEl.innerHTML = `
-      <h4>Chamadas de LLM${artifact ? ` · ${escapeHtml(artifact)}` : ' · todo o projeto'}</h4>
+    return `
+      <h4>Chamadas de LLM${artifact ? ` · ${escapeHtml(artifact)}` : ' · todo o projeto (sem status ao vivo pra filtrar por artefato)'}</h4>
       ${calls
         .map((entry, index) => {
           const costNote = callCostNote(entry);
+          const openKey = `${runId}:${index}`;
+          const open = llmOpenStates.has(openKey) ? llmOpenStates.get(openKey) : index === lastIndex;
           return `
-          <details class="logs-step-group" ${openAttr(index, index === lastIndex)}>
+          <details class="logs-step-group" data-open-key="${escapeAttribute(openKey)}" ${open ? 'open' : ''}>
             <summary>
               <strong>${escapeHtml(entry.backend || '—')}</strong>
               ${entry.artifact && !artifact ? `<small>${escapeHtml(entry.artifact)}</small>` : ''}
@@ -178,124 +240,69 @@ export async function renderLogsTab(container, project) {
               <small>${escapeHtml(formatDate(entry.at))}</small>
             </summary>
             <div class="llm-call-body">
-              <div class="llm-call-block"><h5>Prompt enviado</h5><pre>${escapeHtml(entry.prompt || '')}</pre></div>
-              <div class="llm-call-block"><h5>Resposta bruta</h5><pre>${escapeHtml(entry.response || '')}</pre></div>
+              <div class="llm-call-block">
+                <div class="llm-call-block-head"><h5>Prompt enviado</h5><button class="button tertiary small" data-copy-call="${index}" data-copy-field="prompt">Copiar</button></div>
+                <pre>${escapeHtml(entry.prompt || '')}</pre>
+              </div>
+              <div class="llm-call-block">
+                <div class="llm-call-block-head"><h5>Resposta bruta</h5><button class="button tertiary small" data-copy-call="${index}" data-copy-field="response">Copiar</button></div>
+                <pre>${escapeHtml(entry.response || '')}</pre>
+              </div>
             </div>
           </details>
         `;
         })
         .join('')}
     `;
-    applyOpenOverrides(llmCallsEl);
   }
 
-  async function refreshLlmCalls() {
-    try {
-      llmCalls = (await workItemPromptLog(project.id)) || [];
-    } catch {
-      // Best-effort — mantém o que já tinha, tenta de novo no próximo tick.
-      return;
-    }
-    renderLlmCalls();
+  function wireLlmCallCopyButtons(root, runId, calls) {
+    root.querySelectorAll('[data-open-key]').forEach((el) => {
+      el.addEventListener('toggle', () => llmOpenStates.set(el.dataset.openKey, el.open));
+      el.addEventListener('click', (event) => event.stopPropagation()); // não deixa o clique borbulhar até a <tr> e recolher a linha
+    });
+    root.querySelectorAll('[data-copy-call]').forEach((button) => {
+      button.addEventListener('click', (event) => {
+        event.preventDefault(); // dentro de <summary> — sem isto o clique também alterna o accordion
+        event.stopPropagation();
+        const entry = calls[Number(button.dataset.copyCall)];
+        copyToClipboard(button, entry?.[button.dataset.copyField] || '');
+      });
+    });
   }
 
-  async function refreshList({ autoSelect } = {}) {
+  async function refreshAll() {
+    refreshButton.disabled = true;
     try {
-      entries = await listProjectRunLogs(project.id);
-    } catch (err) {
-      runListEl.innerHTML = `<p class="empty-nav">Erro ao listar logs: ${escapeHtml(String(err))}</p>`;
-      return;
-    }
-    if (autoSelect && !selectedRunId && entries[0]) {
-      selectRun(entries[0].runId);
-      return; // selectRun already re-renders the list
-    }
-    renderList();
-  }
-
-  async function pollContentOnce() {
-    if (!selectedRunId) return;
-    const runId = selectedRunId;
-    try {
-      const text = await getPersistedRunLogs(project.id, runId);
-      if (runId !== selectedRunId) return; // trocou de execução durante a chamada
-      if (text.length !== lastContentLength) {
-        lastContentLength = text.length;
-        contentEl.textContent = text || '(sem saída registrada)';
-        contentEl.scrollTop = contentEl.scrollHeight;
+      const [entriesResult, llmCallsResult] = await Promise.allSettled([listProjectRunLogs(project.id), workItemPromptLog(project.id)]);
+      if (entriesResult.status === 'fulfilled') entries = entriesResult.value;
+      if (llmCallsResult.status === 'fulfilled') llmCalls = llmCallsResult.value || [];
+      // Descarta o cache de detalhe — "Atualizar" deve trazer o log e as
+      // chamadas mais recentes pra qualquer linha que estava aberta, não
+      // repetir o que já tinha sido carregado antes do clique.
+      detailCache.clear();
+      if (entriesResult.status === 'rejected') {
+        listEl.className = 'list-area';
+        listEl.innerHTML = `<p class="doc-empty">Erro ao listar logs: ${escapeHtml(String(entriesResult.reason))}</p>`;
+        return;
       }
-    } catch {
-      // Best-effort — mantém o que já tinha na tela, tenta de novo no
-      // próximo tick.
-    }
-    if (!statusExhausted) {
-      try {
-        const status = await getRunStatus(runId);
-        if (runId !== selectedRunId) return;
-        liveStatus = status;
-        if (status.state !== 'working' && status.state !== 'queued') statusExhausted = true;
-      } catch {
-        // mhl não conhece mais este runId (sessão antiga, ou execução de
-        // antes do último restart) — sem status ao vivo, sem problema, o
-        // conteúdo persistido continua acessível normalmente.
-        liveStatus = null;
-        statusExhausted = true;
-      }
-      renderMeta();
-      renderLlmCalls(); // a filtragem por artefato depende de liveStatus — ver artifactFilter
+      render();
+      if (expandedRunId) await loadDetail(expandedRunId);
+    } finally {
+      refreshButton.disabled = false;
     }
   }
 
-  function stopContentPolling() {
-    if (contentTimer) {
-      clearInterval(contentTimer);
-      contentTimer = null;
-    }
-  }
+  refreshButton.addEventListener('click', refreshAll);
 
-  function startContentPolling() {
-    stopContentPolling();
-    pollContentOnce();
-    contentTimer = setInterval(pollContentOnce, CONTENT_POLL_MS);
-  }
+  await refreshAll();
+}
 
-  function selectRun(runId) {
-    selectedRunId = runId;
-    liveStatus = null;
-    statusExhausted = false;
-    lastContentLength = -1;
-    contentEl.textContent = 'Carregando…';
-    copyButton.disabled = false;
-    renderList();
-    renderMeta();
-    renderLlmCalls(); // liveStatus acabou de zerar — volta a mostrar tudo até um novo status chegar
-    startContentPolling();
-  }
-
-  refreshButton.addEventListener('click', () => refreshList());
-
-  copyButton.addEventListener('click', async () => {
-    if (!selectedRunId) return;
-    try {
-      await navigator.clipboard.writeText(contentEl.textContent);
-      copyButton.textContent = 'Copiado!';
-      setTimeout(() => {
-        copyButton.textContent = 'Copiar';
-      }, 1500);
-    } catch {
-      // Sem permissão de clipboard: o texto continua selecionável na tela.
-    }
-  });
-
-  await refreshList({ autoSelect: true });
-  listTimer = setInterval(() => refreshList(), LIST_POLL_MS);
-
-  refreshLlmCalls();
-  llmCallsTimer = setInterval(refreshLlmCalls, LLM_CALLS_POLL_MS);
-
-  return function dispose() {
-    if (listTimer) clearInterval(listTimer);
-    if (llmCallsTimer) clearInterval(llmCallsTimer);
-    stopContentPolling();
-  };
+// cssEscape: minimal escape for a runId used inside a CSS attribute
+// selector (querySelector) — runIds are UUIDs from this app's own uuid.v7()
+// (see work_item/actions.mh), never user-authored text, so this only ever
+// needs to survive being *valid* CSS, not be a security boundary; kept
+// local rather than pulling in the platform CSS.escape for one call site.
+function cssEscape(value) {
+  return value.replace(/["\\]/g, '\\$&');
 }

@@ -8,8 +8,9 @@ import { Context } from "../shared/artifacts/context.mh"
 import { ArtifactData } from "../shared/artifacts/artifact_data.mh"
 import { ArtifactBody } from "../shared/artifacts/artifact_body.mh"
 import { PageShell, ArtifactMeta } from "../shared/artifacts/page_shell.mh"
+import { ChangesBlock } from "../shared/artifacts/changes_log.mh"
 import {
-    ArtifactSchema, FeedbackBlock,
+    ArtifactSchema,
     BriefInstruction, AtributosInstruction, RequisitosInstruction,
     BriefSchemaFile, AtributosSchemaFile, RequisitosSchemaFile
 } from "../shared/artifacts/artifacts_common.mh"
@@ -18,7 +19,11 @@ partial workflow Discovery {
     step BriefGenerate {
         self.current_artifact = "brief"
         var response = Writer.generate(
-            prompt: BriefInstruction(schema_conventions: ArtifactSchema(), wiki_content: Context.wiki(project_id), feedback_content: FeedbackBlock.render(pending_feedback)),
+            prompt: BriefInstruction(
+                schema_conventions: ArtifactSchema(),
+                wiki_content: Context.wiki(project_id),
+                feedback_content: ChangesBlock.for_artifact(project_id, "brief", "")
+            ),
             schema_file: BriefSchemaFile.get(), project_id: project_id, artifact: self.current_artifact
         )
         self.tokens_in = response.tokens_in
@@ -49,7 +54,12 @@ partial workflow Discovery {
         if (brief_content.is_empty()) fail("gere 'brief' antes de 'atributos'")
 
         var response = Writer.generate(
-            prompt: AtributosInstruction(schema_conventions: ArtifactSchema(), brief_content: brief_content, wiki_content: Context.wiki(project_id), feedback_content: FeedbackBlock.render(pending_feedback)),
+            prompt: AtributosInstruction(
+                schema_conventions: ArtifactSchema(),
+                brief_content: brief_content,
+                wiki_content: Context.wiki(project_id),
+                feedback_content: ChangesBlock.for_artifact(project_id, "atributos", "")
+            ),
             schema_file: AtributosSchemaFile.get(), project_id: project_id, artifact: self.current_artifact
         )
 
@@ -80,7 +90,12 @@ partial workflow Discovery {
         var brief_content = Context.artifact(project_id, "brief.html")
         if (brief_content.is_empty()) fail("gere 'brief' antes de 'requisitos'")
         var response = Writer.generate(
-            prompt: RequisitosInstruction(schema_conventions: ArtifactSchema(), brief_content: brief_content, wiki_content: Context.wiki(project_id), feedback_content: FeedbackBlock.render(pending_feedback)),
+            prompt: RequisitosInstruction(
+                schema_conventions: ArtifactSchema(),
+                brief_content: brief_content,
+                wiki_content: Context.wiki(project_id),
+                feedback_content: ChangesBlock.for_artifact(project_id, "requisitos", "")
+            ),
             schema_file: RequisitosSchemaFile.get(), project_id: project_id, artifact: self.current_artifact
         )
         self.tokens_in = response.tokens_in

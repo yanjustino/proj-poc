@@ -122,8 +122,11 @@ const STALE_EPSILON_MS = 2000;
 // place, so a regenerated ADR batch could otherwise look unchanged. Returns
 // null when the artifact doesn't exist yet (doneNames already gates entries
 // this is called for, but this stays defensive so a caller never has to
-// double-check).
-function latestMtimeOf(entry, byName) {
+// double-check). Exported for tab-artefatos.js's table view — its "Última
+// geração" column needs the exact same "when was this actually touched"
+// value the staleness matrix itself uses, not a separately-computed one
+// that could quietly drift out of agreement with it.
+export function latestMtimeOf(entry, byName) {
   if (entry.dir) {
     const node = byName[entry.dir];
     const children = node && node.children ? node.children : [];

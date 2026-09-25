@@ -11,6 +11,7 @@ import {
 import { createRunTracker } from '../run-tracker.js';
 import { icon } from '../icons.js';
 import { setActiveRun, getActiveRun, clearActiveRun } from '../active-runs.js';
+import { formatRelativeTime } from '../time-format.js';
 
 // renderFontesTab owns the "upload de arquivos-base → Wiki ingest" flow
 // (§3.2 of the plan). Uploading and ingesting are deliberately separate
@@ -47,6 +48,10 @@ export async function renderFontesTab(container, project, { onChanged }) {
       <div class="collection-map-actions">
         <button class="button tertiary small" data-ingest-pending disabled>${icon('inbox', 14)} Ingerir pendentes</button>
         <button class="button primary small" data-add>${icon('plus', 14)} Adicionar fontes</button>
+        <div class="view-toggle" data-view-toggle>
+          <button class="view-toggle-btn" data-view="cards" title="Ver como cards">${icon('grid', 15)}</button>
+          <button class="view-toggle-btn" data-view="table" title="Ver como tabela">${icon('list', 15)}</button>
+        </div>
       </div>
     </div>
     <div class="collection-filters" data-source-filters>
@@ -54,7 +59,7 @@ export async function renderFontesTab(container, project, { onChanged }) {
       <button class="collection-filter" data-source-filter="ready">Ingeridas</button>
       <button class="collection-filter" data-source-filter="pending">Pendentes</button>
     </div>
-    <div class="source-card-grid" data-sources></div>
+    <div class="list-area" data-sources></div>
   `;
 
   const sourcesEl = container.querySelector('[data-sources]');
@@ -62,7 +67,33 @@ export async function renderFontesTab(container, project, { onChanged }) {
   const ingestPendingButton = container.querySelector('[data-ingest-pending]');
   const sourceCountEl = container.querySelector('[data-source-count]');
   const filterButtons = [...container.querySelectorAll('[data-source-filter]')];
+  const viewButtons = [...container.querySelectorAll('[data-view]')];
 
+  // viewMode: same default/persistence reasoning as tab-artefatos.js's own
+  // (see its comment) — table by default, cards one click away. Own
+  // localStorage key: a per-tab preference, not a single global "how does
+  // this person like to browse lists" toggle — someone might want Artefatos
+  // dense but Fontes as cards, say.
+  let viewMode = 'table';
+  try {
+    if (localStorage.getItem('senpai-fontes-view') === 'cards') viewMode = 'cards';
+  } catch {
+    // Degrades to 'table'.
+  }
+  viewButtons.forEach((button) => button.classList.toggle('active', button.dataset.view === viewMode));
+  function setViewMode(mode) {
+    viewMode = mode;
+    try {
+      localStorage.setItem('senpai-fontes-view', mode);
+    } catch {
+      // Not persisted this time — still applies for the rest of this mount.
+    }
+    viewButtons.forEach((button) => button.classList.toggle('active', button.dataset.view === mode));
+    render();
+  }
+  viewButtons.forEach((button) => button.addEventListener('click', () => setViewMode(button.dataset.view)));
+
+  let rawNodes = []; // full listProjectDir() nodes (name + modifiedAt), not just names — the table view's "Última atualização" column needs the timestamp too
   let rawNames = [];
   let ingestedNames = new Set();
   let batching = false; // true only while ingestBatch's own sequential loop is driving things
@@ -86,6 +117,7 @@ export async function renderFontesTab(container, project, { onChanged }) {
       nodes = await listProjectDir(project.id, 'raw', '');
     } catch (err) {
       sourcesEl.innerHTML = `<p class="doc-empty">Erro ao listar fontes: ${escapeHtml(String(err))}</p>`;
+      rawNodes = [];
       rawNames = [];
       return;
     }
@@ -95,6 +127,7 @@ export async function renderFontesTab(container, project, { onChanged }) {
     } catch (err) {
       console.error('listIngestedRaw', err);
     }
+    rawNodes = nodes;
     rawNames = nodes.map((node) => node.name);
     ingestedNames = new Set(ingestedList);
   }
@@ -108,6 +141,14 @@ export async function renderFontesTab(container, project, { onChanged }) {
     return rawNames.filter((name) => !ingestedNames.has(name) && !trackers.has(name));
   }
 
+  // modifiedAtOf: epoch-ms (or null) for the table view's "Última
+  // atualização" column — app.go's ListProjectDir returns each node's own
+  // mtime now (added for tab-artefatos.js's staleness matrix, reused here).
+  function modifiedAtOf(name) {
+    const node = rawNodes.find((n) => n.name === name);
+    return node?.modifiedAt ? Date.parse(node.modifiedAt) : null;
+  }
+
   function render() {
     const visibleNames = rawNames.filter((name) => {
       if (activeFilter === 'all') return true;
@@ -115,32 +156,94 @@ export async function renderFontesTab(container, project, { onChanged }) {
     });
     sourceCountEl.textContent = `${rawNames.length} ${rawNames.length === 1 ? 'arquivo' : 'arquivos'}`;
     if (rawNames.length === 0) {
+      sourcesEl.className = 'list-area';
       sourcesEl.innerHTML = '<div class="collection-map-empty">Nenhuma fonte enviada ainda.</div>';
     } else if (visibleNames.length === 0) {
+      sourcesEl.className = 'list-area';
       sourcesEl.innerHTML = '<div class="collection-map-empty">Nenhuma fonte neste filtro.</div>';
+    } else if (viewMode === 'table') {
+      renderTable(visibleNames);
     } else {
-      sourcesEl.innerHTML = '';
-      for (const name of visibleNames) {
-        const row = document.createElement('article');
-        row.className = `source-card ${ingestedNames.has(name) ? 'ready' : 'pending'}`;
-        sourcesEl.appendChild(row);
-        const tracker = trackers.get(name);
-        if (tracker) {
-          row.innerHTML = sourceCardBody(name, 'Processando a fonte…', 'working');
-          row.appendChild(tracker.element);
-          row.appendChild(tracker.composer);
-        } else {
-          row.innerHTML = rowBody(name);
-          const ingestButton = row.querySelector('[data-ingest-one]');
-          if (ingestButton) ingestButton.addEventListener('click', () => ingestBatch([name]));
-        }
-      }
+      renderCards(visibleNames);
     }
     const pending = pendingNames();
     ingestPendingButton.disabled = batching || pending.length === 0;
     ingestPendingButton.innerHTML = pending.length
       ? `${icon('inbox', 14)} Ingerir pendentes (${pending.length})`
       : `${icon('inbox', 14)} Ingerir pendentes`;
+  }
+
+  function renderCards(visibleNames) {
+    sourcesEl.className = 'list-area source-card-grid';
+    sourcesEl.innerHTML = '';
+    for (const name of visibleNames) {
+      const row = document.createElement('article');
+      row.className = `source-card ${ingestedNames.has(name) ? 'ready' : 'pending'}`;
+      sourcesEl.appendChild(row);
+      const tracker = trackers.get(name);
+      if (tracker) {
+        row.innerHTML = sourceCardBody(name, 'Processando a fonte…', 'working');
+        row.appendChild(tracker.element);
+        row.appendChild(tracker.composer);
+      } else {
+        row.innerHTML = rowBody(name);
+        const ingestButton = row.querySelector('[data-ingest-one]');
+        if (ingestButton) ingestButton.addEventListener('click', () => ingestBatch([name]));
+      }
+    }
+  }
+
+  // renderTable: the dense alternative to renderCards, same reasoning as
+  // tab-artefatos.js's own table view — one row per source instead of one
+  // tile. Rows aren't clickable as a whole (.data-row.static — there's no
+  // detail pane here, this tab never renders into reading-pane.js at all),
+  // only the "Ingerir →" action does anything. A file still being ingested
+  // just shows "Processando…" text instead of embedding the live tracker
+  // widget inline (unlike renderCards, which appends tracker.element/
+  // .composer directly) — that widget's animated orbit and composer don't
+  // fit a dense table row, and Wiki's ingest action never actually pauses
+  // for approval, so there's nothing the composer would offer here anyway.
+  function renderTable(visibleNames) {
+    sourcesEl.className = 'list-area data-table-wrap';
+    sourcesEl.innerHTML = `
+      <table class="data-table">
+        <thead>
+          <tr>
+            <th></th>
+            <th>Nome</th>
+            <th>Status</th>
+            <th>Última atualização</th>
+            <th>Ações</th>
+          </tr>
+        </thead>
+        <tbody>
+          ${visibleNames.map((name) => tableRowHtml(name)).join('')}
+        </tbody>
+      </table>
+    `;
+    sourcesEl.querySelectorAll('[data-ingest-one]').forEach((button) => {
+      button.addEventListener('click', () => ingestBatch([button.dataset.ingestOne]));
+    });
+  }
+
+  function tableRowHtml(name) {
+    const tracker = trackers.get(name);
+    const ingested = ingestedNames.has(name);
+    const dot = tracker ? 'working' : ingested ? 'done' : '';
+    const statusText = tracker ? 'Processando…' : ingested ? 'Ingerido' : 'Pendente';
+    const when = formatRelativeTime(modifiedAtOf(name));
+    const canIngest = !tracker && !ingested;
+    return `
+      <tr class="data-row static" title="${escapeHtml(statusText)}">
+        <td class="data-row-dot"><span class="status-dot ${dot}"></span></td>
+        <td class="data-row-name"><i>${icon('fileText', 14)}</i><span title="${escapeAttribute(name)}">${escapeHtml(name)}</span></td>
+        <td class="data-row-status">${escapeHtml(statusText)}</td>
+        <td class="data-row-when">${escapeHtml(when)}</td>
+        <td class="data-row-actions">
+          ${canIngest ? `<button data-ingest-one="${escapeAttribute(name)}" ${batching ? 'disabled' : ''}>Ingerir →</button>` : ''}
+        </td>
+      </tr>
+    `;
   }
 
   function sourceCardBody(name, status, state, action = '') {
@@ -288,4 +391,7 @@ function escapeHtml(text) {
   const div = document.createElement('div');
   div.textContent = text;
   return div.innerHTML;
+}
+function escapeAttribute(text) {
+  return escapeHtml(text).replaceAll('"', '&quot;').replaceAll("'", '&#39;');
 }

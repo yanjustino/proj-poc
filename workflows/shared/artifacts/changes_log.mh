@@ -1,0 +1,117 @@
+// memory ChangesLog + tool ChangesBlock — registro cumulativo, persistido em
+// disco, de cada pedido de mudança já feito neste work-item ("Solicitar
+// mudança"/"Atualizar", tab-artefatos.js), um por artefato-alvo (e por
+// feature, quando o alvo é uma história de Discovery — cada feature tem sua
+// própria história e seu próprio histórico).
+//
+// Substitui o que antes era só `pending_feedback` (var de workflow) — essa
+// var é re-vinculada ao valor de resume a cada `goto`, mas some por completo
+// entre execuções DIFERENTES (um StartRun novo começa do zero), então cada
+// rodada de "Solicitar mudança" só carregava o ÚLTIMO comentário pra LLM,
+// nunca a soma de todos os anteriores. Reproduzido de verdade: "mude dotnet
+// para Java" funcionou; "mude Relacional para Documental" devolveu uma lista
+// de ADRs menor com Java revertido pra dotnet (síntese do zero, não uma
+// edição); "mude EKS para ECS" trouxe Java de volta por coincidência
+// enquanto revertia banco pra Relacional de novo — cada rodada só lembrava
+// do comentário que ela mesma recebeu.
+//
+// Uma tentativa anterior tentou resolver isso reenviando o conteúdo ATUAL
+// inteiro do artefato pedindo pra LLM "preservar exceto o que mudou" — e
+// isso por sua vez falhou de um jeito diferente e também reproduzido: ADR-002
+// virou EKS→ECS (correto), Features foi atualizado ("Atualizar"), e o
+// backlog regenerado ainda trazia "FT013 — Fundação de Infraestrutura AWS
+// com EKS" — preservou o texto antigo em vez de reconciliar com o ADR que
+// tinha acabado de mudar, mesmo com o conteúdo novo do ADR já estando ali no
+// mesmo prompt. Esse approach dependia de a LLM inferir sozinha "o que
+// mudou" comparando dois blobs grandes — uma tarefa de diff implícito.
+//
+// ChangesLog resolve as duas coisas ao mesmo tempo, sem depender de diff
+// implícito nenhum: cada artefato volta a ser gerado do ZERO a partir dos
+// predecessores atuais (a mesma qualidade da primeira geração, sempre —
+// Features derivado de um ADR já correto sai correto, sem precisar
+// reconciliar nada), mas agora recebe também a lista COMPLETA e EXPLÍCITA de
+// toda diretiva já pedida pra esse artefato especificamente, em vez de só a
+// última.
+import { Paths } from "../core/paths.mh"
+
+export memory ChangesLog {
+    type: "jsonl"
+    path: "projects/${project_id}/changes.jsonl"
+    path_guard: "no_traversal"
+}
+
+export tool ChangesBlock {
+    // for_artifact devolve o bloco de instrução pronto pra entrar no prompt
+    // via `feedback_content` (o mesmo parâmetro que antes só carregava o
+    // último comentário — o nome do parâmetro não mudou nos *Instruction/
+    // *.prompt.md, só o que preenche ele) — "" quando não há nenhuma
+    // diretiva ainda pra este artefato (primeira geração, ou um artefato que
+    // nunca recebeu feedback), mesmo contrato "vazio entra -> vazio sai" que
+    // todo outro bloco deste tipo já usa.
+    //
+    // `feature_id` filtra as histórias de UMA feature de Discovery (cada
+    // feature tem seu próprio histórico — um pedido de mudança na história
+    // da FT001 não deve vazar pra regeneração da FT002); "" pra todo outro
+    // artefato, que não tem essa subdivisão.
+    for_artifact(project_id: string, artifact: string, feature_id: string): string -> {
+        var path = Paths.changes_file(project_id)
+        if (!fs.exists(path)) return ""
+        var entries = json.parse_lines(fs.read(path)).filter((line) ->
+            line.value.artifact == artifact && (line.value?.feature_id ?? "") == feature_id
+        )
+        if (entries.is_empty()) return ""
+
+        var items = ""
+        var n = 1
+        for (var entry in entries) {
+            items = items + "\n${n}. " + entry.value.feedback
+            n = n + 1
+        }
+
+        return "## Mudanças já solicitadas para este artefato — aplique TODAS as instruções abaixo, na ordem em que aparecem; se duas se contradisserem, a mais recente (número mais alto) vale\n" + items
+    }
+}
+
+test ChangesBlockSpec {
+    describe for_artifact_is_empty_when_the_changes_file_does_not_exist {
+        are_equal(ChangesBlock.for_artifact("spec-test-changes-nonexistent", "adr", ""), "")
+    }
+
+    describe for_artifact_numbers_every_matching_entry_in_order_and_ignores_other_artifacts_and_features {
+        var project_id = "spec-test-changes-block"
+        var path = Paths.changes_file(project_id)
+        fs.write(path,
+            json.stringify({value: {artifact: "adr", feature_id: "", feedback: "mude dotnet para Java"}}) + "\n" +
+            json.stringify({value: {artifact: "requisitos", feature_id: "", feedback: "ignorar — outro artefato"}}) + "\n" +
+            json.stringify({value: {artifact: "historias", feature_id: "FT002", feedback: "ignorar — outra feature"}}) + "\n" +
+            json.stringify({value: {artifact: "adr", feature_id: "", feedback: "mude Relacional para Documental"}}) + "\n"
+        )
+
+        var out = ChangesBlock.for_artifact(project_id, "adr", "")
+
+        is_true(out.contains("1. mude dotnet para Java"))
+        is_true(out.contains("2. mude Relacional para Documental"))
+        is_false(out.contains("outro artefato"))
+        is_false(out.contains("outra feature"))
+
+        fs.delete(path)
+        dir.delete(Paths.root(project_id))
+    }
+
+    describe for_artifact_filters_historias_by_feature_id {
+        var project_id = "spec-test-changes-block-historias"
+        var path = Paths.changes_file(project_id)
+        fs.write(path,
+            json.stringify({value: {artifact: "historias", feature_id: "FT001", feedback: "diretiva da FT001"}}) + "\n" +
+            json.stringify({value: {artifact: "historias", feature_id: "FT002", feedback: "diretiva da FT002"}}) + "\n"
+        )
+
+        var out = ChangesBlock.for_artifact(project_id, "historias", "FT001")
+
+        is_true(out.contains("diretiva da FT001"))
+        is_false(out.contains("diretiva da FT002"))
+
+        fs.delete(path)
+        dir.delete(Paths.root(project_id))
+    }
+}

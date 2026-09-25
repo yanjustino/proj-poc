@@ -10,9 +10,11 @@ import { ArtifactData } from "../shared/artifacts/artifact_data.mh"
 import { ArtifactBody } from "../shared/artifacts/artifact_body.mh"
 import { Slug } from "../shared/core/slug.mh"
 import { ArtifactId } from "../shared/artifacts/artifact_id.mh"
+import { DirClear } from "../shared/core/dir_clear.mh"
 import { PageShell, ArtifactMeta } from "../shared/artifacts/page_shell.mh"
+import { ChangesBlock } from "../shared/artifacts/changes_log.mh"
 import {
-    ArtifactSchema, FeedbackBlock,
+    ArtifactSchema,
     AdrInstruction, DerInstruction, DiagramasInstruction,
     AdrSchemaFile, DerSchemaFile, DiagramasSchemaFile
 } from "../shared/artifacts/artifacts_common.mh"
@@ -30,7 +32,7 @@ partial workflow Discovery {
                 schema_conventions: ArtifactSchema(),
                 requisitos_content: requisitos_content,
                 atributos_content: atributos_content,
-                feedback_content: FeedbackBlock.render(pending_feedback)
+                feedback_content: ChangesBlock.for_artifact(project_id, "adr", "")
             ),
             schema_file: AdrSchemaFile.get(),
             project_id: project_id,
@@ -50,10 +52,15 @@ partial workflow Discovery {
         var written = []
         var adr_dir = Paths.artifact(project_id, "adr")
         // *Generate devolve o lote inteiro de decisoes, nao um delta — uma
-        // regeneracao ("Solicitar mudanca" num adr/ ja aprovado,
-        // tab-artefatos.js) precisa substituir, nao somar (ArtifactId.
-        // next_adr_id so conta ADRs ja existentes).
-        if (dir.exists(adr_dir)) dir.delete(adr_dir)
+        // regeneracao ("Solicitar mudanca"/"Atualizar" num adr/ ja
+        // aprovado, tab-artefatos.js) precisa substituir, nao somar
+        // (ArtifactId.next_adr_id so conta ADRs ja existentes).
+        // DirClear.clear, nao dir.delete direto: dir.delete e
+        // deliberadamente nao-recursivo no mhl-runtime (so remove um
+        // diretorio ja vazio) — contra um adr_dir com conteudo real (o caso
+        // normal aqui) ele falhava com "directory not empty" (bug real,
+        // batido em producao via o botao "Atualizar"). Ver dir_clear.mh.
+        DirClear.clear(adr_dir)
         dir.create(adr_dir)
         for (var decision in data.decisions) {
             var id = ArtifactId.next_adr_id(project_id)
@@ -84,7 +91,7 @@ partial workflow Discovery {
                 schema_conventions: ArtifactSchema(),
                 requisitos_content: requisitos_content,
                 atributos_content: atributos_content,
-                feedback_content: FeedbackBlock.render(pending_feedback)
+                feedback_content: ChangesBlock.for_artifact(project_id, "der", "")
             ),
             schema_file: DerSchemaFile.get(),
             project_id: project_id,
@@ -123,7 +130,7 @@ partial workflow Discovery {
                 schema_conventions: ArtifactSchema(),
                 requisitos_content: requisitos_content,
                 atributos_content: atributos_content,
-                feedback_content: FeedbackBlock.render(pending_feedback)
+                feedback_content: ChangesBlock.for_artifact(project_id, "diagramas", "")
             ),
             schema_file: DiagramasSchemaFile.get(),
             project_id: project_id,
@@ -149,8 +156,9 @@ partial workflow Discovery {
         // mudou na regeneracao vira um arquivo NOVO ao lado do antigo
         // (slug diferente), e um cujo titulo ficou igual sobrescreve o
         // antigo silenciosamente; nenhum dos dois casos limpa o que nao
-        // deveria mais existir.
-        if (dir.exists(diagramas_dir)) dir.delete(diagramas_dir)
+        // deveria mais existir. DirClear.clear, nao dir.delete direto — ver
+        // o comentario em AdrCommit acima / dir_clear.mh.
+        DirClear.clear(diagramas_dir)
         dir.create(diagramas_dir)
         for (var diagrama in data.diagramas) {
             var slug = Slug.from_title(diagrama.titulo)

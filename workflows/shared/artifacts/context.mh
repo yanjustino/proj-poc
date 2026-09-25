@@ -31,4 +31,73 @@ export tool Context {
     // vira uma referencia curta relativa a artifacts/ (ex. "adr/ADR-001-x").
     artifact_dir(project_id: string, relative_dir: string): string ->
         DirText.concat_artifacts(Paths.artifact(project_id, relative_dir), Paths.artifacts_dir(project_id))
+
+    // Mesma coisa que artifact_dir, mas para um predecessor que e uma PASTA
+    // DE PASTAS — cada subpasta com seu proprio item_file dentro (ex.
+    // "features/FT001-slug/feature.html", "historias/FT001-slug/US001-
+    // slug/historia.html") — um nivel a mais do que artifact_dir sabe
+    // percorrer (DirText.concat_artifacts so olha arquivos direto dentro de
+    // relative_dir, nao dentro de subpastas). Vazio se relative_dir nao
+    // existir; uma subpasta sem item_file ainda (rascunho incompleto) e
+    // pulada silenciosamente em vez de quebrar a concatenacao inteira.
+    // Cabecalho de cada item vira "relative_dir/subpasta", mesmo formato de
+    // referencia que artifact_dir usa.
+    artifact_dir_of_dirs(project_id: string, relative_dir: string, item_file: string): string -> {
+        var base = Paths.artifact(project_id, relative_dir)
+        if (!dir.exists(base)) return ""
+        var out = ""
+        for (var entry in dir.list(base)) {
+            var name = entry.replace(base + "/", "")
+            var content = self.artifact(project_id, relative_dir + "/" + name + "/" + item_file)
+            if (!content.is_empty()) out = out + "\n\n---\n\n# " + relative_dir + "/" + name + "\n\n" + content
+        }
+        return out
+    }
+}
+
+test ContextSpec {
+    describe artifact_dir_of_dirs_concatenates_item_file_from_each_subfolder {
+        var project_id = "spec-test-context-dirofdirs"
+        var base = Paths.artifact(project_id, "features")
+        dir.create(base + "/FT001-a")
+        fs.write(base + "/FT001-a/feature.html", "<html><body>Conteudo A</body></html>")
+        dir.create(base + "/FT002-b")
+        fs.write(base + "/FT002-b/feature.html", "<html><body>Conteudo B</body></html>")
+
+        var out = Context.artifact_dir_of_dirs(project_id, "features", "feature.html")
+
+        is_true(out.contains("features/FT001-a"))
+        is_true(out.contains("Conteudo A"))
+        is_true(out.contains("features/FT002-b"))
+        is_true(out.contains("Conteudo B"))
+
+        fs.delete(base + "/FT001-a/feature.html")
+        dir.delete(base + "/FT001-a")
+        fs.delete(base + "/FT002-b/feature.html")
+        dir.delete(base + "/FT002-b")
+        dir.delete(base)
+        dir.delete(Paths.artifacts_dir(project_id))
+        dir.delete(Paths.root(project_id))
+    }
+
+    describe artifact_dir_of_dirs_is_empty_for_a_missing_directory {
+        are_equal(Context.artifact_dir_of_dirs("spec-test-context-nonexistent", "features", "feature.html"), "")
+    }
+
+    describe artifact_dir_of_dirs_skips_a_subfolder_still_missing_its_item_file {
+        var project_id = "spec-test-context-dirofdirs-partial"
+        var base = Paths.artifact(project_id, "features")
+        // FT001-a existe mas ainda sem feature.html — rascunho incompleto
+        // (mesma situacao que um dir.create sem o fs.write correspondente
+        // ainda ter rodado), nao deve quebrar a concatenacao.
+        dir.create(base + "/FT001-a")
+
+        var out = Context.artifact_dir_of_dirs(project_id, "features", "feature.html")
+        is_true(out.is_empty())
+
+        dir.delete(base + "/FT001-a")
+        dir.delete(base)
+        dir.delete(Paths.artifacts_dir(project_id))
+        dir.delete(Paths.root(project_id))
+    }
 }

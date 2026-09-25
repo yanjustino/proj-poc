@@ -84,6 +84,30 @@ export tool WorkItemActions {
     // (sem guarda) derrubava `format_prompt_log` inteiro com "field not
     // found" pra QUALQUER artefato do work-item, nao so pra essa linha —
     // a tela de Logs ficava sem nenhuma Chamada de LLM, de nenhum artefato.
+    // changes_log devolve todo pedido de mudança já registrado neste
+    // work-item (ChangesLog, workflows/shared/artifacts/changes_log.mh —
+    // populado por Dispatch/Gate de Discovery e Delivery a cada "Solicitar
+    // mudança"/loop de feedback), em ordem cronológica (mais antigo
+    // primeiro, mesma convenção de prompt_log acima) — usado pela aba
+    // Mudanças do frontend pra mostrar, por artefato, o histórico completo
+    // de diretivas já aplicadas.
+    changes_log(project_id: string): any[] -> {
+        project_id = Paths.ensure_valid(project_id)
+        var path = Paths.changes_file(project_id)
+        if (!fs.exists(path)) return []
+        return self.format_changes_log(json.parse_lines(fs.read(path)))
+    }
+
+    format_changes_log(lines: any[]): any[] -> {
+        var entries = lines.map((line) -> {
+            artifact: line.value.artifact,
+            feature_id: line.value?.feature_id ?? "",
+            feedback: line.value.feedback,
+            at: line.ts,
+        })
+        return entries.sort_by((entry) -> entry.at)
+    }
+
     format_prompt_log(lines: any[]): any[] -> {
         var entries = lines.map((line) -> {
             artifact: line.value.artifact,
@@ -334,5 +358,21 @@ test WorkItemActionsSpec {
 
     describe format_prompt_log_of_empty_lines_is_empty {
         are_equal(WorkItemActions.format_prompt_log([]), [])
+    }
+
+    describe formats_changes_log_entries_in_chronological_order_defaulting_feature_id_to_empty {
+        var result = WorkItemActions.format_changes_log([
+            {value: {artifact: "adr", feedback: "mude EKS para ECS"}, ts: "2026-01-01T11:00:00Z"},
+            {value: {artifact: "historias", feature_id: "FT001", feedback: "adicione cenario de erro"}, ts: "2026-01-01T10:00:00Z"}
+        ])
+        are_equal(result.size(), 2)
+        are_equal(result[0].artifact, "historias")
+        are_equal(result[0].feature_id, "FT001")
+        are_equal(result[1].artifact, "adr")
+        are_equal(result[1].feature_id, "")
+    }
+
+    describe format_changes_log_of_empty_lines_is_empty {
+        are_equal(WorkItemActions.format_changes_log([]), [])
     }
 }

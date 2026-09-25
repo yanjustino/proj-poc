@@ -3,6 +3,7 @@ import { renderMarkdown } from '../markdown.js';
 import { createRunTracker } from '../run-tracker.js';
 import { showMarkdownDoc, showHtmlDoc, showEmpty } from '../reading-pane.js';
 import { icon } from '../icons.js';
+import { formatRelativeTime } from '../time-format.js';
 
 const GROUPS = [
   { dir: 'sources', label: 'Fontes' },
@@ -57,10 +58,16 @@ export async function renderWikiTab(container, project) {
         <div class="collection-map-title"><h2>Páginas da wiki</h2><span data-wiki-count>0 páginas</span></div>
         <p>Conhecimento organizado por fontes, entidades e conceitos.</p>
       </div>
-      <button class="button tertiary small" data-lint-btn>${icon('checkCircle', 14)} Verificar wiki</button>
+      <div class="collection-map-actions">
+        <button class="button tertiary small" data-lint-btn>${icon('checkCircle', 14)} Verificar wiki</button>
+        <div class="view-toggle" data-view-toggle>
+          <button class="view-toggle-btn" data-view="cards" title="Ver como cards">${icon('grid', 15)}</button>
+          <button class="view-toggle-btn" data-view="table" title="Ver como tabela">${icon('list', 15)}</button>
+        </div>
+      </div>
     </div>
     <div class="wiki-group-filters" data-tree-tabs></div>
-    <nav class="wiki-card-grid" data-tree></nav>
+    <nav class="list-area" data-tree></nav>
 
     <div class="wiki-lint-report">
       <div data-lint-tracker></div>
@@ -80,6 +87,29 @@ export async function renderWikiTab(container, project) {
   let latestByName = {};
   let selectedGroup = 'index'; // 'index' | one of GROUPS[].dir
   let openPath = null; // currently-open page's data-path, kept across tab switches so the right row re-marks .active
+
+  const viewButtons = [...container.querySelectorAll('[data-view]')];
+  // viewMode: same default/persistence reasoning as tab-artefatos.js's own
+  // (see its comment) — table by default, cards one click away. Own
+  // localStorage key, not a shared one — a per-tab preference.
+  let viewMode = 'table';
+  try {
+    if (localStorage.getItem('senpai-wiki-view') === 'cards') viewMode = 'cards';
+  } catch {
+    // Degrades to 'table'.
+  }
+  viewButtons.forEach((button) => button.classList.toggle('active', button.dataset.view === viewMode));
+  function setViewMode(mode) {
+    viewMode = mode;
+    try {
+      localStorage.setItem('senpai-wiki-view', mode);
+    } catch {
+      // Not persisted this time — still applies for the rest of this mount.
+    }
+    viewButtons.forEach((button) => button.classList.toggle('active', button.dataset.view === mode));
+    renderList();
+  }
+  viewButtons.forEach((button) => button.addEventListener('click', () => setViewMode(button.dataset.view)));
 
   // A wiki agora é lida como o HTML estático gerado por WikiHtmlExport
   // (workflows/shared/wiki/wiki_html_export.mh), nunca mais como .md cru
@@ -112,9 +142,14 @@ export async function renderWikiTab(container, project) {
     }
   }
 
+  // markActiveRow covers both views' shapes: renderCardsList's inner
+  // <button data-path> (selection goes on its ancestor .wiki-page-card) and
+  // renderTable's own <tr data-path> (selection goes on the row itself,
+  // there's no separate ancestor to reach for).
   function markActiveRow() {
-    treeEl.querySelectorAll('[data-path]').forEach((button) => {
-      button.closest('.wiki-page-card')?.classList.toggle('selected', button.dataset.path === openPath);
+    treeEl.querySelectorAll('[data-path]').forEach((el) => {
+      const target = el.closest('.wiki-page-card') || el;
+      target.classList.toggle('selected', el.dataset.path === openPath);
     });
   }
 
@@ -149,13 +184,29 @@ export async function renderWikiTab(container, project) {
   function renderList() {
     let pages;
     if (selectedGroup === 'index') {
-      pages = [{ path: 'index.md', label: 'Índice' }];
+      pages = [{ path: 'index.md', label: 'Índice', modifiedAt: latestByName['index.md']?.modifiedAt }];
     } else {
       const children = (latestByName[selectedGroup]?.children || []).filter((c) => !c.isDir);
-      pages = children.map((child) => ({ path: `${selectedGroup}/${child.name}`, label: child.name.replace(/\.md$/, '') }));
+      pages = children.map((child) => ({
+        path: `${selectedGroup}/${child.name}`,
+        label: child.name.replace(/\.md$/, ''),
+        modifiedAt: child.modifiedAt,
+      }));
     }
-    treeEl.innerHTML = pages.length
-      ? pages.map((page) => `
+    if (pages.length === 0) {
+      treeEl.className = 'list-area';
+      treeEl.innerHTML = '<div class="collection-map-empty">Nada aqui ainda.</div>';
+      return;
+    }
+    if (viewMode === 'table') renderTable(pages);
+    else renderCardsList(pages);
+    markActiveRow();
+  }
+
+  function renderCardsList(pages) {
+    treeEl.className = 'list-area wiki-card-grid';
+    treeEl.innerHTML = pages
+      .map((page) => `
           <article class="wiki-page-card ${page.path === openPath ? 'selected' : ''}">
             <button data-path="${escapeHtml(page.path)}" data-label="${escapeHtml(page.label)}">
               <span class="wiki-page-kind"><i>${icon(GROUP_ICONS[selectedGroup] || 'fileText', 14)}</i>${escapeHtml(selectedGroup === 'index' ? 'Índice' : GROUPS.find((g) => g.dir === selectedGroup)?.label || 'Wiki')}</span>
@@ -163,12 +214,52 @@ export async function renderWikiTab(container, project) {
               <span>${escapeHtml(GROUP_DESCRIPTIONS[selectedGroup] || 'Página de conhecimento do work-item.')}</span>
               <footer><span class="status-dot done"></span>Disponível para leitura</footer>
             </button>
-          </article>`).join('')
-      : '<div class="collection-map-empty">Nada aqui ainda.</div>';
+          </article>`)
+      .join('');
     treeEl.querySelectorAll('button').forEach((button) => {
       button.addEventListener('click', () => openPage('wiki', button.dataset.path, button.dataset.label).catch(() => {}));
     });
-    markActiveRow();
+  }
+
+  // renderTable: the dense alternative to renderCardsList, same reasoning
+  // as tab-artefatos.js's own table view — one row per page instead of one
+  // tile, useful once a group (Fontes/Entidades/Conceitos) has grown past a
+  // handful of pages. Every wiki page is always "done" (there's no
+  // pending/generating state here, unlike Artefatos), so the row itself —
+  // not a separate button — is the click target, same as artefatos'
+  // clickable rows.
+  function renderTable(pages) {
+    treeEl.className = 'data-table-wrap';
+    treeEl.innerHTML = `
+      <table class="data-table">
+        <thead>
+          <tr>
+            <th></th>
+            <th>Nome</th>
+            <th>Última atualização</th>
+            <th>Ações</th>
+          </tr>
+        </thead>
+        <tbody>
+          ${pages
+            .map((page) => {
+              const when = formatRelativeTime(page.modifiedAt ? Date.parse(page.modifiedAt) : null);
+              return `
+                <tr class="data-row ${page.path === openPath ? 'selected' : ''}" data-path="${escapeHtml(page.path)}" data-label="${escapeHtml(page.label)}" title="Abrir ${escapeHtml(page.label)}">
+                  <td class="data-row-dot"><span class="status-dot done"></span></td>
+                  <td class="data-row-name"><i>${icon(GROUP_ICONS[selectedGroup] || 'fileText', 14)}</i><span>${escapeHtml(page.label)}</span></td>
+                  <td class="data-row-when">${escapeHtml(when)}</td>
+                  <td class="data-row-actions"><span>Abrir →</span></td>
+                </tr>
+              `;
+            })
+            .join('')}
+        </tbody>
+      </table>
+    `;
+    treeEl.querySelectorAll('tr[data-path]').forEach((row) => {
+      row.addEventListener('click', () => openPage('wiki', row.dataset.path, row.dataset.label).catch(() => {}));
+    });
   }
 
   async function buildTree() {

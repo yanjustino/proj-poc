@@ -318,6 +318,18 @@ export async function workItemPromptLog(projectId) {
   return result.prompt_log;
 }
 
+// workItemChangesLog returns every change request ever made on this
+// work-item — artifact, feature_id (Discovery's per-feature histórias
+// only, "" otherwise) and the feedback text, oldest first
+// (workflows/work_item/actions.mh's WorkItemActions.changes_log). This is
+// the persisted memory behind each *Generate step's own directive list
+// (ChangesBlock.for_artifact, workflows/shared/artifacts/changes_log.mh) —
+// exposed here read-only, for the "Mudanças" tab.
+export async function workItemChangesLog(projectId) {
+  const result = await callWorkflowOnce('WorkItem', { action: 'changes', project_id: projectId });
+  return result.changes;
+}
+
 // artifactPreview renders a paused run's pending_data through the same
 // ArtifactBody/PageShell templates the real *Commit step will eventually
 // use (workflows/artifact_preview/artifact_preview.mh) — real HTML, not a

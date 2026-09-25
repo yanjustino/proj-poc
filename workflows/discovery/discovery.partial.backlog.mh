@@ -11,7 +11,9 @@ import { ArtifactBody } from "../shared/artifacts/artifact_body.mh"
 import { ArtifactId } from "../shared/artifacts/artifact_id.mh"
 import { PageShell, ArtifactMeta } from "../shared/artifacts/page_shell.mh"
 import { WorkflowsRoot } from "../shared/core/workflows_root.mh"
-import { ArtifactSchema, FeedbackBlock, HistoriasInstruction, HistoriasSchemaFile} from "../shared/artifacts/artifacts_common.mh"
+import { DirClear } from "../shared/core/dir_clear.mh"
+import { ChangesBlock } from "../shared/artifacts/changes_log.mh"
+import { ArtifactSchema, HistoriasInstruction, HistoriasSchemaFile} from "../shared/artifacts/artifacts_common.mh"
 
 // O SCHEMA de features (o backlog inteiro, varios itens de uma vez) e
 // especifico de Discovery — Delivery nao gera um backlog, gera o
@@ -44,12 +46,12 @@ tool FeaturesSchemaFile {
 // dependencias e Discovery-only pelo mesmo motivo que features e: so um
 // backlog com mais de um item tem dependencias ENTRE itens pra
 // mapear. `features_content` chega ja com o codigo FT00N real de cada uma
-// no cabecalho (montado abaixo, em DependenciasGenerate, do mesmo jeito que
-// DirText.concat_all monta pra adr/diagramas — so que feito na mao aqui
-// porque features/ e uma pasta de pastas, uma a mais de profundidade do
-// que Context.artifact_dir sabe percorrer) — diferente de quando as
-// proprias features foram geradas, quando nenhum codigo existia ainda e
-// dependencias_integridade so podia referenciar outra feature pelo titulo.
+// no cabecalho (montado abaixo, em DependenciasGenerate, via
+// Context.artifact_dir_of_dirs — features/ e uma pasta de pastas, uma a
+// mais de profundidade do que Context.artifact_dir sabe percorrer sozinho)
+// — diferente de quando as proprias features foram geradas, quando nenhum
+// codigo existia ainda e dependencias_integridade so podia referenciar
+// outra feature pelo titulo.
 prompt DependenciasInstruction(
     schema_conventions: prompt,
     features_content: string,
@@ -93,7 +95,7 @@ partial workflow Discovery {
                 adr_content: adr_content,
                 der_content: der_content,
                 diagramas_content: diagramas_content,
-                feedback_content: FeedbackBlock.render(pending_feedback)
+                feedback_content: ChangesBlock.for_artifact(project_id, "features", "")
             ),
             schema_file: FeaturesSchemaFile.get(),
             project_id: project_id,
@@ -113,19 +115,27 @@ partial workflow Discovery {
         var written = []
         var features_dir = Paths.artifact(project_id, "features")
         // *Generate sempre devolve o LOTE INTEIRO atual, nunca um delta —
-        // uma regeneracao ("Solicitar mudanca" num features/ ja aprovado,
-        // tab-artefatos.js) precisa SUBSTITUIR o lote antigo, nao somar a
-        // ele. Sem isto, ArtifactId.next_feature_id (que so conta pastas ja
-        // existentes) continuava cunhando FT00N novos em cima dos antigos —
-        // duplicando em vez de regenerar. Zerar historias/ junto (nao so
-        // features/) e o que fecha a lacuna de verdade: os historias/ de
-        // uma feature antiga ficam orfaos no instante em que essa feature
-        // deixa de existir com aquele id/pasta — iam continuar em disco
-        // como lixo pra sempre, sem nenhuma feature atual apontando pra
-        // eles.
-        if (dir.exists(features_dir)) dir.delete(features_dir)
+        // uma regeneracao ("Solicitar mudanca"/"Atualizar" num features/ ja
+        // aprovado, tab-artefatos.js) precisa SUBSTITUIR o lote antigo, nao
+        // somar a ele. Sem isto, ArtifactId.next_feature_id (que so conta
+        // pastas ja existentes) continuava cunhando FT00N novos em cima dos
+        // antigos — duplicando em vez de regenerar. Zerar historias/ junto
+        // (nao so features/) e o que fecha a lacuna de verdade: os
+        // historias/ de uma feature antiga ficam orfaos no instante em que
+        // essa feature deixa de existir com aquele id/pasta — iam continuar
+        // em disco como lixo pra sempre, sem nenhuma feature atual
+        // apontando pra eles.
+        //
+        // DirClear.clear (nao dir.delete direto): dir.delete e
+        // deliberadamente nao-recursivo no mhl-runtime, entao so remove um
+        // diretorio ja VAZIO — contra um features_dir/historias_dir com
+        // conteudo real (o caso normal aqui, ja que isto so roda numa
+        // regeneracao de algo ja gerado antes) ele falhava com "directory
+        // not empty" (bug real, batido em producao via o botao
+        // "Atualizar"). Ver dir_clear.mh's own comment.
+        DirClear.clear(features_dir)
         var historias_dir = Paths.artifact(project_id, "historias")
-        if (dir.exists(historias_dir)) dir.delete(historias_dir)
+        DirClear.clear(historias_dir)
         dir.create(features_dir)
 
         for (var feature in data.features) {
@@ -149,31 +159,26 @@ partial workflow Discovery {
         goto Done
     }
 
-    // Nao usa Context.artifact_dir: ele concatena um NIVEL de arquivos
-    // (adr/ADR-001.html), mas features/ e uma pasta de pastas
-    // (features/FT001-slug/feature.html, um nivel a mais) — o mesmo motivo
-    // pelo qual HistoriasGenerate acima le uma feature por vez via
-    // ArtifactId.find_feature_dir + Context.artifact em vez de
-    // Context.artifact_dir. Cabecalho "# features/<pasta>" no mesmo formato
-    // que DirText.concat_all usa (dir_text.mh), pra ArtifactSchema regra 4
-    // (citar a fonte pelo identificador do cabecalho) valer aqui tambem.
     step DependenciasGenerate {
         self.current_artifact = "dependencias"
         var features_dir = Paths.artifact(project_id, "features")
         if (!dir.exists(features_dir)) fail("gere 'features' antes de 'dependencias'")
 
-        var features_content = ""
-        for (var entry in dir.list(features_dir)) {
-            var name = entry.replace(features_dir + "/", "")
-            var content = Context.artifact(project_id, "features/" + name + "/feature.html")
-            features_content = features_content + "\n\n---\n\n# features/" + name + "\n\n" + content
-        }
+        // Context.artifact_dir_of_dirs, nao Context.artifact_dir: features/
+        // e uma pasta de pastas (features/FT001-slug/feature.html, um nivel
+        // a mais do que artifact_dir sabe percorrer sozinho) — mesmo motivo
+        // pelo qual HistoriasGenerate le uma feature por vez via
+        // ArtifactId.find_feature_dir + Context.artifact. Cabecalho
+        // "# features/<pasta>" no mesmo formato que DirText.concat_all usa,
+        // pra ArtifactSchema regra 4 (citar a fonte pelo identificador do
+        // cabecalho) valer aqui tambem.
+        var features_content = Context.artifact_dir_of_dirs(project_id, "features", "feature.html")
 
         var response = Writer.generate(
             prompt: DependenciasInstruction(
                 schema_conventions: ArtifactSchema(),
                 features_content: features_content,
-                feedback_content: FeedbackBlock.render(pending_feedback)
+                feedback_content: ChangesBlock.for_artifact(project_id, "dependencias", "")
             ),
             schema_file: DependenciasSchemaFile.get(),
             project_id: project_id,
@@ -207,7 +212,11 @@ partial workflow Discovery {
         var feature_dir = ArtifactId.find_feature_dir(project_id, feature_id)
         var feature_content = Context.artifact(project_id, "features/" + feature_dir + "/feature.html")
         var response = Writer.generate(
-            prompt: HistoriasInstruction(schema_conventions: ArtifactSchema(), feature_content: feature_content, feedback_content: FeedbackBlock.render(pending_feedback)),
+            prompt: HistoriasInstruction(
+                schema_conventions: ArtifactSchema(),
+                feature_content: feature_content,
+                feedback_content: ChangesBlock.for_artifact(project_id, "historias", feature_id)
+            ),
             schema_file: HistoriasSchemaFile.get(), project_id: project_id, artifact: self.current_artifact
         )
         self.tokens_in = response.tokens_in
@@ -229,8 +238,9 @@ partial workflow Discovery {
         // inteiro de historias DESSA feature, nao um delta — uma
         // regeneracao (linha "Histórias — X", tab-artefatos.js) precisa
         // substituir, nao somar (ArtifactId.next_historia_id so conta o que
-        // ja existe nesta pasta).
-        if (dir.exists(historias_base)) dir.delete(historias_base)
+        // ja existe nesta pasta). DirClear.clear, nao dir.delete direto —
+        // ver seu comentario em FeaturesCommit acima / dir_clear.mh.
+        DirClear.clear(historias_base)
         dir.create(historias_base)
 
         for (var historia in data.historias) {

@@ -16,20 +16,13 @@ import { WorkflowsRoot } from "../core/workflows_root.mh"
 
 export prompt ArtifactSchema() from "artifact_schema.prompt.md"
 
-// FeedbackBlock renders the reviewer's freeform comments (Modo Buddy's
-// "Solicitar mudanças" — see reading-pane.js/tab-artefatos.js) as an extra
-// instructions section every *Instruction prompt below appends via its own
-// `feedback_content` parameter. Empty when there's no feedback (the first
-// generation, or any regeneration that isn't a feedback-driven one), so
-// this never changes a single byte of the prompt on the common path —
-// callers pass "" and get "" back.
-export tool FeedbackBlock {
-    render(feedback: string): string -> (
-        if (feedback.is_empty()) "" else (
-            "## Comentários do revisor — corrija o rascunho anterior considerando isto\n\n" + feedback
-        )
-    )
-}
+// feedback_content on every *Instruction prompt below is filled by
+// ChangesBlock.for_artifact (workflows/shared/artifacts/changes_log.mh),
+// not a single "latest comment" string — see that file's own doc comment
+// for the two approaches that were tried here first and why both broke on
+// a real test before this one. The parameter name stayed the same (every
+// *.prompt.md below still just does `${feedback_content}`) — only what
+// computes its value, at each *Generate call site, changed.
 
 export prompt BriefInstruction(schema_conventions: prompt, wiki_content: string, feedback_content: string) from "prompts/brief.prompt.md"
 export prompt AtributosInstruction(schema_conventions: prompt, brief_content: string, wiki_content: string, feedback_content: string) from "prompts/atributos.prompt.md"
