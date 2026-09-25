@@ -352,34 +352,52 @@ type devinPricing struct {
 }
 
 // cost_summary is currently the only machine-readable pricing reference
-// exposed by `devin models list --format json`. Accept only its complete,
-// explicit token-price shape: a partial or future shape must become "sem
-// estimativa", never a plausible-looking calculation with guessed rates.
-var devinCostSummaryPattern = regexp.MustCompile(
-	`(?i)^\s*\$([0-9]+(?:\.[0-9]+)?)\s*/\s*1M\s+Input\s*(?:·|\|)\s*` +
-		`\$([0-9]+(?:\.[0-9]+)?)\s*/\s*1M\s+Cached\s+input\s*(?:·|\|)\s*` +
-		`\$([0-9]+(?:\.[0-9]+)?)\s*/\s*1M\s+Output\s*$`,
+// exposed by `devin models list --format json`, e.g.
+// "$0.5 / 1M Input · $0.2 / 1M Cached input · $2.5 / 1M Output". Accept only
+// its complete, explicit token-price shape — all three rates, nothing else
+// priced: a partial or future shape must become "sem estimativa", never a
+// plausible-looking calculation with guessed rates.
+//
+// The rates are matched by label, not by the separator between them. The
+// separator used to be part of the pattern ("·" or "|"), and on Windows the
+// CLI's output can reach this process in the console's ANSI code page
+// instead of UTF-8 — "·" arrives as the lone byte 0xB7, json.Unmarshal turns
+// it into U+FFFD, the pattern stopped matching and every call there was
+// recorded as having no estimate. Spaces may likewise arrive as NBSP.
+var devinRatePattern = regexp.MustCompile(
+	`(?i)\$[\s\x{00A0}]*([0-9]+(?:\.[0-9]+)?)[\s\x{00A0}]*/[\s\x{00A0}]*1M[\s\x{00A0}]+(cached[\s\x{00A0}]+input|input|output)\b`,
 )
 
 func parseDevinPricing(model, summary string) (devinPricing, bool) {
-	match := devinCostSummaryPattern.FindStringSubmatch(strings.TrimSpace(summary))
-	if len(match) != 4 {
+	summary = strings.TrimSpace(summary)
+	matches := devinRatePattern.FindAllStringSubmatch(summary, -1)
+	if len(matches) != 3 || strings.Count(summary, "$") != 3 {
 		return devinPricing{}, false
 	}
-	rates := make([]float64, 3)
-	for i := range rates {
-		value, err := strconv.ParseFloat(match[i+1], 64)
+	rates := map[string]float64{}
+	for _, match := range matches {
+		label := strings.ToLower(strings.Join(strings.Fields(strings.ReplaceAll(match[2], "\u00a0", " ")), " "))
+		if _, seen := rates[label]; seen {
+			return devinPricing{}, false
+		}
+		value, err := strconv.ParseFloat(match[1], 64)
 		if err != nil || value < 0 {
 			return devinPricing{}, false
 		}
-		rates[i] = value
+		rates[label] = value
+	}
+	input, okInput := rates["input"]
+	cached, okCached := rates["cached input"]
+	output, okOutput := rates["output"]
+	if !okInput || !okCached || !okOutput {
+		return devinPricing{}, false
 	}
 	return devinPricing{
 		ModelID:                  model,
-		Summary:                  strings.TrimSpace(summary),
-		InputUSDPerMillion:       rates[0],
-		CachedInputUSDPerMillion: rates[1],
-		OutputUSDPerMillion:      rates[2],
+		Summary:                  summary,
+		InputUSDPerMillion:       input,
+		CachedInputUSDPerMillion: cached,
+		OutputUSDPerMillion:      output,
 	}, true
 }
 

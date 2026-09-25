@@ -61,8 +61,33 @@ func TestParseDevinPricingAcceptsTheCLIPriceShape(t *testing.T) {
 	}
 }
 
+// Windows: the CLI output may arrive in the console's ANSI code page, so the
+// "·" separator shows up as U+FFFD (or "|", or NBSP-padded) — the rates must
+// still be read by their labels.
+func TestParseDevinPricingIgnoresTheSeparatorBetweenRates(t *testing.T) {
+	for _, summary := range []string{
+		"$0.5 / 1M Input \uFFFD $0.2 / 1M Cached input \uFFFD $2.5 / 1M Output",
+		"$0.5 / 1M Input | $0.2 / 1M Cached input | $2.5 / 1M Output",
+		"$0.5\u00a0/\u00a01M\u00a0Input\u00a0·\u00a0$0.2 / 1M Cached\u00a0input · $2.5 / 1M Output",
+		"$2.5 / 1M Output · $0.5 / 1M Input · $0.2 / 1M Cached input",
+	} {
+		pricing, ok := parseDevinPricing("swe-1-6", summary)
+		if !ok {
+			t.Errorf("parseDevinPricing(%q) rejected a complete price summary", summary)
+			continue
+		}
+		if pricing.InputUSDPerMillion != 0.5 || pricing.CachedInputUSDPerMillion != 0.2 || pricing.OutputUSDPerMillion != 2.5 {
+			t.Errorf("parseDevinPricing(%q) = %+v", summary, pricing)
+		}
+	}
+}
+
 func TestParseDevinPricingRejectsPartialOrUnknownPricing(t *testing.T) {
-	for _, summary := range []string{"", "$0.5 / 1M Input", "Included in plan"} {
+	for _, summary := range []string{
+		"", "$0.5 / 1M Input", "Included in plan",
+		"$0.5 / 1M Input · $0.5 / 1M Input · $2.5 / 1M Output",
+		"$0.5 / 1M Input · $0.2 / 1M Cached input · $2.5 / 1M Output · $1 / request",
+	} {
 		if _, ok := parseDevinPricing("swe-1-6", summary); ok {
 			t.Errorf("parseDevinPricing(%q) succeeded; want no estimate", summary)
 		}
