@@ -41,7 +41,12 @@ export async function waitForRecoveryTerminal({
   getStatus,
   onUpdate = () => {},
   pollIntervalMs = 150,
-  timeoutMs = 15000,
+  // A commit is deterministic, but a large batch (dozens of features or
+  // histórias, each rendered and written) can take longer than a plain
+  // round trip — 15s was tight enough to report a successful approval as
+  // failed. The LLM queue (llm-queue.js) is what keeps it from also waiting
+  // behind generations in mhl's run queue.
+  timeoutMs = 60000,
   delay = (ms) => new Promise((resolve) => setTimeout(resolve, ms)),
 }) {
   let status = initialStatus;

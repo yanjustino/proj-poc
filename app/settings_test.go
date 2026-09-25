@@ -4,6 +4,7 @@ import (
 	"context"
 	"encoding/json"
 	"os"
+	"strings"
 	"testing"
 	"time"
 )
@@ -82,9 +83,32 @@ func TestParseDevinPricingIgnoresTheSeparatorBetweenRates(t *testing.T) {
 	}
 }
 
+// The Devin CLI build seen on Windows lists "MTok" and "In"/"Out", with no
+// cached input rate — cached tokens then fall back to the input rate.
+func TestParseDevinPricingAcceptsTheMTokShapeWithoutACachedRate(t *testing.T) {
+	for _, summary := range []string{
+		"$0.5 / MTok In · $2.5 / MTok Out",
+		"$0.5 / MTok In \uFFFD $2.5 / MTok Out",
+		"$0.5 / MTok In · $0.2 / MTok Cached In · $2.5 / MTok Out",
+	} {
+		pricing, ok := parseDevinPricing("swe-1-6-fast", summary)
+		if !ok {
+			t.Errorf("parseDevinPricing(%q) rejected the MTok price shape", summary)
+			continue
+		}
+		wantCached := 0.5
+		if strings.Contains(summary, "Cached") {
+			wantCached = 0.2
+		}
+		if pricing.InputUSDPerMillion != 0.5 || pricing.OutputUSDPerMillion != 2.5 || pricing.CachedInputUSDPerMillion != wantCached {
+			t.Errorf("parseDevinPricing(%q) = %+v", summary, pricing)
+		}
+	}
+}
+
 func TestParseDevinPricingRejectsPartialOrUnknownPricing(t *testing.T) {
 	for _, summary := range []string{
-		"", "$0.5 / 1M Input", "Included in plan",
+		"", "$0.5 / 1M Input", "$2.5 / MTok Out", "Included in plan",
 		"$0.5 / 1M Input · $0.5 / 1M Input · $2.5 / 1M Output",
 		"$0.5 / 1M Input · $0.2 / 1M Cached input · $2.5 / 1M Output · $1 / request",
 	} {
@@ -249,4 +273,36 @@ func TestApp_SetDevinModelPersistsAndReconnects(t *testing.T) {
 	if err := json.Unmarshal([]byte(statusJSON), &status); err != nil || !status.Ready {
 		t.Errorf("SetDevinModel status = %q, want ready bridge (decode error: %v)", statusJSON, err)
 	}
+}
+
+// TestApp_TailRunLogsSurvivesTheBridgeBeingReplaced is the regression test
+// for the crash on "Reconectar": tailRunLogs used to re-read a.mhl on every
+// tick, ReconnectMCP set it to nil while the new mhl started, and the next
+// RunLogs call on that nil client panicked inside a background goroutine —
+// taking the whole app down. The tail now keeps the client it started with
+// (here already stopped, as after a reconnect) and must simply log the failed
+// fetch and return.
+func TestApp_TailRunLogsSurvivesTheBridgeBeingReplaced(t *testing.T) {
+	app, _ := newTestApp(t)
+	previous := app.mhl
+	app.setBridge(nil)
+	if err := previous.Stop(); err != nil {
+		t.Fatalf("Stop: %v", err)
+	}
+
+	done := make(chan struct{})
+	go func() {
+		defer close(done)
+		// pollingRuns has no entry for this run: one final fetch, then return.
+		app.tailRunLogs(previous, "0123456789abcdef0123456789abcdef", "spec-tail-after-reconnect")
+	}()
+	select {
+	case <-done:
+	case <-time.After(10 * time.Second):
+		t.Fatal("tailRunLogs did not return after its client was stopped")
+	}
+
+	// A nil client (the exact state the old code read mid-reconnect) must
+	// not crash either: recoverBackground catches the panic.
+	app.tailRunLogs(nil, "0123456789abcdef0123456789abcdef", "spec-tail-after-reconnect")
 }

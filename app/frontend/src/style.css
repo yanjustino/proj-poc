@@ -79,6 +79,33 @@ button { cursor: pointer; }
    mostrar — dá a largura dela pro painel de log em vez de deixá-la vazia. */
 .shell.logs-open { grid-template-columns: clamp(210px, 20vw, 280px) 1fr; }
 .shell.logs-open .reading-pane { display: none; }
+/* Menu lateral recolhido: um trilho estreito (largura suficiente para os
+   botões de janela do macOS sobre .drag-strip) com a marca, as ações
+   empilhadas e cada work-item só pelo ícone — o nome fica no tooltip. */
+.drag-strip { display: flex; align-items: center; justify-content: flex-end; }
+.drag-strip .icon-btn { --wails-draggable: no-drag; }
+.sidebar .icon-btn.sidebar-toggle-collapsed { display: none; }
+.shell.sidebar-collapsed .sidebar .icon-btn.sidebar-toggle-expanded { display: none; }
+.shell.sidebar-collapsed .sidebar .icon-btn.sidebar-toggle-collapsed { display: grid; }
+.shell.sidebar-collapsed { grid-template-columns: 72px minmax(320px, 39fr) minmax(380px, 41fr); }
+.shell.sidebar-collapsed.logs-open { grid-template-columns: 72px 1fr; }
+.shell.sidebar-collapsed .sidebar { padding: 0 8px 12px; align-items: center; }
+.shell.sidebar-collapsed .sidebar-top { flex-direction: column; gap: 10px; padding-bottom: 12px; }
+.shell.sidebar-collapsed .brand-copy,
+.shell.sidebar-collapsed .nav-search,
+.shell.sidebar-collapsed .nav-section,
+.shell.sidebar-collapsed .work-copy,
+.shell.sidebar-collapsed .empty-nav,
+.shell.sidebar-collapsed .sidebar-agent,
+.shell.sidebar-collapsed .sidebar-agent-block,
+.shell.sidebar-collapsed .sidebar-status-copy,
+.shell.sidebar-collapsed .sidebar-status-reconnect,
+.shell.sidebar-collapsed .sidebar-version { display: none; }
+.shell.sidebar-collapsed .sidebar-top-actions { flex-direction: column; gap: 4px; }
+.shell.sidebar-collapsed .brand-mark { width: 36px; height: 36px; }
+.shell.sidebar-collapsed .nav-list { width: 100%; }
+.shell.sidebar-collapsed .work { justify-content: center; padding: 8px 0; }
+.shell.sidebar-collapsed .sidebar-status { justify-content: center; padding-left: 0; width: 100%; }
 
 /* The reading pane reuses .document's header/body/shadow (see markup in
    shell.js: class="document reading-pane") — these two rules are the only
@@ -216,6 +243,7 @@ button { cursor: pointer; }
 .summary-tokens-row { display: flex; align-items: center; gap: 8px; }
 .summary-tokens-row svg { flex: none; opacity: .85; }
 .summary-tokens-row b { line-height: 1; white-space: nowrap; }
+.summary-tokens-row.summary-unavailable, .summary-tokens-row.summary-unavailable span { color: var(--amber); }
 
 .tabs { display: flex; gap: 4px; border-bottom: 1px solid var(--line); margin-bottom: 18px; }
 .tab-btn { border: 0; background: transparent; padding: 9px 14px; font-size: 12px; font-weight: 600; color: var(--muted); border-bottom: 2px solid transparent; }
@@ -487,6 +515,10 @@ button { cursor: pointer; }
 .run-status-row { display: flex; align-items: center; gap: 8px; flex-wrap: wrap; }
 .run-tokens { font-family: var(--mono); color: var(--muted); }
 .run-error-banner { display: flex; align-items: flex-start; gap: 10px; background: rgba(200, 58, 55, .12); border: 1px solid rgba(200, 58, 55, .35); border-radius: var(--radius-md); padding: 12px 14px; }
+.run-error-detail { margin-top: 6px; font-size: 11px; }
+.run-error-detail summary { cursor: pointer; color: var(--muted); }
+.run-error-detail pre { margin: 6px 0 0; white-space: pre-wrap; word-break: break-word; font: 11px var(--mono); max-height: 180px; overflow: auto; }
+.data-row-error { margin-top: 3px; color: var(--red); font: 12px var(--sans); white-space: normal; max-width: 380px; }
 .run-error-icon { flex: none; color: var(--red); margin-top: 1px; }
 .run-error-message { font-size: 13px; line-height: 1.5; color: var(--red); }
 .run-reason { color: var(--muted); }

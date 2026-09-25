@@ -18,6 +18,7 @@ import (
 	"encoding/json"
 	"fmt"
 	"io"
+	"log"
 	"net"
 	"net/http"
 	"os"
@@ -57,11 +58,15 @@ import (
 //
 // This is a global cap on the whole mhl process, not scoped to one
 // pipeline — every mhl_run_start (including quick ones like WorkItem
-// action:list) competes for the same slots. 4 is a deliberate middle
-// ground: some headroom for legitimately concurrent work without letting
-// one heavy batch starve ordinary navigation (a list refresh alongside a
-// generation in flight).
-const maxConcurrentRuns = 4
+// action:list, previews, or approving a draft) competes for the same slots,
+// and a run past the cap waits in mhl's queue (measured: a trivial run sat
+// behind a long one until its slot freed up). LLM-backed runs are therefore
+// capped separately and lower in the frontend (llm-queue.js's
+// MAX_CONCURRENT_LLM_RUNS); this cap keeps enough headroom above that for
+// the quick runs the UI blocks on — with it at 4 and every slot held by a
+// multi-minute generation, approving an item sat in this queue until the
+// approval timed out, which read as a frozen screen.
+const maxConcurrentRuns = 8
 
 // Client owns the mhl child process and the MCP session opened against it.
 type Client struct {
@@ -71,6 +76,15 @@ type Client struct {
 	http      *http.Client
 	nextID    atomic.Int64
 	stderr    *bytes.Buffer
+	// exited is closed once the mhl process has exited (exitErr then holds
+	// Wait's result); stopping marks an exit this Client asked for, so only
+	// an unexpected one gets logged as such.
+	exited   chan struct{}
+	exitErr  error
+	stopping atomic.Bool
+	// executing holds every runID this mhl process started or resumed —
+	// the only runs that can genuinely be executing in it (RunStatusGet).
+	executing sync.Map
 	// pidFile, when non-empty, is removed by terminate() on a clean Stop() —
 	// see killStaleOrphan's comment for what it's for.
 	pidFile string
@@ -209,8 +223,13 @@ func Start(ctx context.Context, mhlPath, workflowsDir, stateDir, dataDir, codexC
 		env = append(env, "SENPAI_DEVIN_PRICING="+devinPricingJSON)
 	}
 	cmd.Env = enrichedEnv(ctx, env)
+	// stderr is kept in memory for Start's own "did not become ready" error
+	// AND mirrored line by line into the app log for the whole session —
+	// previously it only ever surfaced if startup failed, so when mhl hit an
+	// error or died mid-session (a real incident during an ingest) nothing
+	// recorded why.
 	var stderr bytes.Buffer
-	cmd.Stderr = &stderr
+	cmd.Stderr = io.MultiWriter(&stderr, &logLineWriter{prefix: "mhl stderr: "})
 	cmd.Stdout = io.Discard
 	// New process group so the child (and anything it spawns) is not left
 	// behind if this process is killed abruptly rather than shut down
@@ -254,7 +273,18 @@ func Start(ctx context.Context, mhlPath, workflowsDir, stateDir, dataDir, codexC
 		http:    &http.Client{Timeout: 30 * time.Second, Transport: &http.Transport{DisableKeepAlives: true}},
 		pidFile: pidFile,
 		stderr:  &stderr,
+		exited:  make(chan struct{}),
 	}
+	// The one Wait() on this process: records how it exited and logs it when
+	// nobody asked it to stop — an mhl crash mid-session used to be silent,
+	// noticed only as every later call failing.
+	go func() {
+		c.exitErr = cmd.Wait()
+		close(c.exited)
+		if !c.stopping.Load() {
+			log.Printf("mhl bridge: mhl exited unexpectedly (pid %d): %v", cmd.Process.Pid, c.exitErr)
+		}
+	}()
 
 	if err := c.waitReady(ctx, 10*time.Second); err != nil {
 		c.killQuietly()
@@ -439,16 +469,45 @@ func (s *RunStatus) Terminal() bool {
 // RunStart calls mhl_run_start — same workflow a synchronous ToolsCall would
 // run, but returns a runId right away instead of blocking (Docs-Servers §05).
 func (c *Client) RunStart(ctx context.Context, workflow string, arguments map[string]any) (*RunStatus, error) {
-	return c.runCall(ctx, "mhl_run_start", map[string]any{
+	status, err := c.runCall(ctx, "mhl_run_start", map[string]any{
 		"workflow":  workflow,
 		"arguments": arguments,
 	})
+	if err == nil {
+		c.executing.Store(status.RunID, struct{}{})
+	}
+	return status, err
 }
+
+// OrphanedRunError is what an orphaned run reports instead of "working" —
+// see RunStatusGet.
+const OrphanedRunError = "execução interrompida: o servidor mhl foi reiniciado (ou caiu) enquanto ela rodava — gere novamente"
 
 // RunStatusGet calls mhl_run_status for a poll snapshot: current step,
 // steps reached so far, and — once terminal — the final vars.
+//
+// A run that the mhl process behind THIS client never started or resumed,
+// yet reports as working/queued, is an orphan: it was executing in an mhl
+// process that has since died (a crash, "Reconectar", an app restart), and
+// --state-dir keeps its last "working" snapshot forever — measured: kill
+// mhl mid-run, restart it on the same state dir, and that run answers
+// "working" indefinitely. The UI reattached to such runs and showed
+// "Processando…" forever, while also refusing to start the item again.
+// Reported as failed instead (and canceled in mhl, best-effort, so it stops
+// counting as active). Paused runs are unaffected: they're a real,
+// resumable checkpoint, not an execution in progress.
 func (c *Client) RunStatusGet(ctx context.Context, runID string) (*RunStatus, error) {
-	return c.runCall(ctx, "mhl_run_status", map[string]any{"runId": runID})
+	status, err := c.runCall(ctx, "mhl_run_status", map[string]any{"runId": runID})
+	if err != nil || status.Terminal() {
+		return status, err
+	}
+	if _, ours := c.executing.Load(runID); ours {
+		return status, nil
+	}
+	_, _ = c.RunCancel(ctx, runID)
+	status.State = "failed"
+	status.Error = OrphanedRunError
+	return status, nil
 }
 
 // RunResume calls mhl_run_resume, re-entering the step a pause() parked in —
@@ -460,7 +519,11 @@ func (c *Client) RunResume(ctx context.Context, runID string, arguments map[stri
 	if arguments != nil {
 		params["arguments"] = arguments
 	}
-	return c.runCall(ctx, "mhl_run_resume", params)
+	status, err := c.runCall(ctx, "mhl_run_resume", params)
+	if err == nil {
+		c.executing.Store(runID, struct{}{})
+	}
+	return status, err
 }
 
 // RunCancel calls mhl_run_cancel, stopping a run in place.
@@ -702,13 +765,12 @@ func (c *Client) terminate() error {
 	// signaling an arbitrary process this way (Signal returns an error
 	// there), so this falls straight through to Kill() on that platform —
 	// correct, just not graceful. Fine for a local dev tool (C6).
+	c.stopping.Store(true)
 	if err := c.cmd.Process.Signal(os.Interrupt); err != nil {
 		return c.cmd.Process.Kill()
 	}
-	done := make(chan error, 1)
-	go func() { done <- c.cmd.Wait() }()
 	select {
-	case <-done:
+	case <-c.exited:
 		return nil
 	case <-time.After(3 * time.Second):
 		return c.cmd.Process.Kill()
@@ -761,4 +823,31 @@ func killStaleOrphan(pidFile string) {
 	// without holding up this Start() for long if it didn't.
 	time.Sleep(500 * time.Millisecond)
 	_ = proc.Kill()
+}
+
+// logLineWriter forwards whatever mhl writes to stderr into the standard
+// logger, one log line per output line (partial lines are held until their
+// newline arrives).
+type logLineWriter struct {
+	prefix string
+	mu     sync.Mutex
+	buf    []byte
+}
+
+func (w *logLineWriter) Write(p []byte) (int, error) {
+	w.mu.Lock()
+	defer w.mu.Unlock()
+	w.buf = append(w.buf, p...)
+	for {
+		i := bytes.IndexByte(w.buf, '\n')
+		if i < 0 {
+			break
+		}
+		line := strings.TrimRight(string(w.buf[:i]), "\r")
+		w.buf = w.buf[i+1:]
+		if strings.TrimSpace(line) != "" {
+			log.Print(w.prefix + line)
+		}
+	}
+	return len(p), nil
 }

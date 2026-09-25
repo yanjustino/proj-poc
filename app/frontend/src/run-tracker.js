@@ -4,6 +4,7 @@
 // on every status update; the caller just mounts `.element` and forwards
 // startAndWatch/resumeAndWatch's onUpdate callback into `.update(status)`.
 import { resumeAndWatch, cancelRun } from './api.js';
+import { friendlyRunError } from './run-errors.js';
 import { dotClass } from './status.js';
 import { icon } from './icons.js';
 
@@ -220,6 +221,12 @@ export function createRunTracker({ resumeArgs = { approved: true }, onCancel, on
   // Buddy's pause point, so a run stuck mid-generation (the reported case)
   // had no way to stop short of force-quitting the app.
   async function doCancel(s) {
+    // Still waiting for an LLM slot (llm-queue.js): nothing exists in mhl
+    // to cancel yet — the host drops it from the queue in onCancel.
+    if (!s.runId) {
+      if (onCancel) onCancel();
+      return;
+    }
     busyAction = 'cancel';
     render();
     try {
@@ -316,8 +323,9 @@ export function createRunTracker({ resumeArgs = { approved: true }, onCancel, on
       // also render. Promoted to its own bordered banner, icon + message,
       // placed first so it's the first thing in the preview pane regardless
       // of what else this tracker renders below it.
-      const errorLine = s.state === 'failed' && s.error
-        ? `<div class="run-error-banner" role="alert"><span class="run-error-icon">${icon('alertCircle', 18)}</span><span class="run-error-message">${escapeHtml(s.error)}</span></div>`
+      const friendly = s.state === 'failed' && s.error ? friendlyRunError(s.error) : null;
+      const errorLine = friendly
+        ? `<div class="run-error-banner" role="alert"><span class="run-error-icon">${icon('alertCircle', 18)}</span><span class="run-error-message">${escapeHtml(friendly.summary)}${friendly.detail ? `<details class="run-error-detail"><summary>Detalhes técnicos</summary><pre>${escapeHtml(friendly.detail)}</pre></details>` : ''}</span></div>`
         : '';
       // s.reason is pause()'s own message (e.g. "revise o conteudo de
       // 'brief' antes de gravar em artifacts/") — see

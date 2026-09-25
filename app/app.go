@@ -10,6 +10,7 @@ import (
 	"os/exec"
 	"path/filepath"
 	"regexp"
+	"runtime/debug"
 	"slices"
 	"sort"
 	"strconv"
@@ -90,6 +91,15 @@ type App struct {
 	// in its arguments.
 	runProjects   map[string]string
 	runProjectsMu sync.Mutex
+
+	// mhlMu guards a.mhl itself. ReconnectMCP swaps the client out from
+	// under everything else (nil while the new mhl starts), so every reader
+	// takes one snapshot through bridge()/requireBridge() and keeps using
+	// that client — never re-reading the field. Real crash this fixes:
+	// tailRunLogs re-read a.mhl on every tick, ReconnectMCP set it to nil,
+	// and the next RunLogs call on the nil client panicked inside a
+	// background goroutine, taking the whole app down.
+	mhlMu sync.RWMutex
 
 	// ingestedMu serializes MarkRawIngested's read-modify-write of
 	// raw/.ingested.json — Wails runs bound methods concurrently, so two
@@ -181,7 +191,7 @@ func (a *App) connectBridge() error {
 	if err != nil {
 		return err
 	}
-	a.mhl = client
+	a.setBridge(client)
 	return nil
 }
 
@@ -197,7 +207,7 @@ func (a *App) connectBridge() error {
 // frontend/src/api.js's waitUntilReady) before its first bound-method call
 // instead of assuming startup already finished.
 func (a *App) IsReady() bool {
-	return a.mhl != nil
+	return a.bridge() != nil
 }
 
 // MCPStatus reports whether the mhl MCP server is answering right now (a
@@ -207,10 +217,11 @@ func (a *App) IsReady() bool {
 // (not requireBridge's usual error) when the bridge never started at all —
 // that's a normal, displayable state for the panel, not a call failure.
 func (a *App) MCPStatus() (string, error) {
-	if a.mhl == nil {
+	client := a.bridge()
+	if client == nil {
 		return `{"ready":false}`, nil
 	}
-	name, version, healthy := a.mhl.Info(a.ctx)
+	name, version, healthy := client.Info(a.ctx)
 	body, err := json.Marshal(map[string]any{
 		"ready":   healthy,
 		"name":    name,
@@ -236,12 +247,13 @@ func (a *App) MCPStatus() (string, error) {
 // failed *attempt* — that's a normal, displayable panel state — only for
 // the json.Marshal failure this fixed shape can't actually produce.
 func (a *App) ReconnectMCP() (string, error) {
-	if a.mhl != nil {
-		if err := a.mhl.Stop(); err != nil {
+	previous := a.bridge()
+	a.setBridge(nil)
+	if previous != nil {
+		if err := previous.Stop(); err != nil {
 			log.Printf("mhl bridge: reconnect: stop previous client: %v", err)
 		}
 	}
-	a.mhl = nil
 
 	if err := a.connectBridge(); err != nil {
 		log.Printf("mhl bridge: reconnect: failed to start: %v", err)
@@ -288,8 +300,8 @@ func (a *App) SetAgent(agent string) (string, error) {
 	if !validAgents[agent] {
 		return "", fmt.Errorf("agente desconhecido: %q (use codex | claude | devin)", agent)
 	}
-	if a.mhl != nil {
-		if active, err := a.mhl.ActiveRuns(a.ctx); err != nil {
+	if client := a.bridge(); client != nil {
+		if active, err := client.ActiveRuns(a.ctx); err != nil {
 			log.Printf("mhl bridge: check active runs before SetAgent: %v", err)
 		} else if len(active) > 0 {
 			return "", fmt.Errorf(
@@ -362,21 +374,41 @@ type devinPricing struct {
 // separator used to be part of the pattern ("·" or "|"), and on Windows the
 // CLI's output can reach this process in the console's ANSI code page
 // instead of UTF-8 — "·" arrives as the lone byte 0xB7, json.Unmarshal turns
-// it into U+FFFD, the pattern stopped matching and every call there was
-// recorded as having no estimate. Spaces may likewise arrive as NBSP.
+// it into U+FFFD. Spaces may likewise arrive as NBSP.
+//
+// The CLI also isn't consistent about the shape itself across versions: the
+// build seen on Windows prints "$0.5 / MTok In · $2.5 / MTok Out" — "MTok"
+// instead of "1M", "In"/"Out" instead of "Input"/"Output", and no cached
+// input rate at all. Both unit spellings and both label spellings are
+// accepted; input and output are required, cached input is optional. Without
+// it, cached tokens are priced at the input rate — the estimate can only err
+// high, never invent a discount the listing didn't state.
 var devinRatePattern = regexp.MustCompile(
-	`(?i)\$[\s\x{00A0}]*([0-9]+(?:\.[0-9]+)?)[\s\x{00A0}]*/[\s\x{00A0}]*1M[\s\x{00A0}]+(cached[\s\x{00A0}]+input|input|output)\b`,
+	`(?i)\$[\s\x{00A0}]*([0-9]+(?:\.[0-9]+)?)[\s\x{00A0}]*/[\s\x{00A0}]*(?:1[\s\x{00A0}]*M|M[\s\x{00A0}]*Tok)[\s\x{00A0}]+(cached[\s\x{00A0}]+input|cached[\s\x{00A0}]+in|input|in|output|out)\b`,
 )
+
+// devinRateLabels normalizes every accepted label spelling to one key.
+var devinRateLabels = map[string]string{
+	"input": "input", "in": "input",
+	"output": "output", "out": "output",
+	"cached input": "cached input", "cached in": "cached input",
+}
 
 func parseDevinPricing(model, summary string) (devinPricing, bool) {
 	summary = strings.TrimSpace(summary)
 	matches := devinRatePattern.FindAllStringSubmatch(summary, -1)
-	if len(matches) != 3 || strings.Count(summary, "$") != 3 {
+	// Every "$" must belong to a recognized rate: a price for something else
+	// ("$1 / request") means a pricing model this estimate doesn't cover.
+	if len(matches) == 0 || strings.Count(summary, "$") != len(matches) {
 		return devinPricing{}, false
 	}
 	rates := map[string]float64{}
 	for _, match := range matches {
-		label := strings.ToLower(strings.Join(strings.Fields(strings.ReplaceAll(match[2], "\u00a0", " ")), " "))
+		raw := strings.ToLower(strings.Join(strings.Fields(strings.ReplaceAll(match[2], "\u00a0", " ")), " "))
+		label, known := devinRateLabels[raw]
+		if !known {
+			return devinPricing{}, false
+		}
 		if _, seen := rates[label]; seen {
 			return devinPricing{}, false
 		}
@@ -387,10 +419,13 @@ func parseDevinPricing(model, summary string) (devinPricing, bool) {
 		rates[label] = value
 	}
 	input, okInput := rates["input"]
-	cached, okCached := rates["cached input"]
 	output, okOutput := rates["output"]
-	if !okInput || !okCached || !okOutput {
+	if !okInput || !okOutput {
 		return devinPricing{}, false
+	}
+	cached, okCached := rates["cached input"]
+	if !okCached {
+		cached = input
 	}
 	return devinPricing{
 		ModelID:                  model,
@@ -545,15 +580,20 @@ func (a *App) ToggleMaximise() {
 // before (visible there, e.g. every "mhl bridge: ..." line this session's
 // own testing already relies on), while a double-clicked .app — the normal
 // way a real user opens this — finally has a file to look at when something
-// goes wrong. Truncated on every start: this is a debug aid for "what
-// happened on the last run", not a retained audit log (see Fase 8 for that
-// kind of policy).
+// goes wrong. The previous session's log is kept as app.previous.log
+// before a fresh app.log starts: truncating on every start used to erase
+// exactly the session worth reading — when the app crashed, reopening it
+// wiped the log of the crash. Still not a retained audit log (see Fase 8
+// for that kind of policy): two sessions, no more.
 func setupFileLogging() (*os.File, error) {
 	dir, err := senpaiSubdir("logs")
 	if err != nil {
 		return nil, err
 	}
 	path := filepath.Join(dir, "app.log")
+	if _, err := os.Stat(path); err == nil {
+		_ = os.Rename(path, filepath.Join(dir, "app.previous.log"))
+	}
 	f, err := os.OpenFile(path, os.O_CREATE|os.O_WRONLY|os.O_TRUNC, 0o644)
 	if err != nil {
 		return nil, err
@@ -597,16 +637,32 @@ func senpaiBaseDir() (string, error) {
 // shutdown is called when the app is closing. Ends the MCP session and
 // terminates the mhl child process — it must not outlive this app.
 func (a *App) shutdown(ctx context.Context) {
-	if err := a.mhl.Stop(); err != nil {
+	if err := a.bridge().Stop(); err != nil {
 		log.Printf("mhl bridge: shutdown: %v", err)
 	}
 }
 
-func (a *App) requireBridge() error {
-	if a.mhl == nil {
-		return fmt.Errorf("mhl bridge is not running (see the app log for why startup failed)")
+// bridge returns the current mhl client (nil while none is running).
+func (a *App) bridge() *mhlbridge.Client {
+	a.mhlMu.RLock()
+	defer a.mhlMu.RUnlock()
+	return a.mhl
+}
+
+func (a *App) setBridge(client *mhlbridge.Client) {
+	a.mhlMu.Lock()
+	a.mhl = client
+	a.mhlMu.Unlock()
+}
+
+// requireBridge returns the current client, or an error when there's none.
+// Callers use the returned client for the rest of the call — see mhlMu.
+func (a *App) requireBridge() (*mhlbridge.Client, error) {
+	client := a.bridge()
+	if client == nil {
+		return nil, fmt.Errorf("mhl bridge is not running (see the app log for why startup failed)")
 	}
-	return nil
+	return client, nil
 }
 
 // ListWorkflows returns the raw tools/list result — every published tool,
@@ -615,10 +671,11 @@ func (a *App) requireBridge() error {
 // — enough to render a basic form; GetWorkflowManifest below gives the
 // fuller picture). Frontend decides what to filter/display (Fase 6).
 func (a *App) ListWorkflows() (string, error) {
-	if err := a.requireBridge(); err != nil {
+	client, err := a.requireBridge()
+	if err != nil {
 		return "", err
 	}
-	result, err := a.mhl.ToolsList(a.ctx)
+	result, err := client.ToolsList(a.ctx)
 	if err != nil {
 		return "", err
 	}
@@ -629,10 +686,11 @@ func (a *App) ListWorkflows() (string, error) {
 // a tools/list entry's compact inputSchema (ordered steps, checkpoint,
 // declared agents/tools/memory/prompts). Returned as raw JSON text.
 func (a *App) GetWorkflowManifest(name string) (string, error) {
-	if err := a.requireBridge(); err != nil {
+	client, err := a.requireBridge()
+	if err != nil {
 		return "", err
 	}
-	return a.mhl.ResourceRead(a.ctx, "mhl://workflow/"+name)
+	return client.ResourceRead(a.ctx, "mhl://workflow/"+name)
 }
 
 // StartRun starts a workflow asynchronously (mhl_run_start) and returns
@@ -641,14 +699,15 @@ func (a *App) GetWorkflowManifest(name string) (string, error) {
 // frontend. argumentsJSON is the workflow's own `input`s as a JSON object
 // string (e.g. `{"action":"create","name":"...","item_type":"feature"}`).
 func (a *App) StartRun(workflow string, argumentsJSON string) (string, error) {
-	if err := a.requireBridge(); err != nil {
+	client, err := a.requireBridge()
+	if err != nil {
 		return "", err
 	}
 	arguments, err := decodeArguments(argumentsJSON)
 	if err != nil {
 		return "", err
 	}
-	status, err := a.mhl.RunStart(a.ctx, workflow, arguments)
+	status, err := client.RunStart(a.ctx, workflow, arguments)
 	if err != nil {
 		return "", err
 	}
@@ -671,10 +730,11 @@ func (a *App) StartRun(workflow string, argumentsJSON string) (string, error) {
 // runId from a previous app session, now that --state-dir makes that
 // possible).
 func (a *App) GetRunStatus(runID string) (string, error) {
-	if err := a.requireBridge(); err != nil {
+	client, err := a.requireBridge()
+	if err != nil {
 		return "", err
 	}
-	status, err := a.mhl.RunStatusGet(a.ctx, runID)
+	status, err := client.RunStatusGet(a.ctx, runID)
 	if err != nil {
 		return "", err
 	}
@@ -688,14 +748,15 @@ func (a *App) GetRunStatus(runID string) (string, error) {
 // automatically restart a background watch, since the run may have been
 // watched by a UI that's no longer even open.
 func (a *App) ResumeRun(runID string, argumentsJSON string) (string, error) {
-	if err := a.requireBridge(); err != nil {
+	client, err := a.requireBridge()
+	if err != nil {
 		return "", err
 	}
 	arguments, err := decodeArguments(argumentsJSON)
 	if err != nil {
 		return "", err
 	}
-	status, err := a.mhl.RunResume(a.ctx, runID, arguments)
+	status, err := client.RunResume(a.ctx, runID, arguments)
 	if err != nil {
 		return "", err
 	}
@@ -704,10 +765,11 @@ func (a *App) ResumeRun(runID string, argumentsJSON string) (string, error) {
 
 // CancelRun stops a run in place (mhl_run_cancel).
 func (a *App) CancelRun(runID string) (string, error) {
-	if err := a.requireBridge(); err != nil {
+	client, err := a.requireBridge()
+	if err != nil {
 		return "", err
 	}
-	status, err := a.mhl.RunCancel(a.ctx, runID)
+	status, err := client.RunCancel(a.ctx, runID)
 	if err != nil {
 		return "", err
 	}
@@ -718,10 +780,11 @@ func (a *App) CancelRun(runID string) (string, error) {
 // run this app instance has started, ownership-scoped by the one MCP
 // session mhlbridge.Client keeps for its whole lifetime.
 func (a *App) ListRuns() (string, error) {
-	if err := a.requireBridge(); err != nil {
+	client, err := a.requireBridge()
+	if err != nil {
 		return "", err
 	}
-	result, err := a.mhl.RunList(a.ctx)
+	result, err := client.RunList(a.ctx)
 	if err != nil {
 		return "", err
 	}
@@ -732,10 +795,11 @@ func (a *App) ListRuns() (string, error) {
 // cursor (pass "" for the start; feed back the response's own `nextSince`
 // to continue reading from where you left off).
 func (a *App) GetRunLogs(runID string, since string) (string, error) {
-	if err := a.requireBridge(); err != nil {
+	client, err := a.requireBridge()
+	if err != nil {
 		return "", err
 	}
-	result, err := a.mhl.RunLogs(a.ctx, runID, since)
+	result, err := client.RunLogs(a.ctx, runID, since)
 	if err != nil {
 		return "", err
 	}
@@ -780,7 +844,8 @@ func (a *App) GetRunProjectID(runID string) string {
 // surfacing as every subsequent call (including starting a brand new
 // work-item) failing with EOF.
 func (a *App) WatchRun(runID string) error {
-	if err := a.requireBridge(); err != nil {
+	client, err := a.requireBridge()
+	if err != nil {
 		return err
 	}
 
@@ -791,7 +856,7 @@ func (a *App) WatchRun(runID string) error {
 	}
 	a.pollingRunsMu.Unlock()
 
-	first, err := a.mhl.RunStatusGet(a.ctx, runID)
+	first, err := client.RunStatusGet(a.ctx, runID)
 	if err != nil {
 		if !alreadyPolling {
 			a.pollingRunsMu.Lock()
@@ -811,12 +876,13 @@ func (a *App) WatchRun(runID string) error {
 	}
 
 	go func() {
+		defer recoverBackground("WatchRun(" + runID + ")")
 		defer func() {
 			a.pollingRunsMu.Lock()
 			delete(a.pollingRuns, runID)
 			a.pollingRunsMu.Unlock()
 		}()
-		_, err := a.mhl.PollRunStatus(a.ctx, runID, runPollInterval, func(status *mhlbridge.RunStatus) {
+		_, err := client.PollRunStatus(a.ctx, runID, runPollInterval, func(status *mhlbridge.RunStatus) {
 			a.publishRunStatus(runID, status)
 		})
 		if err != nil {
@@ -834,9 +900,19 @@ func (a *App) WatchRun(runID string) error {
 	projectID, hasProject := a.runProjects[runID]
 	a.runProjectsMu.Unlock()
 	if hasProject {
-		go a.tailRunLogs(runID, projectID)
+		go a.tailRunLogs(client, runID, projectID)
 	}
 	return nil
+}
+
+// recoverBackground keeps a panic in a background goroutine (status polling,
+// log tailing) from terminating the whole app — a goroutine's panic isn't
+// caught by anything else. The run keeps going in mhl regardless; losing
+// one poll loop is recoverable (the UI reattaches), losing the app isn't.
+func recoverBackground(what string) {
+	if r := recover(); r != nil {
+		log.Printf("mhl bridge: %s: recovered from panic: %v\n%s", what, r, debug.Stack())
+	}
 }
 
 func (a *App) publishRunStatus(runID string, status *mhlbridge.RunStatus) {
@@ -863,7 +939,8 @@ const tailRunLogsInterval = 2 * time.Second
 // WatchRun's status-poll goroutine does for the same runID, checking
 // a.pollingRuns as its own stop signal instead of duplicating that
 // lifecycle.
-func (a *App) tailRunLogs(runID string, projectID string) {
+func (a *App) tailRunLogs(client *mhlbridge.Client, runID string, projectID string) {
+	defer recoverBackground("tailRunLogs(" + runID + ")")
 	path, err := runLogFilePath(a.dataDir, projectID, runID)
 	if err != nil {
 		log.Printf("mhl bridge: tailRunLogs(%s): %v", runID, err)
@@ -873,7 +950,7 @@ func (a *App) tailRunLogs(runID string, projectID string) {
 	defer ticker.Stop()
 	since := ""
 	fetch := func() {
-		result, err := a.mhl.RunLogs(a.ctx, runID, since)
+		result, err := client.RunLogs(a.ctx, runID, since)
 		if err != nil {
 			log.Printf("mhl bridge: tailRunLogs(%s): fetch logs: %v", runID, err)
 			return
@@ -1133,7 +1210,7 @@ func resolveSafeRelative(base string, relative string) (string, error) {
 // SelectRawFiles opens the native multi-file picker and returns the chosen
 // absolute paths as a JSON array (empty if the user cancels).
 func (a *App) SelectRawFiles() (string, error) {
-	if err := a.requireBridge(); err != nil {
+	if _, err := a.requireBridge(); err != nil {
 		return "", err
 	}
 	paths, err := runtime.OpenMultipleFilesDialog(a.ctx, runtime.OpenDialogOptions{

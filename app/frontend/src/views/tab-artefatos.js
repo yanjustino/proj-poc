@@ -18,6 +18,7 @@ import { setActiveRun, getActiveRun, clearActiveRun } from '../active-runs.js';
 import { dotClass } from '../status.js';
 import { icon } from '../icons.js';
 import { approvalRecoveryArgs, waitForRecoveryTerminal } from '../checkpoint-recovery.js';
+import { enqueueLlmRun, llmJob, cancelQueuedLlmJob, subscribeLlmJobs } from '../llm-queue.js';
 import { formatRelativeTime } from '../time-format.js';
 
 const LABELS = {
@@ -1693,6 +1694,7 @@ export async function renderArtefatosTab(container, project, { onChanged }) {
   // the plain "pronto para gerar" / "Gerar" state — exactly like the draft,
   // and the pending_data it lived in, never existed.
   function onRunCancel(row, key) {
+    cancelQueuedLlmJob(key);
     clearActiveRun(key);
     trackers.get(row.key)?.dispose();
     trackers.delete(row.key);
@@ -1766,6 +1768,7 @@ export async function renderArtefatosTab(container, project, { onChanged }) {
   // that matters — one LLM call informed from the start, not two).
   function generate(row, feedback) {
     const key = activeKey(row);
+    reattachedKeys.delete(key); // a new run for this key reports through the queue again
     if (row.parentKey) expandedFeatures.add(row.parentKey); // never hide a starting generation behind a collapsed feature
     // onUpdate: Aprovar/Regenerar (run-tracker.js's own composer) resume
     // this run directly, bypassing startAndWatch entirely — without this,
@@ -1777,12 +1780,12 @@ export async function renderArtefatosTab(container, project, { onChanged }) {
     // approval had never happened.
     const tracker = createArtifactTracker(row, key);
     trackers.set(row.key, tracker);
-    // Seed a non-null "working" status right away — App.StartRun's own
-    // response is still an unresolved promise at this point, so without
-    // this, the renderDetail() call a few lines down (before that promise
-    // settles) sees tracker.status still null and falls through straight
-    // back to the "Gerar" button, as if the click had done nothing.
-    tracker.update({ runId: '', state: 'working' });
+    // Seed a non-null "queued" status right away — the run only starts once
+    // llm-queue.js has a free LLM slot (see that file for why generations
+    // are capped), so without this the renderDetail() call a few lines down
+    // sees tracker.status still null and falls straight back to the "Gerar"
+    // button, as if the click had done nothing.
+    tracker.update({ runId: '', state: 'queued' });
 
     // buddy: true always — this screen used to let a "Modo Buddy" checkbox
     // toggle it, but the checkbox itself (not the pause-for-review gate it
@@ -1797,13 +1800,47 @@ export async function renderArtefatosTab(container, project, { onChanged }) {
         ? { project_id: project.id, artifact: row.featureId ? 'historias' : row.key, buddy: true, ...(row.featureId ? { feature_id: row.featureId } : {}), ...(feedback ? { feedback } : {}) }
         : { project_id: project.id, mode: project.type, artifact: row.key, buddy: true, ...(feedback ? { feedback } : {}) };
 
-    startAndWatch(workflow, args, (status) => onRunUpdate(row, tracker, key, status)).catch((err) =>
-      onRunError(row, tracker, key, err),
-    );
+    // Status arrives through onLlmJobUpdate (subscribed at mount), not a
+    // callback bound to this mount — the job may start after the tab has
+    // been remounted, and the new mount must be the one that renders it.
+    enqueueLlmRun(key, workflow, args);
 
     renderList();
     renderDetail();
   }
+
+  // rowForKey resolves an active-runs/llm-queue key back to the row it
+  // belongs to — including rows rowsToRender() doesn't offer right now: a
+  // collection's group row while it regenerates as a batch, or a feature's
+  // "Histórias" row before its tracker exists.
+  function rowForKey(key) {
+    const prefix = `${project.id}:`;
+    if (!key.startsWith(prefix)) return null;
+    const rowKey = key.slice(prefix.length);
+    const visible = rowsToRender().find((r) => r.key === rowKey);
+    if (visible) return visible;
+    const entry = sequence.find((e) => e.artifact === rowKey);
+    if (entry) return { key: entry.artifact, label: labelFor(entry.artifact), entry, category: entry.category };
+    return featureRowsForHistorias().map(historiasRowFor).find((r) => r.key === rowKey) ?? null;
+  }
+
+  // Keys this mount follows through watchExistingRun (reattachActiveRuns) —
+  // their updates already arrive that way, so the queue's broadcast of the
+  // same run is ignored instead of applied twice.
+  const reattachedKeys = new Set();
+
+  function onLlmJobUpdate(key, status) {
+    if (!active || reattachedKeys.has(key)) return;
+    const row = rowForKey(key);
+    if (!row) return;
+    let tracker = trackers.get(row.key);
+    if (!tracker) {
+      tracker = createArtifactTracker(row, key);
+      trackers.set(row.key, tracker);
+    }
+    onRunUpdate(row, tracker, key, status);
+  }
+  const unsubscribeLlmJobs = subscribeLlmJobs(onLlmJobUpdate);
 
   // Runs once at mount, before the first render: anything still active()
   // in the registry for this project genuinely is still running on the
@@ -1813,8 +1850,18 @@ export async function renderArtefatosTab(container, project, { onChanged }) {
   function reattachActiveRuns() {
     function reattach(row) {
       const key = activeKey(row);
+      // Still owned by llm-queue.js (waiting for a slot, or started and not
+      // yet paused): show its latest status; the queue keeps broadcasting.
+      const queued = llmJob(key);
+      if (queued) {
+        const tracker = createArtifactTracker(row, key);
+        trackers.set(row.key, tracker);
+        tracker.update(queued);
+        return;
+      }
       const runId = getActiveRun(key);
       if (!runId) return;
+      reattachedKeys.add(key);
       const tracker = createArtifactTracker(row, key);
       trackers.set(row.key, tracker);
       tracker.update({ runId, state: 'working' });
@@ -1863,6 +1910,7 @@ export async function renderArtefatosTab(container, project, { onChanged }) {
 
   return () => {
     active = false;
+    unsubscribeLlmJobs();
     // A tracker still working/queued when this tab unmounts owns a ticking
     // setInterval (run-tracker.js's elapsed-time display) — nothing else
     // ever references it again to clear it, so this must, even though the

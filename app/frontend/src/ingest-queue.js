@@ -1,5 +1,7 @@
 import { startAndWatch, isFullyTerminal, listIngestedRaw, markRawIngested } from './api.js';
 import { setActiveRun, clearActiveRun } from './active-runs.js';
+import { acquireLlmSlot } from './llm-queue.js';
+import { friendlyRunError } from './run-errors.js';
 
 // Per-project ingest queue, deliberately module-level instead of living
 // inside tab-fontes.js's mount closure. Wiki only ingests one raw file per
@@ -18,11 +20,11 @@ import { setActiveRun, clearActiveRun } from './active-runs.js';
 // and is told when a file finishes, so it can reload .ingested.json instead
 // of trusting what it read at mount time.
 
-const projects = new Map(); // projectId -> { queued: string[], running: {name, status} | null, draining: bool, listeners: Set }
+const projects = new Map(); // projectId -> { queued: string[], running: {name, status} | null, draining: bool, listeners: Set, failures: Map }
 
 function stateOf(projectId) {
   if (!projects.has(projectId)) {
-    projects.set(projectId, { queued: [], running: null, draining: false, listeners: new Set() });
+    projects.set(projectId, { queued: [], running: null, draining: false, listeners: new Set(), failures: new Map() });
   }
   return projects.get(projectId);
 }
@@ -52,6 +54,14 @@ export function isQueuedOrRunning(projectId, name) {
 
 // subscribeIngestQueue: listener receives {type: 'queued' | 'status' | 'done' | 'idle', name?, status?}.
 // Returns the unsubscribe function.
+// ingestFailure: the last failure of `name` in this session ({summary,
+// detail}), shown inline on its row instead of a blocking window.alert — the
+// alert froze the whole window until dismissed and dumped the raw error chain
+// on the person. Cleared when the file is queued again.
+export function ingestFailure(projectId, name) {
+  return stateOf(projectId).failures.get(name) ?? null;
+}
+
 export function subscribeIngestQueue(projectId, listener) {
   const state = stateOf(projectId);
   state.listeners.add(listener);
@@ -63,6 +73,7 @@ export function enqueueIngest(projectId, names) {
   let added = false;
   for (const name of names) {
     if (state.running?.name === name || state.queued.includes(name)) continue;
+    state.failures.delete(name);
     state.queued.push(name);
     added = true;
   }
@@ -100,8 +111,13 @@ async function drain(projectId) {
   }
 }
 
-function runOne(projectId, state, name) {
+async function runOne(projectId, state, name) {
   const key = `${projectId}:raw:${name}`;
+  state.running = { name, status: { runId: '', state: 'queued' } };
+  notify(state, { type: 'status', name, status: state.running.status });
+  // Ingest calls an LLM too — it shares llm-queue.js's cap with artifact
+  // generations, so a batch of sources can't take every mhl slot either.
+  const release = await acquireLlmSlot();
   state.running = { name, status: { runId: '', state: 'working' } };
   notify(state, { type: 'status', name, status: state.running.status });
 
@@ -110,6 +126,7 @@ function runOne(projectId, state, name) {
     function finish(status) {
       if (settled) return;
       settled = true;
+      release();
       clearActiveRun(key);
       state.running = null;
       notify(state, { type: 'done', name, status });
@@ -125,7 +142,7 @@ function runOne(projectId, state, name) {
         return;
       }
       if (status.state !== 'completed') {
-        if (status.state === 'failed') window.alert(`Falha ao ingerir "${name}": ${status.error || 'erro desconhecido'}`);
+        if (status.state === 'failed') state.failures.set(name, friendlyRunError(status.error || 'erro desconhecido'));
         finish(status);
         return;
       }
@@ -135,7 +152,7 @@ function runOne(projectId, state, name) {
     }
 
     startAndWatch('Wiki', { project_id: projectId, action: 'ingest', raw_paths: [name] }, onUpdate).catch((err) => {
-      window.alert(`Erro ao ingerir "${name}": ` + (err.message || err));
+      state.failures.set(name, friendlyRunError(err.message || err));
       finish({ runId: '', state: 'failed', error: String(err) });
     });
   });

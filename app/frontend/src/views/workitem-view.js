@@ -30,7 +30,7 @@ const LEVEL_LABEL = { discovery: 'Oportunidade · Discovery', delivery: 'Feature
 // as alimentam (duração em usage.jsonl, eventos em activity.jsonl): um
 // work-item mais antigo mostra "—" em vez de um zero enganoso, e o tooltip
 // avisa quando só parte das chamadas tem duração registrada.
-function productivityCardHtml(p) {
+function productivityCardHtml(p, unavailable = false) {
   const hasTiming = p && p.timed_calls > 0;
   const hasCycles = p && p.cycle_samples > 0;
   const hasReviews = p && p.review_samples > 0;
@@ -56,6 +56,7 @@ function productivityCardHtml(p) {
         <div class="summary-tokens-row">${icon('refreshCw', 13)}<b>${hasCycles ? formatDurationShort(p.avg_cycle_seconds) : '—'}</b><span>ciclo médio até aprovação</span></div>
         <div class="summary-tokens-row">${icon('eye', 13)}<b>${hasReviews ? formatDurationShort(p.avg_review_seconds) : '—'}</b><span>espera média pela revisão</span></div>
         <div class="summary-tokens-row">${icon('checkCircle', 13)}<b>${firstPass}</b><span>aprovados de primeira</span></div>
+        ${unavailable ? `<div class="summary-tokens-row summary-unavailable">${icon('alertCircle', 13)}<span>indisponível — o servidor mhl não respondeu</span></div>` : ''}
       </div>
     </div>
   `;
@@ -126,24 +127,30 @@ export async function renderWorkItemView(container, project, { initialTab = 'art
   }
 
   async function refreshSummary() {
-    let artifactNodes = [];
-    let rawNodes = [];
-    let ingestedNames = [];
-    let usage = { total_tokens_in: 0, total_tokens_out: 0, total_cache_creation_tokens: 0, total_cache_read_tokens: 0, total_cost_usd: 0 };
-    let stage = { state: null, count: 0 };
-    let productivity = null;
-    try {
-      [artifactNodes, rawNodes, ingestedNames, usage, stage, productivity] = await Promise.all([
-        listProjectDir(project.id, 'artifacts', ''),
-        listProjectDir(project.id, 'raw', ''),
-        listIngestedRaw(project.id).catch(() => []),
-        workItemUsage(project.id),
-        pipelineStage().catch(() => ({ state: null, count: 0 })),
-        workItemProductivity(project.id).catch(() => null),
-      ]);
-    } catch {
-      // best-effort — summary cards just show zeros if any call fails.
-    }
+    const emptyUsage = { total_tokens_in: 0, total_tokens_out: 0, total_cache_creation_tokens: 0, total_cache_read_tokens: 0, total_cost_usd: 0 };
+    // Each source fails on its own. This used to be one Promise.all whose
+    // single catch kept every default — so when mhl was down (the usage and
+    // productivity queries run through it), even the purely local numbers
+    // (fontes, artefatos) dropped to zero and the whole summary read as if
+    // the project's history had been erased. Now a failed source shows as
+    // unavailable, and only that source.
+    const results = await Promise.allSettled([
+      listProjectDir(project.id, 'artifacts', ''),
+      listProjectDir(project.id, 'raw', ''),
+      listIngestedRaw(project.id),
+      workItemUsage(project.id),
+      pipelineStage(),
+      workItemProductivity(project.id),
+    ]);
+    const valueOf = (i, fallback) => (results[i].status === 'fulfilled' ? results[i].value : fallback);
+    const artifactNodes = valueOf(0, []);
+    const rawNodes = valueOf(1, []);
+    const ingestedNames = valueOf(2, []);
+    const usage = valueOf(3, emptyUsage);
+    const stage = valueOf(4, { state: null, count: 0 });
+    const productivity = valueOf(5, null);
+    const usageUnavailable = results[3].status === 'rejected';
+    const productivityUnavailable = results[5].status === 'rejected';
 
     const { byCategory, doneCount, totalCount } = computeCategoryProgress(project, artifactNodes);
 
@@ -217,7 +224,7 @@ export async function renderWorkItemView(container, project, { initialTab = 'art
           <div class="summary-tokens-row">${icon('zap', 13)}<b>${escapeHtml(lastActivity)}</b><span>última atividade</span></div>
         </div>
       </div>
-      ${productivityCardHtml(productivity)}
+      ${productivityCardHtml(productivity, productivityUnavailable)}
       <div class="summary-card summary-card-progress summary-card-tokens" title="${escapeHtml(tokensTitle)}">
         <div class="summary-progress-head">
           <span class="summary-icon">${icon('layers', 16)}</span>
@@ -228,6 +235,7 @@ export async function renderWorkItemView(container, project, { initialTab = 'art
           <div class="summary-tokens-row">${icon('arrowUp', 13)}<b>${tokensOut.toLocaleString('pt-BR')}</b><span>saída</span></div>
           ${totalCache > 0 ? `<div class="summary-tokens-row">${icon('layers', 13)}<b>${cacheSharePct}%</b><span>do input veio do cache</span></div>` : ''}
           <div class="summary-tokens-row">${icon('dollarSign', 13)}<b>${escapeHtml(cost.value)}</b><span>${escapeHtml(cost.label)}</span></div>
+          ${usageUnavailable ? `<div class="summary-tokens-row summary-unavailable">${icon('alertCircle', 13)}<span>uso indisponível — o servidor mhl não respondeu</span></div>` : ''}
         </div>
       </div>
     `;

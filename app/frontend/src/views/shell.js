@@ -44,13 +44,16 @@ export async function mountShell(root) {
   root.innerHTML = `
     <div class="shell">
       <aside class="sidebar">
-        <div class="drag-strip"></div>
+        <div class="drag-strip">
+          <button class="icon-btn sidebar-toggle-expanded" aria-label="Recolher menu lateral" title="Recolher menu lateral" data-toggle-sidebar>${icon('panelLeft', 15)}</button>
+        </div>
         <div class="sidebar-top">
           <div class="brand">
             <span class="brand-mark"><img src="${brandSymbol}" alt="" /></span>
             <span class="brand-copy"><span class="brand-name">Senpai</span><small>Refiner</small></span>
           </div>
           <div class="sidebar-top-actions">
+            <button class="icon-btn sidebar-toggle-collapsed" aria-label="Expandir menu lateral" title="Expandir menu lateral" data-toggle-sidebar>${icon('panelLeft', 15)}</button>
             <button class="icon-btn" aria-label="Novo work-item" title="Novo work-item" data-create>${icon('plus', 15)}</button>
             <button class="icon-btn" aria-label="Ver logs de execução" title="Ver logs de execução" data-open-logs>${icon('terminal', 15)}</button>
             <button class="icon-btn" aria-label="Maximizar janela" title="Maximizar/restaurar janela" data-toggle-maximise>${icon('maximize', 15)}</button>
@@ -149,6 +152,7 @@ export async function mountShell(root) {
     // (reconnectMCP() respawning a healthy mhl is just a brief blip) and
     // guarantees a way out when the probe and reality disagree.
     const reconnectButton = `<button class="button secondary small sidebar-status-reconnect" data-mcp-reconnect ${reconnecting ? 'disabled' : ''} title="Reiniciar a conexão com o mhl">${reconnecting ? 'Reconectando…' : 'Reconectar'}</button>`;
+    mcpStatusEl.title = plain; // the only readable status when the sidebar is collapsed to a dot
     mcpStatusEl.innerHTML = `<span class="status-dot ${dot}"></span><span class="sidebar-status-copy" title="${escapeHtml(plain)}">${html}</span>${reconnectButton}`;
 
     const button = mcpStatusEl.querySelector('[data-mcp-reconnect]');
@@ -339,7 +343,7 @@ export async function mountShell(root) {
     navList.innerHTML = filtered
       .map(
         (p) => `
-        <button class="work ${p.id === state.projectId ? 'active' : ''}" data-id="${p.id}">
+        <button class="work ${p.id === state.projectId ? 'active' : ''}" data-id="${p.id}" title="${escapeHtml(p.name)}">
           <span class="work-icon">${icon('fileText', 13)}</span>
           <span class="work-copy"><strong>${escapeHtml(p.name)}</strong><span>${LEVEL_SHORT[p.level] || p.level}</span></span>
         </button>
@@ -415,6 +419,39 @@ export async function mountShell(root) {
     filterText = filterInput.value;
     renderNav();
   });
+
+  // Collapsed sidebar: a narrow rail with the brand, the action buttons and
+  // each work-item as an icon (name in its tooltip), so navigating still
+  // works without expanding it. A standing layout preference, so it's
+  // persisted like the theme; localStorage failing just means it starts
+  // expanded next time.
+  // Two toggle buttons, one per state: expanded, it sits in the top strip
+  // right of the macOS window buttons (the brand row has no room left);
+  // collapsed, the strip is all window buttons, so it moves into the rail's
+  // action column. CSS shows whichever matches.
+  const sidebarToggleEls = [...root.querySelectorAll('[data-toggle-sidebar]')];
+  function applySidebarCollapsed(collapsed) {
+    shellEl.classList.toggle('sidebar-collapsed', collapsed);
+    sidebarToggleEls.forEach((el) => el.setAttribute('aria-expanded', String(!collapsed)));
+  }
+  let sidebarCollapsed = false;
+  try {
+    sidebarCollapsed = localStorage.getItem('senpai-sidebar-collapsed') === '1';
+  } catch {
+    // Starts expanded.
+  }
+  applySidebarCollapsed(sidebarCollapsed);
+  sidebarToggleEls.forEach((el) =>
+    el.addEventListener('click', () => {
+      sidebarCollapsed = !sidebarCollapsed;
+      applySidebarCollapsed(sidebarCollapsed);
+      try {
+        localStorage.setItem('senpai-sidebar-collapsed', sidebarCollapsed ? '1' : '0');
+      } catch {
+        // Not persisted — still applies for this session.
+      }
+    }),
+  );
 
   root.querySelector('[data-toggle-maximise]').addEventListener('click', () => {
     ToggleMaximise().catch((err) => console.error('ToggleMaximise failed', err));

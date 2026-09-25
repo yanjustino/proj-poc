@@ -10,7 +10,7 @@ import {
 import { createRunTracker } from '../run-tracker.js';
 import { icon } from '../icons.js';
 import { getActiveRun, clearActiveRun } from '../active-runs.js';
-import { enqueueIngest, ingestQueueSnapshot, isQueuedOrRunning, subscribeIngestQueue } from '../ingest-queue.js';
+import { enqueueIngest, ingestFailure, ingestQueueSnapshot, isQueuedOrRunning, subscribeIngestQueue } from '../ingest-queue.js';
 import { formatRelativeTime } from '../time-format.js';
 
 // renderFontesTab owns the "upload de arquivos-base → Wiki ingest" flow
@@ -271,18 +271,20 @@ export async function renderFontesTab(container, project, { onChanged }) {
     const tracker = trackers.get(name);
     const queued = !tracker && isQueuedOrRunning(project.id, name);
     const ingested = ingestedNames.has(name);
-    const dot = tracker ? 'working' : queued ? 'queued' : ingested ? 'done' : '';
-    const statusText = tracker ? 'Processando…' : queued ? 'Na fila' : ingested ? 'Ingerido' : 'Pendente';
+    const failure = !tracker && !queued && !ingested ? ingestFailure(project.id, name) : null;
+    const dot = tracker ? 'working' : queued ? 'queued' : ingested ? 'done' : failure ? 'failed' : '';
+    const statusText = tracker ? 'Processando…' : queued ? 'Na fila' : ingested ? 'Ingerido' : failure ? 'Falhou' : 'Pendente';
     const when = formatRelativeTime(modifiedAtOf(name));
     const canIngest = !tracker && !queued && !ingested;
+    const rowTitle = failure ? [failure.summary, failure.detail].filter(Boolean).join('\n\n') : statusText;
     return `
-      <tr class="data-row static" title="${escapeHtml(statusText)}">
+      <tr class="data-row static ${failure ? 'failed' : ''}" title="${escapeAttribute(rowTitle)}">
         <td class="data-row-dot"><span class="status-dot ${dot}"></span></td>
         <td class="data-row-name"><i>${icon('fileText', 14)}</i><span title="${escapeAttribute(name)}">${escapeHtml(name)}</span></td>
-        <td class="data-row-status">${escapeHtml(statusText)}</td>
+        <td class="data-row-status">${escapeHtml(statusText)}${failure ? `<div class="data-row-error">${escapeHtml(failure.summary)}</div>` : ''}</td>
         <td class="data-row-when">${escapeHtml(when)}</td>
         <td class="data-row-actions">
-          ${canIngest ? `<button data-ingest-one="${escapeAttribute(name)}">Ingerir →</button>` : ''}
+          ${canIngest ? `<button data-ingest-one="${escapeAttribute(name)}">${failure ? 'Tentar novamente' : 'Ingerir →'}</button>` : ''}
         </td>
       </tr>
     `;
@@ -293,7 +295,7 @@ export async function renderFontesTab(container, project, { onChanged }) {
     return `
       <div class="source-card-kind"><i>${icon('fileText', 15)}</i><span>${escapeHtml(extension)}</span></div>
       <strong title="${escapeHtml(name)}">${escapeHtml(name)}</strong>
-      <p>${state === 'done' ? 'Disponível como contexto na wiki.' : 'Aguardando processamento para entrar no contexto.'}</p>
+      <p>${state === 'done' ? 'Disponível como contexto na wiki.' : state === 'failed' ? 'A última tentativa de ingestão falhou.' : 'Aguardando processamento para entrar no contexto.'}</p>
       <footer><span class="status-dot ${state}"></span><span>${escapeHtml(status)}</span>${action}</footer>
     `;
   }
@@ -301,6 +303,15 @@ export async function renderFontesTab(container, project, { onChanged }) {
   function rowBody(name) {
     if (ingestedNames.has(name)) {
       return sourceCardBody(name, 'Ingerido', 'done');
+    }
+    const failure = ingestFailure(project.id, name);
+    if (failure) {
+      return sourceCardBody(
+        name,
+        failure.summary,
+        'failed',
+        `<button class="source-card-action" data-ingest-one title="${escapeAttribute(failure.detail || failure.summary)}">Tentar novamente</button>`,
+      );
     }
     return sourceCardBody(
       name,
