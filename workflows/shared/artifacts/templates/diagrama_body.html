@@ -1,6 +1,11 @@
-<p><strong>Tipo:</strong> ${diagram_type} · <strong>Nível:</strong> ${hierarchy_level}</p>
+<p><strong>Tipo:</strong> ${tipo_label} · <strong>Nível:</strong> ${hierarchy_level}</p>
+${escopo_html}
 <p>${descricao}</p>${descricao_fontes}
+${avisos_html}
 <h2>Diagrama</h2>
 <pre class="mermaid">${diagrama_mermaid}</pre>
+${legenda_html}
+${elementos_html}
+${relacoes_html}
 <script src="../assets/mermaid.min.js"></script>
 <script>mermaid.initialize({ startOnLoad: true });</script>

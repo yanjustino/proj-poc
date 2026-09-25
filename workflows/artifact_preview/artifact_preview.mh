@@ -168,6 +168,38 @@ test ArtifactPreviewSpec {
         is_true(run.vars.preview_html.contains("Contexto do Checkout"))
     }
 
+    describe structured_c4_item_renders_generated_mermaid_legend_tables_and_warnings {
+        var run = ArtifactPreview.run(inputs: {
+            artifact: "diagrama",
+            data: {
+                titulo: "Contêineres do Checkout",
+                diagram_type: "c4-container",
+                descricao: "Contêineres do checkout",
+                descricao_fontes: ["requisitos"],
+                escopo: {nome: "Checkout", descricao: "Fecha pedidos", fontes: ["brief"]},
+                ambiente: "",
+                elementos: [
+                    {id: "cliente", nome: "Cliente", tipo: "pessoa", tecnologia: "", descricao: "Compra", no_pai: "", fontes: ["requisitos/FR-001"]},
+                    {id: "api", nome: "API", tipo: "container", tecnologia: "", descricao: "Recebe pedidos", no_pai: "", fontes: ["gap"]},
+                ],
+                relacoes: [{de: "cliente", para: "api", descricao: "Envia pedidos para", tecnologia: "HTTPS", fontes: ["inferência"]}],
+                diagrama_mermaid: "",
+                avisos_lote: ["O lote não tem diagrama de contexto de sistema (C4) — recomendado para todo sistema."],
+            }
+        })
+        is_true(run.ok)
+        var page = run.vars.preview_html
+        is_true(page.contains("<strong>Tipo:</strong> Contêiner (C4) · <strong>Nível:</strong> Strategic"))
+        is_true(page.contains("<strong>Escopo:</strong> Checkout — Fecha pedidos"))
+        is_true(page.contains("<strong>Público:</strong> Pessoas técnicas"))
+        is_true(page.contains("subgraph b0"))
+        is_true(page.contains("<h2>Legenda</h2>"))
+        is_true(page.contains("<h2>Elementos</h2>"))
+        is_true(page.contains("<h2>Relações</h2>"))
+        is_true(page.contains("Contêiner sem tecnologia definida: API"))
+        is_true(page.contains("O lote não tem diagrama de contexto"))
+    }
+
     describe decisao_item_renders_standalone_with_its_own_title {
         var run = ArtifactPreview.run(inputs: {
             artifact: "decisao",

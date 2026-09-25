@@ -13,6 +13,7 @@ import { ArtifactId } from "../shared/artifacts/artifact_id.mh"
 import { DirClear } from "../shared/core/dir_clear.mh"
 import { PageShell, ArtifactMeta } from "../shared/artifacts/page_shell.mh"
 import { ChangesBlock } from "../shared/artifacts/changes_log.mh"
+import { C4Diagram, C4Context } from "../shared/artifacts/c4_diagram.mh"
 import {
     ArtifactSchema,
     AdrInstruction, DerInstruction, DiagramasInstruction,
@@ -124,12 +125,16 @@ partial workflow Discovery {
         if (requisitos_content.is_empty()) fail("gere 'requisitos' antes de 'diagramas'")
         var atributos_content = Context.artifact(project_id, "atributos.html")
         if (atributos_content.is_empty()) fail("gere 'atributos' antes de 'diagramas'")
+        // Contexto opcional — ver o comentario de DiagramasInstruction.
+        var adr_content = Context.artifact_dir(project_id, "adr")
+        if (adr_content.is_empty()) adr_content = C4Context.no_adr_placeholder()
 
         var response = Writer.generate(
             prompt: DiagramasInstruction(
                 schema_conventions: ArtifactSchema(),
                 requisitos_content: requisitos_content,
                 atributos_content: atributos_content,
+                adr_content: adr_content,
                 feedback_content: ChangesBlock.for_artifact(project_id, "diagramas", "")
             ),
             schema_file: DiagramasSchemaFile.get(),
@@ -140,7 +145,10 @@ partial workflow Discovery {
         self.tokens_in = response.tokens_in
         self.tokens_out = response.tokens_out
         var raw = response.content
-        self.pending_data = json.parse(raw)
+        // C4Diagram.annotate anexa a cada diagrama os avisos que so o lote
+        // inteiro revela (niveis ausentes, nomes divergentes entre niveis) —
+        // o preview de um item e o arquivo final leem daqui.
+        self.pending_data = C4Diagram.annotate(json.parse(raw))
         goto Gate
     }
 

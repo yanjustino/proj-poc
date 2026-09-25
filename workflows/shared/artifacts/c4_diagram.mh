@@ -1,0 +1,709 @@
+// tool C4Diagram — renderizacao e conformidade dos diagramas C4 (contexto,
+// conteiner, componente, implantacao). C3: a LLM so devolve o MODELO
+// (escopo, elementos, relacoes, cada um com fontes) via schema; o Mermaid, a
+// legenda, as tabelas e a verificacao das regras do C4 sao sempre codigo.
+// Antes disto a LLM escrevia o Mermaid livremente — notacao, escopo e nivel
+// de detalhe ficavam por conta dela, e nada checava se um diagrama de
+// contexto mostrava tecnologia ou se um de conteiner tinha implantacao.
+//
+// Regras extraidas de https://c4model.com/diagrams/system-context,
+// /container e /component:
+//   - contexto: UM sistema de software em escopo, cercado das pessoas e
+//     sistemas externos ligados diretamente a ele; sem tecnologia/protocolo;
+//     publico: todos, inclusive nao tecnicos.
+//   - conteiner: aplicacoes e bancos de dados dentro da fronteira do sistema,
+//     com as principais escolhas de tecnologia e como se comunicam; nada de
+//     implantacao (cluster, balanceador, replicacao, failover) — isso vai
+//     num diagrama de implantacao, um por ambiente.
+//   - componente: escopo e UM conteiner; componentes com responsabilidade e
+//     tecnologia/implementacao; opcional ("so se agregar valor").
+//   - todo diagrama tem legenda (diagram key); elementos de apoio sao os
+//     "diretamente conectados" ao escopo — um elemento sem relacao nao
+//     deveria estar no diagrama.
+//
+// Diagramas gerados antes deste modelo (Mermaid livre em diagrama_mermaid,
+// sem elementos) continuam renderizando pelo caminho legado — ver
+// is_structured.
+
+import { Cite } from "cite.mh"
+
+export tool C4Diagram {
+    is_c4(diagram_type: string): bool -> diagram_type.starts_with("c4-")
+
+    // Estruturado = tipo C4 com o modelo de elementos preenchido. Um
+    // checkpoint/arquivo antigo (so diagrama_mermaid) cai no caminho legado.
+    is_structured(data: any): bool ->
+        self.is_c4(data.diagram_type) && (data?.elementos ?? []).size() > 0
+
+    // Nivel hierarquico: deterministico a partir do tipo (antes era um campo
+    // que a propria LLM preenchia seguindo este mesmo mapeamento — so podia
+    // errar). Checkpoints antigos ainda trazem hierarchy_level; e ignorado.
+    level(diagram_type: string): string -> match diagram_type {
+        "c4-context"    -> "Strategic"
+        "c4-container"  -> "Strategic"
+        "c4-deployment" -> "Strategic"
+        "c4-component"  -> "Product"
+        "process-flow"  -> "Product"
+        "data-flow"     -> "Product"
+        _               -> "Tactical"
+    }
+
+    type_label(diagram_type: string): string -> match diagram_type {
+        "c4-context"    -> "Contexto de sistema (C4)"
+        "c4-container"  -> "Contêiner (C4)"
+        "c4-component"  -> "Componente (C4)"
+        "c4-deployment" -> "Implantação (C4)"
+        "process-flow"  -> "Fluxo de processo"
+        "data-flow"     -> "Fluxo de dados"
+        "sequence"      -> "Sequência"
+        "state"         -> "Estado"
+        _               -> html.escape(diagram_type)
+    }
+
+    audience(diagram_type: string): string -> match diagram_type {
+        "c4-context"    -> "Todos — pessoas técnicas e não técnicas, dentro e fora do time de desenvolvimento."
+        "c4-container"  -> "Pessoas técnicas dentro e fora do time — arquitetos, desenvolvedores e operação/suporte."
+        "c4-component"  -> "Arquitetos e desenvolvedores."
+        "c4-deployment" -> "Pessoas técnicas dentro e fora do time — arquitetos, desenvolvedores, infraestrutura e operação/suporte."
+        _               -> ""
+    }
+
+    element_type_label(tipo: string): string -> match tipo {
+        "pessoa"          -> "Pessoa"
+        "sistema"         -> "Sistema de software"
+        "sistema_externo" -> "Sistema externo"
+        "container"       -> "Contêiner"
+        "banco_dados"     -> "Contêiner: banco de dados"
+        "componente"      -> "Componente"
+        "no_implantacao"  -> "Nó de implantação"
+        _                 -> tipo
+    }
+
+    // classDef de cada tipo — cores do catalogo C4 que o prompt ja citava
+    // (person #08427B, system #1168BD, external #999999, container #438DD5,
+    // component #85BBF0). No de implantacao nao e uma classe: vira subgraph
+    // e recebe `style` proprio (ver mermaid()).
+    element_class(tipo: string): string -> match tipo {
+        "pessoa"          -> "pessoa"
+        "sistema"         -> "sistema"
+        "sistema_externo" -> "externo"
+        "container"       -> "container"
+        "banco_dados"     -> "container"
+        "componente"      -> "componente"
+        _                 -> "externo"
+    }
+
+    class_color(css_class: string): string -> match css_class {
+        "pessoa"     -> "#08427B"
+        "sistema"    -> "#1168BD"
+        "container"  -> "#438DD5"
+        "componente" -> "#85BBF0"
+        _            -> "#999999"
+    }
+
+    // mm escapa texto da LLM para dentro de um rotulo Mermaid entre aspas.
+    // Entidades Mermaid (#quot; #lt; ...), nao HTML: o rotulo ainda passa
+    // por html.escape no template (<pre class="mermaid">), e o Mermaid le o
+    // textContent — entao "&lt;" viraria "<" de novo antes do parser. "#"
+    // primeiro, senao as entidades introduzidas abaixo seriam re-escapadas.
+    mm(text: string): string ->
+        text.replace("#", "#35;").replace("\"", "#quot;").replace("<", "#lt;").replace(">", "#gt;")
+            .replace("\r", " ").replace("\n", " ")
+
+    index_of_id(elementos: any[], id: string): int -> {
+        var i = 0
+        for (var el in elementos) {
+            if (el.id == id) return i
+            i = i + 1
+        }
+        return -1
+    }
+
+    name_of(elementos: any[], id: string): string -> {
+        var i = self.index_of_id(elementos, id)
+        if (i < 0) return id
+        return elementos[i].nome
+    }
+
+    // Um no_pai so vale se apontar para um no de implantacao existente (e nao
+    // para o proprio elemento); qualquer outra coisa trata o elemento como
+    // raiz — ele ainda aparece no desenho, e check() aponta o problema.
+    effective_parent(elementos: any[], el: any): string -> {
+        var pai = el?.no_pai ?? ""
+        if (pai.is_empty() || pai == el.id) return ""
+        var i = self.index_of_id(elementos, pai)
+        if (i < 0 || elementos[i].tipo != "no_implantacao") return ""
+        return pai
+    }
+
+    node_label(el: any): string -> {
+        var tecnologia = el?.tecnologia ?? ""
+        var kind = self.element_type_label(el.tipo)
+        if (!tecnologia.is_empty()) kind = kind + ": " + self.mm(tecnologia)
+        var label = "<b>" + self.mm(el.nome) + "</b><br/>[" + kind + "]"
+        var descricao = el?.descricao ?? ""
+        if (!descricao.is_empty()) label = label + "<br/><small>" + self.mm(descricao) + "</small>"
+        return label
+    }
+
+    node_line(el: any, i: int): string -> {
+        var label = self.node_label(el)
+        var shape = match el.tipo {
+            "pessoa"      -> "([\"" + label + "\"])"
+            "banco_dados" -> "[(\"" + label + "\")]"
+            _             -> "[\"" + label + "\"]"
+        }
+        return "    n${i}" + shape + ":::" + self.element_class(el.tipo)
+    }
+
+    // deployment_nodes desenha a arvore de nos de implantacao como subgraphs
+    // aninhados (no_pai), com os conteineres dentro do no onde rodam. Um
+    // ciclo entre nos nunca e alcancado a partir da raiz (nenhum membro tem
+    // pai "" efetivo), entao a recursao termina — o ciclo so some do desenho
+    // e check() o denuncia.
+    deployment_nodes(elementos: any[], parent: string): string -> {
+        var out = ""
+        var i = 0
+        for (var el in elementos) {
+            if (self.effective_parent(elementos, el) == parent) {
+                if (el.tipo == "no_implantacao") {
+                    out = out + "    subgraph n${i}[\"" + self.node_label(el) + "\"]\n" +
+                        self.deployment_nodes(elementos, el.id) +
+                        "    end\n" +
+                        "    style n${i} fill:#ffffff,stroke:#888888,color:#232323\n"
+                } else {
+                    out = out + self.node_line(el, i) + "\n"
+                }
+            }
+            i = i + 1
+        }
+        return out
+    }
+
+    // inside_boundary: quais elementos ficam dentro da fronteira do escopo —
+    // conteineres na fronteira do sistema (diagrama de conteiner),
+    // componentes na fronteira do conteiner (diagrama de componente). Pessoas,
+    // sistemas externos e (no de componente) os outros conteineres ficam fora.
+    inside_boundary(diagram_type: string, tipo: string): bool -> {
+        if (diagram_type == "c4-container") return tipo == "container" || tipo == "banco_dados"
+        if (diagram_type == "c4-component") return tipo == "componente"
+        return false
+    }
+
+    relation_line(elementos: any[], rel: any): string -> {
+        var de = self.index_of_id(elementos, rel.de)
+        var para = self.index_of_id(elementos, rel.para)
+        if (de < 0 || para < 0) return ""
+        var label = self.mm(rel?.descricao ?? "")
+        var tecnologia = rel?.tecnologia ?? ""
+        if (!tecnologia.is_empty()) label = label + "<br/>[" + self.mm(tecnologia) + "]"
+        return "    n${de} -->|\"" + label + "\"| n${para}\n"
+    }
+
+    mermaid(data: any): string -> {
+        var t = data.diagram_type
+        var elementos = data.elementos
+        var out = "flowchart TB\n" +
+            "    classDef pessoa fill:#08427B,stroke:#073B6F,color:#ffffff\n" +
+            "    classDef sistema fill:#1168BD,stroke:#0B4884,color:#ffffff\n" +
+            "    classDef externo fill:#999999,stroke:#8A8A8A,color:#ffffff\n" +
+            "    classDef container fill:#438DD5,stroke:#3C7FC0,color:#ffffff\n" +
+            "    classDef componente fill:#85BBF0,stroke:#78A8D8,color:#000000\n"
+
+        if (t == "c4-deployment") {
+            out = out + self.deployment_nodes(elementos, "")
+        } else {
+            var outside = ""
+            var inside = ""
+            var i = 0
+            for (var el in elementos) {
+                if (self.inside_boundary(t, el.tipo)) inside = inside + "    " + self.node_line(el, i) + "\n"
+                else outside = outside + self.node_line(el, i) + "\n"
+                i = i + 1
+            }
+            out = out + outside
+            if (!inside.is_empty()) {
+                var escopo_nome = data?.escopo?.nome ?? ""
+                var escopo_kind = if (t == "c4-container") "Sistema de software" else "Contêiner"
+                out = out + "    subgraph b0[\"<b>" + self.mm(escopo_nome) + "</b><br/>[" + escopo_kind + "]\"]\n" +
+                    inside +
+                    "    end\n" +
+                    "    style b0 fill:none,stroke:#444444,stroke-dasharray:6 4,color:#444444\n"
+            }
+        }
+
+        for (var rel in (data?.relacoes ?? [])) out = out + self.relation_line(elementos, rel)
+        // Relacoes tracejadas, como na notacao de referencia do C4.
+        if (!(data?.relacoes ?? []).is_empty()) out = out + "    linkStyle default stroke:#707070,stroke-dasharray:5 5\n"
+        return out
+    }
+
+    // mermaid_source: o Mermaid final de qualquer diagrama — gerado aqui
+    // para um C4 estruturado, o texto da propria LLM para os demais tipos
+    // (processo, dados, sequencia, estado) e para um C4 legado.
+    mermaid_source(data: any): string -> {
+        if (self.is_structured(data)) return self.mermaid(data)
+        return data?.diagrama_mermaid ?? ""
+    }
+
+    // legend: a "diagram key" que toda pagina do c4model.com traz — so os
+    // tipos de fato presentes neste diagrama, mais fronteira e relacao.
+    legend(data: any): string -> {
+        if (!self.is_structured(data)) return ""
+        var items = ""
+        var seen = []
+        for (var el in data.elementos) {
+            var label = self.element_type_label(el.tipo)
+            if (!seen.contains(label)) {
+                seen += [label]
+                var swatch = if (el.tipo == "no_implantacao")
+                    "<span class=\"c4-swatch c4-swatch-node\"></span>"
+                else
+                    "<span class=\"c4-swatch\" style=\"background:" + self.class_color(self.element_class(el.tipo)) + "\"></span>"
+                items = items + "<li>" + swatch + html.escape(label) + "</li>"
+            }
+        }
+        var t = data.diagram_type
+        if (t == "c4-container" || t == "c4-component") {
+            var boundary = if (t == "c4-container") "Fronteira do sistema em escopo" else "Fronteira do contêiner em escopo"
+            items = items + "<li><span class=\"c4-swatch c4-swatch-boundary\"></span>" + boundary + "</li>"
+        }
+        if (!(data?.relacoes ?? []).is_empty()) items = items + "<li><span class=\"c4-swatch c4-swatch-relation\"></span>Relação (descrição e, quando houver, tecnologia)</li>"
+        return "<h2>Legenda</h2><ul class=\"c4-legend\">" + items + "</ul>"
+    }
+
+    scope(data: any): string -> {
+        var t = data.diagram_type
+        if (!self.is_c4(t)) return ""
+        var out = ""
+        var escopo = data?.escopo ?? {nome: "", descricao: "", fontes: []}
+        var nome = escopo?.nome ?? ""
+        if (!nome.is_empty()) {
+            var descricao = escopo?.descricao ?? ""
+            out = out + "<p><strong>Escopo:</strong> " + html.escape(nome) +
+                (if (descricao.is_empty()) "" else " — " + html.escape(descricao)) +
+                " " + Cite.badges(escopo?.fontes ?? []) + "</p>"
+        }
+        var ambiente = data?.ambiente ?? ""
+        if (t == "c4-deployment" && !ambiente.is_empty()) out = out + "<p><strong>Ambiente:</strong> " + html.escape(ambiente) + "</p>"
+        out = out + "<p><strong>Público:</strong> " + self.audience(t) + "</p>"
+        return out
+    }
+
+    elements_table(data: any): string -> {
+        if (!self.is_structured(data)) return ""
+        var deployment = data.diagram_type == "c4-deployment"
+        var elementos = data.elementos
+        var head = "<tr><th>Elemento</th><th>Tipo</th><th>Tecnologia</th>" + (if (deployment) "<th>Dentro de</th>" else "") + "<th>Descrição</th><th>Fontes</th></tr>"
+        var rows = ""
+        for (var el in elementos) {
+            var tecnologia = el?.tecnologia ?? ""
+            var parent = self.effective_parent(elementos, el)
+            rows = rows + "<tr><td>" + html.escape(el.nome) + "</td><td>" + html.escape(self.element_type_label(el.tipo)) + "</td><td>" +
+                (if (tecnologia.is_empty()) "—" else html.escape(tecnologia)) + "</td>" +
+                (if (deployment) "<td>" + (if (parent.is_empty()) "—" else html.escape(self.name_of(elementos, parent))) + "</td>" else "") +
+                "<td>" + html.escape(el?.descricao ?? "") + "</td><td>" + Cite.badges(el?.fontes ?? []) + "</td></tr>"
+        }
+        return "<h2>Elementos</h2><table><thead>" + head + "</thead><tbody>" + rows + "</tbody></table>"
+    }
+
+    relations_table(data: any): string -> {
+        if (!self.is_structured(data)) return ""
+        var relacoes = data?.relacoes ?? []
+        if (relacoes.is_empty()) return ""
+        var elementos = data.elementos
+        var rows = ""
+        for (var rel in relacoes) {
+            var tecnologia = rel?.tecnologia ?? ""
+            rows = rows + "<tr><td>" + html.escape(self.name_of(elementos, rel.de)) + "</td><td>" + html.escape(self.name_of(elementos, rel.para)) +
+                "</td><td>" + html.escape(rel?.descricao ?? "") + "</td><td>" + (if (tecnologia.is_empty()) "—" else html.escape(tecnologia)) +
+                "</td><td>" + Cite.badges(rel?.fontes ?? []) + "</td></tr>"
+        }
+        return "<h2>Relações</h2><table><thead><tr><th>De</th><th>Para</th><th>Descrição</th><th>Tecnologia</th><th>Fontes</th></tr></thead><tbody>" + rows + "</tbody></table>"
+    }
+
+    // --- Conformidade -----------------------------------------------------
+
+    count_type(elementos: any[], tipo: string): int -> elementos.filter((el) -> el.tipo == tipo).size()
+
+    names_of_types(elementos: any[], tipos: string[]): string ->
+        elementos.filter((el) -> tipos.contains(el.tipo)).map((el) -> el.nome).join(", ")
+
+    // check: violacoes das regras C4 dentro de UM diagrama. Texto cru (nomes
+    // vindos da LLM sem escape) — warnings_html escapa na renderizacao.
+    check(data: any): string[] -> {
+        var t = data.diagram_type
+        if (!self.is_c4(t)) return []
+        if (!self.is_structured(data)) return ["Diagrama no formato anterior (Mermaid livre, sem modelo de elementos) — regenere os diagramas para validá-lo contra as regras do C4."]
+
+        var elementos = data.elementos
+        var relacoes = data?.relacoes ?? []
+        var out = []
+        var escopo_nome = data?.escopo?.nome ?? ""
+
+        if (t == "c4-context") {
+            var sistemas = self.count_type(elementos, "sistema")
+            if (sistemas != 1) out += ["O diagrama de contexto deve ter exatamente um sistema de software em escopo (encontrados: ${sistemas})."]
+            var detalhados = self.names_of_types(elementos, ["container", "banco_dados", "componente", "no_implantacao"])
+            if (!detalhados.is_empty()) out += ["Contexto não deve mostrar contêineres, componentes nem nós de implantação — isso pertence aos níveis seguintes: " + detalhados + "."]
+            var com_tecnologia = elementos.filter((el) -> !(el?.tecnologia ?? "").is_empty()).map((el) -> el.nome).join(", ")
+            if (!com_tecnologia.is_empty()) out += ["Contexto não deve mostrar tecnologias: " + com_tecnologia + "."]
+            var rel_com_tecnologia = relacoes.filter((r) -> !(r?.tecnologia ?? "").is_empty()).size()
+            if (rel_com_tecnologia > 0) out += ["Contexto não deve mostrar protocolos/tecnologias nas relações (${rel_com_tecnologia} relação(ões) com tecnologia)."]
+        }
+
+        if (t == "c4-container") {
+            if (escopo_nome.is_empty()) out += ["Informe o sistema de software em escopo (a fronteira do diagrama de contêiner)."]
+            if (self.count_type(elementos, "container") + self.count_type(elementos, "banco_dados") == 0) out += ["Diagrama de contêiner sem nenhum contêiner (aplicação ou banco de dados)."]
+            var fora = self.names_of_types(elementos, ["sistema", "componente", "no_implantacao"])
+            if (!fora.is_empty()) out += ["Diagrama de contêiner não deve incluir o próprio sistema como elemento (ele é a fronteira), componentes nem nós de implantação: " + fora + "."]
+            var sem_tecnologia = elementos.filter((el) -> (el.tipo == "container" || el.tipo == "banco_dados") && (el?.tecnologia ?? "").is_empty()).map((el) -> el.nome).join(", ")
+            if (!sem_tecnologia.is_empty()) out += ["Contêiner sem tecnologia definida: " + sem_tecnologia + "."]
+            for (var rel in relacoes) {
+                var de = self.index_of_id(elementos, rel.de)
+                var para = self.index_of_id(elementos, rel.para)
+                if (de >= 0 && para >= 0 && self.inside_boundary(t, elementos[de].tipo) && self.inside_boundary(t, elementos[para].tipo) && (rel?.tecnologia ?? "").is_empty()) {
+                    out += ["Comunicação entre contêineres sem tecnologia/protocolo: " + elementos[de].nome + " → " + elementos[para].nome + "."]
+                }
+            }
+        }
+
+        if (t == "c4-component") {
+            if (escopo_nome.is_empty()) out += ["O diagrama de componente precisa de um único contêiner em escopo."]
+            if (self.count_type(elementos, "componente") == 0) out += ["Diagrama de componente sem nenhum componente."]
+            var fora = self.names_of_types(elementos, ["sistema", "no_implantacao"])
+            if (!fora.is_empty()) out += ["Diagrama de componente não deve incluir o sistema em escopo nem nós de implantação: " + fora + "."]
+            var sem_tecnologia = elementos.filter((el) -> el.tipo == "componente" && (el?.tecnologia ?? "").is_empty()).map((el) -> el.nome).join(", ")
+            if (!sem_tecnologia.is_empty()) out += ["Componente sem tecnologia/implementação: " + sem_tecnologia + "."]
+        }
+
+        if (t == "c4-deployment") {
+            if ((data?.ambiente ?? "").is_empty()) out += ["O diagrama de implantação precisa de um ambiente (ex.: produção, homologação) — um diagrama por ambiente."]
+            if (self.count_type(elementos, "no_implantacao") == 0) out += ["Diagrama de implantação sem nenhum nó de implantação."]
+            var soltos = elementos.filter((el) -> (el.tipo == "container" || el.tipo == "banco_dados") && self.effective_parent(elementos, el).is_empty()).map((el) -> el.nome).join(", ")
+            if (!soltos.is_empty()) out += ["Contêiner fora de um nó de implantação: " + soltos + "."]
+            var componentes = self.names_of_types(elementos, ["componente"])
+            if (!componentes.is_empty()) out += ["Diagrama de implantação não deve mostrar componentes: " + componentes + "."]
+        }
+
+        // Regras comuns a todo diagrama C4.
+        var ids = []
+        for (var el in elementos) {
+            if (ids.contains(el.id)) out += ["Id de elemento repetido: " + el.id + "."]
+            else ids += [el.id]
+        }
+        for (var rel in relacoes) {
+            if (self.index_of_id(elementos, rel.de) < 0 || self.index_of_id(elementos, rel.para) < 0) {
+                out += ["Relação aponta para um elemento inexistente: " + rel.de + " → " + rel.para + "."]
+            } else if ((rel?.descricao ?? "").trim().is_empty()) {
+                out += ["Relação sem descrição: " + self.name_of(elementos, rel.de) + " → " + self.name_of(elementos, rel.para) + "."]
+            }
+        }
+        // Elementos de apoio sao, por definicao, os diretamente conectados ao
+        // escopo; um no de implantacao e so um recipiente, nao precisa de
+        // relacao propria.
+        var conectados = relacoes.map((r) -> r.de) + relacoes.map((r) -> r.para)
+        var isolados = elementos.filter((el) -> el.tipo != "no_implantacao" && !conectados.contains(el.id)).map((el) -> el.nome).join(", ")
+        if (!isolados.is_empty()) out += ["Elemento sem nenhuma relação no diagrama: " + isolados + "."]
+        return out
+    }
+
+    // --- Consistencia entre os diagramas do mesmo lote ---------------------
+
+    normalized(text: string): string -> text.to_lower().trim()
+
+    names_by_types(diagramas: any[], diagram_type: string, tipos: string[]): string[] -> {
+        var out = []
+        for (var d in diagramas) {
+            if (d.diagram_type == diagram_type && self.is_structured(d)) {
+                for (var el in d.elementos) {
+                    if (tipos.contains(el.tipo)) out += [self.normalized(el.nome)]
+                }
+            }
+        }
+        return out
+    }
+
+    // batch_warnings: um array de avisos por diagrama (mesma ordem de
+    // `diagramas`) para o que so da para ver olhando o lote inteiro —
+    // contexto/conteiner ausentes (recomendados para todo time) e nomes que
+    // nao batem entre os niveis (o zoom de um nivel para o seguinte precisa
+    // manter as mesmas pessoas, sistemas externos e conteineres).
+    batch_warnings(diagramas: any[]): any[] -> {
+        var has_context = diagramas.any((d) -> d.diagram_type == "c4-context")
+        var has_container = diagramas.any((d) -> d.diagram_type == "c4-container")
+        var context_people = self.names_by_types(diagramas, "c4-context", ["pessoa", "sistema_externo"])
+        var context_systems = self.names_by_types(diagramas, "c4-context", ["sistema"])
+        var containers = self.names_by_types(diagramas, "c4-container", ["container", "banco_dados"])
+        var has_structured_context = diagramas.any((d) -> d.diagram_type == "c4-context" && self.is_structured(d))
+        var has_structured_container = diagramas.any((d) -> d.diagram_type == "c4-container" && self.is_structured(d))
+
+        var out = []
+        var first = true
+        for (var d in diagramas) {
+            var avisos = []
+            if (first) {
+                if (!has_context) avisos += ["O lote não tem diagrama de contexto de sistema (C4) — recomendado para todo sistema."]
+                if (!has_container) avisos += ["O lote não tem diagrama de contêiner (C4) — recomendado para todo sistema."]
+            }
+            first = false
+            var t = d.diagram_type
+            if (self.is_structured(d)) {
+                var escopo_nome = self.normalized(d?.escopo?.nome ?? "")
+                if ((t == "c4-container" || t == "c4-deployment") && has_structured_context) {
+                    if (t == "c4-container" && !escopo_nome.is_empty() && !context_systems.contains(escopo_nome)) {
+                        avisos += ["O sistema em escopo (" + d.escopo.nome + ") não corresponde ao sistema do diagrama de contexto."]
+                    }
+                    for (var el in d.elementos) {
+                        if ((el.tipo == "pessoa" || el.tipo == "sistema_externo") && !context_people.contains(self.normalized(el.nome))) {
+                            avisos += ["“" + el.nome + "” aparece aqui mas não no diagrama de contexto."]
+                        }
+                    }
+                }
+                if (t == "c4-component" && has_structured_container && !escopo_nome.is_empty() && !containers.contains(escopo_nome)) {
+                    avisos += ["O contêiner em escopo (" + d.escopo.nome + ") não existe no diagrama de contêiner."]
+                }
+                if (t == "c4-deployment" && has_structured_container) {
+                    for (var el in d.elementos) {
+                        if ((el.tipo == "container" || el.tipo == "banco_dados") && !containers.contains(self.normalized(el.nome))) {
+                            avisos += ["O contêiner “" + el.nome + "” está implantado aqui mas não existe no diagrama de contêiner."]
+                        }
+                    }
+                }
+            }
+            out += [avisos]
+        }
+        return out
+    }
+
+    // annotate: o que DiagramasGenerate guarda em pending_data — o lote da
+    // LLM com os avisos de lote anexados a cada item (avisos_lote), para que
+    // o preview de UM item (ArtifactPreview.Diagrama) e o arquivo final
+    // mostrem a mesma coisa sem precisar do lote inteiro. mhl nao tem spread
+    // nem atribuicao de campo, dai a reconstrucao campo a campo.
+    annotate(data: any): any -> {
+        var diagramas = data.diagramas
+        var avisos = self.batch_warnings(diagramas)
+        var out = []
+        var i = 0
+        for (var d in diagramas) {
+            out += [{
+                titulo: d.titulo,
+                diagram_type: d.diagram_type,
+                descricao: d.descricao,
+                descricao_fontes: d.descricao_fontes,
+                escopo: d?.escopo ?? {nome: "", descricao: "", fontes: []},
+                ambiente: d?.ambiente ?? "",
+                elementos: d?.elementos ?? [],
+                relacoes: d?.relacoes ?? [],
+                diagrama_mermaid: d?.diagrama_mermaid ?? "",
+                avisos_lote: avisos[i],
+            }]
+            i = i + 1
+        }
+        return {diagramas: out}
+    }
+
+    warnings_html(data: any): string -> {
+        var avisos = self.check(data) + (data?.avisos_lote ?? [])
+        if (avisos.is_empty()) return ""
+        return "<h2>Conformidade C4</h2><ul class=\"c4-warnings\">" + avisos.map((a) -> "<li>" + html.escape(a) + "</li>").join("") + "</ul>"
+    }
+}
+
+// Texto fixo no lugar das ADRs quando ainda nao ha nenhuma (C3: decisao
+// deterministica, mesmo padrao de NoAtributos em delivery.mh).
+export tool C4Context {
+    no_adr_placeholder(): string ->
+        "(nenhuma ADR gerada ainda — cite como `gap` toda tecnologia que não esteja nos requisitos ou atributos)"
+}
+
+// Fixtures dos testes abaixo (mhl nao aceita `var` solto no corpo de um
+// `test`, so dentro de cada `describe`).
+tool C4Fixtures {
+    context(): any -> {
+        titulo: "Contexto",
+        diagram_type: "c4-context",
+        descricao: "Visão geral",
+        descricao_fontes: ["requisitos"],
+        escopo: {nome: "Loja", descricao: "Vende online", fontes: ["brief"]},
+        ambiente: "",
+        elementos: [
+            {id: "cliente", nome: "Cliente", tipo: "pessoa", tecnologia: "", descricao: "Compra", no_pai: "", fontes: ["requisitos/FR-001"]},
+            {id: "loja", nome: "Loja", tipo: "sistema", tecnologia: "", descricao: "Vende \"tudo\"", no_pai: "", fontes: ["brief"]},
+            {id: "pag", nome: "Gateway <PSP>", tipo: "sistema_externo", tecnologia: "", descricao: "", no_pai: "", fontes: ["requisitos/IR-001"]},
+        ],
+        relacoes: [
+            {de: "cliente", para: "loja", descricao: "Faz pedidos", tecnologia: "", fontes: ["requisitos/FR-001"]},
+            {de: "loja", para: "pag", descricao: "Cobra", tecnologia: "", fontes: ["requisitos/IR-001"]},
+        ],
+        diagrama_mermaid: "",
+    }
+
+    container(): any -> {
+        titulo: "Contêineres",
+        diagram_type: "c4-container",
+        descricao: "Contêineres",
+        descricao_fontes: ["requisitos"],
+        escopo: {nome: "Loja", descricao: "", fontes: ["brief"]},
+        ambiente: "",
+        elementos: [
+            {id: "cliente", nome: "Cliente", tipo: "pessoa", tecnologia: "", descricao: "", no_pai: "", fontes: ["requisitos/FR-001"]},
+            {id: "api", nome: "API", tipo: "container", tecnologia: "Java", descricao: "", no_pai: "", fontes: ["adr/ADR-001-java"]},
+            {id: "db", nome: "Banco", tipo: "banco_dados", tecnologia: "", descricao: "", no_pai: "", fontes: ["gap"]},
+            {id: "erp", nome: "ERP", tipo: "sistema_externo", tecnologia: "", descricao: "", no_pai: "", fontes: ["gap"]},
+        ],
+        relacoes: [
+            {de: "cliente", para: "api", descricao: "Usa", tecnologia: "HTTPS", fontes: ["inferência"]},
+            {de: "api", para: "db", descricao: "Lê e grava", tecnologia: "", fontes: ["inferência"]},
+            {de: "api", para: "erp", descricao: "Envia pedidos", tecnologia: "REST", fontes: ["inferência"]},
+        ],
+        diagrama_mermaid: "",
+    }
+}
+
+test C4DiagramSpec {
+    describe level_and_labels_are_derived_from_the_type {
+        are_equal(C4Diagram.level("c4-context"), "Strategic")
+        are_equal(C4Diagram.level("c4-component"), "Product")
+        are_equal(C4Diagram.level("sequence"), "Tactical")
+        are_equal(C4Diagram.type_label("c4-container"), "Contêiner (C4)")
+    }
+
+    describe mm_escapes_quotes_brackets_and_hash_for_mermaid_labels {
+        are_equal(C4Diagram.mm("C# \"x\" <y>"), "C#35; #quot;x#quot; #lt;y#gt;")
+    }
+
+    describe context_mermaid_has_one_node_per_element_with_c4_classes {
+        var m = C4Diagram.mermaid(C4Fixtures.context())
+        is_true(m.starts_with("flowchart TB\n"))
+        is_true(m.contains("n0([\"<b>Cliente</b><br/>[Pessoa]<br/><small>Compra</small>\"]):::pessoa"))
+        is_true(m.contains("n1[\"<b>Loja</b><br/>[Sistema de software]<br/><small>Vende #quot;tudo#quot;</small>\"]:::sistema"))
+        is_true(m.contains("<b>Gateway #lt;PSP#gt;</b>"))
+        is_true(m.contains("n0 -->|\"Faz pedidos\"| n1"))
+        is_true(!m.contains("subgraph"))
+    }
+
+    describe container_mermaid_puts_containers_inside_the_system_boundary {
+        var m = C4Diagram.mermaid(C4Fixtures.container())
+        is_true(m.contains("subgraph b0[\"<b>Loja</b><br/>[Sistema de software]\"]"))
+        is_true(m.contains("n2[(\"<b>Banco</b><br/>[Contêiner: banco de dados]\")]:::container"))
+        is_true(m.contains("n1[\"<b>API</b><br/>[Contêiner: Java]\"]:::container"))
+        is_true(m.contains("n0 -->|\"Usa<br/>[HTTPS]\"| n1"))
+    }
+
+    describe a_clean_context_diagram_has_no_warnings {
+        are_equal(C4Diagram.check(C4Fixtures.context()).size(), 0)
+    }
+
+    describe context_flags_technology_and_container_level_detail {
+        var bad = {
+            diagram_type: "c4-context",
+            escopo: {nome: "Loja", descricao: "", fontes: []},
+            elementos: [
+                {id: "a", nome: "Loja", tipo: "sistema", tecnologia: "Java", descricao: "", no_pai: "", fontes: []},
+                {id: "b", nome: "API", tipo: "container", tecnologia: "", descricao: "", no_pai: "", fontes: []},
+                {id: "c", nome: "Solto", tipo: "pessoa", tecnologia: "", descricao: "", no_pai: "", fontes: []},
+            ],
+            relacoes: [{de: "a", para: "b", descricao: "Usa", tecnologia: "HTTP", fontes: []}],
+        }
+        var avisos = C4Diagram.check(bad).join(" | ")
+        is_true(avisos.contains("não deve mostrar contêineres"))
+        is_true(avisos.contains("não deve mostrar tecnologias: Loja"))
+        is_true(avisos.contains("protocolos/tecnologias nas relações"))
+        is_true(avisos.contains("Elemento sem nenhuma relação no diagrama: Solto"))
+    }
+
+    describe container_flags_missing_technology_on_containers_and_their_communication {
+        var avisos = C4Diagram.check(C4Fixtures.container()).join(" | ")
+        is_true(avisos.contains("Contêiner sem tecnologia definida: Banco"))
+        is_true(avisos.contains("Comunicação entre contêineres sem tecnologia/protocolo: API → Banco"))
+    }
+
+    describe relations_to_unknown_elements_are_flagged_and_not_drawn {
+        var d = {
+            diagram_type: "c4-context",
+            escopo: {nome: "Loja", descricao: "", fontes: []},
+            elementos: [{id: "a", nome: "Loja", tipo: "sistema", tecnologia: "", descricao: "", no_pai: "", fontes: []}],
+            relacoes: [{de: "a", para: "zzz", descricao: "Usa", tecnologia: "", fontes: []}],
+        }
+        is_true(C4Diagram.check(d).join(" ").contains("elemento inexistente: a → zzz"))
+        is_true(!C4Diagram.mermaid(d).contains("-->"))
+    }
+
+    describe component_requires_a_container_scope {
+        var d = {
+            diagram_type: "c4-component",
+            escopo: {nome: "", descricao: "", fontes: []},
+            elementos: [{id: "c", nome: "Pedidos", tipo: "componente", tecnologia: "", descricao: "", no_pai: "", fontes: []}],
+            relacoes: [],
+        }
+        var avisos = C4Diagram.check(d).join(" | ")
+        is_true(avisos.contains("precisa de um único contêiner em escopo"))
+        is_true(avisos.contains("Componente sem tecnologia/implementação: Pedidos"))
+    }
+
+    describe deployment_nests_containers_inside_their_nodes {
+        var d = {
+            diagram_type: "c4-deployment",
+            escopo: {nome: "Loja", descricao: "", fontes: []},
+            ambiente: "Produção",
+            elementos: [
+                {id: "aws", nome: "AWS", tipo: "no_implantacao", tecnologia: "sa-east-1", descricao: "", no_pai: "", fontes: []},
+                {id: "eks", nome: "Cluster", tipo: "no_implantacao", tecnologia: "EKS", descricao: "", no_pai: "aws", fontes: []},
+                {id: "api", nome: "API", tipo: "container", tecnologia: "Java", descricao: "", no_pai: "eks", fontes: []},
+                {id: "solto", nome: "Worker", tipo: "container", tecnologia: "Java", descricao: "", no_pai: "", fontes: []},
+            ],
+            relacoes: [{de: "solto", para: "api", descricao: "Chama", tecnologia: "gRPC", fontes: []}],
+        }
+        var m = C4Diagram.mermaid(d)
+        is_true(m.contains("subgraph n0[\"<b>AWS</b><br/>[Nó de implantação: sa-east-1]\"]\n    subgraph n1["))
+        is_true(m.contains("n2[\"<b>API</b><br/>[Contêiner: Java]\"]:::container\n    end\n"))
+        is_true(C4Diagram.check(d).join(" ").contains("Contêiner fora de um nó de implantação: Worker"))
+    }
+
+    describe legacy_c4_diagram_keeps_its_mermaid_and_asks_for_regeneration {
+        var legacy = {diagram_type: "c4-context", hierarchy_level: "Strategic", diagrama_mermaid: "flowchart LR\n a --> b"}
+        is_true(!C4Diagram.is_structured(legacy))
+        are_equal(C4Diagram.mermaid_source(legacy), "flowchart LR\n a --> b")
+        is_true(C4Diagram.check(legacy)[0].contains("formato anterior"))
+        are_equal(C4Diagram.legend(legacy), "")
+    }
+
+    describe non_c4_diagrams_are_never_checked {
+        are_equal(C4Diagram.check({diagram_type: "sequence", diagrama_mermaid: "sequenceDiagram"}).size(), 0)
+        are_equal(C4Diagram.scope({diagram_type: "sequence"}), "")
+    }
+
+    describe batch_flags_missing_levels_on_the_first_diagram_only {
+        var avisos = C4Diagram.batch_warnings([C4Fixtures.context(), {diagram_type: "sequence"}])
+        is_true(avisos[0].join(" ").contains("não tem diagrama de contêiner"))
+        are_equal(avisos[1].size(), 0)
+    }
+
+    describe batch_flags_names_that_do_not_match_between_levels {
+        var avisos = C4Diagram.batch_warnings([C4Fixtures.context(), C4Fixtures.container()])
+        is_true(avisos[1].join(" ").contains("“ERP” aparece aqui mas não no diagrama de contexto"))
+        is_true(!avisos[1].join(" ").contains("Cliente"))
+        var component = {
+            diagram_type: "c4-component",
+            escopo: {nome: "Worker", descricao: "", fontes: []},
+            elementos: [{id: "c", nome: "Pedidos", tipo: "componente", tecnologia: "Spring", descricao: "", no_pai: "", fontes: []}],
+            relacoes: [],
+        }
+        is_true(C4Diagram.batch_warnings([C4Fixtures.context(), C4Fixtures.container(), component])[2].join(" ").contains("não existe no diagrama de contêiner"))
+    }
+
+    describe annotate_attaches_batch_warnings_and_fills_missing_fields {
+        var annotated = C4Diagram.annotate({diagramas: [{titulo: "Seq", diagram_type: "sequence", descricao: "", descricao_fontes: [], diagrama_mermaid: "sequenceDiagram"}]})
+        var item = annotated.diagramas[0]
+        are_equal(item.ambiente, "")
+        are_equal(item.elementos.size(), 0)
+        is_true(item.avisos_lote.join(" ").contains("contexto de sistema"))
+    }
+
+    describe warnings_html_escapes_llm_names {
+        var d = {diagram_type: "c4-context", escopo: {nome: "", descricao: "", fontes: []}, elementos: [{id: "x", nome: "<Solto>", tipo: "sistema", tecnologia: "", descricao: "", no_pai: "", fontes: []}], relacoes: []}
+        is_true(C4Diagram.warnings_html(d).contains("&lt;Solto&gt;"))
+    }
+}

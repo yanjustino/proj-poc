@@ -12,6 +12,7 @@
 
 import { Cite } from "cite.mh"
 import { ArtifactHtml } from "artifact_html.mh"
+import { C4Diagram } from "c4_diagram.mh"
 import {
     BriefBody, AtributosBody, RequisitosBody, AdrBody, DerBody, DiagramaBody,
     FeatureBody, HistoriaBody, DependenciasBody
@@ -84,12 +85,20 @@ export tool ArtifactBody {
         questoes_lista: Cite.list(data.questoes_abertas)
     ))
 
+    // Um C4 estruturado (escopo/elementos/relacoes) tem Mermaid, legenda,
+    // tabelas e conformidade gerados por C4Diagram; os demais tipos — e um
+    // C4 legado, gravado antes desse modelo — usam o Mermaid da propria LLM.
     diagrama(data: any): string -> Cite.finalize(DiagramaBody(
-        diagram_type: html.escape(data.diagram_type),
-        hierarchy_level: html.escape(data.hierarchy_level),
+        tipo_label: C4Diagram.type_label(data.diagram_type),
+        hierarchy_level: C4Diagram.level(data.diagram_type),
+        escopo_html: C4Diagram.scope(data),
         descricao: html.escape(data.descricao),
         descricao_fontes: Cite.note(data.descricao_fontes),
-        diagrama_mermaid: html.escape(data.diagrama_mermaid)
+        avisos_html: C4Diagram.warnings_html(data),
+        diagrama_mermaid: html.escape(C4Diagram.mermaid_source(data)),
+        legenda_html: C4Diagram.legend(data),
+        elementos_html: C4Diagram.elements_table(data),
+        relacoes_html: C4Diagram.relations_table(data)
     ))
 
     feature(data: any): string -> {

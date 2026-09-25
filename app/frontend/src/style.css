@@ -291,6 +291,20 @@ button { cursor: pointer; }
 .data-row-name { display: flex; align-items: center; gap: 8px; font-weight: 600; white-space: normal; }
 .data-row-name i { display: grid; place-items: center; color: var(--muted); font-style: normal; }
 .data-row-name .artifact-card-stale { margin: 0; }
+/* Nested rows: a Discovery feature's own histórias (and its in-flight
+   "Histórias" generation) hang under the feature row instead of being
+   top-level rows of their own — indented past the parent's toggle, on a
+   slightly recessed background so the group reads as one unit. */
+.data-row-toggle { display: grid; place-items: center; width: 18px; height: 18px; margin-left: -4px; border: 0; border-radius: 5px; background: transparent; color: var(--muted); padding: 0; flex: none; }
+.data-row-toggle:hover { background: var(--line); color: var(--ink); }
+.data-row-toggle .icon, .artifact-card-toggle .icon { transition: transform .15s ease; }
+.data-row-toggle.expanded .icon, .artifact-card-toggle.expanded .icon { transform: rotate(90deg); }
+.data-row-toggle-spacer { width: 18px; margin-left: -4px; flex: none; }
+.data-row-count { padding: 1px 7px; border-radius: 999px; background: var(--surface-2); color: var(--muted); font: 500 10px var(--mono); white-space: nowrap; }
+.data-row.nested { background: var(--surface-2); }
+.data-row.nested:hover { background: var(--line); }
+.data-row.nested.selected { background: var(--blue-soft); }
+.data-row.nested .data-row-name { padding-left: 44px; font-weight: 500; }
 .data-row-category, .data-row-status, .data-row-when { color: var(--muted); font: 500 11px var(--mono); }
 /* .data-row-feedback: the one column so far whose content is genuinely
    free-text and can run long (tab-mudancas.js's own request text) — unlike
@@ -359,8 +373,17 @@ button { cursor: pointer; }
    gap) fixes that regardless of how many of the three end up rendering.
    The table view's own action cell doesn't need this — .data-row-actions
    already right-aligns via justify-content on itself, not per-button
-   margins. */
-.artifact-card-foot-actions { margin-left: auto; display: flex; align-items: center; gap: 7px; }
+   margins.
+   Wraps instead of squeezing: a narrow card with two or three actions
+   (Gerar histórias + Exportar, say) used to break each label over several
+   lines inside a cramped right column. Now the footer wraps as a whole —
+   the actions group drops below the status line, still right-aligned by its
+   auto margin — and the group itself wraps button by button if even a full
+   line isn't enough; labels themselves never break. */
+.artifact-card-foot { flex-wrap: wrap; row-gap: 6px; }
+.artifact-card-foot > span { white-space: nowrap; }
+.artifact-card-foot-actions { margin-left: auto; display: flex; flex-wrap: wrap; justify-content: flex-end; align-items: center; gap: 4px 10px; }
+.artifact-card-foot-actions > button { white-space: nowrap; }
 .artifact-card-generate { border: 0; background: transparent; padding: 3px 0 3px 6px; color: var(--blue-deep); font: 600 10px var(--sans); }
 .artifact-card-generate:hover { color: var(--ink); }
 .artifact-card-export { border: 0; background: transparent; color: var(--blue-deep); padding: 3px 0 3px 6px; display: inline-flex; align-items: center; gap: 5px; font: 600 10px var(--sans); }
@@ -368,6 +391,13 @@ button { cursor: pointer; }
 .artifact-card-export:disabled { opacity: .5; cursor: wait; }
 .artifact-card-update { border: 0; background: transparent; color: var(--amber); padding: 3px 0 3px 6px; display: inline-flex; align-items: center; gap: 5px; font: 600 10px var(--sans); }
 .artifact-card-update:hover { color: var(--ink); }
+.artifact-card-approve { border: 0; background: transparent; color: var(--green); padding: 3px 0 3px 6px; display: inline-flex; align-items: center; gap: 5px; font: 600 10px var(--sans); }
+.artifact-card-approve:hover { color: var(--ink); }
+.artifact-card-approve:disabled { opacity: .6; cursor: wait; }
+.data-row-actions .artifact-card-approve { color: var(--green); display: inline-flex; gap: 4px; }
+.artifact-card-toggle { border: 0; background: transparent; color: var(--muted); padding: 3px 0; display: inline-flex; align-items: center; gap: 4px; font: 600 10px var(--sans); }
+.artifact-card-toggle:hover { color: var(--ink); }
+.artifact-card.nested { min-height: 0; background: var(--surface-2); }
 .export-status { margin: -5px 0 14px; padding: 10px 12px; border: 1px solid rgba(46,139,104,.3); border-radius: var(--radius-md); background: rgba(46,139,104,.1); color: #47a880; font-size: 12px; line-height: 1.4; overflow-wrap: anywhere; }
 .export-status.error { border-color: rgba(200,58,55,.3); background: rgba(200,58,55,.1); color: #e45c58; }
 .export-status[hidden] { display: none; }

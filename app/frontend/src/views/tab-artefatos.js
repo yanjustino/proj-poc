@@ -88,6 +88,7 @@ function classificationLabelOf(classification) {
 function descriptionFor(row) {
   if (row.groupKey) return `Documento da coleção ${labelFor(row.entry.artifact)}.`;
   if (row.featureId) return `Histórias vinculadas ao item ${row.featureId}.`;
+  if (row.historiasRow) return `História vinculada ao item ${row.historiasRow.featureId}.`;
   return ARTIFACT_DESCRIPTIONS[row.entry.artifact] || 'Documento gerado a partir do contexto do work-item.';
 }
 
@@ -256,6 +257,21 @@ export async function renderArtefatosTab(container, project, { onChanged }) {
   // needs zero new code here, just its own entry in artifacts.js.
   let collectionChildren = {};
   let historiasDoneFeatureIds = new Set();
+  // historiasByFeatureId: short feature id ("FT001") -> { dir, folders } —
+  // `dir` is the real historias/<folder> name on disk, `folders` every
+  // história folder under it that already has its historia.html committed.
+  // Feeds the nested história rows under each feature (historiaItemRowsFor).
+  let historiasByFeatureId = new Map();
+  // expandedFeatures: feature row keys whose nested história rows are
+  // showing. Collapsed by default — N features × M histórias each would
+  // otherwise bury the rest of the map — and expanded automatically when a
+  // generation for that feature starts (generate/reattach), so progress is
+  // never hidden behind a closed row.
+  const expandedFeatures = new Set();
+  // childCounts: parent row key -> how many nested rows it has after the
+  // current filters — recomputed by renderList() before each render, read
+  // by rowViewModel to decide whether a feature row gets its toggle.
+  let childCounts = new Map();
   // staleness: artifacts.js's computeStaleness() output — artifact name ->
   // { stale, staleDeps } — real mtimes, not "does a downstream artifact
   // merely exist" (see that function's own comment). Drives both the
@@ -362,11 +378,9 @@ export async function renderArtefatosTab(container, project, { onChanged }) {
 
   // rowsToRender expands every collection entry that turned out to hold more
   // than one generated document into one row per document (see
-  // buildItemRows). Discovery's Features is one such collection, but each
-  // Feature additionally owns its *own* Histórias collection — that one gets
-  // a browsable index instead of flattening here (see renderHistoriasIndex's
-  // comment for why), so it's built separately below rather than through the
-  // generic path.
+  // buildItemRows). Discovery's Features additionally nest each feature's
+  // own histórias right under that feature's row (historiasChildRowsFor) —
+  // collapsed by default, see expandedFeatures.
   // hasActiveGroupRegeneration: true while a collection artifact (adr/
   // diagramas/features/Delivery's historias) is being regenerated as a
   // WHOLE batch — "Solicitar mudança" fired from inside one of its already-
@@ -388,46 +402,85 @@ export async function renderArtefatosTab(container, project, { onChanged }) {
     return Boolean(tracker && tracker.status && !['completed', 'failed', 'canceled'].includes(tracker.status.state));
   }
 
+  // historiasRowFor builds the synthetic per-feature "Histórias" row — the
+  // generation target for "Gerar histórias" on a feature row, and the row a
+  // running/paused/failed generation shows up as (nested under its feature)
+  // until real histórias land on disk. It's never a top-level row anymore:
+  // one standalone "Histórias — X" row per feature doubled the length of
+  // the backlog for something that's really an action on the feature.
+  function historiasRowFor(featureRow) {
+    const featureId = featureIdOf(featureRow.folderName);
+    return {
+      key: 'historias:' + featureId,
+      label: `Histórias — ${featureRow.label}`,
+      nestedLabel: 'Histórias',
+      entry: { artifact: 'historias', deps: ['features'] },
+      featureId, // short id ("FT003") — what the workflow's own feature_id argument expects
+      featureFolder: featureRow.folderName, // full folder name ("FT003-slug...") — historias/ mirrors features/'s folder naming, and only the full name is a real path
+      category: featureRow.category,
+      parentKey: featureRow.key,
+    };
+  }
+
+  // historiaItemRowsFor: one nested row per already-committed história of
+  // this feature, each opening its own historia.html directly. `historiasRow`
+  // is what "Solicitar mudança" on one of them regenerates — the whole
+  // per-feature batch, same reasoning as canonicalGroupRow.
+  function historiaItemRowsFor(featureRow, historiasRow) {
+    const stories = historiasByFeatureId.get(historiasRow.featureId);
+    if (!stories) return [];
+    return stories.folders.map((story) => ({
+      key: `historia-item:${historiasRow.featureId}:${story.name}`,
+      label: codedHistoriaTitle(featureRow.folderName, story.name),
+      entry: { artifact: 'historia', deps: [] },
+      category: featureRow.category,
+      previewPath: `historias/${stories.dir}/${story.name}/historia.html`,
+      modifiedAt: (story.children || []).find((f) => !f.isDir && f.name === 'historia.html')?.modifiedAt,
+      parentKey: featureRow.key,
+      historiasRow,
+    }));
+  }
+
+  // historiasChildRowsFor: everything nested under one feature row — the
+  // in-flight generation row (while its tracker hasn't completed), then the
+  // committed histórias themselves (hidden while a regeneration of the same
+  // batch is running, same as hasActiveGroupRegeneration does for a
+  // top-level collection, since that batch is about to be replaced).
+  function historiasChildRowsFor(featureRow) {
+    const historiasRow = historiasRowFor(featureRow);
+    const children = [];
+    const tracker = trackers.get(historiasRow.key);
+    if (tracker && tracker.status && tracker.status.state !== 'completed') children.push(historiasRow);
+    if (!hasActiveGroupRegeneration(historiasRow.key)) children.push(...historiaItemRowsFor(featureRow, historiasRow));
+    return children;
+  }
+
+  // featureRowsForHistorias: the feature rows histórias can hang off of —
+  // Discovery only, and only while Features isn't mid-regeneration. Real
+  // bug that gate fixes: *Generate always returns the WHOLE batch fresh
+  // (FeaturesCommit wipes features/ and features/historias/ together and
+  // mints IDs from scratch), so a "Gerar histórias" fired during that window
+  // could target a feature_id that won't exist once the batch lands.
+  function featureRowsForHistorias() {
+    if (project.level !== 'discovery' || !doneNames.has('features') || hasActiveGroupRegeneration('features')) return [];
+    const entry = sequence.find((e) => e.artifact === 'features');
+    return entry ? buildItemRows(entry) : [];
+  }
+
   function rowsToRender() {
     const rows = [];
     for (const entry of sequence) {
       if (entry.artifact === 'historias' && project.level === 'discovery') continue;
       if (entry.collectionKind && doneNames.has(entry.artifact) && !hasActiveGroupRegeneration(entry.artifact)) {
-        rows.push(...buildItemRows(entry));
+        for (const itemRow of buildItemRows(entry)) {
+          rows.push(itemRow);
+          // Nested rows always follow their parent directly — renderList's
+          // filtering and both renderers rely on that order.
+          if (project.level === 'discovery' && entry.artifact === 'features') rows.push(...historiasChildRowsFor(itemRow));
+        }
         continue;
       }
       rows.push({ key: entry.artifact, label: labelFor(entry.artifact), entry, category: entry.category });
-    }
-    // Gated on !hasActiveGroupRegeneration('features') the same as the
-    // Features cards themselves above (entry.collectionKind branch) — real
-    // bug this fixes: while Features is mid-regeneration (its own cards
-    // already collapsed into one progress row), these per-feature
-    // "Histórias — X" rows used to keep showing anyway, still built from
-    // the OLD collectionChildren.features (doneNames.has('features') stays
-    // true until Commit actually replaces features/ on disk). *Generate
-    // always returns the WHOLE batch fresh — no guarantee the new one has
-    // the same count, order, or ids as the old one (FeaturesCommit wipes
-    // features/ and features/historias/ together and mints IDs from
-    // scratch, see that step's own comment) — so every row on screen during
-    // that window pointed at a feature identity about to be replaced or
-    // gone entirely: clicking "Gerar" on one mid-regeneration would target
-    // a feature_id that might not even exist once the batch lands.
-    // Reported directly: 17 features regenerating, 17 "Histórias" rows
-    // sitting there orphaned the whole time. Once the regeneration finishes
-    // (or was never running), doneNames/collectionChildren are fresh and
-    // this rebuilds from the CURRENT features — no separate cleanup needed.
-    if (project.level === 'discovery' && doneNames.has('features') && !hasActiveGroupRegeneration('features')) {
-      for (const folder of collectionChildren.features || []) {
-        const featureId = featureIdOf(folder.name);
-        rows.push({
-          key: 'historias:' + featureId,
-          label: `Histórias — ${folderTitle(folder.name)}`,
-          entry: { artifact: 'historias', deps: ['features'] },
-          featureId, // short id ("FT003") — what the workflow's own feature_id argument expects
-          featureFolder: folder.name, // full folder name ("FT003-slug...") — historias/ mirrors features/'s folder naming, and only the full name is a real path
-          category: 'Backlog da solução',
-        });
-      }
     }
     return rows;
   }
@@ -478,6 +531,7 @@ export async function renderArtefatosTab(container, project, { onChanged }) {
     }
     const historiasNode = byName.historias;
     historiasDoneFeatureIds = new Set();
+    historiasByFeatureId = new Map();
     if (project.level === 'discovery' && historiasNode && historiasNode.children) {
       for (const child of historiasNode.children) {
         // isRowDone() looks this set up by the *short* feature id
@@ -486,14 +540,15 @@ export async function renderArtefatosTab(container, project, { onChanged }) {
         // never match, so a per-feature "Histórias — X" row could never be
         // marked done even with real histórias already on disk: every
         // completed/approved generation fell straight back to "Gerar".
-        const hasCommittedHistoria =
-          child.isDir &&
-          (child.children || []).some(
-            (storyFolder) =>
-              storyFolder.isDir &&
-              (storyFolder.children || []).some((file) => !file.isDir && file.name === 'historia.html'),
-          );
-        if (hasCommittedHistoria) historiasDoneFeatureIds.add(featureIdOf(child.name));
+        if (!child.isDir) continue;
+        const storyFolders = (child.children || []).filter(
+          (storyFolder) =>
+            storyFolder.isDir &&
+            (storyFolder.children || []).some((file) => !file.isDir && file.name === 'historia.html'),
+        );
+        if (storyFolders.length === 0) continue;
+        historiasDoneFeatureIds.add(featureIdOf(child.name));
+        historiasByFeatureId.set(featureIdOf(child.name), { dir: child.name, folders: storyFolders });
       }
     }
     staleness = computeStaleness(sequence, doneNames, byName);
@@ -560,12 +615,13 @@ export async function renderArtefatosTab(container, project, { onChanged }) {
 
   function isRowDone(row) {
     if (row.groupKey) return true; // expanded item rows only ever exist once their group is done
+    if (row.historiasRow) return true; // nested história rows only exist once committed
     if (row.featureId) return historiasDoneFeatureIds.has(row.featureId);
     return doneNames.has(row.key);
   }
 
   function isRowReady(row) {
-    if (row.groupKey) return true;
+    if (row.groupKey || row.historiasRow) return true;
     if (row.featureId) return true; // features already done, per rowsToRender's gating
     return isReady(row.entry, doneNames);
   }
@@ -578,7 +634,7 @@ export async function renderArtefatosTab(container, project, { onChanged }) {
   // aren't in `sequence` at all (see artifacts.js's own comment on why) so
   // they have no entry here — left out rather than guessed at.
   function staleInfoFor(row) {
-    if (row.featureId) return null;
+    if (row.featureId || row.historiasRow) return null;
     const artifact = row.groupKey || row.entry.artifact;
     return staleness.get(artifact) || null;
   }
@@ -617,8 +673,17 @@ export async function renderArtefatosTab(container, project, { onChanged }) {
   // (Delivery's own historias is a single flat row, not one per feature —
   // see rowsToRender's own comment on why that split exists).
   function pendingHistoriasRows() {
-    if (workflow !== 'Discovery') return [];
-    return rowsToRender().filter((row) => row.featureId && !isRowDone(row) && !trackers.has(row.key));
+    return featureRowsForHistorias()
+      .map(historiasRowFor)
+      .filter((row) => !isRowDone(row) && !trackers.has(row.key));
+  }
+
+  // hasPendingHistorias: a Discovery feature row whose histórias haven't
+  // been generated yet — counts as "Pendente" in the status filter even
+  // though the feature document itself is done, since that's where the
+  // "Gerar histórias" action now lives.
+  function hasPendingHistorias(row) {
+    return project.level === 'discovery' && row.groupKey === 'features' && Boolean(row.folderName) && !historiasDoneFeatureIds.has(featureIdOf(row.folderName));
   }
 
   // Each pending row fires its own generate() — its own mhl_run_start, not
@@ -695,15 +760,47 @@ export async function renderArtefatosTab(container, project, { onChanged }) {
     const updateTarget = stale?.stale ? updateTargetFor(row) : null;
     const classification = classificationFor(row);
     const classificationLabel = classificationLabelOf(classification);
-    return { done, ready, state, dot, statusText, showGenerate, clickable, exportPath, artifactName, kindClass, stale, staleTitle, updateTarget, classification, classificationLabel };
+    // Feature-row-only extras: "Gerar histórias" (no histórias yet and no
+    // generation in flight — a failed/canceled one can be retried from here
+    // too), how many histórias it already has, and whether it has nested
+    // rows to expand at all.
+    let canGenerateHistorias = false;
+    let historiasCount = 0;
+    if (project.level === 'discovery' && row.groupKey === 'features' && row.folderName) {
+      const featureId = featureIdOf(row.folderName);
+      const historiasTracker = trackers.get('historias:' + featureId);
+      const historiasState = historiasTracker && historiasTracker.status ? historiasTracker.status.state : null;
+      canGenerateHistorias = !historiasDoneFeatureIds.has(featureId) && (!historiasTracker || ['failed', 'canceled'].includes(historiasState));
+      historiasCount = historiasByFeatureId.get(featureId)?.folders.length ?? 0;
+    }
+    // Aprovar straight from the list — the same tracker.approve() the
+    // reading pane's own toolbar button calls, so the two can't disagree
+    // about an approval already in flight (tracker.busyAction).
+    const showApprove = state === 'paused';
+    const approving = showApprove && tracker.busyAction === 'approve';
+    const childCount = childCounts.get(row.key) || 0;
+    const expanded = expandedFeatures.has(row.key);
+    return { done, ready, state, dot, statusText, showGenerate, clickable, exportPath, artifactName, kindClass, stale, staleTitle, updateTarget, classification, classificationLabel, canGenerateHistorias, historiasCount, childCount, expanded, showApprove, approving };
+  }
+
+  function historiasCountLabel(count) {
+    return `${count} ${count === 1 ? 'história' : 'histórias'}`;
+  }
+
+  function generateHistoriasButtonHtml(row) {
+    return `<button class="artifact-card-generate" data-generate-historias="${escapeAttribute(row.key)}" title="Gerar as histórias de ${escapeAttribute(row.label)}">Gerar histórias →</button>`;
+  }
+
+  function approveButtonHtml(row, vm) {
+    return `<button class="artifact-card-approve" data-approve="${escapeAttribute(row.key)}" title="Aprovar ${escapeAttribute(row.label)}" ${vm.approving ? 'disabled' : ''}>${icon('checkCircle', 12)} ${vm.approving ? 'Aplicando…' : 'Aprovar'}</button>`;
   }
 
   function cardHtml(row, vm) {
     return `
-      <article class="artifact-card ${vm.kindClass} ${row.key === 'brief' ? 'featured' : ''} ${row.key === selectedKey ? 'selected' : ''} ${!vm.done ? 'pending' : ''} ${vm.stale?.stale ? 'stale' : ''}">
+      <article class="artifact-card ${vm.kindClass} ${row.key === 'brief' ? 'featured' : ''} ${row.key === selectedKey ? 'selected' : ''} ${!vm.done ? 'pending' : ''} ${vm.stale?.stale ? 'stale' : ''} ${row.parentKey ? 'nested' : ''}">
         <button class="artifact-card-main" data-key="${escapeHtml(row.key)}" ${!vm.clickable ? 'disabled' : ''} title="${escapeHtml(vm.statusText)}">
           <span class="artifact-card-kind"><i>${icon(ARTIFACT_ICONS[vm.artifactName] || 'fileText', 14)}</i>${escapeHtml(row.category || labelFor(vm.artifactName))}</span>
-          <strong>${escapeHtml(row.label)}</strong>
+          <strong>${escapeHtml(row.parentKey ? row.nestedLabel || row.label : row.label)}</strong>
           ${vm.classificationLabel ? `<span class="artifact-card-classification ${vm.classification.tipoItem === 'enabler' ? 'enabler' : 'business'}">${escapeHtml(vm.classificationLabel)}</span>` : ''}
           <span class="artifact-card-description">${escapeHtml(descriptionFor(row))}</span>
           ${vm.stale?.stale ? `<span class="artifact-card-stale" title="${escapeAttribute(vm.staleTitle)}">${icon('alertCircle', 12)} Desatualizado</span>` : ''}
@@ -711,6 +808,9 @@ export async function renderArtefatosTab(container, project, { onChanged }) {
         <footer class="artifact-card-foot">
           <span class="status-dot ${vm.dot}"></span><span>${escapeHtml(vm.statusText)}</span>
           <div class="artifact-card-foot-actions">
+            ${vm.childCount ? `<button class="artifact-card-toggle ${vm.expanded ? 'expanded' : ''}" data-toggle="${escapeAttribute(row.key)}" aria-expanded="${vm.expanded}" title="${vm.expanded ? 'Recolher' : 'Expandir'} histórias">${icon('chevronRight', 12)} ${escapeHtml(historiasCountLabel(vm.historiasCount || vm.childCount))}</button>` : ''}
+            ${vm.canGenerateHistorias ? generateHistoriasButtonHtml(row) : ''}
+            ${vm.showApprove ? approveButtonHtml(row, vm) : ''}
             ${vm.exportPath ? `<button class="artifact-card-export" data-export-file="${escapeAttribute(vm.exportPath)}" title="Exportar ${escapeAttribute(row.label)}">${icon('download', 12)} Exportar</button>` : ''}
             ${vm.updateTarget ? `<button class="artifact-card-update" data-update="${escapeHtml(row.key)}" title="Regenerar ${escapeAttribute(row.label)} a partir da versão atual da dependência">${icon('refreshCw', 12)} Atualizar</button>` : ''}
             ${vm.showGenerate ? `<button class="artifact-card-generate" data-generate="${escapeHtml(row.key)}" title="Gerar ${escapeHtml(row.label)}">Gerar →</button>` : ''}
@@ -730,11 +830,19 @@ export async function renderArtefatosTab(container, project, { onChanged }) {
   function tableRowHtml(row, vm) {
     const when = formatRelativeTime(lastGeneratedAt(row));
     return `
-      <tr class="data-row ${row.key === selectedKey ? 'selected' : ''} ${!vm.done ? 'pending' : ''} ${vm.stale?.stale ? 'stale' : ''} ${!vm.clickable ? 'not-ready' : ''}" ${vm.clickable ? `data-key="${escapeHtml(row.key)}"` : ''} title="${escapeHtml(vm.statusText)}">
+      <tr class="data-row ${row.key === selectedKey ? 'selected' : ''} ${!vm.done ? 'pending' : ''} ${vm.stale?.stale ? 'stale' : ''} ${!vm.clickable ? 'not-ready' : ''} ${row.parentKey ? 'nested' : ''}" ${vm.clickable ? `data-key="${escapeHtml(row.key)}"` : ''} title="${escapeHtml(vm.statusText)}">
         <td class="data-row-dot"><span class="status-dot ${vm.dot}"></span></td>
         <td class="data-row-name">
+          ${
+            vm.childCount
+              ? `<button class="data-row-toggle ${vm.expanded ? 'expanded' : ''}" data-toggle="${escapeAttribute(row.key)}" aria-expanded="${vm.expanded}" title="${vm.expanded ? 'Recolher' : 'Expandir'} histórias">${icon('chevronRight', 12)}</button>`
+              : row.groupKey === 'features' && project.level === 'discovery'
+                ? '<span class="data-row-toggle-spacer"></span>'
+                : ''
+          }
           <i>${icon(ARTIFACT_ICONS[vm.artifactName] || 'fileText', 14)}</i>
-          <span>${escapeHtml(row.label)}</span>
+          <span>${escapeHtml(row.parentKey ? row.nestedLabel || row.label : row.label)}</span>
+          ${vm.historiasCount ? `<span class="data-row-count">${escapeHtml(historiasCountLabel(vm.historiasCount))}</span>` : ''}
           ${vm.stale?.stale ? `<span class="artifact-card-stale" title="${escapeAttribute(vm.staleTitle)}">${icon('alertCircle', 12)} Desatualizado</span>` : ''}
         </td>
         <td class="data-row-classification">${vm.classificationLabel ? `<span class="artifact-card-classification ${vm.classification.tipoItem === 'enabler' ? 'enabler' : 'business'}">${escapeHtml(vm.classificationLabel)}</span>` : ''}</td>
@@ -742,6 +850,8 @@ export async function renderArtefatosTab(container, project, { onChanged }) {
         <td class="data-row-status">${escapeHtml(vm.statusText)}</td>
         <td class="data-row-when">${escapeHtml(when)}</td>
         <td class="data-row-actions">
+          ${vm.canGenerateHistorias ? generateHistoriasButtonHtml(row) : ''}
+          ${vm.showApprove ? approveButtonHtml(row, vm) : ''}
           ${vm.exportPath ? `<button class="artifact-card-export" data-export-file="${escapeAttribute(vm.exportPath)}" title="Exportar ${escapeAttribute(row.label)}">${icon('download', 12)}</button>` : ''}
           ${vm.updateTarget ? `<button class="artifact-card-update" data-update="${escapeHtml(row.key)}" title="Regenerar ${escapeAttribute(row.label)} a partir da versão atual da dependência">${icon('refreshCw', 12)} Atualizar</button>` : ''}
           ${vm.showGenerate ? `<button class="artifact-card-generate" data-generate="${escapeHtml(row.key)}" title="Gerar ${escapeHtml(row.label)}">Gerar →</button>` : ''}
@@ -793,14 +903,34 @@ export async function renderArtefatosTab(container, project, { onChanged }) {
 
   function renderList() {
     const rows = rowsToRender();
-    const visibleRows = rows.filter((row) => {
+    function passesFilter(row) {
       if (activeCategory !== 'all' && row.category !== activeCategory) return false;
       if (activeFilter === 'all') return true;
       if (activeFilter === 'stale') return Boolean(staleStatusFor(row)?.stale);
-      return activeFilter === 'ready' ? isRowDone(row) : !isRowDone(row);
+      return activeFilter === 'ready' ? isRowDone(row) : !isRowDone(row) || hasPendingHistorias(row);
+    }
+    // Filters apply to top-level rows only — a nested row (a feature's
+    // histórias) is shown exactly when its parent is, so the status filter
+    // never leaves an orphan história floating without its feature.
+    // rowsToRender() always emits a parent before its children, so one pass
+    // is enough.
+    const shownParents = new Set();
+    const filteredRows = rows.filter((row) => {
+      if (row.parentKey) return shownParents.has(row.parentKey);
+      if (!passesFilter(row)) return false;
+      shownParents.add(row.key);
+      return true;
     });
-    if (!selectedKey || !visibleRows.some((r) => r.key === selectedKey)) selectedKey = visibleRows[0]?.key ?? null;
-    countEl.textContent = `${rows.length} ${rows.length === 1 ? 'item' : 'itens'}`;
+    childCounts = new Map();
+    for (const row of filteredRows) {
+      if (row.parentKey) childCounts.set(row.parentKey, (childCounts.get(row.parentKey) || 0) + 1);
+    }
+    const visibleRows = filteredRows.filter((row) => !row.parentKey || expandedFeatures.has(row.parentKey));
+    // Checked against filteredRows, not visibleRows: a selected história
+    // inside a feature the user just collapsed is still a valid selection.
+    if (!selectedKey || !filteredRows.some((r) => r.key === selectedKey)) selectedKey = visibleRows[0]?.key ?? null;
+    const topLevelCount = rows.filter((row) => !row.parentKey).length;
+    countEl.textContent = `${topLevelCount} ${topLevelCount === 1 ? 'item' : 'itens'}`;
     updateGenerateAllHistoriasButton();
 
     if (visibleRows.length === 0) {
@@ -822,6 +952,47 @@ export async function renderArtefatosTab(container, project, { onChanged }) {
         selectedKey = el.dataset.key;
         renderList();
         renderDetail();
+      });
+    });
+
+    listEl.querySelectorAll('[data-toggle]').forEach((button) => {
+      button.addEventListener('click', (event) => {
+        event.stopPropagation();
+        const key = button.dataset.toggle;
+        if (expandedFeatures.has(key)) expandedFeatures.delete(key);
+        else expandedFeatures.add(key);
+        renderList();
+      });
+    });
+
+    listEl.querySelectorAll('[data-generate-historias]').forEach((button) => {
+      button.addEventListener('click', (event) => {
+        event.stopPropagation();
+        const featureRow = rowsToRender().find((r) => r.key === button.dataset.generateHistorias);
+        if (!featureRow) return;
+        const row = historiasRowFor(featureRow);
+        selectedKey = row.key;
+        generate(row);
+      });
+    });
+
+    listEl.querySelectorAll('[data-approve]').forEach((button) => {
+      button.addEventListener('click', async (event) => {
+        event.stopPropagation();
+        const key = button.dataset.approve;
+        const tracker = trackers.get(key);
+        if (!tracker) return;
+        const approval = tracker.approve();
+        // tracker.approve() already repaints the tracker itself (and the
+        // reading pane's own Aprovar, if this row is open there) — the list
+        // needs its own repaint for "Aplicando…", and again once it settles:
+        // a failed approval only updates the tracker's internal status, it
+        // never reaches onRunUpdate.
+        renderList();
+        await approval;
+        if (!active) return;
+        renderList();
+        if (selectedKey === key) renderDetail();
       });
     });
 
@@ -1334,7 +1505,17 @@ export async function renderArtefatosTab(container, project, { onChanged }) {
       return;
     }
     showHtmlDoc(row.label, html, { mermaid: hasMermaidDiagram(html), inlineMermaid });
-    if (canRequestChanges(row)) {
+    if (row.historiasRow) {
+      // One história out of a feature's batch — same batch-scope caveat as
+      // a collection item below: HistoriasGenerate always rewrites every
+      // história of that feature in one call.
+      setFooter(
+        buildRequestChangesComposer(row, {
+          targetRow: row.historiasRow,
+          note: `Isto regenera todas as histórias de ${row.historiasRow.featureId}, não só esta.`,
+        }),
+      );
+    } else if (canRequestChanges(row)) {
       setFooter(buildRequestChangesComposer(row, { note: downstreamWarningFor(row.key) }));
     } else if (row.groupKey) {
       // One item out of a collection (an ADR, a diagram, a feature, a
@@ -1356,12 +1537,12 @@ export async function renderArtefatosTab(container, project, { onChanged }) {
     }
   }
 
-  // renderHistoriasIndex is the one collection that gets a browsable index
-  // instead of a flat row-per-item: a Discovery feature can hold many
-  // histórias, and flattening every feature's every história into the same
-  // middle-column list would make it explode (N features × M histórias each).
-  // Clicking "Histórias — <feature>" lists its histórias here instead;
-  // clicking one of those opens its actual content in the same pane.
+  // renderHistoriasIndex lists one feature's histórias in the reading pane —
+  // only reached now through the nested "Histórias" generation row when a
+  // regeneration of an already-generated batch failed (the committed
+  // histórias themselves are nested rows of their own, collapsed under the
+  // feature by default so N features × M histórias don't explode the list).
+  // Clicking one of those opens its actual content in the same pane.
   async function renderHistoriasIndex(row) {
     showLoading(row.label);
     let nodes;
@@ -1479,7 +1660,7 @@ export async function renderArtefatosTab(container, project, { onChanged }) {
           // overall, which would yank the view to an unrelated artifact
           // right as this one finishes.
           if (!rowsToRender().some((r) => r.key === selectedKey)) {
-            const firstChild = rowsToRender().find((r) => r.groupKey === row.key);
+            const firstChild = rowsToRender().find((r) => r.groupKey === row.key || r.historiasRow?.key === row.key);
             if (firstChild) selectedKey = firstChild.key;
           }
           renderList();
@@ -1585,6 +1766,7 @@ export async function renderArtefatosTab(container, project, { onChanged }) {
   // that matters — one LLM call informed from the start, not two).
   function generate(row, feedback) {
     const key = activeKey(row);
+    if (row.parentKey) expandedFeatures.add(row.parentKey); // never hide a starting generation behind a collapsed feature
     // onUpdate: Aprovar/Regenerar (run-tracker.js's own composer) resume
     // this run directly, bypassing startAndWatch entirely — without this,
     // their pushes only repainted the tracker widget itself, never reaching
@@ -1637,6 +1819,7 @@ export async function renderArtefatosTab(container, project, { onChanged }) {
       trackers.set(row.key, tracker);
       tracker.update({ runId, state: 'working' });
       selectedKey = row.key; // jump straight to the progress the user left running
+      if (row.parentKey) expandedFeatures.add(row.parentKey);
       watchExistingRun(runId, (status) => onRunUpdate(row, tracker, key, status)).catch((err) =>
         onRunError(row, tracker, key, err),
       );
@@ -1662,6 +1845,14 @@ export async function renderArtefatosTab(container, project, { onChanged }) {
 
     for (const row of rowsToRender()) {
       reattach(row);
+    }
+
+    // Per-feature histórias generations only appear in rowsToRender() once
+    // their tracker exists, so the loop above never sees them on a fresh
+    // mount — look each one up explicitly (after that loop, so none is
+    // reattached twice).
+    for (const featureRow of featureRowsForHistorias()) {
+      reattach(historiasRowFor(featureRow));
     }
   }
 

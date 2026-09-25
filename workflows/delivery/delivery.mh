@@ -14,6 +14,7 @@ import { ArtifactBody } from "../shared/artifacts/artifact_body.mh"
 import { WorkflowsRoot } from "../shared/core/workflows_root.mh"
 import { DirClear } from "../shared/core/dir_clear.mh"
 import { ChangesLog, ChangesBlock } from "../shared/artifacts/changes_log.mh"
+import { C4Diagram, C4Context } from "../shared/artifacts/c4_diagram.mh"
 import {
     ArtifactSchema,
     BriefInstruction, RequisitosInstruction, AdrInstruction, DerInstruction, DiagramasInstruction,
@@ -377,11 +378,14 @@ workflow Delivery {
         current_artifact = "diagramas"
         var requisitos_content = Context.artifact(project_id, "requisitos.html")
         if (requisitos_content.is_empty()) fail("gere 'requisitos' antes de 'diagramas'")
+        var adr_content = Context.artifact_dir(project_id, "adr")
+        if (adr_content.is_empty()) adr_content = C4Context.no_adr_placeholder()
         var response = Writer.generate(
             prompt: DiagramasInstruction(
                 schema_conventions: ArtifactSchema(),
                 requisitos_content: requisitos_content,
                 atributos_content: NoAtributos.placeholder(),
+                adr_content: adr_content,
                 feedback_content: ChangesBlock.for_artifact(project_id, "diagramas", "")
             ),
             schema_file: DiagramasSchemaFile.get(), project_id: project_id, artifact: current_artifact
@@ -389,13 +393,17 @@ workflow Delivery {
         tokens_in = response.tokens_in
         tokens_out = response.tokens_out
         var raw = response.content
-        pending_data = json.parse(raw)
+        pending_data = C4Diagram.annotate(json.parse(raw))
         goto Gate
     }
 
     step DiagramasCommit {
         var data = pending_data
         var written = []
+        // Lote inteiro, nao delta: sem limpar, um diagrama cujo titulo mudou
+        // na regeneracao ficaria duplicado ao lado do antigo (mesma razao do
+        // DiagramasCommit do Discovery).
+        DirClear.clear(Paths.artifact(project_id, "diagramas"))
         dir.create(Paths.artifact(project_id, "diagramas"))
         for (var diagrama in data.diagramas) {
             var slug = Slug.from_title(diagrama.titulo)

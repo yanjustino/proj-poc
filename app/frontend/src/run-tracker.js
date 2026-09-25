@@ -381,26 +381,7 @@ export function createRunTracker({ resumeArgs = { approved: true }, onCancel, on
 
     const approveButton = approveAction.querySelector('.run-approve');
     if (approveButton) {
-      approveButton.addEventListener('click', async () => {
-        busyAction = 'approve';
-        resumeAnchorMs = Date.now();
-        render();
-        try {
-          // Artefatos can approve a reviewed pending_data through a fresh
-          // commit-only run (onApprove), decoupling publication from the
-          // exact pipeline definition that originally produced the draft.
-          // Other tracker hosts retain the ordinary resume behavior.
-          if (onApprove) {
-            await onApprove(s);
-            return;
-          }
-          await resumeAndWatch(s.runId, resumeArgs, (next) => (onUpdate || update)(next));
-        } catch (err) {
-          busyAction = null;
-          status = { ...s, state: 'failed', error: String(err) };
-          render();
-        }
-      });
+      approveButton.addEventListener('click', () => approve());
     }
 
     const feedbackInput = composer.querySelector('.run-feedback-input');
@@ -431,6 +412,35 @@ export function createRunTracker({ resumeArgs = { approved: true }, onCancel, on
     const cancelButton = composer.querySelector('.run-cancel');
     if (cancelButton) {
       cancelButton.addEventListener('click', () => doCancel(s));
+    }
+  }
+
+  // approve is Aprovar's click handler, exposed so a host can offer the same
+  // action somewhere other than `approveAction` (Artefatos' table row) —
+  // one implementation, one busy state, so both buttons always agree on
+  // whether an approval is already in flight. A no-op unless paused and
+  // idle. Resolves once the approval settled either way (a failure is
+  // already rendered into the tracker's own status by then).
+  async function approve() {
+    const s = status;
+    if (!s || s.state !== 'paused' || busyAction) return;
+    busyAction = 'approve';
+    resumeAnchorMs = Date.now();
+    render();
+    try {
+      // Artefatos can approve a reviewed pending_data through a fresh
+      // commit-only run (onApprove), decoupling publication from the
+      // exact pipeline definition that originally produced the draft.
+      // Other tracker hosts retain the ordinary resume behavior.
+      if (onApprove) {
+        await onApprove(s);
+        return;
+      }
+      await resumeAndWatch(s.runId, resumeArgs, (next) => (onUpdate || update)(next));
+    } catch (err) {
+      busyAction = null;
+      status = { ...s, state: 'failed', error: String(err) };
+      render();
     }
   }
 
@@ -465,7 +475,7 @@ export function createRunTracker({ resumeArgs = { approved: true }, onCancel, on
     }
   }
 
-  return { element, composer, approveAction, update, dispose, get status() { return status; } };
+  return { element, composer, approveAction, update, dispose, approve, get status() { return status; }, get busyAction() { return busyAction; } };
 }
 
 function escapeHtml(text) {
