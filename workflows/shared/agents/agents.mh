@@ -247,6 +247,10 @@ export tool Writer {
         cost_usd: number, cost_source: string
     } -> {
         var picked = AgentSelector.pick(prompt: prompt)
+        // Duracao da chamada (inclui as retentativas do proprio agent), em
+        // segundos — alimenta o "tempo de processamento" do resumo de
+        // produtividade do work-item (WorkItemActions.productivity).
+        var started_at = time.now()
         var devin_raw = ""
         var devin_exported = ""
         if (picked == nameof(Devin)) {
@@ -269,9 +273,11 @@ export tool Writer {
             nameof(Codex) -> UsageParser.extract_codex(raw)
         }
         var cost = UsageCost.resolve(usage: usage, backend: picked)
+        var duration_s = time.diff(time.now(), started_at)
 
         Usage.append({
             artifact: artifact,
+            duration_s: duration_s,
             tokens_in: usage.tokens_in,
             tokens_out: usage.tokens_out,
             cache_creation_tokens: usage.cache_creation_tokens,

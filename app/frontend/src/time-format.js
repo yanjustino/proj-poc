@@ -19,6 +19,20 @@ const RELATIVE_TIME_UNITS = [
 ];
 const relativeTimeFormatter = new Intl.RelativeTimeFormat('pt-BR', { numeric: 'auto' });
 
+// formatDurationShort: a compact pt-BR duration for summary figures —
+// "45s", "12min", "1h 05min", "2d 3h". Seconds only show below one minute;
+// finer detail stops mattering at that scale.
+export function formatDurationShort(totalSeconds) {
+  if (totalSeconds === null || totalSeconds === undefined || Number.isNaN(totalSeconds)) return '—';
+  const seconds = Math.max(0, Math.round(totalSeconds));
+  if (seconds < 60) return `${seconds}s`;
+  const minutes = Math.floor(seconds / 60);
+  if (minutes < 60) return `${minutes}min`;
+  const hours = Math.floor(minutes / 60);
+  if (hours < 24) return `${hours}h ${String(minutes % 60).padStart(2, '0')}min`;
+  return `${Math.floor(hours / 24)}d ${hours % 24}h`;
+}
+
 export function formatRelativeTime(ms) {
   if (ms === null || ms === undefined || Number.isNaN(ms)) return '—';
   const diff = ms - Date.now();

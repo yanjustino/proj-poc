@@ -5,15 +5,19 @@
 
 import { Paths } from "../shared/core/paths.mh"
 import { Writer } from "../shared/agents/agents.mh"
-import { Context } from "../shared/artifacts/context.mh"
+import { Context, NoAdr } from "../shared/artifacts/context.mh"
 import { ArtifactData } from "../shared/artifacts/artifact_data.mh"
 import { Slug } from "../shared/core/slug.mh"
 import { ArtifactId } from "../shared/artifacts/artifact_id.mh"
 import { PageShell, ArtifactMeta } from "../shared/artifacts/page_shell.mh"
 import { ArtifactBody } from "../shared/artifacts/artifact_body.mh"
 import { WorkflowsRoot } from "../shared/core/workflows_root.mh"
+import { DirClear } from "../shared/core/dir_clear.mh"
+import { ChangesLog, ChangesBlock } from "../shared/artifacts/changes_log.mh"
+import { Activity } from "../shared/artifacts/activity_log.mh"
+import { C4Diagram } from "../shared/artifacts/c4_diagram.mh"
 import {
-    ArtifactSchema, FeedbackBlock,
+    ArtifactSchema,
     BriefInstruction, RequisitosInstruction, AdrInstruction, DerInstruction, DiagramasInstruction,
     HistoriasInstruction,
     BriefSchemaFile, RequisitosSchemaFile, AdrSchemaFile, DerSchemaFile, DiagramasSchemaFile,
@@ -127,6 +131,7 @@ workflow Delivery {
             tokens_in = approval_tokens_in
             tokens_out = approval_tokens_out
             current_artifact = artifact
+            Activity.record(project_id, "approved", artifact, "")
             if (artifact == "brief") goto BriefCommit
             if (artifact == "requisitos") goto RequisitosCommit
             if (artifact == "adr") goto AdrCommit
@@ -152,8 +157,14 @@ workflow Delivery {
         if (buddy && !approved && !feedback.is_empty()) {
             feedback_consumed = true
             pending_feedback = feedback
+            // Persistido ANTES do primeiro *Generate — ver o mesmo ponto em
+            // discovery.mh's Dispatch / changes_log.mh's own doc comment.
+            // Delivery nao tem conceito de feature_id (seu proprio
+            // `historias` e uma colecao achatada, sem split por feature).
+            ChangesLog.append({artifact: artifact, feature_id: "", feedback: feedback})
         }
 
+        Activity.record(project_id, "started", artifact, "")
         if (artifact == "brief") goto BriefGenerate
         if (artifact == "requisitos") goto RequisitosGenerate
         if (artifact == "adr") goto AdrGenerate
@@ -180,9 +191,11 @@ workflow Delivery {
     // Um resume com approved:false + feedback preenchido (Modo Buddy's
     // "Solicitar mudancas") e diferente de um resume comum: em vez de
     // pausar de novo com o MESMO pending_data, volta pro *Generate do
-    // artefato — refaz a chamada de LLM, desta vez com o comentario do
-    // revisor anexado a instrucao (ver FeedbackBlock/feedback_content nas
-    // *Instruction). Ver a nota de feedback_consumed acima pra por que o
+    // artefato — refaz a chamada de LLM, desta vez com TODO o historico de
+    // comentarios deste artefato (este incluido, ja persistido pelo
+    // ChangesLog.append abaixo) anexado a instrucao via ChangesBlock/
+    // feedback_content nas *Instruction — ver changes_log.mh. Ver a nota de
+    // feedback_consumed acima pra por que o
     // guard usa aquela var, nao `feedback` diretamente — confirmado por
     // spike isolado (LoopProbe) que a versao anterior deste Gate (que
     // tentava `feedback = ""`) entrava num laco infinito de verdade: um
@@ -194,6 +207,7 @@ workflow Delivery {
             if (!feedback.is_empty() && !feedback_consumed) {
                 feedback_consumed = true
                 pending_feedback = feedback
+                ChangesLog.append({artifact: artifact, feature_id: "", feedback: feedback})
                 if (artifact == "brief") goto BriefGenerate
                 if (artifact == "requisitos") goto RequisitosGenerate
                 if (artifact == "adr") goto AdrGenerate
@@ -203,8 +217,10 @@ workflow Delivery {
                 if (artifact == "historias") goto HistoriasGenerate
             }
             feedback_consumed = false
+            Activity.record(project_id, "draft_ready", artifact, "")
             pause("revise o conteudo de '" + artifact + "' antes de gravar em artifacts/")
         }
+        if (buddy) Activity.record(project_id, "approved", artifact, "")
         if (artifact == "brief") goto BriefCommit
         if (artifact == "requisitos") goto RequisitosCommit
         if (artifact == "adr") goto AdrCommit
@@ -221,7 +237,7 @@ workflow Delivery {
             prompt: BriefInstruction(
                 schema_conventions: ArtifactSchema(),
                 wiki_content: Context.wiki(project_id),
-                feedback_content: FeedbackBlock.render(pending_feedback)
+                feedback_content: ChangesBlock.for_artifact(project_id, "brief", "")
             ),
             schema_file: BriefSchemaFile.get(),
             project_id: project_id,
@@ -260,7 +276,7 @@ workflow Delivery {
                 schema_conventions: ArtifactSchema(),
                 brief_content: brief_content,
                 wiki_content: Context.wiki(project_id),
-                feedback_content: FeedbackBlock.render(pending_feedback)
+                feedback_content: ChangesBlock.for_artifact(project_id, "requisitos", "")
             ),
             schema_file: RequisitosSchemaFile.get(),
             project_id: project_id,
@@ -296,7 +312,7 @@ workflow Delivery {
                 schema_conventions: ArtifactSchema(),
                 requisitos_content: requisitos_content,
                 atributos_content: NoAtributos.placeholder(),
-                feedback_content: FeedbackBlock.render(pending_feedback)
+                feedback_content: ChangesBlock.for_artifact(project_id, "adr", "")
             ),
             schema_file: AdrSchemaFile.get(), project_id: project_id, artifact: current_artifact
         )
@@ -333,12 +349,16 @@ workflow Delivery {
         current_artifact = "der"
         var requisitos_content = Context.artifact(project_id, "requisitos.html")
         if (requisitos_content.is_empty()) fail("gere 'requisitos' antes de 'der'")
+        // Contexto opcional — ver o comentario de DerInstruction.
+        var adr_content = Context.artifact_dir(project_id, "adr")
+        if (adr_content.is_empty()) adr_content = NoAdr.placeholder()
         var response = Writer.generate(
             prompt: DerInstruction(
                 schema_conventions: ArtifactSchema(),
                 requisitos_content: requisitos_content,
                 atributos_content: NoAtributos.placeholder(),
-                feedback_content: FeedbackBlock.render(pending_feedback)
+                adr_content: adr_content,
+                feedback_content: ChangesBlock.for_artifact(project_id, "der", "")
             ),
             schema_file: DerSchemaFile.get(), project_id: project_id, artifact: current_artifact
         )
@@ -367,25 +387,32 @@ workflow Delivery {
         current_artifact = "diagramas"
         var requisitos_content = Context.artifact(project_id, "requisitos.html")
         if (requisitos_content.is_empty()) fail("gere 'requisitos' antes de 'diagramas'")
+        var adr_content = Context.artifact_dir(project_id, "adr")
+        if (adr_content.is_empty()) adr_content = NoAdr.placeholder()
         var response = Writer.generate(
             prompt: DiagramasInstruction(
                 schema_conventions: ArtifactSchema(),
                 requisitos_content: requisitos_content,
                 atributos_content: NoAtributos.placeholder(),
-                feedback_content: FeedbackBlock.render(pending_feedback)
+                adr_content: adr_content,
+                feedback_content: ChangesBlock.for_artifact(project_id, "diagramas", "")
             ),
             schema_file: DiagramasSchemaFile.get(), project_id: project_id, artifact: current_artifact
         )
         tokens_in = response.tokens_in
         tokens_out = response.tokens_out
         var raw = response.content
-        pending_data = json.parse(raw)
+        pending_data = C4Diagram.annotate(json.parse(raw))
         goto Gate
     }
 
     step DiagramasCommit {
         var data = pending_data
         var written = []
+        // Lote inteiro, nao delta: sem limpar, um diagrama cujo titulo mudou
+        // na regeneracao ficaria duplicado ao lado do antigo (mesma razao do
+        // DiagramasCommit do Discovery).
+        DirClear.clear(Paths.artifact(project_id, "diagramas"))
         dir.create(Paths.artifact(project_id, "diagramas"))
         for (var diagrama in data.diagramas) {
             var slug = Slug.from_title(diagrama.titulo)
@@ -420,6 +447,8 @@ workflow Delivery {
         var diagramas_content = Context.artifact_dir(project_id, "diagramas")
         if (diagramas_content.is_empty()) diagramas_content = "(não gerado para este projeto)"
 
+        var changes_content = ChangesBlock.for_artifact(project_id, mode, "")
+
         var response = null
         if (mode == "historia") {
             response = Writer.generate(
@@ -429,7 +458,7 @@ workflow Delivery {
                     adr_content: adr_content,
                     der_content: der_content,
                     diagramas_content: diagramas_content,
-                    feedback_content: FeedbackBlock.render(pending_feedback)
+                    feedback_content: changes_content
                 ),
                 schema_file: HistoriaSchemaFile.get(), project_id: project_id, artifact: current_artifact
             )
@@ -441,7 +470,7 @@ workflow Delivery {
                     adr_content: adr_content,
                     der_content: der_content,
                     diagramas_content: diagramas_content,
-                    feedback_content: FeedbackBlock.render(pending_feedback)
+                    feedback_content: changes_content
                 ),
                 schema_file: FeatureSchemaFile.get(), project_id: project_id, artifact: current_artifact
             )
@@ -488,7 +517,11 @@ workflow Delivery {
         var feature_content = Context.artifact(project_id, "feature.html")
         if (feature_content.is_empty()) fail("gere 'feature' antes de 'historias'")
         var response = Writer.generate(
-            prompt: HistoriasInstruction(schema_conventions: ArtifactSchema(), feature_content: feature_content, feedback_content: FeedbackBlock.render(pending_feedback)),
+            prompt: HistoriasInstruction(
+                schema_conventions: ArtifactSchema(),
+                feature_content: feature_content,
+                feedback_content: ChangesBlock.for_artifact(project_id, "historias", "")
+            ),
             schema_file: HistoriasSchemaFile.get(), project_id: project_id, artifact: current_artifact
         )
         tokens_in = response.tokens_in
@@ -502,10 +535,14 @@ workflow Delivery {
         var data = pending_data
         var historias_base = Paths.artifact(project_id, "historias")
         // *Generate devolve o lote inteiro de historias, nao um delta — uma
-        // regeneracao ("Solicitar mudanca" num historias/ ja aprovado,
-        // tab-artefatos.js) precisa substituir, nao somar (ArtifactId.
-        // next_historia_id so conta historias ja existentes).
-        if (dir.exists(historias_base)) dir.delete(historias_base)
+        // regeneracao ("Solicitar mudanca"/"Atualizar" num historias/ ja
+        // aprovado, tab-artefatos.js) precisa substituir, nao somar
+        // (ArtifactId.next_historia_id so conta historias ja existentes).
+        // DirClear.clear, nao dir.delete direto: dir.delete e
+        // deliberadamente nao-recursivo no mhl-runtime (so remove um
+        // diretorio ja vazio) — contra um historias_base com conteudo real
+        // ele falhava com "directory not empty". Ver dir_clear.mh.
+        DirClear.clear(historias_base)
         dir.create(historias_base)
         var written = []
         for (var historia in data.historias) {

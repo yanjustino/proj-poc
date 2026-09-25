@@ -39,6 +39,7 @@ export tool Paths {
     prompt_log_file(project_id: string): string -> self.root(project_id) + "/prompt_log.jsonl"
 
     changes_file(project_id: string): string -> self.root(project_id) + "/changes.jsonl"
+    activity_file(project_id: string): string -> self.root(project_id) + "/activity.jsonl"
 
     // Estado interno (nao-humano) que a WikiIndex usa pra renderizar
     // wiki/index.md do zero a cada ingest — mantem wiki/ 100% markdown puro

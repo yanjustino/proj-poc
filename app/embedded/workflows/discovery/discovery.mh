@@ -15,6 +15,8 @@ import "discovery.partial.tecnicos.mh"
 import "discovery.partial.hook.mh"
 
 import { Paths } from "../shared/core/paths.mh"
+import { ChangesLog } from "../shared/artifacts/changes_log.mh"
+import { Activity } from "../shared/artifacts/activity_log.mh"
 
 partial workflow Discovery {
     description: "Artefatos de nivel Oportunidade: brief, atributos, requisitos, adr, der, diagramas, features, dependencias, historias."
@@ -107,6 +109,7 @@ partial workflow Discovery {
             tokens_in = approval_tokens_in
             tokens_out = approval_tokens_out
             current_artifact = artifact
+            Activity.record(project_id, "approved", artifact, feature_id)
             goto CommitRouter(artifact)
         }
         // Um StartRun novo com feedback preenchido (ver input feedback's
@@ -118,7 +121,20 @@ partial workflow Discovery {
         if (buddy && !approved && !feedback.is_empty()) {
             feedback_consumed = true
             pending_feedback = feedback
+            // Persistido ANTES do primeiro *Generate deste artefato — a
+            // proxima chamada de ChangesBlock.for_artifact (dentro do
+            // *Generate que GenerateRouter esta prestes a abrir) ja le este
+            // pedido de volta junto com todo pedido anterior, entao ele
+            // nunca fica so na var `pending_feedback` (que zera entre
+            // execucoes diferentes — ver changes_log.mh's own doc comment
+            // pro problema real que isto resolve).
+            ChangesLog.append({
+                artifact: artifact,
+                feature_id: if (artifact == "historias") feature_id else "",
+                feedback: feedback,
+            })
         }
+        Activity.record(project_id, "started", artifact, feature_id)
         goto GenerateRouter(artifact)
     }
 
@@ -130,9 +146,11 @@ partial workflow Discovery {
     // Um resume com approved:false + feedback preenchido (Modo Buddy's
     // "Solicitar mudancas") e diferente de um resume comum: em vez de
     // pausar de novo com o MESMO pending_data, volta pro *Generate do
-    // artefato — refaz a chamada de LLM, desta vez com o comentario do
-    // revisor anexado a instrucao (ver FeedbackBlock/feedback_content nas
-    // *Instruction). Ver a nota de feedback_consumed acima pra por que o
+    // artefato — refaz a chamada de LLM, desta vez com TODO o historico de
+    // comentarios deste artefato (este incluido, ja persistido pelo
+    // ChangesLog.append acima) anexado a instrucao via ChangesBlock/
+    // feedback_content nas *Instruction — ver changes_log.mh. Ver a nota de
+    // feedback_consumed acima pra por que o
     // guard usa aquela var, nao `feedback` diretamente — confirmado por
     // spike isolado (LoopProbe) que a versao anterior deste Gate (que
     // tentava `feedback = ""`) entrava num laco infinito de verdade: um
@@ -144,14 +162,23 @@ partial workflow Discovery {
             if (!feedback.is_empty() && !feedback_consumed) {
                 feedback_consumed = true
                 pending_feedback = feedback
+                ChangesLog.append({
+                    artifact: artifact,
+                    feature_id: if (artifact == "historias") feature_id else "",
+                    feedback: feedback,
+                })
 
                 goto GenerateRouter(artifact)
             }
 
             feedback_consumed = false
+            Activity.record(project_id, "draft_ready", artifact, feature_id)
             pause("revise o conteudo de '" + artifact + "' antes de gravar em artifacts/")
         }
 
+        // Um resume com approved:true reexecuta este step e chega aqui; sem
+        // Modo Buddy nao ha revisao, entao nada a registrar.
+        if (buddy) Activity.record(project_id, "approved", artifact, feature_id)
         goto CommitRouter(artifact)
     }
 

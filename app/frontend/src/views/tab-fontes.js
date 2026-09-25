@@ -2,7 +2,6 @@ import {
   listProjectDir,
   selectRawFiles,
   addRawFile,
-  startAndWatch,
   watchExistingRun,
   isFullyTerminal,
   listIngestedRaw,
@@ -10,7 +9,8 @@ import {
 } from '../api.js';
 import { createRunTracker } from '../run-tracker.js';
 import { icon } from '../icons.js';
-import { setActiveRun, getActiveRun, clearActiveRun } from '../active-runs.js';
+import { getActiveRun, clearActiveRun } from '../active-runs.js';
+import { enqueueIngest, ingestQueueSnapshot, isQueuedOrRunning, subscribeIngestQueue } from '../ingest-queue.js';
 import { formatRelativeTime } from '../time-format.js';
 
 // renderFontesTab owns the "upload de arquivos-base → Wiki ingest" flow
@@ -34,6 +34,10 @@ import { formatRelativeTime } from '../time-format.js';
 // reattachActiveRuns(), leaving Fontes mid-ingest and coming back showed
 // that file as "pendente" again, even though it was genuinely still
 // running server-side. Real user-reported symptom this fixes.
+//
+// The batch loop itself lives in ingest-queue.js, not here — see that
+// file's comment for the duplicate-ingest incident a mount-owned loop
+// caused. This tab only renders the queue's state and enqueues into it.
 export async function renderFontesTab(container, project, { onChanged }) {
   // Flipped off by the dispose() this returns — guards a status callback
   // that outlives this mount from touching torn-down DOM.
@@ -96,9 +100,12 @@ export async function renderFontesTab(container, project, { onChanged }) {
   let rawNodes = []; // full listProjectDir() nodes (name + modifiedAt), not just names — the table view's "Última atualização" column needs the timestamp too
   let rawNames = [];
   let ingestedNames = new Set();
-  let batching = false; // true only while ingestBatch's own sequential loop is driving things
   let activeFilter = 'all';
-  const trackers = new Map(); // filename -> live tracker (fresh or reattached), removed once that file's run reaches a terminal state
+  // trackers: filename -> live tracker. Either the queue's current run
+  // (mirrored from ingest-queue.js's status events, one tracker per mount)
+  // or a run reattached from active-runs.js that no queue owns (started
+  // before an app restart). Removed once that file's run is terminal.
+  const trackers = new Map();
 
   // Keyed by project + filename (not just filename) so this stays correct
   // even though active-runs.js's registry is a single app-wide map shared
@@ -108,8 +115,36 @@ export async function renderFontesTab(container, project, { onChanged }) {
   }
 
   await loadState();
+  const queueRunning = ingestQueueSnapshot(project.id).running;
+  if (queueRunning) trackerFor(queueRunning.name).update(queueRunning.status);
   reattachActiveRuns();
+  const unsubscribeQueue = subscribeIngestQueue(project.id, onQueueEvent);
   render();
+
+  function trackerFor(name) {
+    if (!trackers.has(name)) trackers.set(name, createRunTracker());
+    return trackers.get(name);
+  }
+
+  // onQueueEvent: a queued file started or progressed (repaint its tracker),
+  // or finished — then .ingested.json is re-read from the server rather
+  // than patched locally, since the queue may have been started by a
+  // different mount of this tab than the one listening now.
+  function onQueueEvent(event) {
+    if (!active) return;
+    if (event.type === 'status') {
+      trackerFor(event.name).update(event.status);
+      render();
+      return;
+    }
+    if (event.type === 'done') {
+      trackers.get(event.name)?.dispose();
+      trackers.delete(event.name);
+      refresh().then(() => onChanged());
+      return;
+    }
+    render();
+  }
 
   async function loadState() {
     let nodes;
@@ -137,8 +172,12 @@ export async function renderFontesTab(container, project, { onChanged }) {
     if (active) render();
   }
 
+  function isBusy(name) {
+    return trackers.has(name) || isQueuedOrRunning(project.id, name);
+  }
+
   function pendingNames() {
-    return rawNames.filter((name) => !ingestedNames.has(name) && !trackers.has(name));
+    return rawNames.filter((name) => !ingestedNames.has(name) && !isBusy(name));
   }
 
   // modifiedAtOf: epoch-ms (or null) for the table view's "Última
@@ -167,7 +206,7 @@ export async function renderFontesTab(container, project, { onChanged }) {
       renderCards(visibleNames);
     }
     const pending = pendingNames();
-    ingestPendingButton.disabled = batching || pending.length === 0;
+    ingestPendingButton.disabled = pending.length === 0;
     ingestPendingButton.innerHTML = pending.length
       ? `${icon('inbox', 14)} Ingerir pendentes (${pending.length})`
       : `${icon('inbox', 14)} Ingerir pendentes`;
@@ -185,10 +224,12 @@ export async function renderFontesTab(container, project, { onChanged }) {
         row.innerHTML = sourceCardBody(name, 'Processando a fonte…', 'working');
         row.appendChild(tracker.element);
         row.appendChild(tracker.composer);
+      } else if (isQueuedOrRunning(project.id, name)) {
+        row.innerHTML = sourceCardBody(name, 'Na fila', 'queued');
       } else {
         row.innerHTML = rowBody(name);
         const ingestButton = row.querySelector('[data-ingest-one]');
-        if (ingestButton) ingestButton.addEventListener('click', () => ingestBatch([name]));
+        if (ingestButton) ingestButton.addEventListener('click', () => enqueueIngest(project.id, [name]));
       }
     }
   }
@@ -222,17 +263,18 @@ export async function renderFontesTab(container, project, { onChanged }) {
       </table>
     `;
     sourcesEl.querySelectorAll('[data-ingest-one]').forEach((button) => {
-      button.addEventListener('click', () => ingestBatch([button.dataset.ingestOne]));
+      button.addEventListener('click', () => enqueueIngest(project.id, [button.dataset.ingestOne]));
     });
   }
 
   function tableRowHtml(name) {
     const tracker = trackers.get(name);
+    const queued = !tracker && isQueuedOrRunning(project.id, name);
     const ingested = ingestedNames.has(name);
-    const dot = tracker ? 'working' : ingested ? 'done' : '';
-    const statusText = tracker ? 'Processando…' : ingested ? 'Ingerido' : 'Pendente';
+    const dot = tracker ? 'working' : queued ? 'queued' : ingested ? 'done' : '';
+    const statusText = tracker ? 'Processando…' : queued ? 'Na fila' : ingested ? 'Ingerido' : 'Pendente';
     const when = formatRelativeTime(modifiedAtOf(name));
-    const canIngest = !tracker && !ingested;
+    const canIngest = !tracker && !queued && !ingested;
     return `
       <tr class="data-row static" title="${escapeHtml(statusText)}">
         <td class="data-row-dot"><span class="status-dot ${dot}"></span></td>
@@ -240,7 +282,7 @@ export async function renderFontesTab(container, project, { onChanged }) {
         <td class="data-row-status">${escapeHtml(statusText)}</td>
         <td class="data-row-when">${escapeHtml(when)}</td>
         <td class="data-row-actions">
-          ${canIngest ? `<button data-ingest-one="${escapeAttribute(name)}" ${batching ? 'disabled' : ''}>Ingerir →</button>` : ''}
+          ${canIngest ? `<button data-ingest-one="${escapeAttribute(name)}">Ingerir →</button>` : ''}
         </td>
       </tr>
     `;
@@ -264,7 +306,7 @@ export async function renderFontesTab(container, project, { onChanged }) {
       name,
       'Pendente',
       '',
-      `<button class="source-card-action" data-ingest-one ${batching ? 'disabled' : ''}>Ingerir →</button>`,
+      `<button class="source-card-action" data-ingest-one>Ingerir →</button>`,
     );
   }
 
@@ -297,88 +339,48 @@ export async function renderFontesTab(container, project, { onChanged }) {
     }
   });
 
-  ingestPendingButton.addEventListener('click', () => ingestBatch(pendingNames()));
+  ingestPendingButton.addEventListener('click', () => enqueueIngest(project.id, pendingNames()));
 
-  async function ingestBatch(names) {
-    if (batching || names.length === 0) return;
-    batching = true;
-    render();
-    for (const name of names) {
-      await watchOne(name, activeKey(name), (onUpdate) =>
-        startAndWatch('Wiki', { project_id: project.id, action: 'ingest', raw_paths: [name] }, onUpdate),
-      );
-    }
-    batching = false;
-    if (active) render();
-  }
-
-  // watchOne drives one file's ingest run to a terminal state, whether it
-  // was just started (ingestBatch, via startAndWatch) or was already
-  // running on the backend before this mount even existed
-  // (reattachActiveRuns, via watchExistingRun) — same status handling
-  // either way, which is what makes "leave mid-ingest and come back" look
-  // identical to "never left" from the user's side.
-  function watchOne(name, key, watchPromiseFactory) {
-    if (trackers.has(name)) return Promise.resolve();
-    const tracker = createRunTracker();
-    trackers.set(name, tracker);
-    if (active) render();
-
-    return new Promise((resolve) => {
-      function onUpdate(status) {
+  // Runs once at mount: a file whose key is still in active-runs.js'
+  // registry but that no ingest queue owns (its run was started before an
+  // app restart — the queue itself is in-memory) genuinely has an ingest
+  // running on the backend — reattach a tracker instead of letting it look
+  // like it silently reverted to "pendente". A file the queue owns is
+  // skipped: the queue already broadcasts that run's status to this mount.
+  function reattachActiveRuns() {
+    for (const name of rawNames) {
+      if (ingestedNames.has(name) || isQueuedOrRunning(project.id, name)) continue;
+      const key = activeKey(name);
+      const runId = getActiveRun(key);
+      if (!runId) continue;
+      const tracker = trackerFor(name);
+      watchExistingRun(runId, (status) => {
         tracker.update(status);
-        if (status.runId) setActiveRun(key, status.runId);
         if (!isFullyTerminal(status)) {
           if (active) render();
           return;
         }
         clearActiveRun(key);
         trackers.delete(name);
-        if (status.state !== 'completed') {
-          if (status.state === 'failed') {
-            window.alert(`Falha ao ingerir "${name}": ${status.error || 'erro desconhecido'}`);
-          }
-          if (active) render();
-          resolve();
-          return;
-        }
-        markRawIngested(project.id, name)
-          .then(() => ingestedNames.add(name))
-          .catch((err) => console.error('markRawIngested', err))
-          .finally(() => {
-            if (active) render();
-            onChanged();
-            resolve();
-          });
-      }
-
-      watchPromiseFactory(onUpdate).catch((err) => {
+        tracker.dispose();
+        const done = status.state === 'completed' ? markRawIngested(project.id, name).catch((err) => console.error('markRawIngested', err)) : Promise.resolve();
+        done.finally(() => {
+          if (!active) return;
+          refresh().then(() => onChanged());
+        });
+      }).catch((err) => {
         clearActiveRun(key);
         trackers.delete(name);
-        window.alert(`Erro ao ingerir "${name}": ` + (err.message || err));
+        tracker.dispose();
+        console.error('watchExistingRun', err);
         if (active) render();
-        resolve();
       });
-    });
-  }
-
-  // Runs once at mount, before the first render: any file whose key is
-  // still in active-runs.js' registry genuinely has an ingest running on
-  // the backend right now (mhl doesn't stop just because the tab
-  // remounted) — reattach a fresh tracker + event subscription instead of
-  // letting it look like it silently reverted to "pendente".
-  function reattachActiveRuns() {
-    for (const name of rawNames) {
-      if (ingestedNames.has(name)) continue;
-      const key = activeKey(name);
-      const runId = getActiveRun(key);
-      if (!runId) continue;
-      watchOne(name, key, (onUpdate) => watchExistingRun(runId, onUpdate));
     }
   }
 
   return () => {
     active = false;
+    unsubscribeQueue();
     // A tracker still working/queued when this tab unmounts owns a ticking
     // setInterval (run-tracker.js's elapsed-time display) — nothing else
     // ever references it again to clear it, so this must, even though the

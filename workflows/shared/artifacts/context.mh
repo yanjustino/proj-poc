@@ -55,6 +55,14 @@ export tool Context {
     }
 }
 
+// NoAdr — texto fixo no lugar das ADRs quando ainda nao ha nenhuma, para
+// os artefatos que as recebem como contexto OPCIONAL (diagramas, der). C3:
+// decisao deterministica, mesmo padrao de NoAtributos em delivery.mh.
+export tool NoAdr {
+    placeholder(): string ->
+        "(nenhuma ADR gerada ainda — cite como `gap` toda escolha de tecnologia, inclusive de banco de dados, que não esteja nos requisitos ou atributos)"
+}
+
 test ContextSpec {
     describe artifact_dir_of_dirs_concatenates_item_file_from_each_subfolder {
         var project_id = "spec-test-context-dirofdirs"

@@ -1,4 +1,4 @@
-import { listProjectDir, workItemUsage, listIngestedRaw, getRunStatus } from '../api.js';
+import { listProjectDir, workItemUsage, workItemProductivity, listIngestedRaw, getRunStatus } from '../api.js';
 import { computeCategoryProgress } from '../artifacts.js';
 import { renderFontesTab } from './tab-fontes.js';
 import { renderWikiTab } from './tab-wiki.js';
@@ -12,6 +12,7 @@ import { STATE_LABEL } from '../run-tracker.js';
 import { dotClass } from '../status.js';
 import { icon } from '../icons.js';
 import { summarizeCost } from '../cost.js';
+import { formatDurationShort, formatRelativeTime } from '../time-format.js';
 
 const LEVEL_LABEL = { discovery: 'Oportunidade · Discovery', delivery: 'Feature/Enabler/História · Delivery' };
 
@@ -21,6 +22,45 @@ const LEVEL_LABEL = { discovery: 'Oportunidade · Discovery', delivery: 'Feature
 // is called once the user confirms deletion and App.DeleteProject actually
 // succeeds — the shell owns navigating back to the list and refreshing the
 // sidebar, since this view has no access to either.
+// productivityCardHtml: "quanto esforço este work-item já custou e quão
+// rápido os artefatos passam pela revisão" — tempo de processamento (soma da
+// duração de cada chamada de LLM), ciclo médio de um artefato (geração até
+// aprovação, com as rodadas de ajuste), espera média pela revisão humana e
+// aprovações de primeira. Métricas só existem a partir dos registros que
+// as alimentam (duração em usage.jsonl, eventos em activity.jsonl): um
+// work-item mais antigo mostra "—" em vez de um zero enganoso, e o tooltip
+// avisa quando só parte das chamadas tem duração registrada.
+function productivityCardHtml(p) {
+  const hasTiming = p && p.timed_calls > 0;
+  const hasCycles = p && p.cycle_samples > 0;
+  const hasReviews = p && p.review_samples > 0;
+  const partial = p && p.timed_calls > 0 && p.timed_calls < p.total_calls;
+  const title = !p
+    ? 'Métricas indisponíveis'
+    : [
+        partial ? `Tempo de processamento cobre ${p.timed_calls} de ${p.total_calls} chamadas — as anteriores ao registro de duração ficam de fora.` : null,
+        hasReviews ? `Média de ${p.avg_rounds.toLocaleString('pt-BR', { maximumFractionDigits: 1 })} rascunho(s) por aprovação.` : null,
+        p.approved_count ? `${p.approved_count} aprovação(ões) registrada(s).` : null,
+      ]
+        .filter(Boolean)
+        .join(' ') || 'Sem aprovações registradas ainda';
+  const firstPass = hasReviews ? `${Math.round((p.first_pass_count / p.review_samples) * 100)}%` : '—';
+  return `
+    <div class="summary-card summary-card-progress summary-card-tokens" title="${escapeHtml(title)}">
+      <div class="summary-progress-head">
+        <span class="summary-icon">${icon('zap', 16)}</span>
+        <div><b>Produtividade</b></div>
+      </div>
+      <div class="summary-tokens-stack">
+        <div class="summary-tokens-row">${icon('clock', 13)}<b>${hasTiming ? formatDurationShort(p.processing_seconds) : '—'}</b><span>tempo de processamento${partial ? '*' : ''}</span></div>
+        <div class="summary-tokens-row">${icon('refreshCw', 13)}<b>${hasCycles ? formatDurationShort(p.avg_cycle_seconds) : '—'}</b><span>ciclo médio até aprovação</span></div>
+        <div class="summary-tokens-row">${icon('eye', 13)}<b>${hasReviews ? formatDurationShort(p.avg_review_seconds) : '—'}</b><span>espera média pela revisão</span></div>
+        <div class="summary-tokens-row">${icon('checkCircle', 13)}<b>${firstPass}</b><span>aprovados de primeira</span></div>
+      </div>
+    </div>
+  `;
+}
+
 export async function renderWorkItemView(container, project, { initialTab = 'artefatos', onDeleted } = {}) {
   container.innerHTML = `
     <div class="hero">
@@ -91,13 +131,15 @@ export async function renderWorkItemView(container, project, { initialTab = 'art
     let ingestedNames = [];
     let usage = { total_tokens_in: 0, total_tokens_out: 0, total_cache_creation_tokens: 0, total_cache_read_tokens: 0, total_cost_usd: 0 };
     let stage = { state: null, count: 0 };
+    let productivity = null;
     try {
-      [artifactNodes, rawNodes, ingestedNames, usage, stage] = await Promise.all([
+      [artifactNodes, rawNodes, ingestedNames, usage, stage, productivity] = await Promise.all([
         listProjectDir(project.id, 'artifacts', ''),
         listProjectDir(project.id, 'raw', ''),
         listIngestedRaw(project.id).catch(() => []),
         workItemUsage(project.id),
         pipelineStage().catch(() => ({ state: null, count: 0 })),
+        workItemProductivity(project.id).catch(() => null),
       ]);
     } catch {
       // best-effort — summary cards just show zeros if any call fails.
@@ -132,6 +174,7 @@ export async function renderWorkItemView(container, project, { initialTab = 'art
         .join(' · ') || 'Sem uso de cache registrado ainda';
 
     const ingestedCount = rawNodes.filter((n) => ingestedNames.includes(n.name)).length;
+    const lastActivity = productivity?.last_activity_at ? formatRelativeTime(Date.parse(productivity.last_activity_at)) : '—';
 
     // Singular: the specific artifact ("ADR") reads as the headline, its
     // state ("aguarda aprovação") as the subtext. Plural: no single
@@ -163,14 +206,18 @@ export async function renderWorkItemView(container, project, { initialTab = 'art
             .join('')}
         </div>
       </div>
-      <div class="summary-card summary-card-clickable ${stage.state ? `summary-card-stage-${dotClass(stage.state)}` : ''}" data-goto-artefatos title="Ver na aba Artefatos">
-        <span class="summary-icon">${icon('clock', 16)}</span>
-        <div><b>${escapeHtml(stageLabel)}</b><span>${escapeHtml(stageSub)}</span></div>
+      <div class="summary-card summary-card-progress summary-card-clickable ${stage.state ? `summary-card-stage-${dotClass(stage.state)}` : ''}" data-goto-artefatos title="Ver na aba Artefatos">
+        <div class="summary-progress-head">
+          <span class="summary-icon">${icon('clock', 16)}</span>
+          <div><b>${escapeHtml(stageLabel)}</b><span>${escapeHtml(stageSub)}</span></div>
+        </div>
+        <div class="summary-tokens-stack">
+          <div class="summary-tokens-row">${icon('inbox', 13)}<b>${ingestedCount} de ${rawNodes.length}</b><span>fontes ingeridas</span></div>
+          <div class="summary-tokens-row">${icon('refreshCw', 13)}<b>${productivity ? productivity.change_requests : 0}</b><span>pedidos de mudança</span></div>
+          <div class="summary-tokens-row">${icon('zap', 13)}<b>${escapeHtml(lastActivity)}</b><span>última atividade</span></div>
+        </div>
       </div>
-      <div class="summary-card">
-        <span class="summary-icon">${icon('inbox', 16)}</span>
-        <div><b>${ingestedCount} de ${rawNodes.length}</b><span>fontes ingeridas</span></div>
-      </div>
+      ${productivityCardHtml(productivity)}
       <div class="summary-card summary-card-progress summary-card-tokens" title="${escapeHtml(tokensTitle)}">
         <div class="summary-progress-head">
           <span class="summary-icon">${icon('layers', 16)}</span>

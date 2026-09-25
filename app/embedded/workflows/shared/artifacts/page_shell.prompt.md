@@ -31,6 +31,17 @@ p.fontes{margin:-4px 0 16px;line-height:2}
 .item-kind-business{background:#e5f5eb;color:#28724e}
 .item-kind-enabler{background:#e9e8f7;color:#4b4691}
 .item-kind-subtype{background:#f1efe8;color:#625f55}
+.c4-legend{list-style:none;padding:0;display:flex;flex-wrap:wrap;gap:8px 20px;font-size:13px}
+.c4-legend li{display:flex;align-items:center;gap:8px;margin:0}
+.c4-swatch{display:inline-block;width:14px;height:14px;border-radius:3px}
+.c4-swatch-node{border:1px solid #888;background:#fff}
+.c4-swatch-boundary{border:1px dashed #444}
+.c4-swatch-relation{height:0;width:22px;border-top:2px dashed #707070;border-radius:0}
+.c4-warnings{padding:12px 16px 12px 34px;background:#fdf6e7;border-left:3px solid #d28b26;font-size:14px}
+.c4-warnings li{margin-bottom:6px}
+.er-legend{list-style:none;padding:0;display:flex;flex-wrap:wrap;gap:6px 22px;font-size:13px}
+.er-legend li{margin:0}
+.er-legend code{font-family:ui-monospace,monospace;font-size:12px;background:#f1efe8;padding:1px 6px;border-radius:3px}
 </style>
 </head>
 <body>

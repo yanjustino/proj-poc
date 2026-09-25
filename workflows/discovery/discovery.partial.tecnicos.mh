@@ -5,7 +5,7 @@
 
 import { Paths } from "../shared/core/paths.mh"
 import { Writer } from "../shared/agents/agents.mh"
-import { Context } from "../shared/artifacts/context.mh"
+import { Context, NoAdr } from "../shared/artifacts/context.mh"
 import { ArtifactData } from "../shared/artifacts/artifact_data.mh"
 import { ArtifactBody } from "../shared/artifacts/artifact_body.mh"
 import { Slug } from "../shared/core/slug.mh"
@@ -13,7 +13,7 @@ import { ArtifactId } from "../shared/artifacts/artifact_id.mh"
 import { DirClear } from "../shared/core/dir_clear.mh"
 import { PageShell, ArtifactMeta } from "../shared/artifacts/page_shell.mh"
 import { ChangesBlock } from "../shared/artifacts/changes_log.mh"
-import { C4Diagram, C4Context } from "../shared/artifacts/c4_diagram.mh"
+import { C4Diagram } from "../shared/artifacts/c4_diagram.mh"
 import {
     ArtifactSchema,
     AdrInstruction, DerInstruction, DiagramasInstruction,
@@ -87,11 +87,15 @@ partial workflow Discovery {
         if (requisitos_content.is_empty()) fail("gere 'requisitos' antes de 'der'")
         var atributos_content = Context.artifact(project_id, "atributos.html")
         if (atributos_content.is_empty()) fail("gere 'atributos' antes de 'der'")
+        // Contexto opcional — ver o comentario de DerInstruction.
+        var adr_content = Context.artifact_dir(project_id, "adr")
+        if (adr_content.is_empty()) adr_content = NoAdr.placeholder()
         var response = Writer.generate(
             prompt: DerInstruction(
                 schema_conventions: ArtifactSchema(),
                 requisitos_content: requisitos_content,
                 atributos_content: atributos_content,
+                adr_content: adr_content,
                 feedback_content: ChangesBlock.for_artifact(project_id, "der", "")
             ),
             schema_file: DerSchemaFile.get(),
@@ -127,7 +131,7 @@ partial workflow Discovery {
         if (atributos_content.is_empty()) fail("gere 'atributos' antes de 'diagramas'")
         // Contexto opcional — ver o comentario de DiagramasInstruction.
         var adr_content = Context.artifact_dir(project_id, "adr")
-        if (adr_content.is_empty()) adr_content = C4Context.no_adr_placeholder()
+        if (adr_content.is_empty()) adr_content = NoAdr.placeholder()
 
         var response = Writer.generate(
             prompt: DiagramasInstruction(

@@ -1,0 +1,100 @@
+// tool DirClear — esvazia um diretorio inteiro (arquivos e subpastas, em
+// qualquer profundidade) sem apagar o diretorio em si. Existe porque
+// `dir.delete` e deliberadamente NAO recursivo (mhl-runtime's own
+// DeleteDir: "callers cannot accidentally erase a directory tree with this
+// primitive") — ele so remove um diretorio ja vazio, e falha com "directory
+// not empty" contra qualquer coisa real dentro. Todo Commit step que
+// regenera uma colecao inteira (adr/, diagramas/, features/, historias/)
+// precisa zerar o conteudo anterior antes de reescrever — *Generate sempre
+// devolve o LOTE INTEIRO, nunca um delta — e o padrao antigo
+// `if (dir.exists(x)) dir.delete(x)` so funcionava por coincidencia
+// enquanto ninguem regenerava uma colecao ja populada de verdade: o
+// primeiro "Atualizar"/"Solicitar mudanca" real contra um adr/ com
+// conteudo bateu direto em "directory not empty" (bug real, nao
+// hipotetico — reportado via um erro de runtime exatamente nesse Commit).
+//
+// Iterativo (uma fila manual), nao recursao de tool method: nao ha nenhum
+// outro `self.` recursivo nesta base de codigo para confirmar que
+// mhl-runtime suporta chamada recursiva de tool method, entao isto nao vira
+// o primeiro a depender disso — uma fila plana faz o mesmo trabalho.
+export tool DirClear {
+    // clear(path) deixa `path` existindo e vazio (ou simplesmente ausente,
+    // se ja nao existia — no-op). NUNCA apaga `path` em si, so o que esta
+    // dentro; o chamador decide se ainda quer `dir.create(path)` depois
+    // (geralmente redundante — path ja existe e ja esta vazio — mas
+    // inofensivo, mkdir -p e idempotente).
+    clear(path: string) -> {
+        if (!dir.exists(path)) { return }
+
+        // BFS largura-primeiro: cada arquivo encontrado e apagado na hora
+        // (fs.delete nao tem a restricao "so vazio" de dir.delete); cada
+        // subdiretorio encontrado entra em `pending` (pra ter seu proprio
+        // conteudo esvaziado depois) E em `to_delete` (pra ser removido no
+        // fim, depois de esvaziado). `path` propriamente dito nunca entra
+        // em `to_delete` — clear() so esvazia, nunca remove a raiz.
+        var pending = [path]
+        var to_delete = []
+        var i = 0
+        while (i < pending.size()) {
+            var current = pending[i]
+            i = i + 1
+            for (var entry in dir.list(current)) {
+                if (dir.exists(entry)) {
+                    pending = pending + [entry]
+                    to_delete = to_delete + [entry]
+                } else {
+                    fs.delete(entry)
+                }
+            }
+        }
+
+        // Remove os subdiretorios coletados em ORDEM REVERSA — a ordem BFS
+        // de `to_delete` sempre lista um diretorio antes de qualquer coisa
+        // encontrada dentro dele (filhos so entram na fila DEPOIS que o pai
+        // foi processado), entao andar de tras pra frente garante que todo
+        // neto/bisneto ja foi removido antes do proprio pai — exatamente o
+        // que dir.delete exige (diretorio vazio).
+        var j = to_delete.size() - 1
+        while (j >= 0) {
+            dir.delete(to_delete[j])
+            j = j - 1
+        }
+    }
+}
+
+test DirClearSpec {
+    // Escopo proprio sob um prefixo dedicado (nao projects/, que mistura
+    // dados reais de work-items) — criado do zero e removido no fim de cada
+    // describe, entao um teste que falhar no meio nunca deixa lixo visivel
+    // pro proximo.
+    describe clear_removes_files_and_nested_subdirectories_but_keeps_the_root {
+        var root = ".mhl-test-tmp/dir-clear-spec-1"
+        dir.create(root + "/sub/deeper")
+        fs.write(root + "/top.txt", "a")
+        fs.write(root + "/sub/mid.txt", "b")
+        fs.write(root + "/sub/deeper/bottom.txt", "c")
+
+        DirClear.clear(root)
+
+        is_true(dir.exists(root))
+        is_false(dir.exists(root + "/sub"))
+        is_false(fs.exists(root + "/top.txt"))
+
+        dir.delete(root) // limpeza — clear() nunca remove a raiz, entao o teste faz isso
+    }
+
+    describe clear_is_a_noop_for_a_path_that_does_not_exist {
+        DirClear.clear(".mhl-test-tmp/dir-clear-spec-nonexistent")
+        is_false(dir.exists(".mhl-test-tmp/dir-clear-spec-nonexistent"))
+    }
+
+    describe clear_leaves_an_already_empty_directory_untouched {
+        var root = ".mhl-test-tmp/dir-clear-spec-2"
+        dir.create(root)
+
+        DirClear.clear(root)
+
+        is_true(dir.exists(root))
+        dir.delete(root)
+    }
+}

@@ -4,9 +4,9 @@
 import { WorkItemActions } from "actions.mh"
 
 workflow WorkItem {
-    description: "Ciclo de vida de um work-item do Senpai: create, list, get, archive, usage, prompt_log, changes."
+    description: "Ciclo de vida de um work-item do Senpai: create, list, get, archive, usage, prompt_log, changes, productivity."
 
-    input action: string             // "create" | "list" | "get" | "archive" | "usage" | "prompt_log" | "changes"
+    input action: string             // "create" | "list" | "get" | "archive" | "usage" | "prompt_log" | "changes" | "productivity"
     input name: string = ""          // obrigatorio (valor) so para action:"create"
     input item_type: string = ""     // "oportunidade" | "feature" | "historia"; so para action:"create"
     input project_id: string = ""    // obrigatorio (valor) para get/archive/usage/prompt_log/changes
@@ -16,6 +16,7 @@ workflow WorkItem {
     var usage = null
     var prompt_log = []
     var changes = []
+    var productivity = null
     var error_message = ""
 
     output: {
@@ -25,6 +26,7 @@ workflow WorkItem {
         usage: usage,
         prompt_log: prompt_log,
         changes: changes,
+        productivity: productivity,
         error: error_message,
     }
 
@@ -36,9 +38,10 @@ workflow WorkItem {
         if (action == "usage") goto Usage
         if (action == "prompt_log") goto PromptLog
         if (action == "changes") goto Changes
+        if (action == "productivity") goto Productivity
         fail(
             "acao desconhecida: '" + action +
-            "' (use create | list | get | archive | usage | prompt_log | changes)"
+            "' (use create | list | get | archive | usage | prompt_log | changes | productivity)"
         )
     }
 
@@ -74,6 +77,11 @@ workflow WorkItem {
 
     step Changes {
         changes = WorkItemActions.changes_log(project_id)
+        goto Done
+    }
+
+    step Productivity {
+        productivity = WorkItemActions.productivity(project_id)
         goto Done
     }
 
@@ -137,6 +145,13 @@ test WorkItemWorkflowSpec {
     // Documenta comportamento real, nao presumido: `usage` nunca falha por
     // project_id inexistente — le o ledger se existir, devolve zerado se
     // nao (WorkItemActions.usage). Diferente de get/archive de proposito.
+    describe productivity_on_a_project_without_history_returns_zeros_not_a_failure {
+        var run = WorkItem.run(inputs: {action: "productivity", project_id: "spec-nao-existe-de-verdade"})
+        is_true(run.ok)
+        are_equal(run.vars.productivity.processing_seconds, 0)
+        are_equal(run.vars.productivity.approved_count, 0)
+    }
+
     describe usage_on_a_nonexistent_project_id_returns_a_zeroed_ledger_not_a_failure {
         var run = WorkItem.run(inputs: {action: "usage", project_id: "spec-nao-existe-de-verdade"})
         is_true(run.ok)

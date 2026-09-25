@@ -310,6 +310,15 @@ export async function workItemUsage(projectId) {
   return result.usage;
 }
 
+// workItemProductivity returns the project summary's productivity metrics
+// (workflows/work_item/actions.mh's WorkItemActions.productivity): total LLM
+// processing time, average review cycle / wait until approval, first-pass
+// approvals, change requests and the last recorded activity.
+export async function workItemProductivity(projectId) {
+  const result = await callWorkflowOnce('WorkItem', { action: 'productivity', project_id: projectId });
+  return result.productivity;
+}
+
 // workItemPromptLog returns every LLM call recorded for this work-item —
 // final prompt, raw response and usage per call (workflows/work_item/
 // actions.mh's WorkItemActions.prompt_log) — oldest first.

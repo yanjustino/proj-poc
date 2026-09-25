@@ -5,7 +5,7 @@
 
 import { Paths } from "../shared/core/paths.mh"
 import { Writer } from "../shared/agents/agents.mh"
-import { Context } from "../shared/artifacts/context.mh"
+import { Context, NoAdr } from "../shared/artifacts/context.mh"
 import { ArtifactData } from "../shared/artifacts/artifact_data.mh"
 import { Slug } from "../shared/core/slug.mh"
 import { ArtifactId } from "../shared/artifacts/artifact_id.mh"
@@ -14,7 +14,8 @@ import { ArtifactBody } from "../shared/artifacts/artifact_body.mh"
 import { WorkflowsRoot } from "../shared/core/workflows_root.mh"
 import { DirClear } from "../shared/core/dir_clear.mh"
 import { ChangesLog, ChangesBlock } from "../shared/artifacts/changes_log.mh"
-import { C4Diagram, C4Context } from "../shared/artifacts/c4_diagram.mh"
+import { Activity } from "../shared/artifacts/activity_log.mh"
+import { C4Diagram } from "../shared/artifacts/c4_diagram.mh"
 import {
     ArtifactSchema,
     BriefInstruction, RequisitosInstruction, AdrInstruction, DerInstruction, DiagramasInstruction,
@@ -130,6 +131,7 @@ workflow Delivery {
             tokens_in = approval_tokens_in
             tokens_out = approval_tokens_out
             current_artifact = artifact
+            Activity.record(project_id, "approved", artifact, "")
             if (artifact == "brief") goto BriefCommit
             if (artifact == "requisitos") goto RequisitosCommit
             if (artifact == "adr") goto AdrCommit
@@ -162,6 +164,7 @@ workflow Delivery {
             ChangesLog.append({artifact: artifact, feature_id: "", feedback: feedback})
         }
 
+        Activity.record(project_id, "started", artifact, "")
         if (artifact == "brief") goto BriefGenerate
         if (artifact == "requisitos") goto RequisitosGenerate
         if (artifact == "adr") goto AdrGenerate
@@ -214,8 +217,10 @@ workflow Delivery {
                 if (artifact == "historias") goto HistoriasGenerate
             }
             feedback_consumed = false
+            Activity.record(project_id, "draft_ready", artifact, "")
             pause("revise o conteudo de '" + artifact + "' antes de gravar em artifacts/")
         }
+        if (buddy) Activity.record(project_id, "approved", artifact, "")
         if (artifact == "brief") goto BriefCommit
         if (artifact == "requisitos") goto RequisitosCommit
         if (artifact == "adr") goto AdrCommit
@@ -344,11 +349,15 @@ workflow Delivery {
         current_artifact = "der"
         var requisitos_content = Context.artifact(project_id, "requisitos.html")
         if (requisitos_content.is_empty()) fail("gere 'requisitos' antes de 'der'")
+        // Contexto opcional — ver o comentario de DerInstruction.
+        var adr_content = Context.artifact_dir(project_id, "adr")
+        if (adr_content.is_empty()) adr_content = NoAdr.placeholder()
         var response = Writer.generate(
             prompt: DerInstruction(
                 schema_conventions: ArtifactSchema(),
                 requisitos_content: requisitos_content,
                 atributos_content: NoAtributos.placeholder(),
+                adr_content: adr_content,
                 feedback_content: ChangesBlock.for_artifact(project_id, "der", "")
             ),
             schema_file: DerSchemaFile.get(), project_id: project_id, artifact: current_artifact
@@ -379,7 +388,7 @@ workflow Delivery {
         var requisitos_content = Context.artifact(project_id, "requisitos.html")
         if (requisitos_content.is_empty()) fail("gere 'requisitos' antes de 'diagramas'")
         var adr_content = Context.artifact_dir(project_id, "adr")
-        if (adr_content.is_empty()) adr_content = C4Context.no_adr_placeholder()
+        if (adr_content.is_empty()) adr_content = NoAdr.placeholder()
         var response = Writer.generate(
             prompt: DiagramasInstruction(
                 schema_conventions: ArtifactSchema(),

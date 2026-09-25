@@ -1,0 +1,468 @@
+// tool DerModel — renderizacao e conformidade do DER. C3, mesmo padrao do
+// C4Diagram: a LLM devolve o MODELO (nivel, entidades, atributos,
+// relacionamentos, cada um com fontes) via schema; o `erDiagram` Mermaid, a
+// legenda, as tabelas e a verificacao das regras de modelagem sao codigo.
+// Antes disto o diagrama era Mermaid livre, separado das tabelas — os dois
+// podiam se contradizer (entidade no desenho e fora do glossario,
+// cardinalidade diferente em cada lugar) sem nada perceber.
+//
+// Regras extraidas de https://lucid.co/pt/diagrama/entidade-relacionamento/tutorial:
+//   - nivel: conceitual (escopo, menor detalhe), logico (independente de
+//     tecnologia), fisico (detalhe para implementar o banco real);
+//   - entidade forte, fraca (nao se define sozinha — precisa de um
+//     relacionamento identificador) ou associativa (liga entidades; e o que
+//     resolve um muitos-para-muitos no modelo logico);
+//   - chave primaria escolhida entre as candidatas;
+//   - atributo simples, composto, derivado (calculado de outro) ou
+//     multivalorado (vira entidade propria no modelo logico);
+//   - relacionamento rotulado por verbo, com cardinalidade minima/maxima em
+//     cada ponta; pode ter atributos descritivos e ser recursivo;
+//   - sistemas grandes: varios diagramas para manter legibilidade (aqui, um
+//     por area de assunto mais uma visao geral).
+//
+// DERs gravados antes deste modelo (Mermaid livre + relacionamentos
+// confirmados/inferidos em texto) continuam renderizando pelo caminho
+// legado — ver is_structured.
+
+import { Cite } from "cite.mh"
+import { Slug } from "../core/slug.mh"
+
+export tool DerModel {
+    is_structured(data: any): bool -> !(data?.nivel ?? "").is_empty()
+
+    level_label(nivel: string): string -> match nivel {
+        "conceitual" -> "Conceitual — escopo e entidades principais, sem detalhe de implementação"
+        "logico"     -> "Lógico — atributos e chaves, independente de tecnologia"
+        "fisico"     -> "Físico — tipos de dado do banco escolhido"
+        _            -> html.escape(nivel)
+    }
+
+    entity_type_label(tipo: string): string -> match tipo {
+        "forte"       -> "Forte"
+        "fraca"       -> "Fraca"
+        "associativa" -> "Associativa"
+        _             -> tipo
+    }
+
+    key_label(chave: string): string -> match chave {
+        "pk" -> "PK"
+        "fk" -> "FK"
+        "uk" -> "UK"
+        _    -> "—"
+    }
+
+    // --- Mermaid -------------------------------------------------------------
+
+    // Rotulo entre aspas (alias de entidade, rotulo de relacionamento):
+    // mesmas entidades Mermaid do C4Diagram.mm.
+    mm(text: string): string ->
+        text.replace("#", "#35;").replace("\"", "#quot;").replace("<", "#lt;").replace(">", "#gt;")
+            .replace("\r", " ").replace("\n", " ")
+
+    // Identificador de atributo/tipo no erDiagram: so letras, digitos e "_",
+    // comecando por letra — o nome legivel vai no comentario do atributo.
+    token(text: string): string -> {
+        var slug = Slug.from_title(text).replace("-", "_")
+        if ("0123456789".contains(slug.substring(0, 1))) return "a_" + slug
+        return slug
+    }
+
+    // Comentario de atributo: entre aspas, e o erDiagram nao aceita aspas
+    // escapadas dentro dele.
+    comment(text: string): string -> text.replace("\"", "'").replace("\r", " ").replace("\n", " ")
+
+    index_of(entidades: any[], id: string): int -> {
+        var i = 0
+        for (var e in entidades) {
+            if (e.id == id) return i
+            i = i + 1
+        }
+        return -1
+    }
+
+    name_of(entidades: any[], id: string): string -> {
+        var i = self.index_of(entidades, id)
+        if (i < 0) return id
+        return entidades[i].nome
+    }
+
+    // Marcadores pe-de-galinha. O da esquerda descreve quantos "de" existem
+    // por "para" (min_de/max_de); o da direita, quantos "para" por "de".
+    left_marker(min: string, max: string): string -> {
+        if (max == "1") return if (min == "1") "||" else "|o"
+        return if (min == "1") "}|" else "}o"
+    }
+
+    right_marker(min: string, max: string): string -> {
+        if (max == "1") return if (min == "1") "||" else "o|"
+        return if (min == "1") "|{" else "o{"
+    }
+
+    entity_block(data: any, e: any, node: string, with_attributes: bool): string -> {
+        var head = "    " + node + "[\"" + self.mm(e.nome) + "\"]"
+        var attrs = (data?.atributos ?? []).filter((a) -> a.entidade == e.id)
+        if (!with_attributes || attrs.is_empty()) return head + "\n"
+        var fisico = data.nivel == "fisico"
+        var lines = ""
+        for (var a in attrs) {
+            var tipo = if (fisico && !(a?.tipo_dado ?? "").is_empty()) self.token(a.tipo_dado) else self.token(a?.classificacao ?? "simples")
+            var key = if (a?.chave == "pk") " PK" else if (a?.chave == "fk") " FK" else if (a?.chave == "uk") " UK" else ""
+            var note = a.nome + (if (a?.obrigatorio ?? false) "" else " (opcional)")
+            lines = lines + "        " + tipo + " " + self.token(a.nome) + key + " \"" + self.comment(note) + "\"\n"
+        }
+        return head + " {\n" + lines + "    }\n"
+    }
+
+    relation_line(entidades: any[], r: any, prefix: string): string -> {
+        var de = self.index_of(entidades, r.de)
+        var para = self.index_of(entidades, r.para)
+        if (de < 0 || para < 0) return ""
+        var line = if (r?.identificador ?? false) "--" else ".."
+        var label = r?.verbo ?? ""
+        if (r?.evidencia == "inferido") label = label + " (inferido)"
+        return "    " + prefix + "e${de} " + self.left_marker(r?.min_de ?? "0", r?.max_de ?? "N") + line +
+            self.right_marker(r?.min_para ?? "0", r?.max_para ?? "N") + " " + prefix + "e${para} : \"" + self.mm(label) + "\"\n"
+    }
+
+    // erDiagram de um subconjunto de entidades (`ids`); `detailed` sao as que
+    // mostram atributos — numa area, as vizinhas de outras areas aparecem so
+    // pelo nome, como contexto. No nivel conceitual nenhuma mostra atributo.
+    // `prefix` torna os ids de no unicos por diagrama. Varios erDiagram na
+    // mesma pagina tambem precisam ser renderizados um de cada vez (ver o
+    // script de der_body.html): com startOnLoad, o Mermaid 12 desenhava o
+    // segundo sobreposto e o terceiro em branco.
+    mermaid_for(data: any, ids: string[], detailed: string[], prefix: string): string -> {
+        var entidades = data.entidades
+        var out = "erDiagram\n"
+        var i = 0
+        for (var e in entidades) {
+            if (ids.contains(e.id)) out = out + self.entity_block(data, e, prefix + "e${i}", data.nivel != "conceitual" && detailed.contains(e.id))
+            i = i + 1
+        }
+        for (var r in (data?.relacionamentos ?? [])) {
+            if (ids.contains(r.de) && ids.contains(r.para)) out = out + self.relation_line(entidades, r, prefix)
+        }
+        return out
+    }
+
+    // diagrams: [{titulo, mermaid}]. Uma area (ou nenhuma) -> um diagrama
+    // completo. Varias -> visao geral (todas as entidades, sem atributos) e
+    // um diagrama por area (as entidades dela com atributos, mais as
+    // vizinhas diretas de outras areas so pelo nome).
+    diagrams(data: any): any[] -> {
+        var entidades = data.entidades
+        var all_ids = entidades.map((e) -> e.id)
+        var areas = data?.areas ?? []
+        if (areas.size() <= 1) return [{titulo: "", mermaid: self.mermaid_for(data, all_ids, all_ids, "d0")}]
+        var out = [{titulo: "Visão geral", mermaid: self.mermaid_for(data, all_ids, [], "d0")}]
+        var n = 1
+        for (var area in areas) {
+            var own = entidades.filter((e) -> e?.area == area.id).map((e) -> e.id)
+            if (!own.is_empty()) {
+                var ids = own
+                for (var r in (data?.relacionamentos ?? [])) {
+                    if (own.contains(r.de) && !ids.contains(r.para)) ids += [r.para]
+                    if (own.contains(r.para) && !ids.contains(r.de)) ids += [r.de]
+                }
+                out += [{titulo: area.nome, mermaid: self.mermaid_for(data, ids, own, "d${n}")}]
+                n = n + 1
+            }
+        }
+        return out
+    }
+
+    diagrams_html(data: any): string -> {
+        var diagrams = self.diagrams(data)
+        return diagrams.map((d) ->
+            (if (d.titulo.is_empty()) "" else "<h3>" + html.escape(d.titulo) + "</h3>") +
+            "<pre class=\"mermaid\">" + html.escape(d.mermaid) + "</pre>"
+        ).join("")
+    }
+
+    legend(data: any): string ->
+        "<h2>Legenda</h2><ul class=\"er-legend\">" +
+        "<li><code>||</code> exatamente um</li>" +
+        "<li><code>|o</code> zero ou um</li>" +
+        "<li><code>}|</code> um ou mais</li>" +
+        "<li><code>}o</code> zero ou mais</li>" +
+        "<li>Linha contínua: relacionamento identificador (a entidade depende da outra para existir)</li>" +
+        "<li>Linha tracejada: relacionamento não identificador</li>" +
+        "<li>“(inferido)”: relacionamento deduzido, sem evidência direta nos artefatos</li>" +
+        (if (data.nivel == "fisico") "<li>Tipo à esquerda do atributo: tipo de dado no banco</li>" else if (data.nivel == "logico") "<li>Tipo à esquerda do atributo: classificação (simples, composto, derivado, multivalorado)</li>" else "") +
+        "</ul>"
+
+    // --- Tabelas -------------------------------------------------------------
+
+    area_name(data: any, id: string): string -> {
+        for (var a in (data?.areas ?? [])) {
+            if (a.id == id) return a.nome
+        }
+        return ""
+    }
+
+    entities_table(data: any): string -> {
+        var has_areas = (data?.areas ?? []).size() > 1
+        var rows = ""
+        for (var e in data.entidades) {
+            var area = self.area_name(data, e?.area ?? "")
+            rows = rows + "<tr><td>" + html.escape(e.nome) + "</td><td>" + self.entity_type_label(e?.tipo ?? "") + "</td>" +
+                (if (has_areas) "<td>" + (if (area.is_empty()) "—" else html.escape(area)) + "</td>" else "") +
+                "<td>" + html.escape(e?.descricao ?? "") + "</td><td>" + Cite.badges(e?.fontes ?? []) + "</td></tr>"
+        }
+        return "<table><thead><tr><th>Entidade</th><th>Tipo</th>" + (if (has_areas) "<th>Área</th>" else "") +
+            "<th>Descrição</th><th>Fontes</th></tr></thead><tbody>" + rows + "</tbody></table>"
+    }
+
+    attributes_table(data: any): string -> {
+        var atributos = data?.atributos ?? []
+        if (atributos.is_empty()) return "<p>Nenhum atributo documentado neste nível.</p>"
+        var fisico = data.nivel == "fisico"
+        var rows = ""
+        for (var a in atributos) {
+            var tipo_dado = a?.tipo_dado ?? ""
+            rows = rows + "<tr><td>" + html.escape(self.name_of(data.entidades, a.entidade)) + "</td><td>" + html.escape(a.nome) +
+                "</td><td>" + self.key_label(a?.chave ?? "") + "</td><td>" + html.escape(a?.classificacao ?? "") +
+                "</td><td>" + (if (a?.obrigatorio ?? false) "Sim" else "Não") + "</td>" +
+                (if (fisico) "<td>" + (if (tipo_dado.is_empty()) "—" else html.escape(tipo_dado)) + "</td>" else "") +
+                "<td>" + html.escape(a?.descricao ?? "") + "</td><td>" + html.escape(a?.regras_negocio ?? "") +
+                "</td><td>" + Cite.badges(a?.fontes ?? []) + "</td></tr>"
+        }
+        return "<table><thead><tr><th>Entidade</th><th>Atributo</th><th>Chave</th><th>Classificação</th><th>Obrigatório</th>" +
+            (if (fisico) "<th>Tipo de dado</th>" else "") +
+            "<th>Descrição</th><th>Regras de negócio</th><th>Fontes</th></tr></thead><tbody>" + rows + "</tbody></table>"
+    }
+
+    cardinality(r: any): string ->
+        (r?.min_de ?? "0") + ".." + (r?.max_de ?? "N") + " : " + (r?.min_para ?? "0") + ".." + (r?.max_para ?? "N")
+
+    relations_table(data: any, evidencia: string): string -> {
+        var relacoes = (data?.relacionamentos ?? []).filter((r) -> (r?.evidencia ?? "confirmado") == evidencia)
+        if (relacoes.is_empty()) return "<p>Nenhum.</p>"
+        var entidades = data.entidades
+        var rows = ""
+        for (var r in relacoes) {
+            var descritivos = r?.atributos_descritivos ?? []
+            rows = rows + "<tr><td>" + html.escape(self.name_of(entidades, r.de)) + "</td><td>" + html.escape(r?.verbo ?? "") +
+                "</td><td>" + html.escape(self.name_of(entidades, r.para)) + "</td><td>" + self.cardinality(r) +
+                "</td><td>" + (if (r?.identificador ?? false) "Sim" else "Não") + "</td><td>" +
+                (if (descritivos.is_empty()) "—" else html.escape(descritivos.join(", "))) +
+                "</td><td>" + Cite.badges(r?.fontes ?? []) + "</td></tr>"
+        }
+        return "<table><thead><tr><th>De</th><th>Verbo</th><th>Para</th><th>Cardinalidade (de : para)</th><th>Identificador</th><th>Atributos descritivos</th><th>Fontes</th></tr></thead><tbody>" + rows + "</tbody></table>"
+    }
+
+    // --- Conformidade --------------------------------------------------------
+
+    // check: violacoes das regras de modelagem. Texto cru (nomes da LLM sem
+    // escape) — warnings_html escapa na renderizacao.
+    check(data: any): string[] -> {
+        if (!self.is_structured(data)) return ["DER no formato anterior (Mermaid livre, sem modelo de entidades) — regenere o DER para validá-lo contra as regras de modelagem."]
+        var entidades = data?.entidades ?? []
+        var atributos = data?.atributos ?? []
+        var relacoes = data?.relacionamentos ?? []
+        var nivel = data.nivel
+        var detalhado = nivel == "logico" || nivel == "fisico"
+        var out = []
+
+        if (entidades.is_empty()) out += ["O modelo não tem nenhuma entidade."]
+
+        var ids = []
+        for (var e in entidades) {
+            if (ids.contains(e.id)) out += ["Id de entidade repetido: " + e.id + "."]
+            else ids += [e.id]
+        }
+
+        var area_ids = (data?.areas ?? []).map((a) -> a.id)
+        if (area_ids.size() > 1) {
+            var sem_area = entidades.filter((e) -> !area_ids.contains(e?.area ?? "")).map((e) -> e.nome).join(", ")
+            if (!sem_area.is_empty()) out += ["Entidade sem área de assunto válida: " + sem_area + "."]
+        }
+
+        for (var a in atributos) {
+            if (self.index_of(entidades, a.entidade) < 0) out += ["Atributo “" + a.nome + "” pertence a uma entidade inexistente: " + a.entidade + "."]
+        }
+        for (var r in relacoes) {
+            if (self.index_of(entidades, r.de) < 0 || self.index_of(entidades, r.para) < 0) {
+                out += ["Relacionamento aponta para uma entidade inexistente: " + r.de + " → " + r.para + "."]
+            } else if ((r?.verbo ?? "").trim().is_empty()) {
+                out += ["Relacionamento sem verbo: " + self.name_of(entidades, r.de) + " → " + self.name_of(entidades, r.para) + "."]
+            }
+        }
+
+        if (entidades.size() > 1) {
+            var conectadas = relacoes.map((r) -> r.de) + relacoes.map((r) -> r.para)
+            var isoladas = entidades.filter((e) -> !conectadas.contains(e.id)).map((e) -> e.nome).join(", ")
+            if (!isoladas.is_empty()) out += ["Entidade sem nenhum relacionamento: " + isoladas + "."]
+        }
+
+        for (var e in entidades) {
+            var identifica = relacoes.any((r) -> (r?.identificador ?? false) && (r.de == e.id || r.para == e.id))
+            if (e?.tipo == "fraca" && !identifica) out += ["Entidade fraca sem relacionamento identificador: " + e.nome + "."]
+            if (detalhado && !atributos.any((a) -> a.entidade == e.id && a?.chave == "pk")) out += ["Entidade sem chave primária: " + e.nome + "."]
+        }
+
+        for (var r in relacoes) {
+            if ((r?.identificador ?? false) && self.index_of(entidades, r.de) >= 0 && self.index_of(entidades, r.para) >= 0) {
+                var de_tipo = entidades[self.index_of(entidades, r.de)]?.tipo ?? ""
+                var para_tipo = entidades[self.index_of(entidades, r.para)]?.tipo ?? ""
+                if (de_tipo == "forte" && para_tipo == "forte") {
+                    out += ["Relacionamento identificador entre duas entidades fortes: " + self.name_of(entidades, r.de) + " → " + self.name_of(entidades, r.para) + " — uma delas deveria ser fraca ou associativa."]
+                }
+            }
+            if (detalhado && r?.max_de == "N" && r?.max_para == "N") {
+                out += ["Muitos-para-muitos no modelo " + nivel + ": " + self.name_of(entidades, r.de) + " → " + self.name_of(entidades, r.para) + " — resolva com uma entidade associativa."]
+            }
+        }
+
+        for (var a in atributos) {
+            var classificacao = a?.classificacao ?? ""
+            if (detalhado && classificacao == "multivalorado") out += ["Atributo multivalorado no modelo " + nivel + ": " + a.nome + " — deveria virar uma entidade própria."]
+            if (classificacao == "derivado" && (a?.regras_negocio ?? "").trim().is_empty()) out += ["Atributo derivado sem a regra de cálculo: " + a.nome + "."]
+            var tipo_dado = a?.tipo_dado ?? ""
+            if (nivel == "fisico" && tipo_dado.is_empty()) out += ["Atributo sem tipo de dado no modelo físico: " + a.nome + "."]
+            if (nivel != "fisico" && !tipo_dado.is_empty()) out += ["Tipo de dado (" + tipo_dado + ") em “" + a.nome + "” — tipos de banco pertencem só ao modelo físico."]
+        }
+        if (nivel == "conceitual" && !atributos.is_empty()) out += ["Modelo conceitual com atributos documentados — no nível conceitual eles não aparecem no diagrama; considere o nível lógico."]
+
+        var delta = data?.delta_modelo ?? []
+        if (data?.modo == "evolucao" && delta.is_empty()) out += ["Modo evolução sem delta do modelo — descreva o que muda em relação ao modelo existente."]
+        if (data?.modo != "evolucao" && !delta.is_empty()) out += ["Delta do modelo preenchido fora do modo evolução."]
+        return out
+    }
+
+    warnings_html(data: any): string -> {
+        var avisos = self.check(data)
+        if (avisos.is_empty()) return ""
+        return "<h2>Conformidade do modelo</h2><ul class=\"c4-warnings\">" + avisos.map((a) -> "<li>" + html.escape(a) + "</li>").join("") + "</ul>"
+    }
+}
+
+// Fixtures dos testes abaixo (mhl nao aceita `var` solto no corpo de um
+// `test`, so dentro de cada `describe`).
+tool DerFixtures {
+    logical(): any -> {
+        modo: "greenfield",
+        nivel: "logico",
+        contexto: "Plataforma de investimentos",
+        contexto_fontes: ["requisitos"],
+        areas: [],
+        entidades: [
+            {id: "investidor", nome: "Investidor", tipo: "forte", area: "", descricao: "Pessoa que investe", fontes: ["requisitos/FR-001"]},
+            {id: "ordem", nome: "Ordem", tipo: "forte", area: "", descricao: "Ordem de compra ou venda", fontes: ["requisitos/FR-005"]},
+            {id: "item", nome: "Item da ordem", tipo: "fraca", area: "", descricao: "Título dentro da ordem", fontes: ["inferência"]},
+        ],
+        atributos: [
+            {entidade: "investidor", nome: "CPF", chave: "pk", classificacao: "simples", obrigatorio: true, tipo_dado: "", descricao: "Documento", regras_negocio: "Único", fontes: ["requisitos/FR-001"]},
+            {entidade: "investidor", nome: "Telefone \"principal\"", chave: "nenhuma", classificacao: "simples", obrigatorio: false, tipo_dado: "", descricao: "", regras_negocio: "", fontes: ["gap"]},
+            {entidade: "ordem", nome: "Número", chave: "pk", classificacao: "simples", obrigatorio: true, tipo_dado: "", descricao: "", regras_negocio: "", fontes: ["requisitos/FR-005"]},
+            {entidade: "item", nome: "Sequência", chave: "pk", classificacao: "simples", obrigatorio: true, tipo_dado: "", descricao: "", regras_negocio: "", fontes: ["inferência"]},
+        ],
+        relacionamentos: [
+            {de: "investidor", para: "ordem", verbo: "emite", min_de: "1", max_de: "1", min_para: "0", max_para: "N", identificador: false, evidencia: "confirmado", atributos_descritivos: [], fontes: ["requisitos/FR-005"]},
+            {de: "ordem", para: "item", verbo: "contém", min_de: "1", max_de: "1", min_para: "1", max_para: "N", identificador: true, evidencia: "inferido", atributos_descritivos: [], fontes: ["inferência"]},
+        ],
+        delta_modelo: [],
+        gaps: [],
+        questoes_abertas: [],
+    }
+}
+
+test DerModelSpec {
+    describe markers_follow_crows_foot_notation {
+        are_equal(DerModel.left_marker("1", "1"), "||")
+        are_equal(DerModel.left_marker("0", "1"), "|o")
+        are_equal(DerModel.left_marker("1", "N"), "}|")
+        are_equal(DerModel.left_marker("0", "N"), "}o")
+        are_equal(DerModel.right_marker("0", "N"), "o{")
+        are_equal(DerModel.right_marker("1", "N"), "|{")
+        are_equal(DerModel.right_marker("0", "1"), "o|")
+    }
+
+    describe token_makes_mermaid_safe_identifiers {
+        are_equal(DerModel.token("Data de Criação"), "data_de_criacao")
+        are_equal(DerModel.token("1º nome"), "a_1_nome")
+    }
+
+    describe logical_mermaid_has_aliases_attributes_keys_and_relations {
+        var m = DerModel.diagrams(DerFixtures.logical())[0].mermaid
+        is_true(m.starts_with("erDiagram\n"))
+        is_true(m.contains("d0e0[\"Investidor\"] {\n        simples cpf PK \"CPF\"\n"))
+        is_true(m.contains("simples telefone_principal \"Telefone 'principal' (opcional)\""))
+        is_true(m.contains("d0e0 ||..o{ d0e1 : \"emite\""))
+        is_true(m.contains("d0e1 ||--|{ d0e2 : \"contém (inferido)\""))
+    }
+
+    describe conceptual_mermaid_omits_attributes {
+        var data = DerFixtures.logical()
+        var conceptual = {nivel: "conceitual", entidades: data.entidades, atributos: data.atributos, relacionamentos: data.relacionamentos, areas: []}
+        is_true(!DerModel.diagrams(conceptual)[0].mermaid.contains("{\n"))
+    }
+
+    describe a_clean_logical_model_has_no_warnings {
+        are_equal(DerModel.check(DerFixtures.logical()).size(), 0)
+    }
+
+    describe logical_flags_missing_pk_many_to_many_and_multivalued {
+        var d = {
+            modo: "greenfield", nivel: "logico", areas: [],
+            entidades: [
+                {id: "a", nome: "Cliente", tipo: "forte", area: "", descricao: "", fontes: []},
+                {id: "b", nome: "Produto", tipo: "forte", area: "", descricao: "", fontes: []},
+                {id: "c", nome: "Solta", tipo: "fraca", area: "", descricao: "", fontes: []},
+            ],
+            atributos: [
+                {entidade: "a", nome: "Telefones", chave: "nenhuma", classificacao: "multivalorado", obrigatorio: false, tipo_dado: "varchar", descricao: "", regras_negocio: "", fontes: []},
+                {entidade: "a", nome: "Idade", chave: "nenhuma", classificacao: "derivado", obrigatorio: false, tipo_dado: "", descricao: "", regras_negocio: "", fontes: []},
+                {entidade: "zzz", nome: "Órfão", chave: "nenhuma", classificacao: "simples", obrigatorio: false, tipo_dado: "", descricao: "", regras_negocio: "", fontes: []},
+            ],
+            relacionamentos: [{de: "a", para: "b", verbo: "compra", min_de: "0", max_de: "N", min_para: "0", max_para: "N", identificador: false, evidencia: "confirmado", atributos_descritivos: [], fontes: []}],
+            delta_modelo: [{texto: "x", fontes: []}],
+        }
+        var avisos = DerModel.check(d).join(" | ")
+        is_true(avisos.contains("Entidade sem chave primária: Cliente"))
+        is_true(avisos.contains("Muitos-para-muitos no modelo logico: Cliente → Produto"))
+        is_true(avisos.contains("Atributo multivalorado no modelo logico: Telefones"))
+        is_true(avisos.contains("Atributo derivado sem a regra de cálculo: Idade"))
+        is_true(avisos.contains("Tipo de dado (varchar) em “Telefones”"))
+        is_true(avisos.contains("entidade inexistente: zzz"))
+        is_true(avisos.contains("Entidade sem nenhum relacionamento: Solta"))
+        is_true(avisos.contains("Entidade fraca sem relacionamento identificador: Solta"))
+        is_true(avisos.contains("Delta do modelo preenchido fora do modo evolução"))
+    }
+
+    describe many_areas_produce_an_overview_and_one_diagram_per_area {
+        var data = DerFixtures.logical()
+        var with_areas = {
+            nivel: "logico",
+            areas: [{id: "cad", nome: "Cadastro", descricao: ""}, {id: "neg", nome: "Negociação", descricao: ""}],
+            entidades: [
+                {id: "investidor", nome: "Investidor", tipo: "forte", area: "cad", descricao: "", fontes: []},
+                {id: "ordem", nome: "Ordem", tipo: "forte", area: "neg", descricao: "", fontes: []},
+                {id: "item", nome: "Item da ordem", tipo: "fraca", area: "neg", descricao: "", fontes: []},
+            ],
+            atributos: data.atributos,
+            relacionamentos: data.relacionamentos,
+        }
+        var diagrams = DerModel.diagrams(with_areas)
+        are_equal(diagrams.size(), 3)
+        are_equal(diagrams[0].titulo, "Visão geral")
+        is_true(!diagrams[0].mermaid.contains("PK"))
+        // Cadastro: Investidor detalhado, Ordem so como vizinha (sem atributos).
+        is_true(diagrams[1].mermaid.contains("d1e0[\"Investidor\"] {"))
+        is_true(diagrams[1].mermaid.contains("d1e1[\"Ordem\"]\n"))
+        is_true(!diagrams[1].mermaid.contains("d1e2["))
+    }
+
+    describe legacy_der_is_flagged_for_regeneration {
+        var legacy = {modo: "greenfield", diagrama_mermaid: "erDiagram", entidades: [{entidade: "X", descricao: "", fontes: []}]}
+        is_true(!DerModel.is_structured(legacy))
+        is_true(DerModel.check(legacy)[0].contains("formato anterior"))
+    }
+
+    describe relations_tables_split_by_evidence {
+        var data = DerFixtures.logical()
+        is_true(DerModel.relations_table(data, "confirmado").contains("<td>emite</td>"))
+        is_true(!DerModel.relations_table(data, "confirmado").contains("contém"))
+        is_true(DerModel.relations_table(data, "inferido").contains("<td>1..1 : 1..N</td>"))
+    }
+}

@@ -40,7 +40,11 @@ export prompt RequisitosInstruction(schema_conventions: prompt, brief_content: s
 // (CreateProcess), derrubando a chamada com "O nome do arquivo ou a extensao
 // e muito grande" (Windows error 206) antes mesmo de chegar no backend.
 export prompt AdrInstruction(schema_conventions: prompt, requisitos_content: string, atributos_content: string, feedback_content: string) from "prompts/adr.prompt.md"
-export prompt DerInstruction(schema_conventions: prompt, requisitos_content: string, atributos_content: string, feedback_content: string) from "prompts/der.prompt.md"
+// Der recebe as ADRs como contexto OPCIONAL pelo mesmo motivo de
+// Diagramas: o nivel fisico (tipos de dado) so existe depois que uma ADR
+// escolheu o banco, e um armazenamento nao relacional escolhido numa ADR
+// muda o que o DER consegue descrever.
+export prompt DerInstruction(schema_conventions: prompt, requisitos_content: string, atributos_content: string, adr_content: string, feedback_content: string) from "prompts/der.prompt.md"
 // Diagramas recebe tambem as ADRs como contexto OPCIONAL (quem chama passa
 // um texto fixo quando ainda nao ha nenhuma): o diagrama de conteiner mostra
 // as principais escolhas de tecnologia, e essas escolhas moram nas ADRs —
@@ -84,7 +88,10 @@ export prompt AdrBody(
     opcoes_pros_contras: string,
     links_lista: string
 ) from "templates/adr_body.html"
-export prompt DerBody(modo: string, contexto: string, contexto_fontes: string, diagrama_mermaid: string, entidades_tabela: string, confirmados_tabela: string, inferidos_tabela: string, atributos_tabela: string, delta_lista: string, gaps_lista: string, questoes_lista: string) from "templates/der_body.html"
+export prompt DerBody(modo: string, nivel: string, contexto: string, contexto_fontes: string, avisos_html: string, diagramas_html: string, legenda_html: string, entidades_tabela: string, atributos_tabela: string, confirmados_tabela: string, inferidos_tabela: string, delta_lista: string, gaps_lista: string, questoes_lista: string) from "templates/der_body.html"
+// DER gravado antes do modelo estruturado (DerModel) — Mermaid livre e
+// relacionamentos em texto; so renderiza, com um aviso pedindo regeneracao.
+export prompt DerLegacyBody(modo: string, contexto: string, contexto_fontes: string, diagrama_mermaid: string, entidades_tabela: string, confirmados_tabela: string, inferidos_tabela: string, atributos_tabela: string, delta_lista: string, gaps_lista: string, questoes_lista: string) from "templates/der_legacy_body.html"
 export prompt DiagramaBody(tipo_label: string, hierarchy_level: string, escopo_html: string, descricao: string, descricao_fontes: string, avisos_html: string, diagrama_mermaid: string, legenda_html: string, elementos_html: string, relacoes_html: string) from "templates/diagrama_body.html"
 
 // FeatureBody/HistoriaBody sao o corpo de UM item de feature/historia — o

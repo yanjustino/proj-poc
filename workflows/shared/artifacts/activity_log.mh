@@ -1,0 +1,34 @@
+// memory ActivityLog — linha do tempo do ciclo de revisao de cada artefato,
+// para as metricas de produtividade do work-item (WorkItemActions.
+// productivity). Tres eventos, todos gravados por Dispatch/Gate de
+// Discovery e Delivery, nunca pela LLM (C3):
+//
+//   - "started":     uma geracao comecou (StartRun sem approval_data);
+//   - "draft_ready": um rascunho ficou pronto e pausou para revisao
+//                    (Modo Buddy) — um por rodada, inclusive as que voltam
+//                    por "Regerar";
+//   - "approved":    o rascunho revisado foi aprovado e gravado.
+//
+// `ts` vem da propria memory (mesma convencao de Usage/ChangesLog). A chave
+// de um item e artifact + feature_id (historias de Discovery sao uma por
+// feature, cada uma com seu proprio ciclo).
+
+import { Paths } from "../core/paths.mh"
+
+export memory ActivityLog {
+    type: "jsonl"
+    path: "projects/${project_id}/activity.jsonl"
+    path_guard: "no_traversal"
+}
+
+// Activity.record e o unico ponto de escrita: so grava para um work-item que
+// existe de fato. Dispatch registra "started" antes das checagens de
+// dependencia de cada *Generate, e a memory criaria projects/<id>/ para um
+// id inexistente (os testes de workflow usam exatamente isso).
+export tool Activity {
+    record(project_id: string, event: string, artifact: string, feature_id: string) -> {
+        if (dir.exists(Paths.root(project_id))) {
+            ActivityLog.append({event: event, artifact: artifact, feature_id: feature_id})
+        }
+    }
+}

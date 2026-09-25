@@ -12,8 +12,10 @@
 
 import { Cite } from "cite.mh"
 import { ArtifactHtml } from "artifact_html.mh"
+import { C4Diagram } from "c4_diagram.mh"
+import { DerModel } from "der_model.mh"
 import {
-    BriefBody, AtributosBody, RequisitosBody, AdrBody, DerBody, DiagramaBody,
+    BriefBody, AtributosBody, RequisitosBody, AdrBody, DerBody, DerLegacyBody, DiagramaBody,
     FeatureBody, HistoriaBody, DependenciasBody
 } from "artifacts_common.mh"
 
@@ -70,26 +72,57 @@ export tool ArtifactBody {
         links_lista: ArtifactHtml.adr_links(data.links)
     ))
 
-    der(data: any): string -> Cite.finalize(DerBody(
-        modo: html.escape(data.modo),
-        contexto: html.escape(data.contexto),
-        contexto_fontes: Cite.note(data.contexto_fontes),
-        diagrama_mermaid: html.escape(data.diagrama_mermaid),
-        entidades_tabela: ArtifactHtml.entity_rows(data.entidades),
-        confirmados_tabela: ArtifactHtml.relation_rows(data.relacionamentos_confirmados),
-        inferidos_tabela: ArtifactHtml.relation_rows(data.relacionamentos_inferidos),
-        atributos_tabela: ArtifactHtml.attribute_rows(data.atributos),
-        delta_lista: Cite.list(data.delta_modelo),
-        gaps_lista: Cite.list(data.gaps),
-        questoes_lista: Cite.list(data.questoes_abertas)
-    ))
+    // DER estruturado (DerModel): diagramas, legenda, tabelas e
+    // conformidade gerados por codigo. Um DER legado (Mermaid livre) ainda
+    // renderiza pelo template antigo, com o aviso de DerModel.check no topo.
+    der(data: any): string -> {
+        if (!DerModel.is_structured(data)) {
+            return Cite.finalize(DerModel.warnings_html(data) + DerLegacyBody(
+                modo: html.escape(data.modo),
+                contexto: html.escape(data.contexto),
+                contexto_fontes: Cite.note(data.contexto_fontes),
+                diagrama_mermaid: html.escape(data.diagrama_mermaid),
+                entidades_tabela: ArtifactHtml.entity_rows(data.entidades),
+                confirmados_tabela: ArtifactHtml.relation_rows(data.relacionamentos_confirmados),
+                inferidos_tabela: ArtifactHtml.relation_rows(data.relacionamentos_inferidos),
+                atributos_tabela: ArtifactHtml.attribute_rows(data.atributos),
+                delta_lista: Cite.list(data.delta_modelo),
+                gaps_lista: Cite.list(data.gaps),
+                questoes_lista: Cite.list(data.questoes_abertas)
+            ))
+        }
+        return Cite.finalize(DerBody(
+            modo: html.escape(data.modo),
+            nivel: DerModel.level_label(data.nivel),
+            contexto: html.escape(data.contexto),
+            contexto_fontes: Cite.note(data.contexto_fontes),
+            avisos_html: DerModel.warnings_html(data),
+            diagramas_html: DerModel.diagrams_html(data),
+            legenda_html: DerModel.legend(data),
+            entidades_tabela: DerModel.entities_table(data),
+            atributos_tabela: DerModel.attributes_table(data),
+            confirmados_tabela: DerModel.relations_table(data, "confirmado"),
+            inferidos_tabela: DerModel.relations_table(data, "inferido"),
+            delta_lista: Cite.list(data.delta_modelo),
+            gaps_lista: Cite.list(data.gaps),
+            questoes_lista: Cite.list(data.questoes_abertas)
+        ))
+    }
 
+    // Um C4 estruturado (escopo/elementos/relacoes) tem Mermaid, legenda,
+    // tabelas e conformidade gerados por C4Diagram; os demais tipos — e um
+    // C4 legado, gravado antes desse modelo — usam o Mermaid da propria LLM.
     diagrama(data: any): string -> Cite.finalize(DiagramaBody(
-        diagram_type: html.escape(data.diagram_type),
-        hierarchy_level: html.escape(data.hierarchy_level),
+        tipo_label: C4Diagram.type_label(data.diagram_type),
+        hierarchy_level: C4Diagram.level(data.diagram_type),
+        escopo_html: C4Diagram.scope(data),
         descricao: html.escape(data.descricao),
         descricao_fontes: Cite.note(data.descricao_fontes),
-        diagrama_mermaid: html.escape(data.diagrama_mermaid)
+        avisos_html: C4Diagram.warnings_html(data),
+        diagrama_mermaid: html.escape(C4Diagram.mermaid_source(data)),
+        legenda_html: C4Diagram.legend(data),
+        elementos_html: C4Diagram.elements_table(data),
+        relacoes_html: C4Diagram.relations_table(data)
     ))
 
     feature(data: any): string -> {

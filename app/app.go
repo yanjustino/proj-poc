@@ -90,6 +90,12 @@ type App struct {
 	// in its arguments.
 	runProjects   map[string]string
 	runProjectsMu sync.Mutex
+
+	// ingestedMu serializes MarkRawIngested's read-modify-write of
+	// raw/.ingested.json — Wails runs bound methods concurrently, so two
+	// ingests finishing at the same moment could otherwise each read the old
+	// list and the second write would drop the first one's filename.
+	ingestedMu sync.Mutex
 }
 
 // NewApp creates a new App application struct
@@ -848,31 +854,40 @@ func (a *App) tailRunLogs(runID string, projectID string) {
 	ticker := time.NewTicker(tailRunLogsInterval)
 	defer ticker.Stop()
 	since := ""
+	fetch := func() {
+		result, err := a.mhl.RunLogs(a.ctx, runID, since)
+		if err != nil {
+			log.Printf("mhl bridge: tailRunLogs(%s): fetch logs: %v", runID, err)
+			return
+		}
+		var parsed struct {
+			Text      string `json:"text"`
+			NextSince int64  `json:"nextSince"`
+		}
+		if err := json.Unmarshal(result, &parsed); err != nil {
+			log.Printf("mhl bridge: tailRunLogs(%s): decode logs: %v", runID, err)
+			return
+		}
+		if parsed.Text != "" {
+			if err := appendToFile(path, parsed.Text+"\n"); err != nil {
+				log.Printf("mhl bridge: tailRunLogs(%s): write %s: %v", runID, path, err)
+			}
+		}
+		since = strconv.FormatInt(parsed.NextSince, 10)
+	}
 	for {
 		a.pollingRunsMu.Lock()
 		stillWatching := a.pollingRuns[runID]
 		a.pollingRunsMu.Unlock()
+		// The status poll (every runPollInterval) usually notices the run
+		// ended well before this loop's next tick — stopping right there
+		// dropped whatever the run logged since the previous fetch, i.e.
+		// always its last steps (Gate/Commit/Done), making a finished run's
+		// persisted log look like it stalled mid-generation. One final
+		// fetch after the stop signal keeps the tail complete.
+		fetch()
 		if !stillWatching {
 			return
-		}
-		result, err := a.mhl.RunLogs(a.ctx, runID, since)
-		if err != nil {
-			log.Printf("mhl bridge: tailRunLogs(%s): fetch logs: %v", runID, err)
-		} else {
-			var parsed struct {
-				Text      string `json:"text"`
-				NextSince int64  `json:"nextSince"`
-			}
-			if err := json.Unmarshal(result, &parsed); err != nil {
-				log.Printf("mhl bridge: tailRunLogs(%s): decode logs: %v", runID, err)
-			} else {
-				if parsed.Text != "" {
-					if err := appendToFile(path, parsed.Text+"\n"); err != nil {
-						log.Printf("mhl bridge: tailRunLogs(%s): write %s: %v", runID, path, err)
-					}
-				}
-				since = strconv.FormatInt(parsed.NextSince, 10)
-			}
 		}
 		<-ticker.C
 	}
@@ -1224,6 +1239,8 @@ func (a *App) MarkRawIngested(projectID string, filename string) (string, error)
 	if err != nil {
 		return "", err
 	}
+	a.ingestedMu.Lock()
+	defer a.ingestedMu.Unlock()
 	names, err := readIngestedRaw(rawDir)
 	if err != nil {
 		return "", err

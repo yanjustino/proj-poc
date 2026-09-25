@@ -1,0 +1,14 @@
+<h2>Contexto de Banco de Dados</h2><p><strong>Modo:</strong> ${modo} · <strong>Nível:</strong> ${nivel}</p><p>${contexto}</p>${contexto_fontes}
+${avisos_html}
+<h2>Diagrama</h2>
+${diagramas_html}
+${legenda_html}
+<h2>Glossário de Entidades</h2>${entidades_tabela}
+<h2>Atributos</h2>${atributos_tabela}
+<h2>Relacionamentos Confirmados</h2>${confirmados_tabela}
+<h2>Relacionamentos Inferidos</h2>${inferidos_tabela}
+<h2>Delta do Modelo</h2>${delta_lista}
+<h2>Gaps</h2>${gaps_lista}
+<h2>Questões em Aberto</h2>${questoes_lista}
+<script src="./assets/mermaid.min.js"></script>
+<script>mermaid.initialize({ startOnLoad: false });(async () => { for (const el of document.querySelectorAll("pre.mermaid")) await mermaid.run({ nodes: [el] }); })();</script>

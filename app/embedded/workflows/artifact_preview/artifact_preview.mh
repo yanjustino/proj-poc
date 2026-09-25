@@ -168,6 +168,93 @@ test ArtifactPreviewSpec {
         is_true(run.vars.preview_html.contains("Contexto do Checkout"))
     }
 
+    describe structured_c4_item_renders_generated_mermaid_legend_tables_and_warnings {
+        var run = ArtifactPreview.run(inputs: {
+            artifact: "diagrama",
+            data: {
+                titulo: "Contêineres do Checkout",
+                diagram_type: "c4-container",
+                descricao: "Contêineres do checkout",
+                descricao_fontes: ["requisitos"],
+                escopo: {nome: "Checkout", descricao: "Fecha pedidos", fontes: ["brief"]},
+                ambiente: "",
+                elementos: [
+                    {id: "cliente", nome: "Cliente", tipo: "pessoa", tecnologia: "", descricao: "Compra", no_pai: "", fontes: ["requisitos/FR-001"]},
+                    {id: "api", nome: "API", tipo: "container", tecnologia: "", descricao: "Recebe pedidos", no_pai: "", fontes: ["gap"]},
+                ],
+                relacoes: [{de: "cliente", para: "api", descricao: "Envia pedidos para", tecnologia: "HTTPS", fontes: ["inferência"]}],
+                diagrama_mermaid: "",
+                avisos_lote: ["O lote não tem diagrama de contexto de sistema (C4) — recomendado para todo sistema."],
+            }
+        })
+        is_true(run.ok)
+        var page = run.vars.preview_html
+        is_true(page.contains("<strong>Tipo:</strong> Contêiner (C4) · <strong>Nível:</strong> Strategic"))
+        is_true(page.contains("<strong>Escopo:</strong> Checkout — Fecha pedidos"))
+        is_true(page.contains("<strong>Público:</strong> Pessoas técnicas"))
+        is_true(page.contains("subgraph b0"))
+        is_true(page.contains("<h2>Legenda</h2>"))
+        is_true(page.contains("<h2>Elementos</h2>"))
+        is_true(page.contains("<h2>Relações</h2>"))
+        is_true(page.contains("Contêiner sem tecnologia definida: API"))
+        is_true(page.contains("O lote não tem diagrama de contexto"))
+    }
+
+    describe structured_der_renders_generated_er_diagram_tables_and_warnings {
+        var run = ArtifactPreview.run(inputs: {
+            artifact: "der",
+            data: {
+                modo: "greenfield",
+                nivel: "logico",
+                contexto: "Checkout",
+                contexto_fontes: ["requisitos"],
+                areas: [],
+                entidades: [
+                    {id: "cliente", nome: "Cliente", tipo: "forte", area: "", descricao: "Quem compra", fontes: ["requisitos/FR-001"]},
+                    {id: "pedido", nome: "Pedido", tipo: "forte", area: "", descricao: "Compra", fontes: ["requisitos/FR-002"]},
+                ],
+                atributos: [
+                    {entidade: "cliente", nome: "CPF", chave: "pk", classificacao: "simples", obrigatorio: true, tipo_dado: "", descricao: "", regras_negocio: "", fontes: ["requisitos/FR-001"]},
+                ],
+                relacionamentos: [
+                    {de: "cliente", para: "pedido", verbo: "faz", min_de: "1", max_de: "1", min_para: "0", max_para: "N", identificador: false, evidencia: "confirmado", atributos_descritivos: [], fontes: ["requisitos/FR-002"]},
+                ],
+                delta_modelo: [],
+                gaps: [],
+                questoes_abertas: [],
+            }
+        })
+        is_true(run.ok)
+        var page = run.vars.preview_html
+        is_true(page.contains("<strong>Nível:</strong> Lógico"))
+        is_true(page.contains("erDiagram"))
+        is_true(page.contains("d0e0 ||..o{ d0e1 : &#34;faz&#34;"))
+        is_true(page.contains("<h2>Legenda</h2>"))
+        is_true(page.contains("Entidade sem chave primária: Pedido"))
+    }
+
+    describe legacy_der_still_renders_with_a_regeneration_notice {
+        var run = ArtifactPreview.run(inputs: {
+            artifact: "der",
+            data: {
+                modo: "greenfield",
+                contexto: "Checkout",
+                contexto_fontes: ["requisitos"],
+                diagrama_mermaid: "erDiagram\n CLIENTE ||--o{ PEDIDO : faz",
+                entidades: [{entidade: "Cliente", descricao: "", fontes: ["requisitos"]}],
+                relacionamentos_confirmados: [],
+                relacionamentos_inferidos: [],
+                atributos: [],
+                delta_modelo: [],
+                gaps: [],
+                questoes_abertas: [],
+            }
+        })
+        is_true(run.ok)
+        is_true(run.vars.preview_html.contains("DER no formato anterior"))
+        is_true(run.vars.preview_html.contains("CLIENTE ||--o{ PEDIDO"))
+    }
+
     describe decisao_item_renders_standalone_with_its_own_title {
         var run = ArtifactPreview.run(inputs: {
             artifact: "decisao",

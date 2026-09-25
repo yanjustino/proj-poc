@@ -38,6 +38,9 @@ export tool Paths {
 
     prompt_log_file(project_id: string): string -> self.root(project_id) + "/prompt_log.jsonl"
 
+    changes_file(project_id: string): string -> self.root(project_id) + "/changes.jsonl"
+    activity_file(project_id: string): string -> self.root(project_id) + "/activity.jsonl"
+
     // Estado interno (nao-humano) que a WikiIndex usa pra renderizar
     // wiki/index.md do zero a cada ingest — mantem wiki/ 100% markdown puro
     // (nada de .json ali), como o padrao docs/wiki-llm.md espera. Ponto (.)
@@ -93,6 +96,7 @@ test PathsSpec {
         are_equal(Paths.project_file("wi_1"), "projects/wi_1/project.json")
         are_equal(Paths.usage_file("wi_1"), "projects/wi_1/usage.jsonl")
         are_equal(Paths.prompt_log_file("wi_1"), "projects/wi_1/prompt_log.jsonl")
+        are_equal(Paths.changes_file("wi_1"), "projects/wi_1/changes.jsonl")
         are_equal(Paths.index_state_file("wi_1"), "projects/wi_1/.index-state.json")
     }
 
