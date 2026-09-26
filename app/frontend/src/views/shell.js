@@ -11,14 +11,20 @@ import {
   getDevinModel,
   getDevinCostSummary,
   setDevinModel,
+  listCodexModels,
+  getCodexModel,
+  setCodexModel,
+  listClaudeModels,
+  getClaudeModel,
+  setClaudeModel,
   appVersion,
 } from '../api.js';
 import { openNewWorkItemModal } from './new-workitem.js';
 import { renderWorkItemView } from './workitem-view.js';
-import { renderLogsView } from './logs-view.js';
 import { getState, setState, subscribe } from '../state.js';
 import { mountReadingPane } from '../reading-pane.js';
 import { icon } from '../icons.js';
+import { getAutoReview, setAutoReview, getPaneWidth, setPaneWidth } from '../preferences.js';
 import brandSymbol from '../assets/images/senpai-symbol.png';
 
 const LEVEL_SHORT = { discovery: 'Discovery', delivery: 'Delivery' };
@@ -55,7 +61,6 @@ export async function mountShell(root) {
           <div class="sidebar-top-actions">
             <button class="icon-btn sidebar-toggle-collapsed" aria-label="Expandir menu lateral" title="Expandir menu lateral" data-toggle-sidebar>${icon('panelLeft', 15)}</button>
             <button class="icon-btn" aria-label="Novo work-item" title="Novo work-item" data-create>${icon('plus', 15)}</button>
-            <button class="icon-btn" aria-label="Ver logs de execução" title="Ver logs de execução" data-open-logs>${icon('terminal', 15)}</button>
             <button class="icon-btn" aria-label="Maximizar janela" title="Maximizar/restaurar janela" data-toggle-maximise>${icon('maximize', 15)}</button>
             <button class="icon-btn" aria-label="Usar tema claro" title="Usar tema claro" data-theme-toggle>${icon('sun', 15)}</button>
           </div>
@@ -69,34 +74,51 @@ export async function mountShell(root) {
             ${AGENT_OPTIONS.map((opt) => `<option value="${opt.value}">${opt.label}</option>`).join('')}
           </select>
         </div>
-        <div class="sidebar-agent-block" data-devin-model-row hidden>
+        <div class="sidebar-agent-block" data-model-row hidden>
           <div class="sidebar-agent">
-            <label for="devin-model-select">Modelo</label>
-            <select id="devin-model-select" data-devin-model-select>
+            <label for="model-select">Modelo</label>
+            <select id="model-select" data-model-select>
               <option value="">Carregando…</option>
             </select>
           </div>
-          <small class="sidebar-agent-hint" data-devin-model-cost></small>
+          <div class="sidebar-agent-block" data-model-custom-row hidden>
+            <input type="text" id="model-custom-input" data-model-custom-input placeholder="nome do modelo" />
+            <button class="button secondary small" data-model-custom-apply>Aplicar</button>
+          </div>
+          <small class="sidebar-agent-hint" data-model-cost></small>
         </div>
+        <label class="sidebar-agent sidebar-check" title="Quando um artefato gerado tem avisos de conformidade, pede uma correção ao modelo (uma única chamada extra) antes da sua revisão.">
+          <input type="checkbox" data-autorrevisao /> Autorrevisão
+        </label>
         <div class="sidebar-status" data-mcp-status></div>
         <div class="sidebar-version" data-app-version>Senpai</div>
       </aside>
+      <div class="pane-resizer" data-pane-resizer="sidebar" role="separator" aria-orientation="vertical" aria-label="Redimensionar menu lateral" tabindex="0"></div>
       <main class="main" data-main></main>
+      <div class="pane-resizer" data-pane-resizer="reading-pane" role="separator" aria-orientation="vertical" aria-label="Redimensionar área de pré-visualização" tabindex="0"></div>
       <article class="document reading-pane" data-reading-pane></article>
     </div>
   `;
 
   const shellEl = root.querySelector('.shell');
+  const sidebarEl = root.querySelector('.sidebar');
+  const readingPaneEl = root.querySelector('[data-reading-pane]');
   const navList = root.querySelector('[data-nav-list]');
   const filterInput = root.querySelector('[data-filter]');
   const mainEl = root.querySelector('[data-main]');
   const mcpStatusEl = root.querySelector('[data-mcp-status]');
   const agentSelectEl = root.querySelector('[data-agent-select]');
-  const devinModelRow = root.querySelector('[data-devin-model-row]');
-  const devinModelSelectEl = root.querySelector('[data-devin-model-select]');
-  const devinModelCostEl = root.querySelector('[data-devin-model-cost]');
+  const modelRow = root.querySelector('[data-model-row]');
+  const modelSelectEl = root.querySelector('[data-model-select]');
+  const modelCostEl = root.querySelector('[data-model-cost]');
+  const modelCustomRow = root.querySelector('[data-model-custom-row]');
+  const modelCustomInputEl = root.querySelector('[data-model-custom-input]');
+  const modelCustomApplyEl = root.querySelector('[data-model-custom-apply]');
   const appVersionEl = root.querySelector('[data-app-version]');
   const themeToggleEl = root.querySelector('[data-theme-toggle]');
+  const autoReviewEl = root.querySelector('[data-autorrevisao]');
+  autoReviewEl.checked = getAutoReview();
+  autoReviewEl.addEventListener('change', () => setAutoReview(autoReviewEl.checked));
 
   function renderThemeToggle() {
     const isLight = document.documentElement.dataset.theme === 'light';
@@ -121,7 +143,7 @@ export async function mountShell(root) {
 
   appVersionEl.textContent = `Senpai ${await appVersion().catch(() => 'versão desconhecida')}`;
 
-  mountReadingPane(root.querySelector('[data-reading-pane]'));
+  mountReadingPane(readingPaneEl);
 
   // Refreshed on a timer (not just once at startup) because "ready" here is
   // a live /healthz probe, not a cached flag — the mhl child process can die
@@ -190,68 +212,154 @@ export async function mountShell(root) {
   // (SENPAI_AGENT is only read at mhl's own startup, see mhlbridge.Start),
   // so this reuses the exact same reconnect + status-render path as the
   // "Reconectar" button above rather than a separate one.
-  // Keyed by model id so the "custo" hint under the select can be looked up
-  // again on every change without another round trip to ListDevinModels.
-  let devinModelsById = new Map();
+  //
+  // MODEL_CUSTOM_VALUE is a synthetic <option> that reveals the free-text
+  // input instead of applying anything itself — every backend accepts it:
+  // Codex's list comes from an undocumented `codex debug models` subcommand
+  // (see app.go's ListCodexModels doc comment) that may stop returning data
+  // in a future CLI version, and Claude has no list command at all (only a
+  // fixed set of documented aliases) — `--model` itself always accepts any
+  // slug/alias/full name typed directly, so the picker must never be the
+  // only way in.
+  const MODEL_CUSTOM_VALUE = '__custom__';
 
-  function updateDevinModelCost() {
-    const model = devinModelsById.get(devinModelSelectEl.value);
-    devinModelCostEl.textContent = model && model.costSummary ? model.costSummary : '';
+  // Keyed by model id so the hint under the select (Devin's cost summary,
+  // Codex's description) can be looked up again on every change without
+  // another round trip to the list call.
+  let modelsById = new Map();
+
+  // set()'s signature differs only for Devin, which also persists the
+  // pricing snapshot alongside the model id (see app.go's SetDevinModel);
+  // Codex/Claude take just the id.
+  const MODEL_PICKERS = {
+    devin: {
+      list: listDevinModels,
+      get: getDevinModel,
+      set: (id, model) => setDevinModel(id, model?.costSummary || ''),
+      grouped: true,
+    },
+    codex: { list: listCodexModels, get: getCodexModel, set: (id) => setCodexModel(id), grouped: false },
+    claude: { list: listClaudeModels, get: getClaudeModel, set: (id) => setClaudeModel(id), grouped: false },
+  };
+
+  function renderModelOptions(models) {
+    return models
+      .map(
+        (model) =>
+          `<option value="${escapeAttribute(model.id)}" title="${escapeAttribute(model.costSummary || model.description || '')}">${escapeHtml(model.label)}</option>`,
+      )
+      .join('');
   }
 
-  async function refreshDevinModels() {
-    const isDevin = agentSelectEl.value === 'devin';
-    devinModelRow.hidden = !isDevin;
-    if (!isDevin) return;
+  function renderGroupedModelOptions(models) {
+    const groups = new Map();
+    models.forEach((model) => {
+      const family = model.familyLabel || 'Outros';
+      if (!groups.has(family)) groups.set(family, []);
+      groups.get(family).push(model);
+    });
+    return Array.from(
+      groups,
+      ([family, variants]) => `<optgroup label="${escapeAttribute(family)}">${renderModelOptions(variants)}</optgroup>`,
+    ).join('');
+  }
 
-    devinModelSelectEl.disabled = true;
-    devinModelSelectEl.innerHTML = '<option value="">Carregando…</option>';
-    devinModelCostEl.textContent = '';
+  function updateModelCost() {
+    const model = modelsById.get(modelSelectEl.value);
+    modelCostEl.textContent = model ? model.costSummary || model.description || '' : '';
+  }
+
+  // Applies `id` (from the dropdown or the free-text field) as the current
+  // agent's model. Shared by both, so a custom value goes through the exact
+  // same reconnect + status-render path as picking a listed one.
+  async function applyModel(id) {
+    const picker = MODEL_PICKERS[agentSelectEl.value];
+    if (!picker || !id) return;
+    modelSelectEl.disabled = true;
+    modelCustomApplyEl.disabled = true;
+    reconnecting = true;
+    renderMcpStatus({ ready: false, error: 'Trocando modelo…' });
     try {
-      const [models, selected, savedCostSummary] = await Promise.all([
-        listDevinModels(),
-        getDevinModel(),
-        getDevinCostSummary(),
-      ]);
-      devinModelsById = new Map(models.map((model) => [model.id, model]));
-      const groups = new Map();
-      models.forEach((model) => {
-        const family = model.familyLabel || 'Outros';
-        if (!groups.has(family)) groups.set(family, []);
-        groups.get(family).push(model);
-      });
-      devinModelSelectEl.innerHTML = [
-        '<option value="">Selecione um modelo…</option>',
-        ...Array.from(groups, ([family, variants]) =>
-          `<optgroup label="${escapeAttribute(family)}">${variants
-            .map(
-              (model) =>
-                `<option value="${escapeAttribute(model.id)}" title="${escapeAttribute(model.costSummary || '')}">${escapeHtml(model.label)}</option>`,
-            )
-            .join('')}</optgroup>`,
-        ),
-      ].join('');
-      devinModelSelectEl.value = models.some((model) => model.id === selected) ? selected : '';
-      devinModelSelectEl.disabled = false;
-      updateDevinModelCost();
-      const selectedModel = devinModelsById.get(selected);
-      if (selectedModel && selectedModel.costSummary !== savedCostSummary) {
-        const next = await setDevinModel(selected, selectedModel.costSummary || '');
-        renderMcpStatus(next);
-      }
+      const next = await picker.set(id, modelsById.get(id));
+      renderMcpStatus(next);
     } catch (err) {
-      devinModelSelectEl.innerHTML = '<option value="">Não foi possível listar</option>';
-      LogFrontendError(`listDevinModels: failed: ${err && err.stack ? err.stack : err}`).catch(() => {});
+      renderMcpStatus({ ready: false, error: String(err) });
+      LogFrontendError(`setModel(${agentSelectEl.value}): failed: ${err && err.stack ? err.stack : err}`).catch(() => {});
+    } finally {
+      reconnecting = false;
+      modelSelectEl.disabled = false;
+      modelCustomApplyEl.disabled = false;
+    }
+  }
+
+  async function refreshModelPicker() {
+    const picker = MODEL_PICKERS[agentSelectEl.value];
+    modelRow.hidden = !picker;
+    if (!picker) return;
+
+    modelSelectEl.disabled = true;
+    modelSelectEl.innerHTML = '<option value="">Carregando…</option>';
+    modelCostEl.textContent = '';
+    modelCustomRow.hidden = true;
+
+    const selected = await picker.get().catch(() => '');
+
+    let models = [];
+    try {
+      models = await picker.list();
+      modelsById = new Map(models.map((model) => [model.id, model]));
+      modelSelectEl.innerHTML = [
+        '<option value="">Selecione um modelo…</option>',
+        picker.grouped ? renderGroupedModelOptions(models) : renderModelOptions(models),
+        `<option value="${MODEL_CUSTOM_VALUE}">Personalizado…</option>`,
+      ].join('');
+    } catch (err) {
+      // The list itself failing (Codex's debug subcommand disappearing, no
+      // network, ...) must not take the free-text fallback down with it.
+      modelsById = new Map();
+      modelSelectEl.innerHTML = [
+        '<option value="">Não foi possível listar modelos</option>',
+        `<option value="${MODEL_CUSTOM_VALUE}">Personalizado…</option>`,
+      ].join('');
+      LogFrontendError(`listModels(${agentSelectEl.value}): failed: ${err && err.stack ? err.stack : err}`).catch(() => {});
+    }
+
+    if (models.some((model) => model.id === selected)) {
+      modelSelectEl.value = selected;
+    } else if (selected) {
+      // Already-persisted value isn't one of the listed models — either it
+      // was set as free text before, or the list changed underneath it.
+      // Show it as-is rather than silently reverting the picker's choice.
+      modelSelectEl.value = MODEL_CUSTOM_VALUE;
+      modelCustomInputEl.value = selected;
+      modelCustomRow.hidden = false;
+    } else {
+      modelSelectEl.value = '';
+    }
+    modelSelectEl.disabled = false;
+    updateModelCost();
+
+    // Devin-only: the cost snapshot the app persisted alongside the model
+    // id can go stale (Devin republishes pricing over time) — re-apply so
+    // the ledger's pricing reference stays current without a manual pick.
+    if (agentSelectEl.value === 'devin' && selected) {
+      const savedCostSummary = await getDevinCostSummary().catch(() => '');
+      const selectedModel = modelsById.get(selected);
+      if (selectedModel && selectedModel.costSummary !== savedCostSummary) {
+        const next = await setDevinModel(selected, selectedModel.costSummary || '').catch(() => null);
+        if (next) renderMcpStatus(next);
+      }
     }
   }
 
   agentSelectEl.value = (await getAgent().catch(() => '')) || AGENT_OPTIONS[0].value;
-  // Listing Devin models invokes an external CLI and may take up to its
-  // 30-second backend timeout. It must not sit on the startup critical path:
-  // the sidebar, work-item list and selected project are all usable while
-  // this picker independently finishes loading (or reports its own error).
-  refreshDevinModels().catch((err) => {
-    LogFrontendError(`refreshDevinModels: failed: ${err && err.stack ? err.stack : err}`).catch(() => {});
+  // Listing models invokes an external CLI (Devin/Codex) and may take up to
+  // its 30-second backend timeout. It must not sit on the startup critical
+  // path: the sidebar, work-item list and selected project are all usable
+  // while this picker independently finishes loading (or reports its own
+  // error).
+  refreshModelPicker().catch((err) => {
+    LogFrontendError(`refreshModelPicker: failed: ${err && err.stack ? err.stack : err}`).catch(() => {});
   });
   agentSelectEl.addEventListener('change', async () => {
     const previous = await getAgent().catch(() => '');
@@ -262,7 +370,7 @@ export async function mountShell(root) {
     try {
       const next = await setAgent(chosen);
       renderMcpStatus(next);
-      await refreshDevinModels();
+      await refreshModelPicker();
     } catch (err) {
       // SetAgent refuses to swap while a run is active (see app.go) rather
       // than silently killing it — nothing actually changed backend-side,
@@ -289,23 +397,28 @@ export async function mountShell(root) {
     }
   });
 
-  devinModelSelectEl.addEventListener('change', async () => {
-    const chosen = devinModelSelectEl.value;
-    updateDevinModelCost();
+  modelSelectEl.addEventListener('change', async () => {
+    const chosen = modelSelectEl.value;
+    updateModelCost();
+    if (chosen === MODEL_CUSTOM_VALUE) {
+      modelCustomRow.hidden = false;
+      modelCustomInputEl.focus();
+      return;
+    }
+    modelCustomRow.hidden = true;
     if (!chosen) return;
-    devinModelSelectEl.disabled = true;
-    reconnecting = true;
-    renderMcpStatus({ ready: false, error: 'Trocando modelo do Devin…' });
-    try {
-      const selectedModel = devinModelsById.get(chosen);
-      const next = await setDevinModel(chosen, selectedModel?.costSummary || '');
-      renderMcpStatus(next);
-    } catch (err) {
-      renderMcpStatus({ ready: false, error: String(err) });
-      LogFrontendError(`setDevinModel: failed: ${err && err.stack ? err.stack : err}`).catch(() => {});
-    } finally {
-      reconnecting = false;
-      devinModelSelectEl.disabled = false;
+    await applyModel(chosen);
+  });
+
+  modelCustomApplyEl.addEventListener('click', async () => {
+    const value = modelCustomInputEl.value.trim();
+    if (!value) return;
+    await applyModel(value);
+  });
+  modelCustomInputEl.addEventListener('keydown', (event) => {
+    if (event.key === 'Enter') {
+      event.preventDefault();
+      modelCustomApplyEl.click();
     }
   });
 
@@ -360,17 +473,11 @@ export async function mountShell(root) {
     renderMain(initialTab);
   }
 
-  function openLogs() {
-    setState({ view: 'logs' });
-    renderMain();
-  }
-
   // Mirrors workitem-view.js's disposeTab: a generation or wiki question
   // started under one work-item keeps running (and writing into the shared
   // reading pane once it resolves) even after the user switches to a
   // different work-item entirely — disposeView() tells the outgoing
-  // work-item's view to stop before the next one takes over. Also covers
-  // switching away from the Logs screen (clears its polling intervals).
+  // work-item's view to stop before the next one takes over.
   let disposeView = null;
 
   async function renderMain(initialTab) {
@@ -378,16 +485,6 @@ export async function mountShell(root) {
     disposeView?.();
     disposeView = null;
     const state = getState();
-    // A coluna de leitura (reading-pane) so faz sentido junto de um
-    // work-item aberto — na tela de Logs ela so mostrava o placeholder da
-    // aba anterior ("Fontes não usa a coluna de leitura..."), sobrando
-    // largura inútil ao lado do painel de log. Escondida via classe (não
-    // desmontada) porque mountReadingPane roda uma vez só, pro app inteiro.
-    shellEl.classList.toggle('logs-open', state.view === 'logs');
-    if (state.view === 'logs') {
-      disposeView = renderLogsView(mainEl);
-      return;
-    }
     if (!state.projectId) {
       mainEl.innerHTML = '<div class="center">Selecione um work-item ou crie um novo para começar.</div>';
       return;
@@ -420,6 +517,90 @@ export async function mountShell(root) {
     renderNav();
   });
 
+  // pane-resizer: drag either divider (VS Code-style — its own left sidebar
+  // and right panel both drag against the editor in between) to resize the
+  // pane right next to it. `.main` on either side never gets its own width
+  // set directly, it just flexes into whatever space the drag leaves (see
+  // style.css's .shell comment). `side` is which way a rightward mouse
+  // move/ArrowRight press grows `paneEl`: +1 when the resizer sits on the
+  // pane's right edge (sidebar), -1 when it sits on the pane's left edge
+  // (reading-pane). Persisted per pane (preferences.js's getPaneWidth/
+  // setPaneWidth) so a drag survives a restart, same as sidebar-collapsed/
+  // theme below. `max` is a function, not a fixed number — it's evaluated
+  // fresh on every move/apply so a window resize between drags is reflected
+  // without this needing its own resize listener.
+  function initPaneResizer(name, { resizerEl, paneEl, side, min, max }) {
+    function applyWidth(px) {
+      if (px == null) {
+        paneEl.style.flexBasis = '';
+        return;
+      }
+      paneEl.style.flexBasis = `${Math.min(max(), Math.max(min, px))}px`;
+    }
+
+    let dragging = false;
+    let startX = 0;
+    let startWidth = 0;
+
+    function onMouseMove(event) {
+      if (!dragging) return;
+      applyWidth(startWidth + (event.clientX - startX) * side);
+    }
+
+    function stopDragging() {
+      if (!dragging) return;
+      dragging = false;
+      resizerEl.classList.remove('resizing');
+      document.body.classList.remove('pane-resizing');
+      document.removeEventListener('mousemove', onMouseMove);
+      document.removeEventListener('mouseup', stopDragging);
+      setPaneWidth(name, paneEl.getBoundingClientRect().width);
+    }
+
+    resizerEl.addEventListener('mousedown', (event) => {
+      event.preventDefault();
+      dragging = true;
+      startX = event.clientX;
+      startWidth = paneEl.getBoundingClientRect().width;
+      resizerEl.classList.add('resizing');
+      document.body.classList.add('pane-resizing');
+      document.addEventListener('mousemove', onMouseMove);
+      document.addEventListener('mouseup', stopDragging);
+    });
+
+    // Keyboard equivalent (role="separator" — see the markup above) — the
+    // resizer is a real focusable control, not mouse-only.
+    resizerEl.addEventListener('keydown', (event) => {
+      const STEP = 24;
+      let steps = 0;
+      if (event.key === 'ArrowLeft') steps = -1;
+      else if (event.key === 'ArrowRight') steps = 1;
+      else return;
+      event.preventDefault();
+      const width = paneEl.getBoundingClientRect().width + steps * STEP * side;
+      applyWidth(width);
+      setPaneWidth(name, paneEl.getBoundingClientRect().width);
+    });
+
+    return { applyWidth };
+  }
+
+  const sidebarResizer = initPaneResizer('sidebar', {
+    resizerEl: root.querySelector('[data-pane-resizer="sidebar"]'),
+    paneEl: sidebarEl,
+    side: 1,
+    min: 180,
+    max: () => Math.min(480, shellEl.clientWidth - 320 - 12),
+  });
+  const readingPaneResizer = initPaneResizer('reading-pane', {
+    resizerEl: root.querySelector('[data-pane-resizer="reading-pane"]'),
+    paneEl: readingPaneEl,
+    side: -1,
+    min: 380,
+    max: () => Math.round(shellEl.clientWidth * 0.7),
+  });
+  readingPaneResizer.applyWidth(getPaneWidth('reading-pane'));
+
   // Collapsed sidebar: a narrow rail with the brand, the action buttons and
   // each work-item as an icon (name in its tooltip), so navigating still
   // works without expanding it. A standing layout preference, so it's
@@ -429,10 +610,17 @@ export async function mountShell(root) {
   // right of the macOS window buttons (the brand row has no room left);
   // collapsed, the strip is all window buttons, so it moves into the rail's
   // action column. CSS shows whichever matches.
+  //
+  // sidebarResizer.applyWidth(null) below clears any dragged width so the
+  // collapsed rail falls back to CSS's own fixed 72px (.shell.sidebar-
+  // collapsed .sidebar) instead of the inline style (which would otherwise
+  // always win over it, dragged-width-or-not) pinning it at whatever the
+  // user last dragged. Expanding restores that same dragged width, if any.
   const sidebarToggleEls = [...root.querySelectorAll('[data-toggle-sidebar]')];
   function applySidebarCollapsed(collapsed) {
     shellEl.classList.toggle('sidebar-collapsed', collapsed);
     sidebarToggleEls.forEach((el) => el.setAttribute('aria-expanded', String(!collapsed)));
+    sidebarResizer.applyWidth(collapsed ? null : getPaneWidth('sidebar'));
   }
   let sidebarCollapsed = false;
   try {
@@ -464,7 +652,6 @@ export async function mountShell(root) {
     openWorkItem(project.id, 'fontes');
   });
 
-  root.querySelector('[data-open-logs]').addEventListener('click', () => openLogs());
 
   subscribe(() => renderNav());
 

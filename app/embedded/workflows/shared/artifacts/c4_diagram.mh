@@ -481,9 +481,20 @@ export tool C4Diagram {
     // o preview de UM item (ArtifactPreview.Diagrama) e o arquivo final
     // mostrem a mesma coisa sem precisar do lote inteiro. mhl nao tem spread
     // nem atribuicao de campo, dai a reconstrucao campo a campo.
-    annotate(data: any): any -> {
+    // infra_hint: se as ADRs do work-item mencionam infraestrutura de
+    // implantacao (termos como cluster, kubernetes, eks, regiao) — ai o lote
+    // precisa de um c4-deployment (ver diagramas.prompt.md).
+    infra_hint(adr_content: string): bool -> {
+        var t = adr_content.to_lower()
+        return ["kubernetes", "eks", "aks", "gke", "cluster", "zonas de disponibilidade", "availability zone", "região", "ecs", "fargate", "máquina virtual"].any((k) -> t.contains(k))
+    }
+
+    annotate(data: any, infra: bool = false): any -> {
         var diagramas = data.diagramas
         var avisos = self.batch_warnings(diagramas)
+        if (infra && !diagramas.any((d) -> d.diagram_type == "c4-deployment")) {
+            avisos[0] = avisos[0] + ["As ADRs definem infraestrutura de implantação, mas o lote não tem diagrama de implantação (c4-deployment)."]
+        }
         var out = []
         var i = 0
         for (var d in diagramas) {
@@ -693,6 +704,14 @@ test C4DiagramSpec {
         are_equal(item.ambiente, "")
         are_equal(item.elementos.size(), 0)
         is_true(item.avisos_lote.join(" ").contains("contexto de sistema"))
+    }
+
+    describe missing_deployment_is_flagged_when_adrs_define_infrastructure {
+        is_true(C4Diagram.infra_hint("Decisão: usar AWS EKS com três zonas de disponibilidade"))
+        is_true(!C4Diagram.infra_hint("Decisão: usar .NET 10"))
+        var annotated = C4Diagram.annotate({diagramas: [C4Fixtures.context(), C4Fixtures.container()]}, true)
+        is_true(annotated.diagramas[0].avisos_lote.join(" ").contains("não tem diagrama de implantação"))
+        are_equal(C4Diagram.annotate({diagramas: [C4Fixtures.context(), C4Fixtures.container()]}, false).diagramas[0].avisos_lote.size(), 0)
     }
 
     describe warnings_html_escapes_llm_names {

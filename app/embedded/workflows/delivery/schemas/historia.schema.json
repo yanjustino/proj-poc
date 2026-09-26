@@ -3,48 +3,675 @@
     "sourcedText": {
       "type": "object",
       "additionalProperties": false,
-      "required": ["texto", "fontes"],
+      "required": [
+        "texto",
+        "fontes"
+      ],
       "properties": {
-        "texto": {"type": "string"},
-        "fontes": {"type": "array", "items": {"type": "string"}, "minItems": 1}
+        "texto": {
+          "type": "string"
+        },
+        "fontes": {
+          "type": "array",
+          "items": {
+            "type": "string"
+          },
+          "minItems": 1
+        }
+      }
+    },
+    "campo": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": [
+        "nome",
+        "tipo",
+        "obrigatorio",
+        "descricao",
+        "local"
+      ],
+      "properties": {
+        "nome": {
+          "type": "string"
+        },
+        "tipo": {
+          "type": "string",
+          "enum": [
+            "string",
+            "number",
+            "integer",
+            "boolean",
+            "date",
+            "datetime",
+            "uuid",
+            "object",
+            "array"
+          ]
+        },
+        "obrigatorio": {
+          "type": "boolean"
+        },
+        "descricao": {
+          "type": "string"
+        },
+        "local": {
+          "type": "string",
+          "enum": [
+            "path",
+            "query",
+            "header",
+            ""
+          ],
+          "description": "Só em parametros de endpoint (path/query/header). Vazio em corpo, respostas e eventos."
+        }
+      }
+    },
+    "endpoint": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": [
+        "id",
+        "metodo",
+        "caminho",
+        "resumo",
+        "autenticacao",
+        "parametros",
+        "corpo",
+        "respostas",
+        "fontes"
+      ],
+      "properties": {
+        "id": {
+          "type": "string",
+          "description": "operationId em camelCase (ex.: consultarOrdem)."
+        },
+        "metodo": {
+          "type": "string",
+          "enum": [
+            "GET",
+            "POST",
+            "PUT",
+            "PATCH",
+            "DELETE"
+          ]
+        },
+        "caminho": {
+          "type": "string",
+          "description": "Ex.: /ordens/{id} — cada {param} declarado em parametros com local path."
+        },
+        "resumo": {
+          "type": "string"
+        },
+        "autenticacao": {
+          "type": "string",
+          "description": "Mecanismo exigido (ex.: JWT, mTLS) ou \"nenhuma\"."
+        },
+        "parametros": {
+          "type": "array",
+          "items": {
+            "$ref": "#/$defs/campo"
+          }
+        },
+        "corpo": {
+          "type": "array",
+          "items": {
+            "$ref": "#/$defs/campo"
+          },
+          "description": "Campos do corpo JSON; vazio em GET/DELETE."
+        },
+        "respostas": {
+          "type": "array",
+          "minItems": 1,
+          "items": {
+            "type": "object",
+            "additionalProperties": false,
+            "required": [
+              "status",
+              "descricao",
+              "campos"
+            ],
+            "properties": {
+              "status": {
+                "type": "string",
+                "description": "Código HTTP (ex.: 200, 201, 400, 404)."
+              },
+              "descricao": {
+                "type": "string"
+              },
+              "campos": {
+                "type": "array",
+                "items": {
+                  "$ref": "#/$defs/campo"
+                }
+              }
+            }
+          }
+        },
+        "fontes": {
+          "type": "array",
+          "items": {
+            "type": "string"
+          },
+          "minItems": 1
+        }
+      }
+    },
+    "evento": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": [
+        "nome",
+        "direcao",
+        "canal",
+        "resumo",
+        "campos",
+        "fontes"
+      ],
+      "properties": {
+        "nome": {
+          "type": "string",
+          "description": "Nome do evento/mensagem (ex.: OrdemCriada)."
+        },
+        "direcao": {
+          "type": "string",
+          "enum": [
+            "publica",
+            "consome"
+          ]
+        },
+        "canal": {
+          "type": "string",
+          "description": "Fila/tópico (ex.: ordens.criadas)."
+        },
+        "resumo": {
+          "type": "string"
+        },
+        "campos": {
+          "type": "array",
+          "items": {
+            "$ref": "#/$defs/campo"
+          }
+        },
+        "fontes": {
+          "type": "array",
+          "items": {
+            "type": "string"
+          },
+          "minItems": 1
+        }
+      }
+    },
+    "spike": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": [
+        "pergunta",
+        "timebox",
+        "metodo",
+        "evidencia_saida",
+        "decisao_habilitada",
+        "criterio_encerramento"
+      ],
+      "description": "Só para story_type spike; nos demais tipos, todas as strings vazias.",
+      "properties": {
+        "pergunta": {
+          "type": "string",
+          "description": "A pergunta que a investigação responde."
+        },
+        "timebox": {
+          "type": "string",
+          "description": "Limite de tempo (ex.: 2 dias)."
+        },
+        "metodo": {
+          "type": "string",
+          "description": "Como investigar (prova de conceito, benchmark, leitura de documentação…)."
+        },
+        "evidencia_saida": {
+          "type": "string",
+          "description": "O artefato que comprova a resposta (relatório, PoC, medição)."
+        },
+        "decisao_habilitada": {
+          "type": "string",
+          "description": "A decisão ou o item de backlog que a resposta desbloqueia."
+        },
+        "criterio_encerramento": {
+          "type": "string",
+          "description": "Quando encerrar — resposta obtida ou timebox esgotado, e o que fazer em cada caso."
+        }
+      }
+    },
+    "cenario": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": [
+        "titulo",
+        "dado",
+        "quando",
+        "entao",
+        "criterios",
+        "fontes"
+      ],
+      "properties": {
+        "titulo": {
+          "type": "string"
+        },
+        "dado": {
+          "type": "array",
+          "minItems": 1,
+          "items": {
+            "type": "string"
+          },
+          "description": "Pré-condições (Dado … / E …), sem a palavra-chave."
+        },
+        "quando": {
+          "type": "array",
+          "minItems": 1,
+          "items": {
+            "type": "string"
+          },
+          "description": "Ação (Quando … / E …), sem a palavra-chave."
+        },
+        "entao": {
+          "type": "array",
+          "minItems": 1,
+          "items": {
+            "type": "string"
+          },
+          "description": "Resultado verificável (Então … / E …), sem a palavra-chave."
+        },
+        "criterios": {
+          "type": "array",
+          "minItems": 1,
+          "items": {
+            "type": "string"
+          },
+          "description": "Critérios de aceite que o cenário verifica: CA1 é o primeiro item de criterios_aceite, CA2 o segundo…"
+        },
+        "fontes": {
+          "type": "array",
+          "items": {
+            "type": "string"
+          },
+          "minItems": 1
+        }
+      }
+    },
+    "mudancaText": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": [
+        "texto",
+        "mudanca",
+        "fontes"
+      ],
+      "properties": {
+        "texto": {
+          "type": "string"
+        },
+        "mudanca": {
+          "type": "string",
+          "enum": [
+            "novo",
+            "modificado",
+            "as_is",
+            "removido"
+          ],
+          "description": "novo: criado por este item; modificado: altera algo existente; as_is: já existe e só é referenciado; removido: deixa de existir."
+        },
+        "fontes": {
+          "type": "array",
+          "items": {
+            "type": "string"
+          },
+          "minItems": 1
+        }
+      }
+    },
+    "dependencia": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": [
+        "tipo",
+        "destino",
+        "texto",
+        "mudanca",
+        "fontes"
+      ],
+      "properties": {
+        "tipo": {
+          "type": "string",
+          "enum": [
+            "depende_de",
+            "bloqueia",
+            "relacionada",
+            "impedimento_externo"
+          ],
+          "description": "depende_de: esta história precisa do destino antes; bloqueia: o destino precisa desta; impedimento_externo: algo fora do backlog (acesso, contrato, time)."
+        },
+        "destino": {
+          "type": "string",
+          "description": "Título exato de outra história deste lote, código de feature (FT001), ID de requisito ou o sistema/time externo."
+        },
+        "texto": {
+          "type": "string",
+          "description": "Justificativa da dependência."
+        },
+        "mudanca": {
+          "type": "string",
+          "enum": [
+            "novo",
+            "modificado",
+            "as_is",
+            "removido"
+          ],
+          "description": "novo: criado por este item; modificado: altera algo existente; as_is: já existe e só é referenciado; removido: deixa de existir."
+        },
+        "fontes": {
+          "type": "array",
+          "items": {
+            "type": "string"
+          },
+          "minItems": 1
+        }
+      }
+    },
+    "integracao": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": [
+        "sistema",
+        "operacao",
+        "protocolo",
+        "requisicao",
+        "resposta",
+        "falhas",
+        "fontes"
+      ],
+      "properties": {
+        "sistema": {
+          "type": "string",
+          "description": "Sistema externo chamado — nome ou id exato do diagrama C4 (ex.: bureau-credito)."
+        },
+        "operacao": {
+          "type": "string",
+          "description": "A operação consumida (ex.: consultar score de crédito)."
+        },
+        "protocolo": {
+          "type": "string",
+          "description": "Ex.: REST/HTTPS, SOAP, SFTP batch, fila."
+        },
+        "requisicao": {
+          "type": "array",
+          "items": {
+            "$ref": "#/$defs/campo"
+          }
+        },
+        "resposta": {
+          "type": "array",
+          "items": {
+            "$ref": "#/$defs/campo"
+          }
+        },
+        "falhas": {
+          "type": "string",
+          "description": "Como tratar indisponibilidade, timeout e resposta inválida (retry, circuit breaker, fallback)."
+        },
+        "fontes": {
+          "type": "array",
+          "items": {
+            "type": "string"
+          },
+          "minItems": 1
+        }
       }
     }
   },
   "type": "object",
   "additionalProperties": false,
   "required": [
-    "como", "quero", "para", "resultado_tecnico", "habilita", "evidenciado_por", "fontes", "work_item_type",
-    "story_type", "subclassification", "nature", "specialty", "contexto_negocio", "contexto_fontes",
-    "criterios_aceite", "cenarios_gherkin", "cenarios_fontes", "regras_negocio", "definition_of_done",
-    "dependencias_impedimentos", "fora_escopo", "exemplo_uso", "exemplo_fontes", "contratos_interface",
-    "contratos_fontes", "questoes_abertas"
+    "como",
+    "quero",
+    "para",
+    "resultado_tecnico",
+    "habilita",
+    "evidenciado_por",
+    "spike",
+    "fontes",
+    "work_item_type",
+    "story_type",
+    "subclassification",
+    "nature",
+    "specialty",
+    "contexto_negocio",
+    "contexto_fontes",
+    "criterios_aceite",
+    "cenarios",
+    "regras_negocio",
+    "definition_of_done",
+    "dependencias_impedimentos",
+    "fora_escopo",
+    "exemplo_uso",
+    "exemplo_fontes",
+    "rastreabilidade",
+    "contratos",
+    "contratos_fontes",
+    "gaps",
+    "questoes_abertas"
   ],
   "properties": {
-    "como": {"type": "string"},
-    "quero": {"type": "string"},
-    "para": {"type": "string"},
-    "resultado_tecnico": {"type": "string"},
-    "habilita": {"type": "string"},
-    "evidenciado_por": {"type": "string"},
-    "fontes": {"type": "array", "items": {"type": "string"}, "minItems": 1},
-    "work_item_type": {"type": "string", "enum": ["historia"]},
-    "story_type": {"type": "string", "enum": ["historia_usuario", "historia_habilitadora", "spike"]},
-    "subclassification": {"type": "string"},
-    "nature": {"type": "string", "enum": ["funcional", "tecnica", "pesquisa"]},
-    "specialty": {"type": "string"},
-    "contexto_negocio": {"type": "string"},
-    "contexto_fontes": {"type": "array", "items": {"type": "string"}, "minItems": 1},
-    "criterios_aceite": {"type": "array", "minItems": 1, "items": {"$ref": "#/$defs/sourcedText"}},
-    "cenarios_gherkin": {"type": "string"},
-    "cenarios_fontes": {"type": "array", "items": {"type": "string"}, "minItems": 1},
-    "regras_negocio": {"type": "array", "items": {"$ref": "#/$defs/sourcedText"}},
-    "definition_of_done": {"type": "array", "items": {"$ref": "#/$defs/sourcedText"}},
-    "dependencias_impedimentos": {"type": "array", "items": {"$ref": "#/$defs/sourcedText"}},
-    "fora_escopo": {"type": "array", "items": {"$ref": "#/$defs/sourcedText"}},
-    "exemplo_uso": {"type": "string"},
-    "exemplo_fontes": {"type": "array", "items": {"type": "string"}, "minItems": 1},
-    "contratos_interface": {"type": "string"},
-    "contratos_fontes": {"type": "array", "items": {"type": "string"}, "minItems": 1},
-    "questoes_abertas": {"type": "array", "items": {"$ref": "#/$defs/sourcedText"}}
+    "como": {
+      "type": "string"
+    },
+    "quero": {
+      "type": "string"
+    },
+    "para": {
+      "type": "string"
+    },
+    "resultado_tecnico": {
+      "type": "string"
+    },
+    "habilita": {
+      "type": "string"
+    },
+    "evidenciado_por": {
+      "type": "string"
+    },
+    "spike": {
+      "$ref": "#/$defs/spike"
+    },
+    "fontes": {
+      "type": "array",
+      "items": {
+        "type": "string"
+      },
+      "minItems": 1
+    },
+    "work_item_type": {
+      "type": "string",
+      "enum": [
+        "historia"
+      ]
+    },
+    "story_type": {
+      "type": "string",
+      "enum": [
+        "historia_usuario",
+        "historia_habilitadora",
+        "spike"
+      ]
+    },
+    "subclassification": {
+      "type": "string"
+    },
+    "nature": {
+      "type": "string",
+      "enum": [
+        "funcional",
+        "tecnica",
+        "pesquisa"
+      ]
+    },
+    "specialty": {
+      "type": "string"
+    },
+    "contexto_negocio": {
+      "type": "string"
+    },
+    "contexto_fontes": {
+      "type": "array",
+      "items": {
+        "type": "string"
+      },
+      "minItems": 1
+    },
+    "criterios_aceite": {
+      "type": "array",
+      "minItems": 1,
+      "items": {
+        "$ref": "#/$defs/sourcedText"
+      }
+    },
+    "cenarios": {
+      "type": "array",
+      "minItems": 1,
+      "items": {
+        "$ref": "#/$defs/cenario"
+      },
+      "description": "Cenários de aceite; todo critério de aceite é verificado por ao menos um."
+    },
+    "regras_negocio": {
+      "type": "array",
+      "items": {
+        "$ref": "#/$defs/mudancaText"
+      }
+    },
+    "definition_of_done": {
+      "type": "array",
+      "items": {
+        "$ref": "#/$defs/sourcedText"
+      }
+    },
+    "dependencias_impedimentos": {
+      "type": "array",
+      "items": {
+        "$ref": "#/$defs/dependencia"
+      }
+    },
+    "fora_escopo": {
+      "type": "array",
+      "items": {
+        "$ref": "#/$defs/sourcedText"
+      }
+    },
+    "exemplo_uso": {
+      "type": "string"
+    },
+    "exemplo_fontes": {
+      "type": "array",
+      "items": {
+        "type": "string"
+      },
+      "description": "Fontes do conteúdo; vazio quando a seção não se aplica."
+    },
+    "rastreabilidade": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": [
+        "requisitos",
+        "atributos",
+        "adrs",
+        "entidades",
+        "conteineres"
+      ],
+      "description": "IDs/nomes EXATOS dos artefatos acima que esta história atende ou toca.",
+      "properties": {
+        "requisitos": {
+          "type": "array",
+          "items": {
+            "type": "string"
+          },
+          "description": "IDs de requisitos (ex.: FR-003, IR-001, RN-002)."
+        },
+        "atributos": {
+          "type": "array",
+          "items": {
+            "type": "string"
+          },
+          "description": "IDs de atributos de qualidade/restrições (ex.: NFR-001, AC-002)."
+        },
+        "adrs": {
+          "type": "array",
+          "items": {
+            "type": "string"
+          },
+          "description": "ADRs que a implementação deve respeitar (ex.: ADR-002)."
+        },
+        "entidades": {
+          "type": "array",
+          "items": {
+            "type": "string"
+          },
+          "description": "Nomes de entidades do DER que a história lê ou altera."
+        },
+        "conteineres": {
+          "type": "array",
+          "items": {
+            "type": "string"
+          },
+          "description": "Nomes de contêineres do diagrama C4 que a história altera."
+        }
+      }
+    },
+    "contratos": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": [
+        "endpoints",
+        "eventos",
+        "integracoes"
+      ],
+      "properties": {
+        "endpoints": {
+          "type": "array",
+          "items": {
+            "$ref": "#/$defs/endpoint"
+          }
+        },
+        "eventos": {
+          "type": "array",
+          "items": {
+            "$ref": "#/$defs/evento"
+          }
+        },
+        "integracoes": {
+          "type": "array",
+          "items": {
+            "$ref": "#/$defs/integracao"
+          },
+          "description": "APIs de sistemas externos que esta história CONSOME (chamadas de saída)."
+        }
+      }
+    },
+    "contratos_fontes": {
+      "type": "array",
+      "items": {
+        "type": "string"
+      },
+      "description": "Fontes do conteúdo; vazio quando a seção não se aplica."
+    },
+    "gaps": {
+      "type": "array",
+      "items": {
+        "$ref": "#/$defs/sourcedText"
+      },
+      "description": "Informação que deveria existir para implementar a história mas falta nas fontes (fonte `gap`)."
+    },
+    "questoes_abertas": {
+      "type": "array",
+      "items": {
+        "$ref": "#/$defs/sourcedText"
+      }
+    }
   }
 }

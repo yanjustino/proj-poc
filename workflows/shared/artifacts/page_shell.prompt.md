@@ -39,6 +39,7 @@ p.fontes{margin:-4px 0 16px;line-height:2}
 .c4-swatch-relation{height:0;width:22px;border-top:2px dashed #707070;border-radius:0}
 .c4-warnings{padding:12px 16px 12px 34px;background:#fdf6e7;border-left:3px solid #d28b26;font-size:14px}
 .c4-warnings li{margin-bottom:6px}
+.autorrevisao{padding:8px 12px;background:#eef3ee;border-left:3px solid #2c7a4b;font-size:13px;color:#2c5a3b}
 .er-legend{list-style:none;padding:0;display:flex;flex-wrap:wrap;gap:6px 22px;font-size:13px}
 .er-legend li{margin:0}
 .er-legend code{font-family:ui-monospace,monospace;font-size:12px;background:#f1efe8;padding:1px 6px;border-radius:3px}

@@ -411,3 +411,40 @@ func writeTempFile(t *testing.T, name string, content string) string {
 	}
 	return path
 }
+
+func TestExportHandoffToCopiesThePackage(t *testing.T) {
+	dataDir := t.TempDir()
+	app := &App{dataDir: dataDir}
+	projectID := "handoff-test"
+	handoffDir := filepath.Join(dataDir, "projects", projectID, "handoff")
+
+	if _, err := app.exportHandoffTo(projectID, t.TempDir()); err == nil || !strings.Contains(err.Error(), "ainda nao gerado") {
+		t.Fatalf("exportHandoffTo without a package: err = %v, want 'ainda nao gerado'", err)
+	}
+
+	specDir := filepath.Join(handoffDir, "specs", "FT001-a", "US001-b")
+	if err := os.MkdirAll(specDir, 0o755); err != nil {
+		t.Fatalf("mkdir: %v", err)
+	}
+	if err := os.WriteFile(filepath.Join(handoffDir, "README.md"), []byte("# Pacote\n"), 0o644); err != nil {
+		t.Fatalf("write README: %v", err)
+	}
+	if err := os.WriteFile(filepath.Join(specDir, "spec.md"), []byte("# US001\n"), 0o644); err != nil {
+		t.Fatalf("write spec: %v", err)
+	}
+
+	exported, err := app.exportHandoffTo(projectID, t.TempDir())
+	if err != nil {
+		t.Fatalf("exportHandoffTo: %v", err)
+	}
+	if filepath.Base(exported) != "senpai-handoff-"+projectID {
+		t.Fatalf("unexpected export directory: %s", exported)
+	}
+	if body, err := os.ReadFile(filepath.Join(exported, "specs", "FT001-a", "US001-b", "spec.md")); err != nil || string(body) != "# US001\n" {
+		t.Fatalf("spec.md not copied: %q, %v", body, err)
+	}
+
+	if _, err := app.exportHandoffTo(projectID, specDir); err == nil {
+		t.Fatal("exportHandoffTo accepted a destination inside the package itself")
+	}
+}

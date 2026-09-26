@@ -40,24 +40,36 @@ export prompt RequisitosInstruction(schema_conventions: prompt, brief_content: s
 // (CreateProcess), derrubando a chamada com "O nome do arquivo ou a extensao
 // e muito grande" (Windows error 206) antes mesmo de chegar no backend.
 export prompt AdrInstruction(schema_conventions: prompt, requisitos_content: string, atributos_content: string, feedback_content: string) from "prompts/adr.prompt.md"
-// Der recebe as ADRs como contexto OPCIONAL pelo mesmo motivo de
-// Diagramas: o nivel fisico (tipos de dado) so existe depois que uma ADR
-// escolheu o banco, e um armazenamento nao relacional escolhido numa ADR
-// muda o que o DER consegue descrever.
+// Der recebe as ADRs pelo mesmo motivo de Diagramas — e com a mesma regra
+// (dependencia no Discovery, opcional no Delivery): o nivel fisico (tipos de
+// dado) so existe depois que uma ADR escolheu o banco, e um armazenamento
+// nao relacional escolhido numa ADR muda o que o DER consegue descrever.
 export prompt DerInstruction(schema_conventions: prompt, requisitos_content: string, atributos_content: string, adr_content: string, feedback_content: string) from "prompts/der.prompt.md"
-// Diagramas recebe tambem as ADRs como contexto OPCIONAL (quem chama passa
-// um texto fixo quando ainda nao ha nenhuma): o diagrama de conteiner mostra
-// as principais escolhas de tecnologia, e essas escolhas moram nas ADRs —
-// sem elas a LLM inventava a tecnologia ou contradizia uma decisao ja
-// registrada. Opcional, nao dependencia: adr e diagramas continuam podendo
-// ser gerados em paralelo (artifacts.js nao muda).
+// Diagramas recebe tambem as ADRs: o diagrama de conteiner mostra as
+// principais escolhas de tecnologia e o de implantacao a infraestrutura, e
+// essas escolhas moram nas ADRs — sem elas a LLM inventava a tecnologia ou
+// contradizia uma decisao ja registrada. No Discovery e DEPENDENCIA (o passo
+// falha sem ADRs; artifacts.js tambem declara `adr` em deps, o que da o
+// aviso de "Desatualizado" quando uma ADR muda). No Delivery, onde ADRs sao
+// opcionais para tudo, quem chama passa um texto fixo (NoAdr).
 export prompt DiagramasInstruction(schema_conventions: prompt, requisitos_content: string, atributos_content: string, adr_content: string, feedback_content: string) from "prompts/diagramas.prompt.md"
 
 // Gera historias pra UMA feature — usado por Discovery (feature dentro do
 // backlog de uma Oportunidade) e por Delivery (a unica feature implicita de
 // um projeto standalone). `feature_content` e o feature.html de qualquer um
 // dos dois casos — a instrucao nao muda, so quem fornece o conteudo muda.
-export prompt HistoriasInstruction(schema_conventions: prompt, feature_content: string, feedback_content: string) from "prompts/historias.prompt.md"
+// As historias recebem, alem da feature, todo o contexto tecnico da
+// oportunidade: sem ele a historia nao sabia qual conteiner altera, quais
+// entidades toca nem quais decisoes respeitar, e os contratos saiam como gap
+// ou inventados. SpecConventions (compartilhado com a historia unica do
+// Delivery) pede rastreabilidade e contratos estruturados — ver
+// historia_spec.mh. Quem chama passa um texto fixo para artefato ausente.
+export prompt SpecConventions() from "prompts/spec_conventions.prompt.md"
+// Plano de implementacao de UMA historia (plano_model.mh) — o "como" do
+// Spec-Driven Development. Recebe a historia e todo o contexto tecnico;
+// Delivery passa textos fixos para o que nao tem (atributos) ou nao gerou.
+export prompt PlanoInstruction(schema_conventions: prompt, historia_content: string, feature_content: string, requisitos_content: string, atributos_content: string, adr_content: string, der_content: string, diagramas_content: string, feedback_content: string) from "prompts/plano.prompt.md"
+export prompt HistoriasInstruction(schema_conventions: prompt, spec_conventions: prompt, feature_content: string, requisitos_content: string, atributos_content: string, adr_content: string, der_content: string, diagramas_content: string, feedback_content: string) from "prompts/historias.prompt.md"
 
 prompt HistoriasSchemaContent() from "schemas/historias.schema.json"
 prompt BriefSchemaContent() from "schemas/brief.schema.json"
@@ -66,6 +78,7 @@ prompt RequisitosSchemaContent() from "schemas/requisitos.schema.json"
 prompt AdrSchemaContent() from "schemas/adr.schema.json"
 prompt DerSchemaContent() from "schemas/der.schema.json"
 prompt DiagramasSchemaContent() from "schemas/diagramas.schema.json"
+prompt PlanoSchemaContent() from "schemas/plano.schema.json"
 
 export tool HistoriasSchemaFile { get(): {content: string, path: string} -> {content: HistoriasSchemaContent(), path: WorkflowsRoot.resolve("shared/artifacts/schemas/historias.schema.json")} }
 export tool BriefSchemaFile { get(): {content: string, path: string} -> {content: BriefSchemaContent(), path: WorkflowsRoot.resolve("shared/artifacts/schemas/brief.schema.json")} }
@@ -73,6 +86,7 @@ export tool AtributosSchemaFile { get(): {content: string, path: string} -> {con
 export tool RequisitosSchemaFile { get(): {content: string, path: string} -> {content: RequisitosSchemaContent(), path: WorkflowsRoot.resolve("shared/artifacts/schemas/requisitos.schema.json")} }
 export tool AdrSchemaFile { get(): {content: string, path: string} -> {content: AdrSchemaContent(), path: WorkflowsRoot.resolve("shared/artifacts/schemas/adr.schema.json")} }
 export tool DerSchemaFile { get(): {content: string, path: string} -> {content: DerSchemaContent(), path: WorkflowsRoot.resolve("shared/artifacts/schemas/der.schema.json")} }
+export tool PlanoSchemaFile { get(): {content: string, path: string} -> {content: PlanoSchemaContent(), path: WorkflowsRoot.resolve("shared/artifacts/schemas/plano.schema.json")} }
 export tool DiagramasSchemaFile { get(): {content: string, path: string} -> {content: DiagramasSchemaContent(), path: WorkflowsRoot.resolve("shared/artifacts/schemas/diagramas.schema.json")} }
 
 export prompt BriefBody(resumo_executivo: string, resumo_fontes: string, contexto_negocio: string, contexto_fontes: string, objetivos_tabela: string, em_escopo_lista: string, fora_escopo_lista: string, stakeholders_tabela: string, metricas_tabela: string, marcos_tabela: string, riscos_tabela: string, perguntas_lista: string) from "templates/brief_body.html"
@@ -98,8 +112,13 @@ export prompt DiagramaBody(tipo_label: string, hierarchy_level: string, escopo_h
 // mesmo formato serve tanto pro item dentro do backlog do Discovery quanto
 // pro detalhamento final do Delivery (a diferenca entre os dois nunca esta
 // na FORMA renderizada, so em quais dados entram e onde o arquivo e gravado).
-export prompt FeatureBody(classificacao_lista: string, hipotese_beneficio: string, hipotese_beneficio_fontes: string, itens_habilitados_lista: string, resumo: string, resumo_fontes: string, objetivo: string, objetivo_fontes: string, personas_tabela: string, em_escopo_lista: string, fora_escopo_lista: string, regras_lista: string, interacoes_lista: string, criterios_lista: string, historias_lista: string, dependencias_lista: string, dependencias_sistema_lista: string, gaps_lista: string, questoes_lista: string) from "templates/feature_body.html"
-export prompt HistoriaBody(statement: string, statement_fontes: string, atributos_lista: string, contexto_negocio: string, contexto_fontes: string, criterios_lista: string, cenarios_gherkin: string, cenarios_fontes: string, regras_lista: string, dod_lista: string, dependencias_lista: string, fora_escopo_lista: string, exemplo_uso: string, exemplo_fontes: string, contratos_interface: string, contratos_fontes: string, questoes_lista: string) from "templates/historia_body.html"
+export prompt FeatureBody(avisos_html: string, classificacao_lista: string, hipotese_beneficio: string, hipotese_beneficio_fontes: string, itens_habilitados_lista: string, resumo: string, resumo_fontes: string, objetivo: string, objetivo_fontes: string, personas_tabela: string, em_escopo_lista: string, fora_escopo_lista: string, regras_lista: string, interacoes_lista: string, criterios_lista: string, historias_lista: string, dependencias_lista: string, dependencias_sistema_lista: string, gaps_lista: string, questoes_lista: string) from "templates/feature_body.html"
+export prompt HistoriaBody(statement: string, statement_fontes: string, avisos_html: string, atributos_lista: string, contexto_html: string, criterios_lista: string, cenarios_html: string, regras_html: string, dod_html: string, dependencias_html: string, fora_escopo_html: string, exemplo_html: string, rastreabilidade_html: string, contratos_html: string, gaps_html: string, questoes_html: string) from "templates/historia_body.html"
+
+// PlanoBody — o plano mora na pasta da historia (historias/<...>/<USxxx>/
+// plano.html), dois ou tres niveis abaixo de artifacts/ conforme o workflow:
+// `assets_prefix` e o caminho relativo ate artifacts/ para o mermaid.min.js.
+export prompt PlanoBody(historia_titulo: string, avisos_html: string, abordagem: string, abordagem_fontes: string, componentes_tabela: string, adrs_tabela: string, dados_tabela: string, fluxo_html: string, erros_lista: string, seguranca_lista: string, observabilidade_lista: string, tarefas_tabela: string, testes_tabela: string, cobertura_html: string, riscos_lista: string, assets_prefix: string) from "templates/plano_body.html"
 
 // DependenciasBody — Discovery-only (a "dependência entre features" só faz
 // sentido quando o work-item tem um backlog de mais de uma feature; Delivery

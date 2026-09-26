@@ -28,8 +28,14 @@ export const DISCOVERY_SEQUENCE = [
   { artifact: 'atributos', deps: ['brief'], path: 'atributos.html', category: 'Discovery' },
   { artifact: 'requisitos', deps: ['brief'], path: 'requisitos.html', category: 'Discovery' },
   { artifact: 'adr', deps: ['requisitos', 'atributos'], dir: 'adr', collectionKind: 'files', category: 'Decisões e modelos' },
-  { artifact: 'der', deps: ['requisitos', 'atributos'], path: 'der.html', category: 'Decisões e modelos' },
-  { artifact: 'diagramas', deps: ['requisitos', 'atributos'], dir: 'diagramas', collectionKind: 'files', category: 'Diagramas' },
+  // der and diagramas depend on adr: the container diagram's technologies,
+  // the deployment diagram and the DER's level (physical only once an ADR
+  // picked the database) all come from the ADRs — and declaring it here is
+  // what marks them "Desatualizado" when an ADR is regenerated. Mirrors the
+  // fail() gates in discovery.partial.tecnicos.mh's DerGenerate/
+  // DiagramasGenerate. (Delivery keeps ADRs optional — see below.)
+  { artifact: 'der', deps: ['requisitos', 'atributos', 'adr'], path: 'der.html', category: 'Decisões e modelos' },
+  { artifact: 'diagramas', deps: ['requisitos', 'atributos', 'adr'], dir: 'diagramas', collectionKind: 'files', category: 'Diagramas' },
   // der is real context for features when present, but never blocks it —
   // deliberately left out of `deps` (see discovery.mh's FeaturesGenerate).
   { artifact: 'features', deps: ['atributos', 'requisitos', 'adr', 'diagramas'], dir: 'features', collectionKind: 'folders', itemFile: 'feature.html', category: 'Backlog da solução' },

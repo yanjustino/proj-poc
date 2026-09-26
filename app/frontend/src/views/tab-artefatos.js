@@ -2,6 +2,9 @@ import {
   artifactPreview,
   exportProject,
   exportProjectFile,
+  exportHandoff,
+  buildHandoff,
+  workItemReadiness,
   getRunStatus,
   isFullyTerminal,
   listProjectDir,
@@ -19,6 +22,7 @@ import { dotClass } from '../status.js';
 import { icon } from '../icons.js';
 import { approvalRecoveryArgs, waitForRecoveryTerminal } from '../checkpoint-recovery.js';
 import { enqueueLlmRun, llmJob, cancelQueuedLlmJob, subscribeLlmJobs } from '../llm-queue.js';
+import { getAutoReview } from '../preferences.js';
 import { formatRelativeTime } from '../time-format.js';
 
 const LABELS = {
@@ -33,6 +37,7 @@ const LABELS = {
   historias: 'Histórias',
   feature: 'Detalhamento da feature / enabler',
   historia: 'Detalhamento da história',
+  plano: 'Plano de implementação',
 };
 
 function labelFor(name) {
@@ -51,11 +56,12 @@ const ARTIFACT_DESCRIPTIONS = {
   historias: 'Histórias detalhadas para implementação e validação.',
   feature: 'Detalhamento da entrega, classificação e critérios de aceite.',
   historia: 'Comportamento esperado, regras e critérios de aceite da história.',
+  plano: 'Componentes, dados, fluxo, tarefas e testes para implementar a história.',
 };
 
 const ARTIFACT_ICONS = {
   brief: 'zap', atributos: 'checkCircle', requisitos: 'fileText', adr: 'layers', der: 'inbox',
-  diagramas: 'maximize', features: 'layers', dependencias: 'layers', historias: 'fileText', feature: 'layers', historia: 'fileText',
+  diagramas: 'maximize', features: 'layers', dependencias: 'layers', historias: 'fileText', feature: 'layers', historia: 'fileText', plano: 'list',
 };
 
 // ENABLER_SUBTYPE_LABELS: pt-BR display names for a feature's own
@@ -89,6 +95,7 @@ function classificationLabelOf(classification) {
 function descriptionFor(row) {
   if (row.groupKey) return `Documento da coleção ${labelFor(row.entry.artifact)}.`;
   if (row.featureId) return `Histórias vinculadas ao item ${row.featureId}.`;
+  if (row.plan) return 'Plano de implementação da história — componentes, tarefas e testes.';
   if (row.historiasRow) return `História vinculada ao item ${row.historiasRow.featureId}.`;
   return ARTIFACT_DESCRIPTIONS[row.entry.artifact] || 'Documento gerado a partir do contexto do work-item.';
 }
@@ -191,6 +198,8 @@ export async function renderArtefatosTab(container, project, { onChanged }) {
       </div>
       <div class="artifact-map-controls">
         <button class="button secondary small" data-generate-all-historias hidden title="Cada feature pendente dispara sua própria geração — mhl_run_start é assíncrono e o servidor já roda até 4 runs em paralelo, então isto não é uma fila sequencial.">${icon('layers', 14)} Gerar histórias pendentes</button>
+        <span class="dor-summary" data-dor-summary hidden></span>
+        <button class="button secondary small" data-handoff hidden title="Gera o pacote de handoff (specs, planos, tarefas, contratos, ADRs e arquitetura) com as histórias prontas e exporta para uma pasta — para levar ao repositório de código.">${icon('layers', 14)} Pacote de handoff</button>
         <button class="button secondary small" data-export-all title="Exportar toda a Wiki e todos os Artefatos">${icon('download', 14)} Exportar tudo</button>
         <div class="view-toggle" data-view-toggle>
           <button class="view-toggle-btn" data-view="cards" title="Ver como cards">${icon('grid', 15)}</button>
@@ -214,6 +223,8 @@ export async function renderArtefatosTab(container, project, { onChanged }) {
   const filterButtons = [...container.querySelectorAll('[data-filter]')];
   const categoryFiltersEl = container.querySelector('[data-category-filters]');
   const exportAllButton = container.querySelector('[data-export-all]');
+  const handoffButton = container.querySelector('[data-handoff]');
+  const dorSummaryEl = container.querySelector('[data-dor-summary]');
   const exportStatusEl = container.querySelector('[data-export-status]');
   const generateAllHistoriasButton = container.querySelector('[data-generate-all-historias]');
   const viewButtons = [...container.querySelectorAll('[data-view]')];
@@ -296,7 +307,25 @@ export async function renderArtefatosTab(container, project, { onChanged }) {
   // fire-and-forget, instead of blocking refreshDoneState() on N extra
   // reads every time it runs.
   let featureClassifications = new Map();
+  // readiness: Definition of Ready per história, keyed by its folder path
+  // relative to artifacts/ ("" for Delivery's single story) — loaded like
+  // featureClassifications, fire-and-forget after each refreshDoneState().
+  let readiness = new Map();
   const trackers = new Map(); // key -> { element, update, status }
+  // relativeTimeCache: freezes each row's "Última geração" text the first
+  // time it's computed against a given lastGeneratedAt(row), keyed by
+  // row.key. Without this, tableRowHtml() re-ran formatRelativeTime() (and
+  // the whole table re-rendered) on every renderList() call — including the
+  // ones onRunUpdate fires for every WatchRun poll tick (500ms, app.go's
+  // runPollInterval) while ANY row is generating, whether or not this row's
+  // own timestamp actually changed. That's a lot of wasted recompute for
+  // text that's only supposed to move forward once real time passes, not on
+  // every heartbeat — and reads as the column visibly "ticking". Scoped to
+  // this mount (a fresh Map every renderArtefatosTab() call), so leaving and
+  // re-entering the tab is exactly when the text is allowed to catch up;
+  // within one mount it only updates when the underlying timestamp itself
+  // does (a real new generation — see whenLabelFor below).
+  const relativeTimeCache = new Map(); // key -> { ms, text }
   let selectedKey = sequence[0]?.artifact ?? null;
   let activeFilter = 'all';
   let activeCategory = 'all';
@@ -323,6 +352,23 @@ export async function renderArtefatosTab(container, project, { onChanged }) {
     exportStatusEl.className = `export-status ${state}`;
     exportStatusEl.textContent = message;
   }
+
+  // Pacote de handoff: regenerate from the current artifacts, then export.
+  handoffButton.addEventListener('click', async () => {
+    handoffButton.disabled = true;
+    try {
+      const summary = await buildHandoff(project.id);
+      const destination = await exportHandoff(project.id);
+      if (destination) {
+        const fora = summary?.fora ? ` · ${summary.fora} ainda não pronta(s), listada(s) no README` : '';
+        showExportStatus(`Pacote de handoff exportado para ${destination} — ${summary?.exportadas ?? 0} história(s) pronta(s)${fora}.`);
+      }
+    } catch (err) {
+      showExportStatus(`Não foi possível gerar o pacote de handoff: ${String(err.message || err)}`, 'error');
+    } finally {
+      handoffButton.disabled = false;
+    }
+  });
 
   exportAllButton.addEventListener('click', async () => {
     exportAllButton.disabled = true;
@@ -430,16 +476,81 @@ export async function renderArtefatosTab(container, project, { onChanged }) {
   function historiaItemRowsFor(featureRow, historiasRow) {
     const stories = historiasByFeatureId.get(historiasRow.featureId);
     if (!stories) return [];
-    return stories.folders.map((story) => ({
-      key: `historia-item:${historiasRow.featureId}:${story.name}`,
-      label: codedHistoriaTitle(featureRow.folderName, story.name),
-      entry: { artifact: 'historia', deps: [] },
-      category: featureRow.category,
-      previewPath: `historias/${stories.dir}/${story.name}/historia.html`,
-      modifiedAt: (story.children || []).find((f) => !f.isDir && f.name === 'historia.html')?.modifiedAt,
-      parentKey: featureRow.key,
-      historiasRow,
-    }));
+    return stories.folders.map((story) => {
+      const row = {
+        key: `historia-item:${historiasRow.featureId}:${story.name}`,
+        label: codedHistoriaTitle(featureRow.folderName, story.name),
+        entry: { artifact: 'historia', deps: [] },
+        category: featureRow.category,
+        previewPath: `historias/${stories.dir}/${story.name}/historia.html`,
+        modifiedAt: fileMtime(story.children, 'historia.html'),
+        parentKey: featureRow.key,
+        historiasRow,
+        devFiles: fileNames(story.children),
+      };
+      row.planRow = planRowFor(row, {
+        base: `historias/${stories.dir}/${story.name}`,
+        files: story.children,
+        featureId: historiasRow.featureId,
+        historiaId: featureIdOf(story.name),
+        parentKey: featureRow.key,
+        deep: true,
+      });
+      return row;
+    });
+  }
+
+  function fileNames(files) {
+    return (files || []).filter((f) => !f.isDir).map((f) => f.name);
+  }
+
+  function fileMtime(files, name) {
+    return (files || []).find((f) => !f.isDir && f.name === name)?.modifiedAt;
+  }
+
+  // planRowFor: the "Plano de implementação" row of one história — plano.html
+  // lives next to its historia.html (`base`, "" for Delivery's single story at
+  // the artifacts root). It's only rendered once the plan exists or is being
+  // generated (see planChildRows); before that the história row offers
+  // "Gerar plano" instead, so N histórias don't add N placeholder rows.
+  // `plan` carries what the workflow needs: Discovery takes feature_id +
+  // historia_id, Delivery only historia_id ("" for the single story).
+  function planRowFor(historiaRow, { base, files, featureId, historiaId, parentKey, deep }) {
+    const planModifiedAt = fileMtime(files, 'plano.html');
+    return {
+      key: `plano:${featureId || '-'}:${historiaId || '-'}`,
+      label: `Plano — ${historiaRow.label}`,
+      nestedLabel: 'Plano de implementação',
+      entry: { artifact: 'plano', deps: [] },
+      category: historiaRow.category,
+      previewPath: base ? `${base}/plano.html` : 'plano.html',
+      modifiedAt: planModifiedAt,
+      historiaModifiedAt: fileMtime(files, 'historia.html'),
+      planDone: Boolean(planModifiedAt),
+      parentKey,
+      deep,
+      plan: { featureId: featureId || '', historiaId: historiaId || '' },
+    };
+  }
+
+  // planChildRows: the plan row to nest right after a história row — when
+  // the plan exists, or while its generation hasn't completed (the tracker is
+  // keyed by the plan row's own key).
+  function planChildRows(historiaRow) {
+    const planRow = historiaRow.planRow;
+    if (!planRow) return [];
+    const tracker = trackers.get(planRow.key);
+    const inFlight = tracker && tracker.status && tracker.status.state !== 'completed';
+    return planRow.planDone || inFlight ? [planRow] : [];
+  }
+
+  // allPlanRows: every história's plan row, rendered or not — what a queued/
+  // reattached plan generation resolves its key against (rowForKey,
+  // reattachActiveRuns) before its row appears in rowsToRender().
+  function allPlanRows() {
+    return rowsToRender()
+      .filter((r) => r.planRow)
+      .map((r) => r.planRow);
   }
 
   // historiasChildRowsFor: everything nested under one feature row — the
@@ -452,7 +563,11 @@ export async function renderArtefatosTab(container, project, { onChanged }) {
     const children = [];
     const tracker = trackers.get(historiasRow.key);
     if (tracker && tracker.status && tracker.status.state !== 'completed') children.push(historiasRow);
-    if (!hasActiveGroupRegeneration(historiasRow.key)) children.push(...historiaItemRowsFor(featureRow, historiasRow));
+    if (!hasActiveGroupRegeneration(historiasRow.key)) {
+      for (const historiaRow of historiaItemRowsFor(featureRow, historiasRow)) {
+        children.push(historiaRow, ...planChildRows(historiaRow));
+      }
+    }
     return children;
   }
 
@@ -474,14 +589,37 @@ export async function renderArtefatosTab(container, project, { onChanged }) {
       if (entry.artifact === 'historias' && project.level === 'discovery') continue;
       if (entry.collectionKind && doneNames.has(entry.artifact) && !hasActiveGroupRegeneration(entry.artifact)) {
         for (const itemRow of buildItemRows(entry)) {
+          // Delivery's histórias: each one can have its implementation plan,
+          // nested under the história itself.
+          if (project.level !== 'discovery' && entry.artifact === 'historias') {
+            const child = (collectionChildren.historias || []).find((c) => c.name === itemRow.folderName);
+            itemRow.devFiles = fileNames(child?.children);
+            itemRow.planRow = planRowFor(itemRow, {
+              base: `historias/${itemRow.folderName}`,
+              files: child?.children,
+              featureId: '',
+              historiaId: featureIdOf(itemRow.folderName),
+              parentKey: itemRow.key,
+              deep: false,
+            });
+          }
           rows.push(itemRow);
           // Nested rows always follow their parent directly — renderList's
           // filtering and both renderers rely on that order.
           if (project.level === 'discovery' && entry.artifact === 'features') rows.push(...historiasChildRowsFor(itemRow));
+          else rows.push(...planChildRows(itemRow));
         }
         continue;
       }
-      rows.push({ key: entry.artifact, label: labelFor(entry.artifact), entry, category: entry.category });
+      const row = { key: entry.artifact, label: labelFor(entry.artifact), entry, category: entry.category };
+      // Delivery in "historia" mode: the project's single story, at the
+      // artifacts root, gets its plan (plano.html) there too.
+      if (entry.artifact === 'historia' && doneNames.has('historia')) {
+        const rootFiles = Object.values(lastByName).filter((n) => !n.isDir);
+        row.devFiles = fileNames(rootFiles);
+        row.planRow = planRowFor(row, { base: '', files: rootFiles, featureId: '', historiaId: '', parentKey: row.key, deep: false });
+      }
+      rows.push(row, ...planChildRows(row));
     }
     return rows;
   }
@@ -557,6 +695,54 @@ export async function renderArtefatosTab(container, project, { onChanged }) {
     // — see loadFeatureClassifications' own comment for why this needs its
     // own reads instead of piggybacking on the tree above.
     loadFeatureClassifications();
+    loadReadiness();
+  }
+
+  async function loadReadiness() {
+    const items = await workItemReadiness(project.id).catch(() => []);
+    if (!active) return;
+    readiness = new Map(items.map((i) => [i.path, i]));
+    renderList();
+  }
+
+  // storyDir: the folder (relative to artifacts/) of a história row, or null
+  // for any other row. Discovery's nested história rows, Delivery's
+  // histórias collection items, and Delivery's single story at the root.
+  function storyDir(row) {
+    const isStory = row.historiasRow || row.groupKey === 'historias' || (row.key === 'historia' && !row.groupKey && isRowDone(row));
+    if (!isStory) return null;
+    const path = row.previewPath || row.entry.path || '';
+    return path.endsWith('historia.html') ? path.slice(0, -'historia.html'.length).replace(/\/$/, '') : null;
+  }
+
+  // readinessFor: the story's Definition of Ready, plus one check only the
+  // app can make — a plan older than its história (file mtimes).
+  function readinessFor(row) {
+    const dir = storyDir(row);
+    if (dir === null) return null;
+    const base = readiness.get(dir);
+    if (!base) return null;
+    const planStale = row.planRow && staleInfoFor(row.planRow)?.stale;
+    if (!planStale) return base;
+    const bloqueios = [...base.bloqueios, 'Plano desatualizado — a história foi regerada depois dele; atualize o plano.'];
+    return { ...base, bloqueios, status: 'nao_pronta' };
+  }
+
+  const DOR_LABEL = { pronta: 'Pronta p/ dev', pronta_com_ressalvas: 'Com ressalvas', nao_pronta: 'Não pronta' };
+
+  function dorBadgeHtml(r) {
+    if (!r) return '';
+    const reasons = [...r.bloqueios.map((b) => `✗ ${b}`), ...r.ressalvas.map((x) => `• ${x}`)].join('\n');
+    const title = `Definition of Ready: ${DOR_LABEL[r.status]}${reasons ? `\n\n${reasons}` : ''}`;
+    return `<span class="dor-badge dor-${r.status}" title="${escapeAttribute(title)}">${escapeHtml(DOR_LABEL[r.status])}</span>`;
+  }
+
+  function updateHandoffControls() {
+    const stories = [...readiness.values()];
+    handoffButton.hidden = stories.length === 0;
+    dorSummaryEl.hidden = stories.length === 0;
+    const prontas = stories.filter((s) => s.status !== 'nao_pronta').length;
+    dorSummaryEl.textContent = `${prontas} de ${stories.length} história(s) prontas p/ dev`;
   }
 
   // loadFeatureClassifications reads each feature's own feature.json (the
@@ -616,13 +802,14 @@ export async function renderArtefatosTab(container, project, { onChanged }) {
 
   function isRowDone(row) {
     if (row.groupKey) return true; // expanded item rows only ever exist once their group is done
+    if (row.plan) return row.planDone;
     if (row.historiasRow) return true; // nested história rows only exist once committed
     if (row.featureId) return historiasDoneFeatureIds.has(row.featureId);
     return doneNames.has(row.key);
   }
 
   function isRowReady(row) {
-    if (row.groupKey || row.historiasRow) return true;
+    if (row.groupKey || row.historiasRow || row.plan) return true;
     if (row.featureId) return true; // features already done, per rowsToRender's gating
     return isReady(row.entry, doneNames);
   }
@@ -635,6 +822,14 @@ export async function renderArtefatosTab(container, project, { onChanged }) {
   // aren't in `sequence` at all (see artifacts.js's own comment on why) so
   // they have no entry here — left out rather than guessed at.
   function staleInfoFor(row) {
+    // A plan is out of date once its história was regenerated after it —
+    // its own files' mtimes, same 2s tolerance as artifacts.js's matrix.
+    if (row.plan) {
+      const plan = Date.parse(row.modifiedAt || '');
+      const historia = Date.parse(row.historiaModifiedAt || '');
+      const stale = row.planDone && !Number.isNaN(plan) && !Number.isNaN(historia) && historia - plan > 2000;
+      return { stale, staleDeps: stale ? ['historia'] : [] };
+    }
     if (row.featureId || row.historiasRow) return null;
     const artifact = row.groupKey || row.entry.artifact;
     return staleness.get(artifact) || null;
@@ -666,6 +861,20 @@ export async function renderArtefatosTab(container, project, { onChanged }) {
     if (row.modifiedAt) return Date.parse(row.modifiedAt);
     if (row.featureId || !isRowDone(row)) return null;
     return latestMtimeOf(row.entry, lastByName);
+  }
+
+  // whenLabelFor: relativeTimeCache's read/write side — see that Map's own
+  // comment for why this doesn't just call formatRelativeTime(ms) directly
+  // on every tableRowHtml() call. Recomputes only when `ms` itself moved
+  // (a real new generation) or this row was never cached yet; otherwise
+  // returns the frozen text from the last time it did.
+  function whenLabelFor(row) {
+    const ms = lastGeneratedAt(row);
+    const cached = relativeTimeCache.get(row.key);
+    if (cached && cached.ms === ms) return cached.text;
+    const text = formatRelativeTime(ms);
+    relativeTimeCache.set(row.key, { ms, text });
+    return text;
   }
 
   // pendingHistoriasRows: every per-feature "Histórias — X" row that's ready
@@ -779,13 +988,25 @@ export async function renderArtefatosTab(container, project, { onChanged }) {
     // about an approval already in flight (tracker.busyAction).
     const showApprove = state === 'paused';
     const approving = showApprove && tracker.busyAction === 'approve';
+    // "Gerar plano" on a história row: no plan yet, and no plan generation in
+    // flight (a failed/canceled one can be retried from here too).
+    let canGeneratePlan = false;
+    if (row.planRow && !row.planRow.planDone) {
+      const planTracker = trackers.get(row.planRow.key);
+      const planState = planTracker && planTracker.status ? planTracker.status.state : null;
+      canGeneratePlan = !planTracker || ['failed', 'canceled'].includes(planState);
+    }
     const childCount = childCounts.get(row.key) || 0;
     const expanded = expandedFeatures.has(row.key);
-    return { done, ready, state, dot, statusText, showGenerate, clickable, exportPath, artifactName, kindClass, stale, staleTitle, updateTarget, classification, classificationLabel, canGenerateHistorias, historiasCount, childCount, expanded, showApprove, approving };
+    return { done, ready, state, dot, statusText, showGenerate, clickable, exportPath, artifactName, kindClass, stale, staleTitle, updateTarget, classification, classificationLabel, canGenerateHistorias, canGeneratePlan, historiasCount, childCount, expanded, showApprove, approving };
   }
 
   function historiasCountLabel(count) {
     return `${count} ${count === 1 ? 'história' : 'histórias'}`;
+  }
+
+  function generatePlanButtonHtml(row) {
+    return `<button class="artifact-card-generate" data-generate-plan="${escapeAttribute(row.key)}" title="Gerar o plano de implementação de ${escapeAttribute(row.label)}">Gerar plano →</button>`;
   }
 
   function generateHistoriasButtonHtml(row) {
@@ -798,19 +1019,21 @@ export async function renderArtefatosTab(container, project, { onChanged }) {
 
   function cardHtml(row, vm) {
     return `
-      <article class="artifact-card ${vm.kindClass} ${row.key === 'brief' ? 'featured' : ''} ${row.key === selectedKey ? 'selected' : ''} ${!vm.done ? 'pending' : ''} ${vm.stale?.stale ? 'stale' : ''} ${row.parentKey ? 'nested' : ''}">
+      <article class="artifact-card ${vm.kindClass} ${row.key === 'brief' ? 'featured' : ''} ${row.key === selectedKey ? 'selected' : ''} ${!vm.done ? 'pending' : ''} ${vm.stale?.stale ? 'stale' : ''} ${row.parentKey ? 'nested' : ''} ${row.deep ? 'nested-deep' : ''}">
         <button class="artifact-card-main" data-key="${escapeHtml(row.key)}" ${!vm.clickable ? 'disabled' : ''} title="${escapeHtml(vm.statusText)}">
           <span class="artifact-card-kind"><i>${icon(ARTIFACT_ICONS[vm.artifactName] || 'fileText', 14)}</i>${escapeHtml(row.category || labelFor(vm.artifactName))}</span>
           <strong>${escapeHtml(row.parentKey ? row.nestedLabel || row.label : row.label)}</strong>
           ${vm.classificationLabel ? `<span class="artifact-card-classification ${vm.classification.tipoItem === 'enabler' ? 'enabler' : 'business'}">${escapeHtml(vm.classificationLabel)}</span>` : ''}
+          ${dorBadgeHtml(readinessFor(row))}
           <span class="artifact-card-description">${escapeHtml(descriptionFor(row))}</span>
           ${vm.stale?.stale ? `<span class="artifact-card-stale" title="${escapeAttribute(vm.staleTitle)}">${icon('alertCircle', 12)} Desatualizado</span>` : ''}
         </button>
         <footer class="artifact-card-foot">
           <span class="status-dot ${vm.dot}"></span><span>${escapeHtml(vm.statusText)}</span>
           <div class="artifact-card-foot-actions">
-            ${vm.childCount ? `<button class="artifact-card-toggle ${vm.expanded ? 'expanded' : ''}" data-toggle="${escapeAttribute(row.key)}" aria-expanded="${vm.expanded}" title="${vm.expanded ? 'Recolher' : 'Expandir'} histórias">${icon('chevronRight', 12)} ${escapeHtml(historiasCountLabel(vm.historiasCount || vm.childCount))}</button>` : ''}
+            ${vm.childCount ? `<button class="artifact-card-toggle ${vm.expanded ? 'expanded' : ''}" data-toggle="${escapeAttribute(row.key)}" aria-expanded="${vm.expanded}" title="${vm.expanded ? 'Recolher' : 'Expandir'} histórias">${icon('chevronRight', 12)} ${escapeHtml(vm.historiasCount || row.groupKey === 'features' ? historiasCountLabel(vm.historiasCount || vm.childCount) : 'Plano')}</button>` : ''}
             ${vm.canGenerateHistorias ? generateHistoriasButtonHtml(row) : ''}
+            ${vm.canGeneratePlan ? generatePlanButtonHtml(row) : ''}
             ${vm.showApprove ? approveButtonHtml(row, vm) : ''}
             ${vm.exportPath ? `<button class="artifact-card-export" data-export-file="${escapeAttribute(vm.exportPath)}" title="Exportar ${escapeAttribute(row.label)}">${icon('download', 12)} Exportar</button>` : ''}
             ${vm.updateTarget ? `<button class="artifact-card-update" data-update="${escapeHtml(row.key)}" title="Regenerar ${escapeAttribute(row.label)} a partir da versão atual da dependência">${icon('refreshCw', 12)} Atualizar</button>` : ''}
@@ -829,9 +1052,9 @@ export async function renderArtefatosTab(container, project, { onChanged }) {
   // no native disabled state, so the click listener below simply never
   // attaches to an unclickable one instead).
   function tableRowHtml(row, vm) {
-    const when = formatRelativeTime(lastGeneratedAt(row));
+    const when = whenLabelFor(row);
     return `
-      <tr class="data-row ${row.key === selectedKey ? 'selected' : ''} ${!vm.done ? 'pending' : ''} ${vm.stale?.stale ? 'stale' : ''} ${!vm.clickable ? 'not-ready' : ''} ${row.parentKey ? 'nested' : ''}" ${vm.clickable ? `data-key="${escapeHtml(row.key)}"` : ''} title="${escapeHtml(vm.statusText)}">
+      <tr class="data-row ${row.key === selectedKey ? 'selected' : ''} ${!vm.done ? 'pending' : ''} ${vm.stale?.stale ? 'stale' : ''} ${!vm.clickable ? 'not-ready' : ''} ${row.parentKey ? 'nested' : ''} ${row.deep ? 'nested-deep' : ''}" ${vm.clickable ? `data-key="${escapeHtml(row.key)}"` : ''} title="${escapeHtml(vm.statusText)}">
         <td class="data-row-dot"><span class="status-dot ${vm.dot}"></span></td>
         <td class="data-row-name">
           ${
@@ -846,12 +1069,13 @@ export async function renderArtefatosTab(container, project, { onChanged }) {
           ${vm.historiasCount ? `<span class="data-row-count">${escapeHtml(historiasCountLabel(vm.historiasCount))}</span>` : ''}
           ${vm.stale?.stale ? `<span class="artifact-card-stale" title="${escapeAttribute(vm.staleTitle)}">${icon('alertCircle', 12)} Desatualizado</span>` : ''}
         </td>
-        <td class="data-row-classification">${vm.classificationLabel ? `<span class="artifact-card-classification ${vm.classification.tipoItem === 'enabler' ? 'enabler' : 'business'}">${escapeHtml(vm.classificationLabel)}</span>` : ''}</td>
+        <td class="data-row-classification">${vm.classificationLabel ? `<span class="artifact-card-classification ${vm.classification.tipoItem === 'enabler' ? 'enabler' : 'business'}">${escapeHtml(vm.classificationLabel)}</span>` : ''}${dorBadgeHtml(readinessFor(row))}</td>
         <td class="data-row-category">${escapeHtml(row.category || labelFor(vm.artifactName))}</td>
         <td class="data-row-status">${escapeHtml(vm.statusText)}</td>
         <td class="data-row-when">${escapeHtml(when)}</td>
         <td class="data-row-actions">
           ${vm.canGenerateHistorias ? generateHistoriasButtonHtml(row) : ''}
+          ${vm.canGeneratePlan ? generatePlanButtonHtml(row) : ''}
           ${vm.showApprove ? approveButtonHtml(row, vm) : ''}
           ${vm.exportPath ? `<button class="artifact-card-export" data-export-file="${escapeAttribute(vm.exportPath)}" title="Exportar ${escapeAttribute(row.label)}">${icon('download', 12)}</button>` : ''}
           ${vm.updateTarget ? `<button class="artifact-card-update" data-update="${escapeHtml(row.key)}" title="Regenerar ${escapeAttribute(row.label)} a partir da versão atual da dependência">${icon('refreshCw', 12)} Atualizar</button>` : ''}
@@ -933,6 +1157,7 @@ export async function renderArtefatosTab(container, project, { onChanged }) {
     const topLevelCount = rows.filter((row) => !row.parentKey).length;
     countEl.textContent = `${topLevelCount} ${topLevelCount === 1 ? 'item' : 'itens'}`;
     updateGenerateAllHistoriasButton();
+    updateHandoffControls();
 
     if (visibleRows.length === 0) {
       listEl.className = 'list-area';
@@ -974,6 +1199,16 @@ export async function renderArtefatosTab(container, project, { onChanged }) {
         const row = historiasRowFor(featureRow);
         selectedKey = row.key;
         generate(row);
+      });
+    });
+
+    listEl.querySelectorAll('[data-generate-plan]').forEach((button) => {
+      button.addEventListener('click', (event) => {
+        event.stopPropagation();
+        const historiaRow = rowsToRender().find((r) => r.key === button.dataset.generatePlan);
+        if (!historiaRow?.planRow) return;
+        selectedKey = historiaRow.planRow.key;
+        generate(historiaRow.planRow);
       });
     });
 
@@ -1506,18 +1741,17 @@ export async function renderArtefatosTab(container, project, { onChanged }) {
       return;
     }
     showHtmlDoc(row.label, html, { mermaid: hasMermaidDiagram(html), inlineMermaid });
+    let footer = null;
     if (row.historiasRow) {
       // One história out of a feature's batch — same batch-scope caveat as
       // a collection item below: HistoriasGenerate always rewrites every
       // história of that feature in one call.
-      setFooter(
-        buildRequestChangesComposer(row, {
-          targetRow: row.historiasRow,
-          note: `Isto regenera todas as histórias de ${row.historiasRow.featureId}, não só esta.`,
-        }),
-      );
+      footer = buildRequestChangesComposer(row, {
+        targetRow: row.historiasRow,
+        note: `Isto regenera todas as histórias de ${row.historiasRow.featureId}, não só esta.`,
+      });
     } else if (canRequestChanges(row)) {
-      setFooter(buildRequestChangesComposer(row, { note: downstreamWarningFor(row.key) }));
+      footer = buildRequestChangesComposer(row, { note: downstreamWarningFor(row.key) });
     } else if (row.groupKey) {
       // One item out of a collection (an ADR, a diagram, a feature, a
       // história) — the composer still shows here (real gap this closes:
@@ -1529,13 +1763,53 @@ export async function renderArtefatosTab(container, project, { onChanged }) {
         `Isto regenera todo o lote de "${labelFor(row.groupKey)}", não só este item.`,
         downstreamWarningFor(row.groupKey),
       ].filter(Boolean);
-      setFooter(
-        buildRequestChangesComposer(row, {
-          targetRow: canonicalGroupRow(row),
-          note: notes.join(' '),
-        }),
-      );
+      footer = buildRequestChangesComposer(row, {
+        targetRow: canonicalGroupRow(row),
+        note: notes.join(' '),
+      });
     }
+    // A história também mostra o que vai para o desenvolvimento: a Definition
+    // of Ready e os arquivos gerados ao lado dela (contratos, cenários, plano).
+    const devBar = storyDir(row) !== null ? buildDevFilesBar(row) : null;
+    if (devBar || footer) {
+      const wrap = document.createElement('div');
+      if (devBar) wrap.appendChild(devBar);
+      if (footer) wrap.appendChild(footer);
+      setFooter(wrap);
+    }
+  }
+
+  // buildDevFilesBar: "Arquivos para desenvolvimento" of a história — each
+  // file generated next to it (openapi.json, asyncapi.json, historia.feature,
+  // plano.html) exportable on its own, plus its Definition of Ready. The
+  // package with every ready story comes from "Pacote de handoff".
+  function buildDevFilesBar(row) {
+    const dir = storyDir(row);
+    const bar = document.createElement('div');
+    bar.className = 'dev-files-bar';
+    const r = readinessFor(row);
+    const files = ['openapi.json', 'asyncapi.json', 'historia.feature', 'plano.html'];
+    const present = files.filter((f) => (row.devFiles || []).includes(f));
+    bar.innerHTML = `
+      <span class="dev-files-title">Arquivos para desenvolvimento</span>
+      ${dorBadgeHtml(r)}
+      ${present.length ? present.map((f) => `<button class="button tertiary small" data-dev-file="${escapeAttribute(f)}">${icon('download', 12)} ${escapeHtml(f)}</button>`).join('') : '<span class="dev-files-empty">Nenhum arquivo gerado — regere a história (e gere o plano).</span>'}
+    `;
+    bar.querySelectorAll('[data-dev-file]').forEach((button) => {
+      button.addEventListener('click', async () => {
+        button.disabled = true;
+        try {
+          const path = dir ? `${dir}/${button.dataset.devFile}` : button.dataset.devFile;
+          const destination = await exportProjectFile(project.id, 'artifacts', path);
+          if (destination) showExportStatus(`Arquivo exportado para ${destination}`);
+        } catch (err) {
+          showExportStatus(`Não foi possível exportar: ${String(err.message || err)}`, 'error');
+        } finally {
+          button.disabled = false;
+        }
+      });
+    });
+    return bar;
   }
 
   // renderHistoriasIndex lists one feature's histórias in the reading pane —
@@ -1795,10 +2069,9 @@ export async function renderArtefatosTab(container, project, { onChanged }) {
     // entirely and writes straight to artifacts/ — every generation looked
     // "auto-approved" with no Aprovar step at all. Pinning it here keeps the
     // review gate always on, just without a toggle to accidentally turn off.
-    const args =
-      workflow === 'Discovery'
-        ? { project_id: project.id, artifact: row.featureId ? 'historias' : row.key, buddy: true, ...(row.featureId ? { feature_id: row.featureId } : {}), ...(feedback ? { feedback } : {}) }
-        : { project_id: project.id, mode: project.type, artifact: row.key, buddy: true, ...(feedback ? { feedback } : {}) };
+    // autorrevisao: the sidebar toggle (preferences.js) — the workflow makes
+    // at most one extra LLM call when the draft fails its checks.
+    const args = { ...runTargetArgs(row), buddy: true, autorrevisao: getAutoReview(), ...(feedback ? { feedback } : {}) };
 
     // Status arrives through onLlmJobUpdate (subscribed at mount), not a
     // callback bound to this mount — the job may start after the tab has
@@ -1807,6 +2080,20 @@ export async function renderArtefatosTab(container, project, { onChanged }) {
 
     renderList();
     renderDetail();
+  }
+
+  // runTargetArgs: which artifact a row generates, in the workflow's own
+  // inputs — shared by generate() and approval recovery (checkpoint-
+  // recovery.js mirrors it for a paused draft). A feature's "Histórias" row
+  // needs its feature_id; a plan row, the história it belongs to.
+  function runTargetArgs(row) {
+    if (workflow === 'Discovery') {
+      if (row.plan) return { project_id: project.id, artifact: 'plano', feature_id: row.plan.featureId, historia_id: row.plan.historiaId };
+      if (row.featureId) return { project_id: project.id, artifact: 'historias', feature_id: row.featureId };
+      return { project_id: project.id, artifact: row.key };
+    }
+    if (row.plan) return { project_id: project.id, mode: project.type, artifact: 'plano', historia_id: row.plan.historiaId };
+    return { project_id: project.id, mode: project.type, artifact: row.key };
   }
 
   // rowForKey resolves an active-runs/llm-queue key back to the row it
@@ -1821,7 +2108,11 @@ export async function renderArtefatosTab(container, project, { onChanged }) {
     if (visible) return visible;
     const entry = sequence.find((e) => e.artifact === rowKey);
     if (entry) return { key: entry.artifact, label: labelFor(entry.artifact), entry, category: entry.category };
-    return featureRowsForHistorias().map(historiasRowFor).find((r) => r.key === rowKey) ?? null;
+    return (
+      featureRowsForHistorias().map(historiasRowFor).find((r) => r.key === rowKey) ??
+      allPlanRows().find((r) => r.key === rowKey) ??
+      null
+    );
   }
 
   // Keys this mount follows through watchExistingRun (reattachActiveRuns) —
@@ -1900,6 +2191,11 @@ export async function renderArtefatosTab(container, project, { onChanged }) {
     // reattached twice).
     for (const featureRow of featureRowsForHistorias()) {
       reattach(historiasRowFor(featureRow));
+    }
+    // Same for a plan still being generated (its row only renders once a
+    // tracker exists) — skipping plans the loop above already reattached.
+    for (const planRow of allPlanRows()) {
+      if (!trackers.has(planRow.key)) reattach(planRow);
     }
   }
 

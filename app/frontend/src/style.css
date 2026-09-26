@@ -62,23 +62,20 @@ button { cursor: pointer; }
 ::-webkit-scrollbar-thumb { background: rgba(33, 32, 28, .16); border-radius: 8px; }
 ::-webkit-scrollbar-thumb:hover { background: rgba(33, 32, 28, .28); }
 
-/* Columns scale proportionally with the window (~20/39/41%, matching the
-   reference screenshot's ratio) instead of holding a fixed pixel width —
-   each minmax() floor only takes over once the window is small enough that
-   the percentage share would drop below a usable minimum, per the user's
-   "só fica fixa quando a tela chega num tamanho mínimo". The sidebar column
-   uses clamp() instead of minmax() so it also stops growing past 280px on
-   very wide/ultrawide windows — its content (work-item list) never needed
-   the extra width 20% implied there. The other two columns use fr (not %)
-   for their ceiling: a % is a share of the *whole* row, so once the sidebar
-   stops taking its 20% those two no longer summed to 100% and left a dead
-   gap on the right; fr instead splits whatever space the sidebar didn't
-   use, in the same 39:41 ratio, so the row always fills the window. */
-.shell { height: 100vh; display: grid; grid-template-columns: clamp(210px, 20vw, 280px) minmax(320px, 39fr) minmax(380px, 41fr); background: var(--bg-0); overflow: hidden; }
-/* Tela de Logs: sem work-item aberto, a coluna de leitura não tem o que
-   mostrar — dá a largura dela pro painel de log em vez de deixá-la vazia. */
-.shell.logs-open { grid-template-columns: clamp(210px, 20vw, 280px) 1fr; }
-.shell.logs-open .reading-pane { display: none; }
+/* .shell: sidebar / resizer / main / resizer / reading-pane, one flex row —
+   a VS Code-style layout (its own left sidebar and right panel both drag
+   against the editor in between) instead of the fixed grid this used to be.
+   Each pane keeps its old proportional sizing as a flex-basis (sidebar's
+   clamp(210px,20vw,280px), main's 39%, reading-pane's 41% — the same ~20/39/
+   41 split as before, still scaling with the window on its own) until the
+   user actually drags a .pane-resizer, at which point shell.js pins that
+   one pane's flex-basis to a fixed px (applyPaneWidth) instead of a
+   percentage — flex-shrink stays 1 either way, so a pinned pane still gives
+   up space to its neighbors' own min-width floors on a narrow window rather
+   than overflowing them. */
+.shell { height: 100vh; display: flex; background: var(--bg-0); overflow: hidden; }
+.shell .sidebar { flex: 0 0 clamp(210px, 20vw, 280px); }
+.shell.sidebar-collapsed .sidebar { flex: 0 0 72px; }
 /* Menu lateral recolhido: um trilho estreito (largura suficiente para os
    botões de janela do macOS sobre .drag-strip) com a marca, as ações
    empilhadas e cada work-item só pelo ícone — o nome fica no tooltip. */
@@ -87,8 +84,26 @@ button { cursor: pointer; }
 .sidebar .icon-btn.sidebar-toggle-collapsed { display: none; }
 .shell.sidebar-collapsed .sidebar .icon-btn.sidebar-toggle-expanded { display: none; }
 .shell.sidebar-collapsed .sidebar .icon-btn.sidebar-toggle-collapsed { display: grid; }
-.shell.sidebar-collapsed { grid-template-columns: 72px minmax(320px, 39fr) minmax(380px, 41fr); }
-.shell.sidebar-collapsed.logs-open { grid-template-columns: 72px 1fr; }
+.main { flex: 1 1 39%; min-width: 320px; min-height: 0; }
+.reading-pane { flex: 1 1 41%; min-width: 380px; max-width: 75%; }
+/* pane-resizer: the drag handle between two panes — a hairline by default
+   (same visual weight as .reading-pane's own left border, which the second
+   one sits right on top of) that only picks out a visible line on hover/
+   active, via ::before giving it a bigger invisible hit area than its own
+   6px would comfortably allow for a mouse drag. data-resize-target says
+   which pane (sidebar|reading-pane) shell.js's drag handler resizes — the
+   pane on the OTHER side of it (.main) never gets its own flex-basis
+   touched, it just flexes into whatever the drag left it. */
+.pane-resizer { flex: none; width: 6px; margin-left: -3px; margin-right: -3px; position: relative; z-index: 1; cursor: col-resize; background: transparent; }
+.pane-resizer::before { content: ''; position: absolute; inset: 0 -4px; }
+.pane-resizer::after { content: ''; position: absolute; top: 0; bottom: 0; left: 50%; width: 2px; transform: translateX(-50%); background: transparent; border-radius: 2px; transition: background .12s ease; }
+.pane-resizer:hover::after, .pane-resizer.resizing::after { background: var(--vermilion); }
+.shell.sidebar-collapsed [data-resize-target="sidebar"] { display: none; }
+/* Dragging: text selection while the mouse sweeps across .main/.reading-pane
+   reads as broken (everything highlighting blue mid-resize); disabled only
+   for the duration of the drag, not globally, via this class on <body>. */
+body.pane-resizing { cursor: col-resize; user-select: none; }
+body.pane-resizing iframe { pointer-events: none; }
 .shell.sidebar-collapsed .sidebar { padding: 0 8px 12px; align-items: center; }
 .shell.sidebar-collapsed .sidebar-top { flex-direction: column; gap: 10px; padding-bottom: 12px; }
 .shell.sidebar-collapsed .brand-copy,
@@ -171,8 +186,11 @@ button { cursor: pointer; }
 .sidebar-agent-block[hidden] { display: none; }
 .sidebar-agent-hint { display: block; margin: 2px 0 0; padding-left: 7px; font-size: 11px; font-family: var(--mono); color: var(--muted); opacity: .7; overflow-wrap: anywhere; }
 .sidebar-agent-hint:empty { display: none; }
+.sidebar-check { cursor: pointer; margin-top: 6px; }
+.sidebar-check input { accent-color: var(--blue); margin: 0; }
+.shell.sidebar-collapsed .sidebar-check { display: none; }
 
-.main { padding: 22px 26px 26px; overflow: auto; min-width: 0; }
+.main { padding: 22px 26px 26px; overflow: auto; }
 .center { display: grid; place-items: center; height: 100%; color: var(--muted); font-size: 13px; }
 
 .hero { display: flex; justify-content: space-between; gap: 20px; align-items: flex-end; margin-bottom: 16px; }
@@ -333,6 +351,9 @@ button { cursor: pointer; }
 .data-row.nested:hover { background: var(--line); }
 .data-row.nested.selected { background: var(--blue-soft); }
 .data-row.nested .data-row-name { padding-left: 44px; font-weight: 500; }
+/* Plano de implementação: um nível abaixo da história que ele detalha. */
+.data-row.nested.nested-deep .data-row-name { padding-left: 70px; }
+.artifact-card.nested-deep { margin-left: 18px; }
 .data-row-category, .data-row-status, .data-row-when { color: var(--muted); font: 500 11px var(--mono); }
 /* .data-row-feedback: the one column so far whose content is genuinely
    free-text and can run long (tab-mudancas.js's own request text) — unlike
@@ -388,6 +409,17 @@ button { cursor: pointer; }
 .artifact-card-classification.business { background: #e5f5eb; color: #28724e; }
 .artifact-card-classification.enabler { background: #eeebff; color: #6551af; }
 .data-row-classification { white-space: nowrap; }
+/* Definition of Ready de uma história (readiness.mh) — selo na lista e na
+   barra "Arquivos para desenvolvimento"; os motivos ficam no tooltip. */
+.dor-badge { display: inline-flex; align-items: center; margin: 4px 0 0 6px; padding: 2px 8px; border-radius: 999px; font: 600 10px var(--sans); white-space: nowrap; }
+.dor-badge.dor-pronta { background: #e5f5eb; color: #28724e; }
+.dor-badge.dor-pronta_com_ressalvas { background: rgba(210,139,38,.14); color: var(--amber); }
+.dor-badge.dor-nao_pronta { background: rgba(200,58,55,.12); color: var(--red); }
+.dor-summary { font: 500 11px var(--mono); color: var(--muted); white-space: nowrap; }
+.dev-files-bar { display: flex; flex-wrap: wrap; align-items: center; gap: 6px 8px; padding: 8px 0 10px; border-bottom: 1px solid var(--line); margin-bottom: 10px; }
+.dev-files-title { font: 600 11px var(--sans); color: var(--ink); text-transform: uppercase; letter-spacing: .04em; }
+.dev-files-bar .dor-badge { margin: 0; }
+.dev-files-empty { font-size: 11px; color: var(--muted); }
 .artifact-card-foot { min-height: 38px; display: flex; align-items: center; gap: 7px; margin: 0 15px; padding: 10px 0 12px; color: var(--muted); font: 500 9px var(--mono); border-top: 1px solid #f0eee8; }
 /* .artifact-card-foot-actions: groups whichever of Exportar/Atualizar/Gerar
    apply to this row and pushes the group as a whole to the right — the
@@ -507,8 +539,17 @@ button { cursor: pointer; }
 
 /* Expand-to-fullscreen reading mode — a focused CSS overlay over the shared
    reading pane (reading-pane.js), not OS-level fullscreen, so it behaves
-   the same regardless of window state. */
-.pane-fullscreen { position: fixed !important; inset: 20px; z-index: 200; border-radius: var(--radius-lg); overflow: hidden; box-shadow: var(--shadow); }
+   the same regardless of window state. max-width/flex-basis: none override
+   .reading-pane's own drag-resize sizing (style.css's .shell comment) —
+   without this, .reading-pane's max-width:75% (a resize-clamp bound, sized
+   against the flex row it normally sits in) was ALSO capping this fixed,
+   inset:20px overlay to 75% of the viewport instead of letting it span
+   (viewport - 40px) like inset:20px alone implies, and any fixed px width
+   from a previous drag (shell.js's applyWidth, an inline flex-basis) needs
+   clearing here too even though flex-basis has no effect once position is
+   fixed — belt and suspenders against a future layout change re-adding
+   flex-basis's relevance. */
+.pane-fullscreen { position: fixed !important; inset: 20px; z-index: 200; border-radius: var(--radius-lg); overflow: hidden; box-shadow: var(--shadow); max-width: none; flex-basis: auto; }
 
 /* Run tracker */
 .run-tracker { display: flex; flex-direction: column; gap: 8px; font-size: 11px; color: var(--muted); margin-top: 6px; }
@@ -561,23 +602,8 @@ button { cursor: pointer; }
 label.check { display: inline-flex; align-items: center; gap: 6px; font-size: 11px; color: var(--muted); }
 label.check input { accent-color: var(--blue); width: 15px; height: 15px; }
 
-/* Logs view — tela separada (data-open-logs no sidebar) para acompanhar a
-   saída retida de uma execução (mhl_run_logs), incluindo o stdout/stderr
-   cru dos agentes CLI (Devin/Codex/Claude) chamados por Writer.generate. */
-.logs-view { display: flex; gap: 16px; height: calc(100vh - 68px); min-height: 0; }
-.logs-runs { flex: none; width: 280px; display: flex; flex-direction: column; min-height: 0; }
-.logs-runs-head { display: flex; align-items: center; justify-content: space-between; margin-bottom: 8px; }
-.logs-runs-head h3 { font-size: 13px; margin: 0; }
-.logs-run-list { flex: 1 1 auto; overflow: auto; min-height: 0; }
-.list-item { border: 0; border-radius: var(--radius-sm); background: transparent; text-align: left; padding: 8px 7px; color: #55534b; width: 100%; display: flex; gap: 9px; align-items: center; justify-content: space-between; }
-.list-item:hover { background: var(--surface-2); }
-.list-item.active { background: var(--blue-soft); color: var(--blue-deep); }
-.list-item strong { display: block; font-size: 13px; color: var(--ink); font-weight: 500; }
-.list-item.active strong { color: var(--blue-deep); }
-.list-item small { display: block; font-size: 10px; color: var(--muted); }
-.logs-panel { flex: 1 1 auto; min-width: 0; display: flex; flex-direction: column; background: var(--surface); border: 1px solid var(--line); border-radius: var(--radius-md); box-shadow: var(--soft-shadow); overflow: hidden; }
-.logs-panel-head { flex: none; display: flex; align-items: center; justify-content: space-between; gap: 12px; padding: 10px 14px; border-bottom: 1px solid var(--line); }
-.logs-panel-meta { display: flex; align-items: center; gap: 8px; min-width: 0; font-size: 12px; color: var(--ink); }
+/* Logs de execução — blocos compartilhados pela aba Logs do projeto
+   (tab-logs.js): saída retida de uma execução e chamadas de LLM. */
 .logs-run-id { color: var(--muted); font-family: var(--mono); font-size: 10px; }
 .logs-output { flex: 1 1 auto; margin: 0; padding: 14px; overflow: auto; background: var(--bg-0); display: flex; flex-direction: column; gap: 6px; }
 .logs-step-group { border: 1px solid var(--line); border-radius: var(--radius-md); background: var(--surface); }
@@ -586,10 +612,6 @@ label.check input { accent-color: var(--blue); width: 15px; height: 15px; }
 .logs-step-group summary small { color: var(--muted); font-family: var(--mono); font-size: 10px; }
 .logs-step-group summary strong { flex: 1 1 auto; min-width: 0; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
 .logs-step-group pre { margin: 0; padding: 10px 12px; border-top: 1px solid var(--line); white-space: pre-wrap; word-break: break-word; font-family: var(--mono); font-size: 11px; line-height: 1.6; color: #55534b; }
-.logs-llm-calls { flex: none; padding: 14px 14px 0; display: flex; flex-direction: column; gap: 6px; border-bottom: 1px solid var(--line); max-height: 45%; overflow: auto; }
-.logs-llm-calls[hidden] { display: none; }
-.logs-llm-calls h4 { margin: 0 0 2px; font-size: 11px; text-transform: uppercase; letter-spacing: .04em; color: var(--muted); }
-.logs-llm-calls .logs-step-group { margin-bottom: 6px; }
 .llm-call-body { display: grid; gap: 1px; background: var(--line); border-top: 1px solid var(--line); }
 .llm-call-block { background: var(--surface); padding: 10px 12px; }
 .llm-call-block-head { display: flex; align-items: center; justify-content: space-between; gap: 8px; margin: 0 0 6px; }
@@ -759,10 +781,6 @@ button { color: inherit; }
 .work.active { color: #fff; background: var(--surface-2); box-shadow: inset 2px 0 var(--vermilion); }
 .work-copy strong { color: inherit; }
 .work.active .work-icon { color: var(--vermilion); }
-.list-item { color: var(--muted); border-radius: 7px; }
-.list-item:hover { background: var(--surface-2); }
-.list-item.active { color: #fff; background: var(--surface-2); box-shadow: inset 2px 0 var(--vermilion); }
-.list-item strong { color: inherit; }
 .sidebar-agent select { background: var(--surface); color: var(--rice-paper); border-color: var(--line); }
 .sidebar-status { border-color: var(--line); }
 .sidebar-status-copy b { color: var(--rice-paper); }
@@ -948,8 +966,9 @@ html[data-theme='light'] .artifact-card-export:hover { color: var(--ink); }
 }
 
 @media (max-width: 900px) {
-  .shell { grid-template-columns: 1fr; }
   .sidebar { display: none; }
   .reading-pane { display: none; }
+  .pane-resizer { display: none; }
+  .main { flex-basis: 100%; }
   .summary { grid-template-columns: 1fr; }
 }

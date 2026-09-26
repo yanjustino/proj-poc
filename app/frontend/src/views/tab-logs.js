@@ -1,12 +1,9 @@
 // A per-project "Logs" tab: lists every run whose log survived to disk for
 // this work-item (projects/<id>/run_logs/*.log, written by app.go's
-// tailRunLogs) and lets you read any of them back. Exists because the
-// global Logs screen (logs-view.js) only ever lists the CURRENT app
-// session's own runs (mhl_run_list) — leave the screen, switch work-items,
-// restart the app, or just let SetAgent reconnect the bridge, and that list
-// forgets every run it had, even though the bytes themselves were durably
-// written to disk the whole time. This tab reads straight from that
-// filesystem index instead, so a project's history stays reachable exactly
+// tailRunLogs) and lets you read any of them back — the app's only logs
+// screen. It reads straight from that filesystem index, not mhl_run_list
+// (which only knows the CURRENT mhl session's runs and forgets them on every
+// restart or reconnect), so a project's history stays reachable exactly
 // where you'd look for it: on the project, not on a session that already
 // ended.
 //

@@ -5,7 +5,7 @@
 
 import { Paths } from "../shared/core/paths.mh"
 import { Writer } from "../shared/agents/agents.mh"
-import { Context, NoAdr } from "../shared/artifacts/context.mh"
+import { Context } from "../shared/artifacts/context.mh"
 import { ArtifactData } from "../shared/artifacts/artifact_data.mh"
 import { ArtifactBody } from "../shared/artifacts/artifact_body.mh"
 import { Slug } from "../shared/core/slug.mh"
@@ -14,6 +14,8 @@ import { DirClear } from "../shared/core/dir_clear.mh"
 import { PageShell, ArtifactMeta } from "../shared/artifacts/page_shell.mh"
 import { ChangesBlock } from "../shared/artifacts/changes_log.mh"
 import { C4Diagram } from "../shared/artifacts/c4_diagram.mh"
+import { AutoReview } from "../shared/artifacts/auto_review.mh"
+import { ArtifactChecks } from "../shared/artifacts/artifact_checks.mh"
 import {
     ArtifactSchema,
     AdrInstruction, DerInstruction, DiagramasInstruction,
@@ -87,10 +89,13 @@ partial workflow Discovery {
         if (requisitos_content.is_empty()) fail("gere 'requisitos' antes de 'der'")
         var atributos_content = Context.artifact(project_id, "atributos.html")
         if (atributos_content.is_empty()) fail("gere 'atributos' antes de 'der'")
-        // Contexto opcional — ver o comentario de DerInstruction.
+        // No Discovery as ADRs sao dependencia: o nivel do DER (fisico so com
+        // banco escolhido; conceitual para armazenamento nao relacional)
+        // depende delas — ver o comentario de DerInstruction.
         var adr_content = Context.artifact_dir(project_id, "adr")
-        if (adr_content.is_empty()) adr_content = NoAdr.placeholder()
-        var response = Writer.generate(
+        if (adr_content.is_empty()) fail("gere 'adr' antes de 'der'")
+        var review = AutoReview.generate(
+            enabled: autorrevisao,
             prompt: DerInstruction(
                 schema_conventions: ArtifactSchema(),
                 requisitos_content: requisitos_content,
@@ -100,12 +105,15 @@ partial workflow Discovery {
             ),
             schema_file: DerSchemaFile.get(),
             project_id: project_id,
-            artifact: self.current_artifact
+            artifact: self.current_artifact,
+            prepare: (raw) -> json.parse(raw),
+            check: (d) -> ArtifactChecks.der(d)
         )
-        self.tokens_in = response.tokens_in
-        self.tokens_out = response.tokens_out
-        var raw = response.content
-        self.pending_data = json.parse(raw)
+        self.tokens_in = review.tokens_in
+        self.tokens_out = review.tokens_out
+        var data = review.data
+        data["autorrevisao"] = review.revisao
+        self.pending_data = data
         goto Gate
     }
 
@@ -129,11 +137,14 @@ partial workflow Discovery {
         if (requisitos_content.is_empty()) fail("gere 'requisitos' antes de 'diagramas'")
         var atributos_content = Context.artifact(project_id, "atributos.html")
         if (atributos_content.is_empty()) fail("gere 'atributos' antes de 'diagramas'")
-        // Contexto opcional — ver o comentario de DiagramasInstruction.
+        // No Discovery as ADRs sao dependencia: tecnologias dos conteineres e
+        // o diagrama de implantacao saem delas — ver o comentario de
+        // DiagramasInstruction.
         var adr_content = Context.artifact_dir(project_id, "adr")
-        if (adr_content.is_empty()) adr_content = NoAdr.placeholder()
+        if (adr_content.is_empty()) fail("gere 'adr' antes de 'diagramas'")
 
-        var response = Writer.generate(
+        var review = AutoReview.generate(
+            enabled: autorrevisao,
             prompt: DiagramasInstruction(
                 schema_conventions: ArtifactSchema(),
                 requisitos_content: requisitos_content,
@@ -143,16 +154,20 @@ partial workflow Discovery {
             ),
             schema_file: DiagramasSchemaFile.get(),
             project_id: project_id,
-            artifact: self.current_artifact
+            artifact: self.current_artifact,
+            prepare: (raw) -> C4Diagram.annotate(json.parse(raw), C4Diagram.infra_hint(adr_content)),
+            check: (d) -> ArtifactChecks.diagramas(d)
         )
 
-        self.tokens_in = response.tokens_in
-        self.tokens_out = response.tokens_out
-        var raw = response.content
-        // C4Diagram.annotate anexa a cada diagrama os avisos que so o lote
-        // inteiro revela (niveis ausentes, nomes divergentes entre niveis) —
-        // o preview de um item e o arquivo final leem daqui.
-        self.pending_data = C4Diagram.annotate(json.parse(raw))
+        self.tokens_in = review.tokens_in
+        self.tokens_out = review.tokens_out
+        // C4Diagram.annotate (no prepare acima) anexa a cada diagrama os
+        // avisos que so o lote inteiro revela (niveis ausentes, nomes
+        // divergentes, falta de diagrama de implantacao) — o preview de um
+        // item e o arquivo final leem daqui.
+        var data = review.data
+        data["diagramas"] = AutoReview.tag_items(data.diagramas, review.revisao)
+        self.pending_data = data
         goto Gate
     }
 

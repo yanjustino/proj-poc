@@ -15,15 +15,29 @@ import "discovery.partial.tecnicos.mh"
 import "discovery.partial.hook.mh"
 
 import { Paths } from "../shared/core/paths.mh"
+import { DirClear } from "../shared/core/dir_clear.mh"
 import { ChangesLog } from "../shared/artifacts/changes_log.mh"
 import { Activity } from "../shared/artifacts/activity_log.mh"
+
+// ItemScope: o escopo de um item alem do proprio artefato — a feature, para
+// as historias (uma colecao por feature); feature/historia, para o plano de
+// implementacao (um por historia). E a chave que ChangesLog e ActivityLog
+// usam para separar o historico de cada item.
+tool ItemScope {
+    of(artifact: string, feature_id: string, historia_id: string): string -> match artifact {
+        "historias" -> feature_id
+        "plano"     -> feature_id + "/" + historia_id
+        _           -> ""
+    }
+}
 
 partial workflow Discovery {
     description: "Artefatos de nivel Oportunidade: brief, atributos, requisitos, adr, der, diagramas, features, dependencias, historias."
 
     input project_id: string
     input artifact: string        // brief | atributos | requisitos | adr | der | diagramas | features | dependencias | historias
-    input feature_id: string = "" // obrigatorio (valor) so para artifact:"historias"
+    input feature_id: string = "" // obrigatorio (valor) para artifact:"historias" e "plano"
+    input historia_id: string = "" // obrigatorio (valor) so para artifact:"plano" (ex.: "US0001")
     input buddy: bool = false
     input approved: bool = false
     // Caminho de recuperacao para um rascunho pausado cujo checkpoint foi
@@ -45,6 +59,9 @@ partial workflow Discovery {
     // chamada seguinte (o loop-back do proprio Gate) o usaria, custando
     // uma chamada de LLM inteira a mais por nada.
     input feedback: string = ""
+    // Autorrevisao (auto_review.mh): com avisos de conformidade na geracao,
+    // uma unica chamada extra pede a correcao antes da pausa para revisao.
+    input autorrevisao: bool = false
 
     var discovery_result = null
     var tokens_in = 0
@@ -81,6 +98,7 @@ partial workflow Discovery {
         "features"   -> FeaturesCommit
         "dependencias" -> DependenciasCommit
         "historias"  -> HistoriasCommit
+        "plano"      -> PlanoCommit
         _ -> fail("invariante violado: artefato desconhecido chegou ao Gate")
     }
 
@@ -94,6 +112,7 @@ partial workflow Discovery {
         "features"   -> FeaturesGenerate
         "dependencias" -> DependenciasGenerate
         "historias"  -> HistoriasGenerate
+        "plano"      -> PlanoGenerate
         _ -> fail("artefato desconhecido: '" + artifact +
                 "' (use brief | atributos | requisitos | adr | der | diagramas | features | dependencias | historias)"
         )
@@ -105,11 +124,14 @@ partial workflow Discovery {
             if (artifact == "historias" && feature_id.is_empty()) {
                 fail("'feature_id' e obrigatorio para aprovar artifact: \"historias\"")
             }
+            if (artifact == "plano" && (feature_id.is_empty() || historia_id.is_empty())) {
+                fail("'feature_id' e 'historia_id' sao obrigatorios para aprovar artifact: \"plano\"")
+            }
             pending_data = approval_data
             tokens_in = approval_tokens_in
             tokens_out = approval_tokens_out
             current_artifact = artifact
-            Activity.record(project_id, "approved", artifact, feature_id)
+            Activity.record(project_id, "approved", artifact, ItemScope.of(artifact, feature_id, historia_id))
             goto CommitRouter(artifact)
         }
         // Um StartRun novo com feedback preenchido (ver input feedback's
@@ -130,11 +152,11 @@ partial workflow Discovery {
             // pro problema real que isto resolve).
             ChangesLog.append({
                 artifact: artifact,
-                feature_id: if (artifact == "historias") feature_id else "",
+                feature_id: ItemScope.of(artifact, feature_id, historia_id),
                 feedback: feedback,
             })
         }
-        Activity.record(project_id, "started", artifact, feature_id)
+        Activity.record(project_id, "started", artifact, ItemScope.of(artifact, feature_id, historia_id))
         goto GenerateRouter(artifact)
     }
 
@@ -164,7 +186,7 @@ partial workflow Discovery {
                 pending_feedback = feedback
                 ChangesLog.append({
                     artifact: artifact,
-                    feature_id: if (artifact == "historias") feature_id else "",
+                    feature_id: ItemScope.of(artifact, feature_id, historia_id),
                     feedback: feedback,
                 })
 
@@ -172,13 +194,13 @@ partial workflow Discovery {
             }
 
             feedback_consumed = false
-            Activity.record(project_id, "draft_ready", artifact, feature_id)
+            Activity.record(project_id, "draft_ready", artifact, ItemScope.of(artifact, feature_id, historia_id))
             pause("revise o conteudo de '" + artifact + "' antes de gravar em artifacts/")
         }
 
         // Um resume com approved:true reexecuta este step e chega aqui; sem
         // Modo Buddy nao ha revisao, entao nada a registrar.
-        if (buddy) Activity.record(project_id, "approved", artifact, feature_id)
+        if (buddy) Activity.record(project_id, "approved", artifact, ItemScope.of(artifact, feature_id, historia_id))
         goto CommitRouter(artifact)
     }
 
@@ -242,6 +264,24 @@ test DiscoveryWorkflowSpec {
         is_true(run.error.contains("gere 'requisitos' antes de 'der'"))
     }
 
+    // DER e diagramas dependem das ADRs no Discovery: com requisitos e
+    // atributos gravados mas sem nenhuma ADR, os dois falham antes de
+    // chamar a LLM.
+    describe der_and_diagramas_require_adr_first {
+        var project_id = "spec-test-der-diagramas-adr"
+        dir.create(Paths.artifacts_dir(project_id))
+        fs.write(Paths.artifact(project_id, "requisitos.html"), "<html><body>FR-001</body></html>")
+        fs.write(Paths.artifact(project_id, "atributos.html"), "<html><body>NFR-001</body></html>")
+        var der = Discovery.run(inputs: {project_id: project_id, artifact: "der"})
+        is_false(der.ok)
+        is_true(der.error.contains("gere 'adr' antes de 'der'"))
+        var diagramas = Discovery.run(inputs: {project_id: project_id, artifact: "diagramas"})
+        is_false(diagramas.ok)
+        is_true(diagramas.error.contains("gere 'adr' antes de 'diagramas'"))
+        DirClear.clear(Paths.root(project_id))
+        dir.delete(Paths.root(project_id))
+    }
+
     describe diagramas_requires_requisitos_first {
         var run = Discovery.run(inputs: {project_id: "spec-test-project", artifact: "diagramas"})
         is_false(run.ok)
@@ -258,6 +298,12 @@ test DiscoveryWorkflowSpec {
         var run = Discovery.run(inputs: {project_id: "spec-test-project", artifact: "dependencias"})
         is_false(run.ok)
         is_true(run.error.contains("gere 'features' antes de 'dependencias'"))
+    }
+
+    describe plano_requires_a_feature_and_a_historia_id {
+        var run = Discovery.run(inputs: {project_id: "spec-test-project", artifact: "plano", feature_id: "FT001"})
+        is_true(!run.ok)
+        is_true(run.error.contains("'feature_id' e 'historia_id' sao obrigatorios"))
     }
 
     describe historias_requires_a_feature_id {

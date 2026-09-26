@@ -14,9 +14,13 @@ import { Cite } from "cite.mh"
 import { ArtifactHtml } from "artifact_html.mh"
 import { C4Diagram } from "c4_diagram.mh"
 import { DerModel } from "der_model.mh"
+import { Traceability, Contracts, Scenarios, SpikeSpec } from "historia_spec.mh"
+import { PlanoModel } from "plano_model.mh"
+import { StoryRules, FeatureRules, BacklogHtml } from "backlog_rules.mh"
+import { AutoReview } from "auto_review.mh"
 import {
     BriefBody, AtributosBody, RequisitosBody, AdrBody, DerBody, DerLegacyBody, DiagramaBody,
-    FeatureBody, HistoriaBody, DependenciasBody
+    FeatureBody, HistoriaBody, DependenciasBody, PlanoBody
 } from "artifacts_common.mh"
 
 export tool ArtifactBody {
@@ -96,7 +100,7 @@ export tool ArtifactBody {
             nivel: DerModel.level_label(data.nivel),
             contexto: html.escape(data.contexto),
             contexto_fontes: Cite.note(data.contexto_fontes),
-            avisos_html: DerModel.warnings_html(data),
+            avisos_html: AutoReview.note_html(data) + DerModel.warnings_html(data),
             diagramas_html: DerModel.diagrams_html(data),
             legenda_html: DerModel.legend(data),
             entidades_tabela: DerModel.entities_table(data),
@@ -118,12 +122,18 @@ export tool ArtifactBody {
         escopo_html: C4Diagram.scope(data),
         descricao: html.escape(data.descricao),
         descricao_fontes: Cite.note(data.descricao_fontes),
-        avisos_html: C4Diagram.warnings_html(data),
+        avisos_html: AutoReview.note_html(data) + C4Diagram.warnings_html(data),
         diagrama_mermaid: html.escape(C4Diagram.mermaid_source(data)),
         legenda_html: C4Diagram.legend(data),
         elementos_html: C4Diagram.elements_table(data),
         relacoes_html: C4Diagram.relations_table(data)
     ))
+
+    feature_warnings(data: any): string -> {
+        var avisos = FeatureRules.check(data)
+        if (avisos.is_empty()) return ""
+        return "<h2>Conformidade do item</h2><ul class=\"c4-warnings\">" + avisos.map((a) -> "<li>" + html.escape(a) + "</li>").join("") + "</ul>"
+    }
 
     feature(data: any): string -> {
         // Checkpoints anteriores a classificacao Feature/Enabler nao tem
@@ -138,26 +148,67 @@ export tool ArtifactBody {
         var itens_habilitados = data?.itens_habilitados ?? []
 
         return Cite.finalize(FeatureBody(
+            avisos_html: AutoReview.note_html(data) + self.feature_warnings(data),
             classificacao_lista: ArtifactHtml.feature_classification(tipo_item, subtipo_enabler, classificacao_fontes),
             hipotese_beneficio: html.escape(hipotese_beneficio),
-            hipotese_beneficio_fontes: Cite.note(hipotese_beneficio_fontes),
+            hipotese_beneficio_fontes: Cite.note(hipotese_beneficio_fontes) + BacklogHtml.measurement(data?.medicao_beneficio),
             itens_habilitados_lista: Cite.list(itens_habilitados),
             resumo: html.escape(data.resumo),
             resumo_fontes: Cite.note(data.resumo_fontes),
             objetivo: html.escape(data.objetivo),
             objetivo_fontes: Cite.note(data.objetivo_fontes),
             personas_tabela: ArtifactHtml.feature_personas(data.personas),
-            em_escopo_lista: Cite.list(data.em_escopo),
+            em_escopo_lista: BacklogHtml.change_list(data.em_escopo),
             fora_escopo_lista: Cite.list(data.fora_escopo),
-            regras_lista: Cite.list(data.regras_negocio),
-            interacoes_lista: Cite.list(data.interacoes_entidades_dados),
+            regras_lista: BacklogHtml.change_list(data.regras_negocio),
+            interacoes_lista: BacklogHtml.change_list(data.interacoes_entidades_dados),
             criterios_lista: Cite.list(data.criterios_aceite),
-            historias_lista: Cite.list(data.historias_propostas),
+            historias_lista: BacklogHtml.proposals(data.historias_propostas),
             dependencias_lista: Cite.list(data.dependencias_integridade),
-            dependencias_sistema_lista: Cite.list(data.dependencias_sistema),
+            dependencias_sistema_lista: BacklogHtml.change_list(data.dependencias_sistema),
             gaps_lista: Cite.list(data.gaps),
             questoes_lista: Cite.list(data.questoes_abertas)
         ))
+    }
+
+    // Contratos estruturados (Contracts, historia_spec.mh) ou, numa historia
+    // gravada antes deles, o texto livre de contratos_interface.
+    historia_contracts(data: any): string -> {
+        if (Contracts.is_structured(data)) return Contracts.html(data)
+        return "<h2>Contratos de Interface</h2><pre><code class=\"language-json\">" + html.escape(data?.contratos_interface ?? "") + "</code></pre>" + Cite.note(data?.contratos_fontes ?? [])
+    }
+
+    // Coerencia do contrato (sem contexto) + rastreabilidade (calculada no
+    // *Generate contra os artefatos do work-item — ver Traceability.annotate).
+    historia_warnings(data: any): string -> {
+        var avisos = StoryRules.check(data) + Scenarios.check(data) + Contracts.check(data) + (data?.avisos_rastreabilidade ?? [])
+        if (avisos.is_empty()) return ""
+        return "<h2>Conformidade da especificação</h2><ul class=\"c4-warnings\">" + avisos.map((a) -> "<li>" + html.escape(a) + "</li>").join("") + "</ul>"
+    }
+
+    // Criterios numerados CA1, CA2… — a referencia que o plano de
+    // implementacao usa para ligar tarefas e testes a cada criterio.
+    numbered_criteria(itens: any[]): string -> {
+        var out = []
+        var n = 1
+        for (var item in itens) {
+            out += [{texto: "CA${n} — " + item.texto, fontes: item.fontes}]
+            n = n + 1
+        }
+        return Cite.list(out)
+    }
+
+    // Secoes que nao se aplicam somem da pagina em vez de aparecerem com um
+    // titulo e um bloco vazio — "nao se aplica" nao e o mesmo que "falta"
+    // (o que falta vai para Lacunas).
+    list_section(title: string, items: any[]): string -> {
+        if (items.is_empty()) return ""
+        return "<h2>" + title + "</h2>" + Cite.list(items)
+    }
+
+    text_section(title: string, body: string, content: string): string -> {
+        if (content.trim().is_empty()) return ""
+        return "<h2>" + title + "</h2>" + body
     }
 
     historia(data: any): string -> {
@@ -168,7 +219,7 @@ export tool ArtifactBody {
         var story_type = if (legacy_story) "historia_usuario" else (data?.story_type ?? "historia_usuario")
 
         return Cite.finalize(HistoriaBody(
-            statement: ArtifactHtml.story_statement(
+            statement: if (story_type == "spike" && SpikeSpec.is_structured(data)) SpikeSpec.html(data.spike) else ArtifactHtml.story_statement(
                 story_type,
                 data.como,
                 data.quero,
@@ -178,6 +229,7 @@ export tool ArtifactBody {
                 data?.evidenciado_por ?? ""
             ),
             statement_fontes: Cite.note(data.fontes),
+            avisos_html: AutoReview.note_html(data) + self.historia_warnings(data),
             atributos_lista: ArtifactHtml.story_attributes(
                 data.work_item_type,
                 story_type,
@@ -186,20 +238,18 @@ export tool ArtifactBody {
                 data.specialty,
                 data.fontes
             ),
-            contexto_negocio: html.escape(data.contexto_negocio),
-            contexto_fontes: Cite.note(data.contexto_fontes),
-            criterios_lista: Cite.list(data.criterios_aceite),
-            cenarios_gherkin: html.escape(data.cenarios_gherkin),
-            cenarios_fontes: Cite.note(data.cenarios_fontes),
-            regras_lista: Cite.list(data.regras_negocio),
-            dod_lista: Cite.list(data.definition_of_done),
-            dependencias_lista: Cite.list(data.dependencias_impedimentos),
-            fora_escopo_lista: Cite.list(data.fora_escopo),
-            exemplo_uso: html.escape(data.exemplo_uso),
-            exemplo_fontes: Cite.note(data.exemplo_fontes),
-            contratos_interface: html.escape(data.contratos_interface),
-            contratos_fontes: Cite.note(data.contratos_fontes),
-            questoes_lista: Cite.list(data.questoes_abertas)
+            contexto_html: self.text_section("Contexto da Entrega", "<p>" + html.escape(data?.contexto_negocio ?? "") + "</p>" + Cite.note(data?.contexto_fontes ?? []), data?.contexto_negocio ?? ""),
+            criterios_lista: self.numbered_criteria(data.criterios_aceite),
+            cenarios_html: if (Scenarios.is_structured(data)) Scenarios.html(data) else self.text_section("Cenários Gherkin", "<pre><code class=\"language-gherkin\">" + html.escape(data?.cenarios_gherkin ?? "") + "</code></pre>" + Cite.note(data?.cenarios_fontes ?? []), data?.cenarios_gherkin ?? ""),
+            regras_html: if ((data?.regras_negocio ?? []).is_empty()) "" else "<h2>Regras de Negócio</h2>" + BacklogHtml.change_list(data.regras_negocio),
+            dod_html: self.list_section("Definição de Pronto (Definition of Done)", data?.definition_of_done ?? []),
+            dependencias_html: if ((data?.dependencias_impedimentos ?? []).is_empty()) "" else "<h2>Dependências e Impedimentos</h2>" + BacklogHtml.dependencies(data.dependencias_impedimentos),
+            fora_escopo_html: self.list_section("Fora de Escopo", data?.fora_escopo ?? []),
+            exemplo_html: self.text_section("Exemplo de Uso (Use Case)", "<pre><code>" + html.escape(data?.exemplo_uso ?? "") + "</code></pre>" + Cite.note(data?.exemplo_fontes ?? []), data?.exemplo_uso ?? ""),
+            rastreabilidade_html: Traceability.html(data?.rastreabilidade),
+            contratos_html: self.historia_contracts(data),
+            gaps_html: self.list_section("Lacunas", data?.gaps ?? []),
+            questoes_html: self.list_section("Questões em Aberto", data?.questoes_abertas ?? [])
         ))
     }
 
@@ -208,5 +258,26 @@ export tool ArtifactBody {
         ordem_tabela: ArtifactHtml.execution_order(data.ordem_execucao),
         diagrama_mermaid: html.escape(data.diagrama_mermaid),
         gaps_lista: Cite.list(data.gaps)
+    ))
+
+    // Plano de implementacao de uma historia — ver plano_model.mh.
+    // `assets_prefix`: caminho relativo ate artifacts/ (ver PlanoBody).
+    plano(data: any, assets_prefix: string): string -> Cite.finalize(PlanoBody(
+        historia_titulo: html.escape(data?.historia_titulo ?? ""),
+        avisos_html: AutoReview.note_html(data) + PlanoModel.warnings_html(data),
+        abordagem: html.escape(data.abordagem),
+        abordagem_fontes: Cite.note(data.abordagem_fontes),
+        componentes_tabela: PlanoModel.components_html(data?.componentes ?? []),
+        adrs_tabela: PlanoModel.adrs_html(data?.adrs ?? []),
+        dados_tabela: PlanoModel.data_html(data?.dados ?? []),
+        fluxo_html: PlanoModel.sequence_html(data),
+        erros_lista: Cite.list(data?.erros ?? []),
+        seguranca_lista: Cite.list(data?.seguranca ?? []),
+        observabilidade_lista: Cite.list(data?.observabilidade ?? []),
+        tarefas_tabela: PlanoModel.tasks_html(data?.tarefas ?? []),
+        testes_tabela: PlanoModel.tests_html(data?.testes ?? []),
+        cobertura_html: PlanoModel.coverage_html(data),
+        riscos_lista: Cite.list(data?.riscos ?? []),
+        assets_prefix: assets_prefix
     ))
 }

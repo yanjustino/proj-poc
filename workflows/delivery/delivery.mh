@@ -14,15 +14,20 @@ import { ArtifactBody } from "../shared/artifacts/artifact_body.mh"
 import { WorkflowsRoot } from "../shared/core/workflows_root.mh"
 import { DirClear } from "../shared/core/dir_clear.mh"
 import { ChangesLog, ChangesBlock } from "../shared/artifacts/changes_log.mh"
+import { Traceability, SpecFiles } from "../shared/artifacts/historia_spec.mh"
 import { Activity } from "../shared/artifacts/activity_log.mh"
 import { C4Diagram } from "../shared/artifacts/c4_diagram.mh"
 import {
-    ArtifactSchema,
+    ArtifactSchema, SpecConventions,
     BriefInstruction, RequisitosInstruction, AdrInstruction, DerInstruction, DiagramasInstruction,
     HistoriasInstruction,
     BriefSchemaFile, RequisitosSchemaFile, AdrSchemaFile, DerSchemaFile, DiagramasSchemaFile,
-    HistoriasSchemaFile
+    HistoriasSchemaFile, PlanoInstruction, PlanoSchemaFile
 } from "../shared/artifacts/artifacts_common.mh"
+import { PlanoModel, PlanoPrep } from "../shared/artifacts/plano_model.mh"
+import { ContextSlice } from "../shared/artifacts/context_slice.mh"
+import { AutoReview } from "../shared/artifacts/auto_review.mh"
+import { ArtifactChecks } from "../shared/artifacts/artifact_checks.mh"
 
 // Delivery nao tem atributos de qualidade proprio — este texto fixo e o que
 // entra no lugar de `atributos_content` ao reaproveitar AdrInstruction/
@@ -48,6 +53,7 @@ prompt FeatureInstruction(
 
 prompt HistoriaInstruction(
     schema_conventions: prompt,
+    spec_conventions: prompt,
     requisitos_content: string,
     adr_content: string,
     der_content: string,
@@ -76,7 +82,11 @@ workflow Delivery {
 
     input project_id: string
     input mode: string        // "feature" | "historia"
-    input artifact: string    // brief | requisitos | adr | der | diagramas | feature | historia | historias
+    input artifact: string    // brief | requisitos | adr | der | diagramas | feature | historia | historias | plano
+    // Plano de implementacao: no modo "feature", de UMA historia do lote
+    // (historia_id obrigatorio, ex.: "US0001"); no modo "historia", da
+    // propria historia do projeto (historia_id ignorado).
+    input historia_id: string = ""
     input buddy: bool = false
     input approved: bool = false
     // Caminho de recuperacao equivalente ao de Discovery: permite aprovar o
@@ -96,6 +106,8 @@ workflow Delivery {
     // chamada seguinte (o loop-back do proprio Gate) o usaria, custando
     // uma chamada de LLM inteira a mais por nada.
     input feedback: string = ""
+    // Autorrevisao (auto_review.mh) — ver o mesmo input em discovery.mh.
+    input autorrevisao: bool = false
 
     var delivery_result = null
     var tokens_in = 0
@@ -131,7 +143,7 @@ workflow Delivery {
             tokens_in = approval_tokens_in
             tokens_out = approval_tokens_out
             current_artifact = artifact
-            Activity.record(project_id, "approved", artifact, "")
+            Activity.record(project_id, "approved", artifact, if (artifact == "plano") historia_id else "")
             if (artifact == "brief") goto BriefCommit
             if (artifact == "requisitos") goto RequisitosCommit
             if (artifact == "adr") goto AdrCommit
@@ -145,6 +157,7 @@ workflow Delivery {
                 if (mode != "feature") fail("'historias' so existe quando mode=\"feature\"")
                 goto HistoriasCommit
             }
+            if (artifact == "plano") goto PlanoCommit
             fail("artefato desconhecido para aprovacao: '" + artifact + "'")
         }
 
@@ -161,10 +174,10 @@ workflow Delivery {
             // discovery.mh's Dispatch / changes_log.mh's own doc comment.
             // Delivery nao tem conceito de feature_id (seu proprio
             // `historias` e uma colecao achatada, sem split por feature).
-            ChangesLog.append({artifact: artifact, feature_id: "", feedback: feedback})
+            ChangesLog.append({artifact: artifact, feature_id: if (artifact == "plano") historia_id else "", feedback: feedback})
         }
 
-        Activity.record(project_id, "started", artifact, "")
+        Activity.record(project_id, "started", artifact, if (artifact == "plano") historia_id else "")
         if (artifact == "brief") goto BriefGenerate
         if (artifact == "requisitos") goto RequisitosGenerate
         if (artifact == "adr") goto AdrGenerate
@@ -178,7 +191,8 @@ workflow Delivery {
             if (mode != "feature") fail("'historias' so existe quando mode=\"feature\"")
             goto HistoriasGenerate
         }
-        var final_artifacts = mode + (if (mode == "feature") " | historias" else "")
+        if (artifact == "plano") goto PlanoGenerate
+        var final_artifacts = mode + (if (mode == "feature") " | historias" else "") + " | plano"
         fail(
             "artefato desconhecido: '" + artifact +
             "' (use brief | requisitos | adr | der | diagramas | " + final_artifacts + ")"
@@ -207,7 +221,7 @@ workflow Delivery {
             if (!feedback.is_empty() && !feedback_consumed) {
                 feedback_consumed = true
                 pending_feedback = feedback
-                ChangesLog.append({artifact: artifact, feature_id: "", feedback: feedback})
+                ChangesLog.append({artifact: artifact, feature_id: if (artifact == "plano") historia_id else "", feedback: feedback})
                 if (artifact == "brief") goto BriefGenerate
                 if (artifact == "requisitos") goto RequisitosGenerate
                 if (artifact == "adr") goto AdrGenerate
@@ -215,12 +229,13 @@ workflow Delivery {
                 if (artifact == "diagramas") goto DiagramasGenerate
                 if (artifact == "feature" || artifact == "historia") goto FinalGenerate
                 if (artifact == "historias") goto HistoriasGenerate
+                if (artifact == "plano") goto PlanoGenerate
             }
             feedback_consumed = false
-            Activity.record(project_id, "draft_ready", artifact, "")
+            Activity.record(project_id, "draft_ready", artifact, if (artifact == "plano") historia_id else "")
             pause("revise o conteudo de '" + artifact + "' antes de gravar em artifacts/")
         }
-        if (buddy) Activity.record(project_id, "approved", artifact, "")
+        if (buddy) Activity.record(project_id, "approved", artifact, if (artifact == "plano") historia_id else "")
         if (artifact == "brief") goto BriefCommit
         if (artifact == "requisitos") goto RequisitosCommit
         if (artifact == "adr") goto AdrCommit
@@ -228,6 +243,7 @@ workflow Delivery {
         if (artifact == "diagramas") goto DiagramasCommit
         if (artifact == "feature" || artifact == "historia") goto FinalCommit
         if (artifact == "historias") goto HistoriasCommit
+        if (artifact == "plano") goto PlanoCommit
         fail("invariante violado: artefato desconhecido chegou ao Gate")
     }
 
@@ -352,7 +368,8 @@ workflow Delivery {
         // Contexto opcional — ver o comentario de DerInstruction.
         var adr_content = Context.artifact_dir(project_id, "adr")
         if (adr_content.is_empty()) adr_content = NoAdr.placeholder()
-        var response = Writer.generate(
+        var review = AutoReview.generate(
+            enabled: autorrevisao,
             prompt: DerInstruction(
                 schema_conventions: ArtifactSchema(),
                 requisitos_content: requisitos_content,
@@ -360,12 +377,15 @@ workflow Delivery {
                 adr_content: adr_content,
                 feedback_content: ChangesBlock.for_artifact(project_id, "der", "")
             ),
-            schema_file: DerSchemaFile.get(), project_id: project_id, artifact: current_artifact
+            schema_file: DerSchemaFile.get(), project_id: project_id, artifact: current_artifact,
+            prepare: (raw) -> json.parse(raw),
+            check: (d) -> ArtifactChecks.der(d)
         )
-        tokens_in = response.tokens_in
-        tokens_out = response.tokens_out
-        var raw = response.content
-        pending_data = json.parse(raw)
+        tokens_in = review.tokens_in
+        tokens_out = review.tokens_out
+        var data = review.data
+        data["autorrevisao"] = review.revisao
+        pending_data = data
         goto Gate
     }
 
@@ -389,7 +409,8 @@ workflow Delivery {
         if (requisitos_content.is_empty()) fail("gere 'requisitos' antes de 'diagramas'")
         var adr_content = Context.artifact_dir(project_id, "adr")
         if (adr_content.is_empty()) adr_content = NoAdr.placeholder()
-        var response = Writer.generate(
+        var review = AutoReview.generate(
+            enabled: autorrevisao,
             prompt: DiagramasInstruction(
                 schema_conventions: ArtifactSchema(),
                 requisitos_content: requisitos_content,
@@ -397,12 +418,15 @@ workflow Delivery {
                 adr_content: adr_content,
                 feedback_content: ChangesBlock.for_artifact(project_id, "diagramas", "")
             ),
-            schema_file: DiagramasSchemaFile.get(), project_id: project_id, artifact: current_artifact
+            schema_file: DiagramasSchemaFile.get(), project_id: project_id, artifact: current_artifact,
+            prepare: (raw) -> C4Diagram.annotate(json.parse(raw), C4Diagram.infra_hint(adr_content)),
+            check: (d) -> ArtifactChecks.diagramas(d)
         )
-        tokens_in = response.tokens_in
-        tokens_out = response.tokens_out
-        var raw = response.content
-        pending_data = C4Diagram.annotate(json.parse(raw))
+        tokens_in = review.tokens_in
+        tokens_out = review.tokens_out
+        var data = review.data
+        data["diagramas"] = AutoReview.tag_items(data.diagramas, review.revisao)
+        pending_data = data
         goto Gate
     }
 
@@ -449,36 +473,47 @@ workflow Delivery {
 
         var changes_content = ChangesBlock.for_artifact(project_id, mode, "")
 
-        var response = null
+        // Um so prompt/schema por modo, e uma unica chamada ao AutoReview
+        // (feature final ou historia final — cada um com suas verificacoes).
+        var prompt = ""
+        var schema_file = null
         if (mode == "historia") {
-            response = Writer.generate(
-                prompt: HistoriaInstruction(
-                    schema_conventions: ArtifactSchema(),
-                    requisitos_content: requisitos_content,
-                    adr_content: adr_content,
-                    der_content: der_content,
-                    diagramas_content: diagramas_content,
-                    feedback_content: changes_content
-                ),
-                schema_file: HistoriaSchemaFile.get(), project_id: project_id, artifact: current_artifact
+            prompt = HistoriaInstruction(
+                schema_conventions: ArtifactSchema(),
+                spec_conventions: SpecConventions(),
+                requisitos_content: requisitos_content,
+                adr_content: adr_content,
+                der_content: der_content,
+                diagramas_content: diagramas_content,
+                feedback_content: changes_content
             )
+            schema_file = HistoriaSchemaFile.get()
         } else {
-            response = Writer.generate(
-                prompt: FeatureInstruction(
-                    schema_conventions: ArtifactSchema(),
-                    requisitos_content: requisitos_content,
-                    adr_content: adr_content,
-                    der_content: der_content,
-                    diagramas_content: diagramas_content,
-                    feedback_content: changes_content
-                ),
-                schema_file: FeatureSchemaFile.get(), project_id: project_id, artifact: current_artifact
+            prompt = FeatureInstruction(
+                schema_conventions: ArtifactSchema(),
+                requisitos_content: requisitos_content,
+                adr_content: adr_content,
+                der_content: der_content,
+                diagramas_content: diagramas_content,
+                feedback_content: changes_content
             )
+            schema_file = FeatureSchemaFile.get()
         }
-        tokens_in = response.tokens_in
-        tokens_out = response.tokens_out
-        var raw = response.content
-        pending_data = json.parse(raw)
+        var known = Traceability.known(project_id)
+        // A historia unica recebe os mesmos avisos de rastreabilidade de um
+        // lote de historias (Traceability.annotate trabalha sobre um lote).
+        var review = AutoReview.generate(
+            enabled: autorrevisao,
+            prompt: prompt,
+            schema_file: schema_file, project_id: project_id, artifact: current_artifact,
+            prepare: (raw) -> if (mode == "historia") Traceability.annotate({historias: [json.parse(raw)]}, known).historias[0] else json.parse(raw),
+            check: (d) -> if (mode == "historia") ArtifactChecks.historia(d) else ArtifactChecks.feature(d)
+        )
+        tokens_in = review.tokens_in
+        tokens_out = review.tokens_out
+        var data = review.data
+        data["autorrevisao"] = review.revisao
+        pending_data = data
         goto Gate
     }
 
@@ -501,6 +536,7 @@ workflow Delivery {
             meta: ArtifactMeta.line(time.format(time.now(), "yyyy-MM-dd HH:mm"), "artifacts/" + out_path, tokens_in, tokens_out)
         )
         ArtifactData.write(project_id, out_path, data)
+        if (mode == "historia") SpecFiles.write(project_id, "", data)
         fs.write(Paths.artifact(project_id, out_path), rendered)
         delivery_result = {artifact: mode, path: "artifacts/" + out_path}
         goto Done
@@ -516,18 +552,39 @@ workflow Delivery {
         current_artifact = "historias"
         var feature_content = Context.artifact(project_id, "feature.html")
         if (feature_content.is_empty()) fail("gere 'feature' antes de 'historias'")
-        var response = Writer.generate(
+        // Mesmo contexto da feature final (FinalGenerate): requisitos e o
+        // que existir de adr/der/diagramas, recortado pelo que a feature
+        // cita (ContextSlice). Delivery nao tem atributos.
+        var refs = ContextSlice.refs(ContextSlice.read(project_id, "feature.json"))
+        var adr_content = ContextSlice.adrs(project_id, refs)
+        if (adr_content.is_empty()) adr_content = "(não gerado para este projeto)"
+        var der_content = Context.artifact(project_id, "der.html")
+        if (der_content.is_empty()) der_content = "(não gerado para este projeto)"
+        var diagramas_content = ContextSlice.diagramas(project_id, refs)
+        if (diagramas_content.is_empty()) diagramas_content = "(não gerado para este projeto)"
+        var known = Traceability.known(project_id)
+        var review = AutoReview.generate(
+            enabled: autorrevisao,
             prompt: HistoriasInstruction(
                 schema_conventions: ArtifactSchema(),
+                spec_conventions: SpecConventions(),
                 feature_content: feature_content,
+                requisitos_content: ContextSlice.requisitos(project_id, refs),
+                atributos_content: NoAtributos.placeholder(),
+                adr_content: adr_content,
+                der_content: der_content,
+                diagramas_content: diagramas_content,
                 feedback_content: ChangesBlock.for_artifact(project_id, "historias", "")
             ),
-            schema_file: HistoriasSchemaFile.get(), project_id: project_id, artifact: current_artifact
+            schema_file: HistoriasSchemaFile.get(), project_id: project_id, artifact: current_artifact,
+            prepare: (raw) -> Traceability.annotate(json.parse(raw), known),
+            check: (d) -> ArtifactChecks.historias(d)
         )
-        tokens_in = response.tokens_in
-        tokens_out = response.tokens_out
-        var raw = response.content
-        pending_data = json.parse(raw)
+        tokens_in = review.tokens_in
+        tokens_out = review.tokens_out
+        var data = review.data
+        data["historias"] = AutoReview.tag_items(data.historias, review.revisao)
+        pending_data = data
         goto Gate
     }
 
@@ -557,10 +614,89 @@ workflow Delivery {
             dir.create(historias_base + "/" + folder)
             var relative = "historias/" + folder + "/historia.html"
             ArtifactData.write(project_id, relative, historia)
+            SpecFiles.write(project_id, "historias/" + folder, historia)
             fs.write(Paths.artifact(project_id, relative), rendered)
             written += [folder]
         }
         delivery_result = {artifact: "historias", written: written}
+        goto Done
+    }
+
+    // PlanoGenerate/PlanoCommit — plano de implementacao (plano_model.mh),
+    // gravado ao lado da historia: historias/<USxxx>/plano.html no modo
+    // "feature"; plano.html na raiz no modo "historia" (a historia unica do
+    // projeto e o proprio historia.html da raiz). Mesmo contexto opcional de
+    // FinalGenerate; Delivery nao tem atributos.
+    step PlanoGenerate {
+        current_artifact = "plano"
+        var historia_rel = ""
+        var plano_rel = ""
+        var assets_prefix = ""
+        var feature_content = ""
+        if (mode == "historia") {
+            historia_rel = "historia.html"
+            plano_rel = "plano.html"
+            assets_prefix = "./"
+            feature_content = "(este projeto é uma história avulsa, sem feature)"
+        } else {
+            if (historia_id.is_empty()) fail("'historia_id' e obrigatorio para artifact: \"plano\" no modo feature")
+            var folder = ArtifactId.find_historia_dir(project_id, "historias", historia_id)
+            historia_rel = "historias/" + folder + "/historia.html"
+            plano_rel = "historias/" + folder + "/plano.html"
+            assets_prefix = "../../"
+            feature_content = Context.artifact(project_id, "feature.html")
+        }
+        var historia_json = Paths.artifact(project_id, ArtifactData.json_relative(historia_rel))
+        if (!fs.exists(historia_json)) fail("gere a historia antes do plano de implementacao")
+        var historia = json.parse(fs.read(historia_json))
+
+        // Recorte pelo que a historia cita (rastreabilidade + fontes).
+        var refs = ContextSlice.refs(historia)
+        var adr_content = ContextSlice.adrs(project_id, refs)
+        if (adr_content.is_empty()) adr_content = "(não gerado para este projeto)"
+        var der_content = Context.artifact(project_id, "der.html")
+        if (der_content.is_empty()) der_content = "(não gerado para este projeto)"
+        var diagramas_content = ContextSlice.diagramas(project_id, refs)
+        if (diagramas_content.is_empty()) diagramas_content = "(não gerado para este projeto)"
+
+        var known = Traceability.known(project_id)
+        var review = AutoReview.generate(
+            enabled: autorrevisao,
+            prompt: PlanoInstruction(
+                schema_conventions: ArtifactSchema(),
+                historia_content: Context.artifact(project_id, historia_rel),
+                feature_content: feature_content,
+                requisitos_content: ContextSlice.requisitos(project_id, refs),
+                atributos_content: NoAtributos.placeholder(),
+                adr_content: adr_content,
+                der_content: der_content,
+                diagramas_content: diagramas_content,
+                feedback_content: ChangesBlock.for_artifact(project_id, "plano", historia_id)
+            ),
+            schema_file: PlanoSchemaFile.get(), project_id: project_id, artifact: current_artifact,
+            prepare: (raw) -> PlanoPrep.annotate(json.parse(raw), historia, (if (mode == "historia") "" else historia_id + " — ") + (historia?.titulo ?? "História do projeto"), known),
+            check: (d) -> ArtifactChecks.plano(d)
+        )
+        tokens_in = review.tokens_in
+        tokens_out = review.tokens_out
+        var data = review.data
+        data["autorrevisao"] = review.revisao
+        data["plano_rel"] = plano_rel
+        data["assets_prefix"] = assets_prefix
+        pending_data = data
+        goto Gate
+    }
+
+    step PlanoCommit {
+        var data = pending_data
+        var rendered = PageShell(
+            title: "Plano de implementação — " + html.escape(data.historia_titulo),
+            body: ArtifactBody.plano(data, data.assets_prefix),
+            meta: ArtifactMeta.line(time.format(time.now(), "yyyy-MM-dd HH:mm"), "artifacts/" + data.plano_rel, tokens_in, tokens_out)
+        )
+        ArtifactData.write(project_id, data.plano_rel, data)
+        fs.write(Paths.artifact(project_id, data.plano_rel), rendered)
+        delivery_result = {artifact: "plano", historia_id: historia_id, path: "artifacts/" + data.plano_rel}
         goto Done
     }
 

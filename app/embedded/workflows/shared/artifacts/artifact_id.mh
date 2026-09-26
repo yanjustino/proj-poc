@@ -54,6 +54,19 @@ export tool ArtifactId {
     folder_name(id: string, title: string): string ->
         id + "-" + Slug.from_title(title)
 
+    // Resolve "US0001" pro nome real da pasta da historia dentro de
+    // `historias_rel` (ex.: "historias/FT001-slug" no Discovery, "historias"
+    // no Delivery) — o plano de implementacao e gravado ao lado dela.
+    find_historia_dir(project_id: string, historias_rel: string, historia_id: string): string -> {
+        var base_dir = Paths.artifact(project_id, historias_rel)
+        if (!dir.exists(base_dir)) fail("nenhuma historia encontrada em artifacts/" + historias_rel + "/ (gere 'historias' primeiro)")
+        for (var entry in dir.list(base_dir)) {
+            var name = entry.replace(base_dir + "/", "")
+            if (name.starts_with(historia_id + "-")) return name
+        }
+        fail("historia '" + historia_id + "' nao encontrada em artifacts/" + historias_rel + "/")
+    }
+
     // Resolve "FT001" pro nome real da pasta ("FT001-nome-da-feature") —
     // quem pede historias de uma feature so sabe o id curto, nao o slug.
     // Usado pelo Discovery (`historias` de uma feature especifica do backlog).

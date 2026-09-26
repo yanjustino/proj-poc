@@ -35,9 +35,9 @@ Para os tipos `c4-*`, você **não** escreve Mermaid (`diagrama_mermaid` fica va
 - Escopo: **um único contêiner** (`escopo.nome` igual ao nome dele no diagrama de contêiner). Um diagrama por contêiner.
 - Elementos principais: os `componente` dentro desse contêiner, cada um com responsabilidade e tecnologia/implementação. Elementos de apoio: outros contêineres do mesmo sistema, pessoas e sistemas externos ligados diretamente aos componentes.
 
-### `c4-deployment` — implantação (opcional)
+### `c4-deployment` — implantação
 
-- Só produza se atributos de qualidade ou ADRs definirem a infraestrutura. Um diagrama **por ambiente** (preencha `ambiente`, ex.: "Produção").
+- **Obrigatório quando uma ADR ou um atributo de qualidade definir infraestrutura** (nuvem, cluster, região, zonas, ambientes) — as histórias de infraestrutura e os planos referenciam esses nós. Um diagrama **por ambiente** (preencha `ambiente`; ao menos "Produção"). Sem nenhuma definição de infraestrutura, não produza.
 - Elementos: `no_implantacao` (nuvem, região, cluster, máquina, serviço gerenciado — com a tecnologia) e as instâncias dos contêineres do diagrama de contêiner, com `no_pai` apontando para o nó onde rodam. Nós podem ser aninhados via `no_pai`.
 
 ### Campos que não se aplicam

@@ -17,6 +17,7 @@ const LABELS = {
   historias: 'Histórias',
   feature: 'Detalhamento da feature/enabler',
   historia: 'Detalhamento da história',
+  plano: 'Plano de implementação',
 };
 
 function labelFor(name) {

@@ -1,0 +1,42 @@
+// tool ArtifactChecks — todos os avisos deterministicos de um artefato
+// recem-gerado, numa lista so: o que AutoReview usa para decidir se pede uma
+// revisao (e para comparar a versao revisada com a original). Espelha o que
+// cada pagina mostra na sua secao de conformidade (ArtifactBody).
+
+import { C4Diagram } from "c4_diagram.mh"
+import { DerModel } from "der_model.mh"
+import { StoryRules, FeatureRules } from "backlog_rules.mh"
+import { Contracts, Scenarios } from "historia_spec.mh"
+import { PlanoModel } from "plano_model.mh"
+
+export tool ArtifactChecks {
+    // Lote de diagramas ja anotado (C4Diagram.annotate: avisos_lote).
+    diagramas(data: any): string[] -> {
+        var out = []
+        for (var d in (data?.diagramas ?? [])) out = out + C4Diagram.check(d) + (d?.avisos_lote ?? [])
+        return out
+    }
+
+    der(data: any): string[] -> DerModel.check(data)
+
+    feature(data: any): string[] -> FeatureRules.check(data)
+
+    features(data: any): string[] -> {
+        var out = []
+        for (var f in (data?.features ?? [])) out = out + FeatureRules.check(f)
+        return out
+    }
+
+    // Historia ja anotada (Traceability.annotate: avisos_rastreabilidade).
+    historia(h: any): string[] ->
+        StoryRules.check(h) + Scenarios.check(h) + Contracts.check(h) + (h?.avisos_rastreabilidade ?? [])
+
+    historias(data: any): string[] -> {
+        var out = []
+        for (var h in (data?.historias ?? [])) out = out + self.historia(h)
+        return out
+    }
+
+    // Plano ja anotado (avisos_contexto, criterios_total).
+    plano(data: any): string[] -> PlanoModel.check(data) + (data?.avisos_contexto ?? [])
+}

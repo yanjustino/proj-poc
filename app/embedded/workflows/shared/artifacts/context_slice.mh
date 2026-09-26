@@ -1,0 +1,209 @@
+// tool ContextSlice — contexto por referencia. Gerar historias (e o plano de
+// uma historia) passou a receber todo o contexto tecnico da oportunidade;
+// isso resolve historias sem base tecnica, mas cada lote de historias
+// carregava todos os requisitos, ADRs e diagramas, mesmo os que nada tem a
+// ver com a feature. Aqui o contexto e recortado pelo que o artefato de
+// origem CITA (fontes da feature; rastreabilidade + fontes da historia):
+//
+//   - requisitos: so os itens citados ("requisitos/FR-003"); nenhum item
+//     citado (ou o artefato citado inteiro, "requisitos") => tudo;
+//   - atributos: os citados + todas as restricoes arquiteturais e
+//     obrigacoes de compliance (transversais, valem para qualquer item);
+//   - ADRs: as citadas; nenhuma citada => todas;
+//   - diagramas: sempre os de contexto e conteiner (o mapa do sistema) +
+//     os citados;
+//   - DER: inteiro (contratos e plano precisam dos atributos das entidades).
+//
+// Na duvida, inclui: um recorte que falta contexto e pior que um prompt
+// maior. Cada recorte diz no proprio texto que e um recorte e o que contem.
+
+import { Paths } from "../core/paths.mh"
+import { Context } from "context.mh"
+import { DirClear } from "../core/dir_clear.mh"
+
+export tool ContextSlice {
+    // refs: toda string citada em qualquer campo "fontes"/"*_fontes" do
+    // artefato, e (numa historia) nas listas de `rastreabilidade`.
+    refs(value: any): string[] -> {
+        var out = []
+        for (var r in self.collect(value, false)) {
+            if (!out.contains(r)) out += [r]
+        }
+        return out
+    }
+
+    // Devolve as strings coletadas (arrays sao passados por copia no mhl —
+    // anexar a um parametro dentro da recursao nao chegaria a quem chamou).
+    collect(value: any, is_source: bool): string[] -> {
+        var t = type_of(value)
+        if (t == "string") return if (is_source) [value] else []
+        var out = []
+        if (t == "array") {
+            for (var v in value) out = out + self.collect(v, is_source)
+        } else if (t == "object") {
+            for (var k in value.keys()) {
+                var source = k == "fontes" || k.ends_with("_fontes") || k == "rastreabilidade" || is_source
+                out = out + self.collect(value[k], source)
+            }
+        }
+        return out
+    }
+
+    // ids citados de um artefato: "requisitos/FR-003" -> "FR-003"; um ID sem
+    // prefixo ("FR-003", vindo da rastreabilidade) tambem conta.
+    ids_for(refs: string[], artifact: string, id_prefixes: string[]): string[] -> {
+        var out = []
+        for (var r in refs) {
+            var ref = r.trim()
+            if (ref.starts_with(artifact + "/")) ref = ref.substring(artifact.size() + 1, ref.size())
+            if (id_prefixes.any((p) -> ref.starts_with(p)) && !out.contains(ref)) out += [ref]
+        }
+        return out
+    }
+
+    cites_whole(refs: string[], artifact: string): bool -> refs.any((r) -> r.trim() == artifact)
+
+    read(project_id: string, relative: string): any -> {
+        var path = Paths.artifact(project_id, relative)
+        if (!fs.exists(path)) return null
+        try {
+            return json.parse(fs.read(path))
+        } catch (err) {
+            return null
+        }
+    }
+
+    filter_items(items: any[], ids: string[]): any[] -> items.filter((i) -> ids.contains(i?.id ?? ""))
+
+    requisitos(project_id: string, refs: string[]): string -> {
+        var full = Context.artifact(project_id, "requisitos.html")
+        var data = self.read(project_id, "requisitos.json")
+        var ids = self.ids_for(refs, "requisitos", ["FR-", "IR-", "DR-", "BR-", "RN-"])
+        if (data == null || ids.is_empty() || self.cites_whole(refs, "requisitos")) return full
+        var slice = {
+            contexto: data?.contexto ?? "",
+            funcionais: self.filter_items(data?.funcionais ?? [], ids),
+            integracoes: self.filter_items(data?.integracoes ?? [], ids),
+            dados: self.filter_items(data?.dados ?? [], ids),
+            negocio: self.filter_items(data?.negocio ?? [], ids),
+            regras_negocio: self.filter_items(data?.regras_negocio ?? [], ids),
+        }
+        return "(Recorte: só os requisitos citados — " + ids.join(", ") + ".)\n" + json.stringify(slice)
+    }
+
+    atributos(project_id: string, refs: string[]): string -> {
+        var full = Context.artifact(project_id, "atributos.html")
+        var data = self.read(project_id, "atributos.json")
+        var ids = self.ids_for(refs, "atributos", ["NFR-", "AC-", "CO-"])
+        if (data == null || ids.is_empty() || self.cites_whole(refs, "atributos")) return full
+        var slice = {
+            requisitos_nao_funcionais: self.filter_items(data?.requisitos_nao_funcionais ?? [], ids),
+            restricoes_arquiteturais: data?.restricoes_arquiteturais ?? [],
+            compliance: data?.compliance ?? [],
+        }
+        return "(Recorte: os atributos citados — " + ids.join(", ") + " — e todas as restrições arquiteturais e obrigações de compliance.)\n" + json.stringify(slice)
+    }
+
+    // ADRs por prefixo "ADR-NNN" do nome do arquivo.
+    adrs(project_id: string, refs: string[]): string -> {
+        var full = Context.artifact_dir(project_id, "adr")
+        var cited = self.ids_for(refs, "adr", ["ADR-"]).map((r) -> {
+            var parts = r.split("-")
+            return if (parts.size() >= 2) parts[0] + "-" + parts[1] else r
+        })
+        var base = Paths.artifact(project_id, "adr")
+        if (cited.is_empty() || !dir.exists(base)) return full
+        var out = ""
+        for (var entry in dir.list(base)) {
+            var name = entry.replace(base + "/", "").replace(base + "\\", "")
+            if (name.ends_with(".html")) {
+                var parts = name.split("-")
+                var id = if (parts.size() >= 2) parts[0] + "-" + parts[1] else name
+                if (cited.contains(id)) out = out + "\n\n---\n\n# adr/" + name.replace(".html", "") + "\n\n" + Context.artifact(project_id, "adr/" + name)
+            }
+        }
+        if (out.is_empty()) return full
+        return "(Recorte: só as ADRs citadas — " + cited.join(", ") + ".)" + out
+    }
+
+    // Diagramas de contexto e conteiner sempre; os demais so se citados.
+    diagramas(project_id: string, refs: string[]): string -> {
+        var base = Paths.artifact(project_id, "diagramas")
+        if (!dir.exists(base)) return ""
+        var cited = self.ids_for(refs, "diagramas", [""]).filter((r) -> !r.is_empty())
+        var out = ""
+        var skipped = 0
+        for (var entry in dir.list(base)) {
+            var name = entry.replace(base + "/", "").replace(base + "\\", "")
+            if (name.ends_with(".html")) {
+                var slug = name.replace(".html", "")
+                var data = self.read(project_id, "diagramas/" + slug + ".json")
+                var tipo = data?.diagram_type ?? ""
+                if (tipo == "c4-context" || tipo == "c4-container" || cited.contains(slug) || data == null) {
+                    out = out + "\n\n---\n\n# diagramas/" + slug + "\n\n" + Context.artifact(project_id, "diagramas/" + name)
+                } else {
+                    skipped = skipped + 1
+                }
+            }
+        }
+        if (skipped == 0) return out
+        return "(Recorte: diagramas de contexto e contêiner, mais os citados.)" + out
+    }
+}
+
+test ContextSliceSpec {
+    describe refs_collects_sources_and_traceability {
+        var refs = ContextSlice.refs({
+            resumo: "não é fonte",
+            resumo_fontes: ["requisitos/FR-001"],
+            regras_negocio: [{texto: "x", fontes: ["adr/ADR-002-nosql", "gap"]}],
+            rastreabilidade: {requisitos: ["FR-003"], adrs: ["ADR-004"], entidades: ["Ordem"]},
+        })
+        is_true(refs.contains("requisitos/FR-001"))
+        is_true(refs.contains("adr/ADR-002-nosql"))
+        is_true(refs.contains("FR-003"))
+        is_true(refs.contains("ADR-004"))
+        is_true(!refs.contains("não é fonte"))
+    }
+
+    describe ids_for_accepts_prefixed_and_bare_ids {
+        are_equal(ContextSlice.ids_for(["requisitos/FR-001", "FR-003", "atributos/NFR-001", "gap"], "requisitos", ["FR-", "IR-"]), ["FR-001", "FR-003"])
+    }
+
+    describe slices_requirements_adrs_and_diagrams_by_citation {
+        var project_id = "spec-test-context-slice"
+        var root = Paths.root(project_id)
+        dir.create(Paths.artifact(project_id, "adr"))
+        dir.create(Paths.artifact(project_id, "diagramas"))
+        // Context.artifact prefere o JSON semantico quando existe — o
+        // "artefato inteiro" aqui e o requisitos.json completo.
+        fs.write(Paths.artifact(project_id, "requisitos.html"), "<html><body>requisitos</body></html>")
+        fs.write(Paths.artifact(project_id, "requisitos.json"), json.stringify({contexto: "c", funcionais: [{id: "FR-001", titulo: "Cadastro"}, {id: "FR-002", titulo: "Ordens"}], integracoes: [], dados: [], negocio: [], regras_negocio: []}))
+        fs.write(Paths.artifact(project_id, "adr/ADR-001-java.html"), "<html><body>ADR JAVA</body></html>")
+        fs.write(Paths.artifact(project_id, "adr/ADR-002-nosql.html"), "<html><body>ADR NOSQL</body></html>")
+        fs.write(Paths.artifact(project_id, "diagramas/contexto.html"), "<html><body>DIAGRAMA CONTEXTO</body></html>")
+        fs.write(Paths.artifact(project_id, "diagramas/contexto.json"), json.stringify({diagram_type: "c4-context", titulo: "DIAGRAMA CONTEXTO"}))
+        fs.write(Paths.artifact(project_id, "diagramas/sequencia-login.html"), "<html><body>SEQUENCIA LOGIN</body></html>")
+        fs.write(Paths.artifact(project_id, "diagramas/sequencia-login.json"), json.stringify({diagram_type: "sequence", titulo: "SEQUENCIA LOGIN"}))
+
+        var refs = ["requisitos/FR-002", "adr/ADR-002-nosql"]
+        var req = ContextSlice.requisitos(project_id, refs)
+        is_true(req.contains("Ordens"))
+        is_true(!req.contains("Cadastro"))
+        is_true(ContextSlice.requisitos(project_id, ["requisitos"]).contains("Cadastro"))
+        is_true(ContextSlice.requisitos(project_id, []).contains("Cadastro"))
+
+        var adr = ContextSlice.adrs(project_id, refs)
+        is_true(adr.contains("ADR NOSQL"))
+        is_true(!adr.contains("ADR JAVA"))
+        is_true(ContextSlice.adrs(project_id, []).contains("ADR JAVA"))
+
+        var diag = ContextSlice.diagramas(project_id, refs)
+        is_true(diag.contains("DIAGRAMA CONTEXTO"))
+        is_true(!diag.contains("SEQUENCIA LOGIN"))
+        is_true(ContextSlice.diagramas(project_id, ["diagramas/sequencia-login"]).contains("SEQUENCIA LOGIN"))
+
+        DirClear.clear(root)
+        dir.delete(root)
+    }
+}

@@ -13,7 +13,12 @@ import { PageShell, ArtifactMeta } from "../shared/artifacts/page_shell.mh"
 import { WorkflowsRoot } from "../shared/core/workflows_root.mh"
 import { DirClear } from "../shared/core/dir_clear.mh"
 import { ChangesBlock } from "../shared/artifacts/changes_log.mh"
-import { ArtifactSchema, HistoriasInstruction, HistoriasSchemaFile} from "../shared/artifacts/artifacts_common.mh"
+import { ArtifactSchema, SpecConventions, HistoriasInstruction, HistoriasSchemaFile, PlanoInstruction, PlanoSchemaFile } from "../shared/artifacts/artifacts_common.mh"
+import { Traceability, SpecFiles } from "../shared/artifacts/historia_spec.mh"
+import { PlanoModel, PlanoPrep } from "../shared/artifacts/plano_model.mh"
+import { ContextSlice } from "../shared/artifacts/context_slice.mh"
+import { AutoReview } from "../shared/artifacts/auto_review.mh"
+import { ArtifactChecks } from "../shared/artifacts/artifact_checks.mh"
 
 // O SCHEMA de features (o backlog inteiro, varios itens de uma vez) e
 // especifico de Discovery — Delivery nao gera um backlog, gera o
@@ -87,7 +92,8 @@ partial workflow Discovery {
         var diagramas_content = Context.artifact_dir(project_id, "diagramas")
         if (diagramas_content.is_empty()) fail("gere 'diagramas' antes de 'features'")
 
-        var response = Writer.generate(
+        var review = AutoReview.generate(
+            enabled: autorrevisao,
             prompt: FeaturesInstruction(
                 schema_conventions: ArtifactSchema(),
                 atributos_content: atributos_content,
@@ -99,13 +105,16 @@ partial workflow Discovery {
             ),
             schema_file: FeaturesSchemaFile.get(),
             project_id: project_id,
-            artifact: self.current_artifact
+            artifact: self.current_artifact,
+            prepare: (raw) -> json.parse(raw),
+            check: (d) -> ArtifactChecks.features(d)
         )
 
-        self.tokens_in = response.tokens_in
-        self.tokens_out = response.tokens_out
-        var raw = response.content
-        self.pending_data = json.parse(raw)
+        self.tokens_in = review.tokens_in
+        self.tokens_out = review.tokens_out
+        var data = review.data
+        data["features"] = AutoReview.tag_items(data.features, review.revisao)
+        self.pending_data = data
 
         goto Gate
     }
@@ -211,18 +220,35 @@ partial workflow Discovery {
         self.current_artifact = "historias"
         var feature_dir = ArtifactId.find_feature_dir(project_id, feature_id)
         var feature_content = Context.artifact(project_id, "features/" + feature_dir + "/feature.html")
-        var response = Writer.generate(
+        // Contexto tecnico da oportunidade — ver o comentario de
+        // HistoriasInstruction — recortado pelo que a feature cita
+        // (ContextSlice). Todos ja existem quando ha features (que os
+        // exigem), exceto o DER, opcional.
+        var refs = ContextSlice.refs(ContextSlice.read(project_id, "features/" + feature_dir + "/feature.json"))
+        var der_content = Context.artifact(project_id, "der.html")
+        if (der_content.is_empty()) der_content = "(não gerado para esta oportunidade)"
+        var known = Traceability.known(project_id)
+        var review = AutoReview.generate(
+            enabled: autorrevisao,
             prompt: HistoriasInstruction(
                 schema_conventions: ArtifactSchema(),
+                spec_conventions: SpecConventions(),
                 feature_content: feature_content,
+                requisitos_content: ContextSlice.requisitos(project_id, refs),
+                atributos_content: ContextSlice.atributos(project_id, refs),
+                adr_content: ContextSlice.adrs(project_id, refs),
+                der_content: der_content,
+                diagramas_content: ContextSlice.diagramas(project_id, refs),
                 feedback_content: ChangesBlock.for_artifact(project_id, "historias", feature_id)
             ),
-            schema_file: HistoriasSchemaFile.get(), project_id: project_id, artifact: self.current_artifact
+            schema_file: HistoriasSchemaFile.get(), project_id: project_id, artifact: self.current_artifact,
+            prepare: (raw) -> Traceability.annotate(json.parse(raw), known),
+            check: (d) -> ArtifactChecks.historias(d)
         )
-        self.tokens_in = response.tokens_in
-        self.tokens_out = response.tokens_out
-        var raw = response.content
-        var data = json.parse(raw)
+        self.tokens_in = review.tokens_in
+        self.tokens_out = review.tokens_out
+        var data = review.data
+        data["historias"] = AutoReview.tag_items(data.historias, review.revisao)
         data["feature_dir"] = feature_dir
         self.pending_data = data
         goto Gate
@@ -262,10 +288,72 @@ partial workflow Discovery {
             dir.create(historias_base + "/" + folder)
             var relative = "historias/" + feature_dir + "/" + folder + "/historia.html"
             ArtifactData.write(project_id, relative, historia)
+            SpecFiles.write(project_id, "historias/" + feature_dir + "/" + folder, historia)
             fs.write(Paths.artifact(project_id, relative), rendered)
             written += [folder]
         }
         self.discovery_result = {artifact: "historias", feature_id: feature_id, written: written}
+        goto Done
+    }
+
+    // PlanoGenerate/PlanoCommit — plano de implementacao de UMA historia
+    // (plano_model.mh), gravado ao lado dela: historias/<feature>/<USxxx>/
+    // plano.html. Recebe a historia e todo o contexto tecnico da
+    // oportunidade; o que depende desse contexto (conteineres, ADRs e
+    // entidades citados que nao existem) e calculado aqui e guardado em
+    // avisos_contexto, como as historias fazem com a rastreabilidade.
+    step PlanoGenerate {
+        if (feature_id.is_empty() || historia_id.is_empty()) fail("'feature_id' e 'historia_id' sao obrigatorios para artifact: \"plano\"")
+        self.current_artifact = "plano"
+        var feature_dir = ArtifactId.find_feature_dir(project_id, feature_id)
+        var historias_rel = "historias/" + feature_dir
+        var historia_rel = historias_rel + "/" + ArtifactId.find_historia_dir(project_id, historias_rel, historia_id)
+        var historia_json = Paths.artifact(project_id, historia_rel + "/historia.json")
+        if (!fs.exists(historia_json)) fail("gere as historias de '" + feature_id + "' antes do plano de '" + historia_id + "'")
+        var historia = json.parse(fs.read(historia_json))
+        // Recorte pelo que a historia cita (rastreabilidade + fontes).
+        var refs = ContextSlice.refs(historia)
+        var der_content = Context.artifact(project_id, "der.html")
+        if (der_content.is_empty()) der_content = "(não gerado para esta oportunidade)"
+
+        var known = Traceability.known(project_id)
+        var review = AutoReview.generate(
+            enabled: autorrevisao,
+            prompt: PlanoInstruction(
+                schema_conventions: ArtifactSchema(),
+                historia_content: Context.artifact(project_id, historia_rel + "/historia.html"),
+                feature_content: Context.artifact(project_id, "features/" + feature_dir + "/feature.html"),
+                requisitos_content: ContextSlice.requisitos(project_id, refs),
+                atributos_content: ContextSlice.atributos(project_id, refs),
+                adr_content: ContextSlice.adrs(project_id, refs),
+                der_content: der_content,
+                diagramas_content: ContextSlice.diagramas(project_id, refs),
+                feedback_content: ChangesBlock.for_artifact(project_id, "plano", feature_id + "/" + historia_id)
+            ),
+            schema_file: PlanoSchemaFile.get(), project_id: project_id, artifact: self.current_artifact,
+            prepare: (raw) -> PlanoPrep.annotate(json.parse(raw), historia, historia_id + " — " + historia.titulo, known),
+            check: (d) -> ArtifactChecks.plano(d)
+        )
+        self.tokens_in = review.tokens_in
+        self.tokens_out = review.tokens_out
+        var data = review.data
+        data["autorrevisao"] = review.revisao
+        data["historia_dir"] = historia_rel
+        self.pending_data = data
+        goto Gate
+    }
+
+    step PlanoCommit {
+        var data = self.pending_data
+        var relative = data.historia_dir + "/plano.html"
+        var rendered = PageShell(
+            title: "Plano de implementação — " + html.escape(data.historia_titulo),
+            body: ArtifactBody.plano(data, "../../../"),
+            meta: ArtifactMeta.line(time.format(time.now(), "yyyy-MM-dd HH:mm"), "artifacts/" + relative, self.tokens_in, self.tokens_out)
+        )
+        ArtifactData.write(project_id, relative, data)
+        fs.write(Paths.artifact(project_id, relative), rendered)
+        self.discovery_result = {artifact: "plano", feature_id: feature_id, historia_id: historia_id, path: "artifacts/" + relative}
         goto Done
     }
 }

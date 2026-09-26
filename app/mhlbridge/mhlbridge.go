@@ -16,6 +16,7 @@ import (
 	"bytes"
 	"context"
 	"encoding/json"
+	"errors"
 	"fmt"
 	"io"
 	"log"
@@ -67,6 +68,14 @@ import (
 // multi-minute generation, approving an item sat in this queue until the
 // approval timed out, which read as a frozen screen.
 const maxConcurrentRuns = 8
+
+// sessionTTL is passed as MHL_SERVE_SESSION_TTL — see Start.
+const sessionTTL = "720h"
+
+// errSessionExpired: mhl answered 404 to a request carrying our
+// Mcp-Session-Id — the session was swept as idle (or the process was
+// replaced). callWithSession re-establishes it once.
+var errSessionExpired = errors.New("mhl: sessao MCP expirada")
 
 // Client owns the mhl child process and the MCP session opened against it.
 type Client struct {
@@ -170,7 +179,11 @@ type rpcError struct {
 // devinPricingJSON is a validated snapshot of that model's token rates from
 // `devin models list`; the workflow uses it only when the execution itself
 // does not report total_cost_usd.
-func Start(ctx context.Context, mhlPath, workflowsDir, stateDir, dataDir, codexCwdDir, agent, devinModel, devinPricingJSON string) (*Client, error) {
+// codexModel/claudeModel, when non-empty, are exported as SENPAI_CODEX_MODEL/
+// SENPAI_CLAUDE_MODEL and become the values passed to `codex exec --model`/
+// `claude --model` — same "empty leaves agents.mh's own default alone, only
+// takes effect on the next spawned process" rule as agent/devinModel above.
+func Start(ctx context.Context, mhlPath, workflowsDir, stateDir, dataDir, codexCwdDir, agent, devinModel, devinPricingJSON, codexModel, claudeModel string) (*Client, error) {
 	// A previous mhl child can still be running here — not from another
 	// live instance (each Start() picks its own fresh port below), but from
 	// THIS app's own last run ending abruptly: a killed debug session, a
@@ -213,6 +226,17 @@ func Start(ctx context.Context, mhlPath, workflowsDir, stateDir, dataDir, codexC
 	if codexCwdDir != "" {
 		env = append(env, "SENPAI_CODEX_CWD="+codexCwdDir)
 	}
+	// MCP sessions expire after a period of inactivity inside mhl
+	// (MHL_SERVE_SESSION_TTL; measured: an idle session answers 404 with an
+	// empty body once swept). Every run this app starts is scoped to its
+	// session — a new session can't even see an old run's status ("unknown
+	// runId") —, so an expired session silently orphans paused drafts
+	// waiting for review. Sessions here live as long as the mhl process
+	// (which dies with the app), so the TTL is set far beyond any real idle
+	// time; an explicit value in the environment still wins.
+	if os.Getenv("MHL_SERVE_SESSION_TTL") == "" {
+		env = append(env, "MHL_SERVE_SESSION_TTL="+sessionTTL)
+	}
 	if agent != "" {
 		env = append(env, "SENPAI_AGENT="+agent)
 	}
@@ -221,6 +245,12 @@ func Start(ctx context.Context, mhlPath, workflowsDir, stateDir, dataDir, codexC
 	}
 	if devinPricingJSON != "" {
 		env = append(env, "SENPAI_DEVIN_PRICING="+devinPricingJSON)
+	}
+	if codexModel != "" {
+		env = append(env, "SENPAI_CODEX_MODEL="+codexModel)
+	}
+	if claudeModel != "" {
+		env = append(env, "SENPAI_CLAUDE_MODEL="+claudeModel)
 	}
 	cmd.Env = enrichedEnv(ctx, env)
 	// stderr is kept in memory for Start's own "did not become ready" error
@@ -249,27 +279,13 @@ func Start(ctx context.Context, mhlPath, workflowsDir, stateDir, dataDir, codexC
 	c := &Client{
 		cmd:     cmd,
 		baseURL: "http://" + addr,
-		// DisableKeepAlives: reported symptom (real user, this exact
-		// process) — the app sits idle for a while (nothing polling,
-		// nothing generating), then the next action fails outright with
-		// "decode response: EOF" and stays broken until the mhl child is
-		// manually reconnected. Classic stale-keep-alive-connection
-		// failure: Go's default Transport pools and reuses idle TCP
-		// connections, but if the far end (mhl's own HTTP server) closes
-		// one while it sits idle in that pool — its own idle timeout, not
-		// configurable from here since mhl is a separate binary — the next
-		// request reusing it reads zero bytes before any response body,
-		// which json.Decode reports as plain EOF. Worse on a POST than a
-		// GET: net/http only auto-retries a request transparently on a
-		// dead reused connection when it knows the request is safe to
-		// resend (GET, HEAD, …); every RPC call here is a POST (JSON-RPC
-		// requires a body), so the stale hit surfaces as a real error
-		// instead of a silent, invisible retry. This is a loopback
-		// connection to a child process this app itself spawned —
-		// re-dialing per request costs a fraction of a millisecond here,
-		// nowhere close to real network latency — so trading keep-alive
-		// reuse away outright removes the whole failure class instead of
-		// papering over it with a retry-on-EOF special case.
+		// DisableKeepAlives: re-dialing per request costs a fraction of a
+		// millisecond on loopback, and removes stale pooled connections
+		// from the picture. It did NOT fix the "decode response: EOF" after
+		// a long idle period, originally blamed on them: measured against
+		// an isolated `mhl serve`, the real cause is mhl sweeping the idle
+		// MCP session (404 with an empty body) — see sessionTTL and
+		// callWithSession.
 		http:    &http.Client{Timeout: 30 * time.Second, Transport: &http.Transport{DisableKeepAlives: true}},
 		pidFile: pidFile,
 		stderr:  &stderr,
@@ -383,8 +399,26 @@ func (c *Client) Info(ctx context.Context) (name, version string, healthy bool) 
 }
 
 // ToolsList calls the standard MCP tools/list method.
+// callWithSession is postRPC for session-scoped methods, re-establishing an
+// expired session once (errSessionExpired) and retrying. With sessionTTL
+// this should only ever happen if something outside this app swept the
+// session; runs from the old session stay unreachable either way (mhl
+// scopes runs to their session), so the re-initialization is logged.
+func (c *Client) callWithSession(ctx context.Context, method string, params any) (json.RawMessage, error) {
+	result, _, err := c.postRPC(ctx, method, params, true)
+	if !errors.Is(err, errSessionExpired) {
+		return result, err
+	}
+	log.Printf("mhl bridge: sessao MCP expirada — abrindo uma nova (execucoes da sessao anterior ficam inacessiveis)")
+	if initErr := c.initialize(ctx); initErr != nil {
+		return nil, fmt.Errorf("reabrir sessao MCP expirada: %w", initErr)
+	}
+	result, _, err = c.postRPC(ctx, method, params, true)
+	return result, err
+}
+
 func (c *Client) ToolsList(ctx context.Context) (json.RawMessage, error) {
-	result, _, err := c.postRPC(ctx, "tools/list", nil, true)
+	result, err := c.callWithSession(ctx, "tools/list", nil)
 	return result, err
 }
 
@@ -398,7 +432,7 @@ func (c *Client) ToolsCall(ctx context.Context, name string, arguments map[strin
 		"name":      name,
 		"arguments": arguments,
 	}
-	result, _, err := c.postRPC(ctx, "tools/call", params, true)
+	result, err := c.callWithSession(ctx, "tools/call", params)
 	return result, err
 }
 
@@ -409,7 +443,7 @@ func (c *Client) ToolsCall(ctx context.Context, name string, arguments map[strin
 // content (its mimeType is almost always application/json for our use, but
 // this doesn't assume that — callers decide how to parse it).
 func (c *Client) ResourceRead(ctx context.Context, uri string) (string, error) {
-	result, _, err := c.postRPC(ctx, "resources/read", map[string]any{"uri": uri}, true)
+	result, err := c.callWithSession(ctx, "resources/read", map[string]any{"uri": uri})
 	if err != nil {
 		return "", err
 	}
@@ -717,6 +751,16 @@ func (c *Client) postRPC(ctx context.Context, method string, params any, withSes
 		return nil, nil, err
 	}
 	defer resp.Body.Close()
+
+	// Status before body: an expired session is a 404 with an EMPTY body,
+	// which used to surface as the opaque "decode response: EOF".
+	if resp.StatusCode == http.StatusNotFound && withSession {
+		return nil, resp.Header, errSessionExpired
+	}
+	if resp.StatusCode < 200 || resp.StatusCode > 299 {
+		snippet, _ := io.ReadAll(io.LimitReader(resp.Body, 512))
+		return nil, resp.Header, fmt.Errorf("mhl respondeu HTTP %d: %s", resp.StatusCode, strings.TrimSpace(string(snippet)))
+	}
 
 	var rpcResp rpcResponse
 	if err := json.NewDecoder(resp.Body).Decode(&rpcResp); err != nil {

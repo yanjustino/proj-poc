@@ -10,7 +10,9 @@ export function approvalRecoveryArgs({ workflow, projectId, projectType, row, st
     throw new Error('O checkpoint antigo não contém o documento pendente necessário para concluir a aprovação.');
   }
 
-  const artifact = workflow === 'Discovery' && row.featureId ? 'historias' : row.key;
+  // Same targets as tab-artefatos.js's runTargetArgs: a plan row approves
+  // artifact "plano" for its história; a feature's "Histórias" row, the batch.
+  const artifact = row.plan ? 'plano' : workflow === 'Discovery' && row.featureId ? 'historias' : row.key;
   const args = {
     project_id: projectId,
     artifact,
@@ -21,7 +23,9 @@ export function approvalRecoveryArgs({ workflow, projectId, projectType, row, st
     approval_tokens_out: Number(vars.tokens_out || 0),
   };
 
+  if (row.plan) args.historia_id = row.plan.historiaId;
   if (workflow === 'Discovery') {
+    if (row.plan) args.feature_id = row.plan.featureId;
     if (row.featureId) args.feature_id = row.featureId;
   } else {
     args.mode = projectType;

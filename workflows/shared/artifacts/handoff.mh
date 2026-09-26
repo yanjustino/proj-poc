@@ -1,0 +1,322 @@
+// tool Handoff — pacote de handoff para o repositorio de codigo (Spec-Driven
+// Development): a spec de cada historia pronta, o plano e as tarefas, os
+// contratos (OpenAPI/AsyncAPI), os cenarios (Gherkin), as ADRs e a
+// arquitetura, em Markdown — o formato que vive junto do codigo, e o que
+// agentes de codigo (e pessoas) leem. Deterministico (C3): tudo sai dos JSON
+// estruturados ja gravados; nenhuma chamada de LLM.
+//
+// Estrutura gerada em projects/<id>/handoff/ (o app exporta a pasta):
+//
+//   README.md                       indice: historias e status (Definition of Ready)
+//   AGENTS.md                       como um agente de codigo deve usar o pacote
+//   docs/arquitetura.md             diagramas C4 e DER em Mermaid
+//   docs/adr/ADR-NNN-*.md           decisoes arquiteturais (MADR)
+//   specs/<feature>/<historia>/     so historias prontas (com ou sem ressalvas):
+//       spec.md  plan.md  tasks.md  openapi.json  asyncapi.json  historia.feature
+
+import { Paths } from "../core/paths.mh"
+import { DirClear } from "../core/dir_clear.mh"
+import { Readiness } from "readiness.mh"
+import { C4Diagram } from "c4_diagram.mh"
+import { DerModel } from "der_model.mh"
+import { PlanoModel } from "plano_model.mh"
+import { BacklogHtml } from "backlog_rules.mh"
+
+export tool HandoffMd {
+    // Texto de uma celula de tabela Markdown: sem quebra de linha, "|" escapado.
+    cell(text: any): string -> (text ?? "").replace("\r", " ").replace("\n", " ").replace("|", "\\|")
+
+    line(text: any): string -> (text ?? "").replace("\r", " ").replace("\n", " ")
+
+    bullets(items: any[]): string -> {
+        if (items.is_empty()) return "—\n"
+        return items.map((i) -> "- " + self.line(i?.texto ?? i)).join("\n") + "\n"
+    }
+
+    status_label(status: string): string -> match status {
+        "pronta"               -> "Pronta"
+        "pronta_com_ressalvas" -> "Pronta com ressalvas"
+        _                      -> "Não pronta"
+    }
+
+    change_tag(mudanca: string): string -> match mudanca {
+        "as_is"      -> "[já existe] "
+        "modificado" -> "[modificado] "
+        "removido"   -> "[removido] "
+        _            -> ""
+    }
+
+    statement(h: any): string -> {
+        var tipo = h?.story_type ?? ""
+        if (tipo == "spike" && h?.spike != null) {
+            var s = h.spike
+            return "- **Pergunta:** " + self.line(s?.pergunta) + "\n- **Timebox:** " + self.line(s?.timebox) +
+                "\n- **Método:** " + self.line(s?.metodo) + "\n- **Evidência de saída:** " + self.line(s?.evidencia_saida) +
+                "\n- **Decisão habilitada:** " + self.line(s?.decisao_habilitada) + "\n- **Critério de encerramento:** " + self.line(s?.criterio_encerramento) + "\n"
+        }
+        if (tipo == "historia_usuario") return "**Como** " + self.line(h?.como) + ", **quero** " + self.line(h?.quero) + ", **para** " + self.line(h?.para) + ".\n"
+        return "- **Resultado técnico:** " + self.line(h?.resultado_tecnico) + "\n- **Habilita:** " + self.line(h?.habilita) + "\n- **Evidenciado por:** " + self.line(h?.evidenciado_por) + "\n"
+    }
+
+    fields(campos: any[]): string -> {
+        if (campos.is_empty()) return ""
+        return "\n| Campo | Tipo | Obrigatório | Descrição |\n|---|---|---|---|\n" +
+            campos.map((c) -> "| `" + self.cell(c.nome) + "`" + (if ((c?.local ?? "") == "") "" else " (" + c.local + ")") + " | " + self.cell(c?.tipo) + " | " + (if (c?.obrigatorio ?? false) "sim" else "não") + " | " + self.cell(c?.descricao) + " |").join("\n") + "\n"
+    }
+
+    contracts(h: any): string -> {
+        var endpoints = h?.contratos?.endpoints ?? []
+        var eventos = h?.contratos?.eventos ?? []
+        var integracoes = h?.contratos?.integracoes ?? []
+        if (endpoints.is_empty() && eventos.is_empty() && integracoes.is_empty()) return "Esta história não expõe nem consome interfaces.\n"
+        var out = ""
+        if (!endpoints.is_empty()) {
+            out = out + "### Endpoints (especificação completa em `openapi.json`)\n\n" +
+                endpoints.map((e) -> "- `" + e.metodo + " " + e.caminho + "` — " + self.line(e?.resumo) + " (autenticação: " + self.line(if ((e?.autenticacao ?? "") == "") "—" else e.autenticacao) + "; respostas: " + (e?.respostas ?? []).map((r) -> r.status).join(", ") + ")").join("\n") + "\n\n"
+        }
+        if (!eventos.is_empty()) {
+            out = out + "### Eventos (especificação completa em `asyncapi.json`)\n\n" +
+                eventos.map((ev) -> "- " + (if (ev?.direcao == "consome") "Consome" else "Publica") + " `" + ev.nome + "` em `" + self.line(ev?.canal) + "` — " + self.line(ev?.resumo)).join("\n") + "\n\n"
+        }
+        for (var ig in integracoes) {
+            out = out + "### Integração com `" + self.line(ig?.sistema) + "` — " + self.line(ig?.operacao) + "\n\n" +
+                "- Protocolo: " + self.line(ig?.protocolo) + "\n- Tratamento de falhas: " + self.line(ig?.falhas) + "\n" +
+                (if ((ig?.requisicao ?? []).is_empty()) "" else "\nRequisição:\n" + self.fields(ig.requisicao)) +
+                (if ((ig?.resposta ?? []).is_empty()) "" else "\nResposta:\n" + self.fields(ig.resposta)) + "\n"
+        }
+        return out
+    }
+
+    spec(h: any, codigo: string, feature: string, r: any): string -> {
+        var tipo = BacklogHtml.story_type_label(h?.story_type ?? "")
+        var out = "# " + codigo + " — " + self.line(h?.titulo) + "\n\n" +
+            "> " + (if (feature.is_empty()) "" else "Feature: " + feature + " · ") + "Tipo: " + tipo + " · Subclassificação: " + self.line(h?.subclassification) +
+            " · Definition of Ready: **" + self.status_label(r.status) + "**\n\n" +
+            "## Enunciado\n\n" + self.statement(h) + "\n"
+        if (!(h?.contexto_negocio ?? "").trim().is_empty()) out = out + "## Contexto\n\n" + self.line(h.contexto_negocio) + "\n\n"
+        var n = 1
+        var criterios = ""
+        for (var c in (h?.criterios_aceite ?? [])) {
+            criterios = criterios + "- **CA${n}** — " + self.line(c.texto) + "\n"
+            n = n + 1
+        }
+        out = out + "## Critérios de aceite\n\n" + criterios + "\n"
+        var cenarios = h?.cenarios ?? []
+        out = out + "## Cenários de aceite\n\nExecutáveis em `historia.feature` (Gherkin, tags `@CAn`):\n\n" +
+            cenarios.map((c) -> "- " + self.line(c.titulo) + " — verifica " + (c?.criterios ?? []).join(", ")).join("\n") + "\n\n"
+        var regras = h?.regras_negocio ?? []
+        if (!regras.is_empty()) out = out + "## Regras de negócio\n\n" + regras.map((x) -> "- " + self.change_tag(x?.mudanca ?? "") + self.line(x.texto)).join("\n") + "\n\n"
+        out = out + "## Contratos de interface\n\n" + self.contracts(h) + "\n"
+        var rast = h?.rastreabilidade
+        out = out + "## Rastreabilidade\n\n| Artefato | Referências |\n|---|---|\n" +
+            "| Requisitos | " + self.cell((rast?.requisitos ?? []).join(", ")) + " |\n" +
+            "| Atributos de qualidade | " + self.cell((rast?.atributos ?? []).join(", ")) + " |\n" +
+            "| ADRs (em `docs/adr/`) | " + self.cell((rast?.adrs ?? []).join(", ")) + " |\n" +
+            "| Entidades (DER) | " + self.cell((rast?.entidades ?? []).join(", ")) + " |\n" +
+            "| Contêineres (C4) | " + self.cell((rast?.conteineres ?? []).join(", ")) + " |\n\n"
+        var deps = h?.dependencias_impedimentos ?? []
+        if (!deps.is_empty()) {
+            out = out + "## Dependências\n\n| Tipo | Destino | Justificativa |\n|---|---|---|\n" +
+                deps.map((d) -> "| " + BacklogHtml.dependency_type_label(d?.tipo ?? "") + " | " + self.cell(d?.destino) + " | " + self.cell(d?.texto) + " |").join("\n") + "\n\n"
+        }
+        var fora = h?.fora_escopo ?? []
+        if (!fora.is_empty()) out = out + "## Fora de escopo\n\n" + self.bullets(fora) + "\n"
+        var dod = h?.definition_of_done ?? []
+        if (!dod.is_empty()) out = out + "## Definition of Done\n\n" + dod.map((x) -> "- [ ] " + self.line(x.texto)).join("\n") + "\n\n"
+        var gaps = h?.gaps ?? []
+        if (!gaps.is_empty()) out = out + "## Lacunas\n\n" + self.bullets(gaps) + "\n"
+        var questoes = h?.questoes_abertas ?? []
+        if (!questoes.is_empty()) out = out + "## Questões em aberto\n\n" + self.bullets(questoes) + "\n"
+        if (!r.ressalvas.is_empty()) out = out + "## Ressalvas da Definition of Ready\n\n" + r.ressalvas.map((x) -> "- " + self.line(x)).join("\n") + "\n"
+        return out
+    }
+
+    plan(p: any, codigo: string): string -> {
+        var out = "# Plano de implementação — " + codigo + "\n\n## Abordagem\n\n" + self.line(p?.abordagem) + "\n\n"
+        var comps = p?.componentes ?? []
+        if (!comps.is_empty()) out = out + "## Componentes afetados\n\n| Contêiner | Componente | Mudança |\n|---|---|---|\n" + comps.map((c) -> "| " + self.cell(c.conteiner) + " | " + self.cell(c?.componente) + " | " + self.cell(c?.mudanca) + " |").join("\n") + "\n\n"
+        var adrs = p?.adrs ?? []
+        if (!adrs.is_empty()) out = out + "## Decisões arquiteturais aplicáveis\n\n" + adrs.map((a) -> "- **" + self.line(a.adr) + "** — " + self.line(a?.aplicacao)).join("\n") + "\n\n"
+        var dados = p?.dados ?? []
+        if (!dados.is_empty()) out = out + "## Dados\n\n| Entidade | Operação | Detalhe |\n|---|---|---|\n" + dados.map((d) -> "| " + self.cell(d.entidade) + " | " + PlanoModel.operation_label(d?.operacao ?? "") + " | " + self.cell(d?.detalhe) + " |").join("\n") + "\n\n"
+        var seq = PlanoModel.sequence(p)
+        if (!seq.is_empty()) out = out + "## Fluxo principal\n\n```mermaid\n" + seq + "```\n\n"
+        out = out + "## Tratamento de erros\n\n" + self.bullets(p?.erros ?? []) + "\n## Segurança\n\n" + self.bullets(p?.seguranca ?? []) + "\n## Observabilidade\n\n" + self.bullets(p?.observabilidade ?? []) + "\n"
+        var testes = p?.testes ?? []
+        if (!testes.is_empty()) out = out + "## Estratégia de testes\n\n| Nível | O que testa | Critérios |\n|---|---|---|\n" + testes.map((t) -> "| " + PlanoModel.level_label(t.nivel) + " | " + self.cell(t?.descricao) + " | " + (t?.criterios ?? []).join(", ") + " |").join("\n") + "\n\n"
+        out = out + "## Riscos e questões em aberto\n\n" + self.bullets(p?.riscos ?? []) + "\nAs tarefas, em ordem, estão em `tasks.md`.\n"
+        return out
+    }
+
+    tasks(p: any, codigo: string): string ->
+        "# Tarefas — " + codigo + "\n\nExecute em ordem. Os testes vêm antes da implementação que cobrem; cada tarefa indica os critérios de aceite (`CAn`, ver `spec.md`) que ajuda a satisfazer.\n\n" +
+        (p?.tarefas ?? []).map((t) ->
+            "- [ ] **" + t.id + "** (" + PlanoModel.task_type_label(t?.tipo ?? "") + ") " + self.line(t.titulo) +
+            (if ((t?.criterios ?? []).is_empty()) "" else " — cobre " + t.criterios.join(", ")) +
+            (if ((t?.depende_de ?? []).is_empty()) "" else " — depende de " + t.depende_de.join(", ")) +
+            (if ((t?.descricao ?? "").trim().is_empty()) "" else "\n  " + self.line(t.descricao))
+        ).join("\n") + "\n"
+
+    adr(a: any, id: string): string -> {
+        var out = "# " + id + " — " + self.line(a?.titulo) + "\n\n- Status: " + self.line(a?.status) + "\n\n## Contexto e problema\n\n" + self.line(a?.contexto_e_problema) + "\n\n" +
+            "## Fatores de decisão\n\n" + self.bullets(a?.fatores_decisao ?? []) + "\n## Opções consideradas\n\n" + self.bullets(a?.opcoes_consideradas ?? []) + "\n" +
+            "## Decisão\n\n**Opção escolhida:** " + self.line(a?.decisao_final?.opcao_escolhida) + " — " + self.line(a?.decisao_final?.justificativa) + "\n\n" +
+            "## Consequências\n\n### Positivas\n\n" + self.bullets(a?.consequencias_positivas ?? []) + "\n### Negativas\n\n" + self.bullets(a?.consequencias_negativas ?? []) + "\n"
+        for (var o in (a?.opcoes_pros_contras ?? [])) {
+            out = out + "\n### " + self.line(o.opcao) + "\n\nPrós:\n" + self.bullets(o?.pros ?? []) + "\nContras:\n" + self.bullets(o?.contras ?? [])
+        }
+        var links = a?.links ?? []
+        if (!links.is_empty()) out = out + "\n## Links\n\n" + links.map((l) -> "- " + self.line(l.tipo) + ": " + self.line(l.referencia)).join("\n") + "\n"
+        return out
+    }
+
+    agents(nome: string): string ->
+        "# Instruções para agentes de código — " + nome + "\n\n" +
+        "Este pacote foi gerado pelo Senpai a partir do refinamento do work-item. Ele é a especificação: implemente a partir dele, não reinterprete.\n\n" +
+        "## Como trabalhar uma história\n\n" +
+        "1. Leia `specs/<feature>/<história>/spec.md` — comportamento, critérios de aceite (`CAn`), regras, contratos e rastreabilidade.\n" +
+        "2. Siga `tasks.md` **em ordem**. Os testes vêm antes da implementação que cobrem.\n" +
+        "3. Os contratos são a fonte da verdade da interface: `openapi.json` (endpoints expostos), `asyncapi.json` (eventos). Não mude um contrato sem registrar a mudança na spec.\n" +
+        "4. Os cenários de `historia.feature` (Gherkin, tags `@CAn`) precisam passar — são os testes de aceitação.\n" +
+        "5. Respeite as decisões em `docs/adr/` e os contêineres e entidades de `docs/arquitetura.md`.\n" +
+        "6. Uma história de API Gateway e a de Backend do mesmo endpoint expõem o mesmo contrato; implemente a de Backend primeiro.\n\n" +
+        "## O que não fazer\n\n" +
+        "- Não implemente histórias fora de `specs/` — elas ainda não estão prontas (veja o `README.md`).\n" +
+        "- Não invente comportamento fora dos critérios de aceite; lacunas e questões em aberto de cada `spec.md` precisam de resposta de quem refinou.\n"
+
+    readme(nome: string, items: any[]): string -> {
+        var prontas = items.filter((i) -> i.status != "nao_pronta")
+        var fora = items.filter((i) -> i.status == "nao_pronta")
+        var out = "# " + nome + " — pacote de handoff\n\n" +
+            "Gerado pelo Senpai. " + "${prontas.size()}" + " de " + "${items.size()}" + " história(s) prontas para desenvolvimento. Veja `AGENTS.md` para como usar este pacote.\n\n" +
+            "## Histórias prontas\n\n"
+        if (prontas.is_empty()) out = out + "Nenhuma ainda.\n\n"
+        else {
+            out = out + "| História | Feature | Definition of Ready | Pasta |\n|---|---|---|---|\n" +
+                prontas.map((i) -> "| " + self.cell(i.titulo) + " | " + self.cell(i.feature_dir) + " | " + self.status_label(i.status) + " | `" + i.spec_dir + "` |").join("\n") + "\n\n"
+        }
+        if (!fora.is_empty()) {
+            out = out + "## Histórias ainda não prontas (fora do pacote)\n\n" +
+                fora.map((i) -> "- **" + self.line(i.titulo) + "** (" + self.line(i.feature_dir) + "): " + i.bloqueios.map((b) -> self.line(b)).join("; ")).join("\n") + "\n\n"
+        }
+        return out + "## Documentação\n\n- `docs/arquitetura.md` — diagramas C4 e modelo de dados\n- `docs/adr/` — decisões arquiteturais\n"
+    }
+
+    architecture(project_id: string): string -> {
+        var out = "# Arquitetura\n\n"
+        var base = Paths.artifact(project_id, "diagramas")
+        if (dir.exists(base)) {
+            for (var entry in dir.list(base)) {
+                if (entry.ends_with(".json")) {
+                    var d = Readiness.read_json(entry)
+                    if (d != null) {
+                        var src = C4Diagram.mermaid_source(d)
+                        out = out + "## " + self.line(d?.titulo) + "\n\n" + self.line(d?.descricao) + "\n\n" + (if (src.is_empty()) "" else "```mermaid\n" + src + "\n```\n\n")
+                    }
+                }
+            }
+        }
+        var der = Readiness.read_json(Paths.artifact(project_id, "der.json"))
+        if (der != null) {
+            out = out + "## Modelo de dados\n\n"
+            if (DerModel.is_structured(der)) {
+                for (var dg in DerModel.diagrams(der)) out = out + (if (dg.titulo.is_empty()) "" else "### " + dg.titulo + "\n\n") + "```mermaid\n" + dg.mermaid + "```\n\n"
+            } else if (!(der?.diagrama_mermaid ?? "").is_empty()) {
+                out = out + "```mermaid\n" + der.diagrama_mermaid + "\n```\n\n"
+            }
+        }
+        return out
+    }
+}
+
+export tool Handoff {
+    // build: (re)gera projects/<id>/handoff/ e devolve o resumo. A pasta e
+    // limpa antes — o pacote sempre reflete o estado atual dos artefatos.
+    build(project_id: string): any -> {
+        project_id = Paths.ensure_valid(project_id)
+        var root = Paths.root(project_id) + "/handoff"
+        if (dir.exists(root)) DirClear.clear(root)
+        dir.create(root + "/docs/adr")
+        dir.create(root + "/specs")
+        var project = Readiness.read_json(Paths.project_file(project_id))
+        var nome = project?.name ?? project_id
+
+        var items = []
+        for (var it in Readiness.batch(project_id)) {
+            var folder = if (it.path.is_empty()) "historia" else it.path.split("/")[it.path.split("/").size() - 1]
+            var feature = if (it.feature_dir.is_empty()) "" else it.feature_dir
+            it["spec_dir"] = "specs/" + (if (feature.is_empty()) folder else feature + "/" + folder)
+            items += [it]
+        }
+
+        fs.write(root + "/README.md", HandoffMd.readme(nome, items))
+        fs.write(root + "/AGENTS.md", HandoffMd.agents(nome))
+        fs.write(root + "/docs/arquitetura.md", HandoffMd.architecture(project_id))
+
+        var adr_base = Paths.artifact(project_id, "adr")
+        if (dir.exists(adr_base)) {
+            for (var entry in dir.list(adr_base)) {
+                if (entry.ends_with(".json")) {
+                    var name = entry.replace(adr_base + "/", "").replace(adr_base + "\\", "").replace(".json", "")
+                    var parts = name.split("-")
+                    var id = if (parts.size() >= 2) parts[0] + "-" + parts[1] else name
+                    fs.write(root + "/docs/adr/" + name + ".md", HandoffMd.adr(Readiness.read_json(entry), id))
+                }
+            }
+        }
+
+        var exportadas = 0
+        for (var it in items) {
+            if (it.status != "nao_pronta") {
+                var source = if (it.path.is_empty()) Paths.artifacts_dir(project_id) else Paths.artifact(project_id, it.path)
+                var dest = root + "/" + it.spec_dir
+                dir.create(dest)
+                var h = Readiness.read_json(source + "/historia.json")
+                var p = Readiness.read_json(source + "/plano.json")
+                var feature_titulo = ""
+                if (!it.feature_dir.is_empty()) {
+                    var f = Readiness.read_json(Paths.artifact(project_id, "features/" + it.feature_dir + "/feature.json"))
+                    feature_titulo = it.feature_dir.split("-")[0] + " — " + (f?.titulo ?? it.feature_dir)
+                }
+                var codigo = if (it.historia_id.is_empty()) "História" else (if (it.feature_dir.is_empty()) "" else it.feature_dir.split("-")[0] + "-") + it.historia_id
+                var r = {status: it.status, ressalvas: it.ressalvas}
+                fs.write(dest + "/spec.md", HandoffMd.spec(h, codigo, feature_titulo, r))
+                if (p != null) {
+                    fs.write(dest + "/plan.md", HandoffMd.plan(p, codigo))
+                    fs.write(dest + "/tasks.md", HandoffMd.tasks(p, codigo))
+                }
+                for (var file in ["openapi.json", "asyncapi.json", "historia.feature"]) {
+                    if (fs.exists(source + "/" + file)) fs.write(dest + "/" + file, fs.read(source + "/" + file))
+                }
+                exportadas = exportadas + 1
+            }
+        }
+        return {path: root, total: items.size(), exportadas: exportadas, fora: items.size() - exportadas}
+    }
+}
+
+test HandoffSpec {
+    describe tasks_are_an_ordered_checklist_with_criteria_and_dependencies {
+        var md = HandoffMd.tasks({tarefas: [
+            {id: "T1", titulo: "Teste do endpoint", tipo: "teste", criterios: ["CA1"], depende_de: [], descricao: ""},
+            {id: "T2", titulo: "Implementar", tipo: "implementacao", criterios: ["CA1", "CA2"], depende_de: ["T1"], descricao: "Usar o repositório"},
+        ]}, "FT001-US002")
+        is_true(md.starts_with("# Tarefas — FT001-US002"))
+        is_true(md.contains("- [ ] **T1** (Teste) Teste do endpoint — cobre CA1\n"))
+        is_true(md.contains("- [ ] **T2** (Implementação) Implementar — cobre CA1, CA2 — depende de T1\n  Usar o repositório"))
+    }
+
+    describe readme_splits_ready_and_not_ready_stories {
+        var md = HandoffMd.readme("Plataforma", [
+            {titulo: "Cadastro", feature_dir: "FT001-a", status: "pronta", bloqueios: [], spec_dir: "specs/FT001-a/US001-b"},
+            {titulo: "Papéis", feature_dir: "FT001-a", status: "nao_pronta", bloqueios: ["Sem plano de implementação."], spec_dir: "specs/FT001-a/US002-c"},
+        ])
+        is_true(md.contains("1 de 2 história(s) prontas"))
+        is_true(md.contains("| Cadastro | FT001-a | Pronta | `specs/FT001-a/US001-b` |"))
+        is_true(md.contains("- **Papéis** (FT001-a): Sem plano de implementação."))
+    }
+
+    describe table_cells_escape_pipes_and_newlines {
+        are_equal(HandoffMd.cell("a|b\nc"), "a\\|b c")
+    }
+}

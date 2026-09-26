@@ -22,6 +22,10 @@ export function DeleteProject(arg1) {
   return window['go']['main']['App']['DeleteProject'](arg1);
 }
 
+export function ExportHandoff(arg1) {
+  return window['go']['main']['App']['ExportHandoff'](arg1);
+}
+
 export function ExportProject(arg1) {
   return window['go']['main']['App']['ExportProject'](arg1);
 }
@@ -32,6 +36,14 @@ export function ExportProjectFile(arg1, arg2, arg3) {
 
 export function GetAgent() {
   return window['go']['main']['App']['GetAgent']();
+}
+
+export function GetClaudeModel() {
+  return window['go']['main']['App']['GetClaudeModel']();
+}
+
+export function GetCodexModel() {
+  return window['go']['main']['App']['GetCodexModel']();
 }
 
 export function GetDevinCostSummary() {
@@ -60,6 +72,14 @@ export function GetWorkflowManifest(arg1) {
 
 export function IsReady() {
   return window['go']['main']['App']['IsReady']();
+}
+
+export function ListClaudeModels() {
+  return window['go']['main']['App']['ListClaudeModels']();
+}
+
+export function ListCodexModels() {
+  return window['go']['main']['App']['ListCodexModels']();
 }
 
 export function ListDevinModels() {
@@ -120,6 +140,14 @@ export function SelectRawFiles() {
 
 export function SetAgent(arg1) {
   return window['go']['main']['App']['SetAgent'](arg1);
+}
+
+export function SetClaudeModel(arg1) {
+  return window['go']['main']['App']['SetClaudeModel'](arg1);
+}
+
+export function SetCodexModel(arg1) {
+  return window['go']['main']['App']['SetCodexModel'](arg1);
 }
 
 export function SetDevinModel(arg1, arg2) {

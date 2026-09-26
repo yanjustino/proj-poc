@@ -2,11 +2,14 @@
 // agregações ficam concentradas em WorkItemActions.
 
 import { WorkItemActions } from "actions.mh"
+import { Paths } from "../shared/core/paths.mh"
+import { Readiness } from "../shared/artifacts/readiness.mh"
+import { Handoff } from "../shared/artifacts/handoff.mh"
 
 workflow WorkItem {
-    description: "Ciclo de vida de um work-item do Senpai: create, list, get, archive, usage, prompt_log, changes, productivity."
+    description: "Ciclo de vida de um work-item do Senpai: create, list, get, archive, usage, prompt_log, changes, productivity, readiness, handoff."
 
-    input action: string             // "create" | "list" | "get" | "archive" | "usage" | "prompt_log" | "changes" | "productivity"
+    input action: string             // "create" | "list" | "get" | "archive" | "usage" | "prompt_log" | "changes" | "productivity" | "readiness" | "handoff"
     input name: string = ""          // obrigatorio (valor) so para action:"create"
     input item_type: string = ""     // "oportunidade" | "feature" | "historia"; so para action:"create"
     input project_id: string = ""    // obrigatorio (valor) para get/archive/usage/prompt_log/changes
@@ -17,6 +20,8 @@ workflow WorkItem {
     var prompt_log = []
     var changes = []
     var productivity = null
+    var readiness = []
+    var handoff = null
     var error_message = ""
 
     output: {
@@ -27,6 +32,8 @@ workflow WorkItem {
         prompt_log: prompt_log,
         changes: changes,
         productivity: productivity,
+        readiness: readiness,
+        handoff: handoff,
         error: error_message,
     }
 
@@ -39,9 +46,11 @@ workflow WorkItem {
         if (action == "prompt_log") goto PromptLog
         if (action == "changes") goto Changes
         if (action == "productivity") goto Productivity
+        if (action == "readiness") goto Readiness
+        if (action == "handoff") goto Handoff
         fail(
             "acao desconhecida: '" + action +
-            "' (use create | list | get | archive | usage | prompt_log | changes | productivity)"
+            "' (use create | list | get | archive | usage | prompt_log | changes | productivity | readiness | handoff)"
         )
     }
 
@@ -82,6 +91,19 @@ workflow WorkItem {
 
     step Productivity {
         productivity = WorkItemActions.productivity(project_id)
+        goto Done
+    }
+
+    // Definition of Ready de cada historia (readiness.mh).
+    step Readiness {
+        readiness = Readiness.batch(Paths.ensure_valid(project_id))
+        goto Done
+    }
+
+    // Gera o pacote de handoff em projects/<id>/handoff/ (handoff.mh); o app
+    // exporta a pasta para onde o usuario escolher.
+    step Handoff {
+        handoff = Handoff.build(project_id)
         goto Done
     }
 

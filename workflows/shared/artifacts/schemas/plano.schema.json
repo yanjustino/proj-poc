@@ -1,0 +1,325 @@
+{
+  "$defs": {
+    "sourcedText": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": [
+        "texto",
+        "fontes"
+      ],
+      "properties": {
+        "texto": {
+          "type": "string"
+        },
+        "fontes": {
+          "type": "array",
+          "items": {
+            "type": "string"
+          },
+          "minItems": 1
+        }
+      }
+    }
+  },
+  "type": "object",
+  "additionalProperties": false,
+  "required": [
+    "abordagem",
+    "abordagem_fontes",
+    "componentes",
+    "adrs",
+    "dados",
+    "fluxo",
+    "fluxo_fontes",
+    "erros",
+    "seguranca",
+    "observabilidade",
+    "tarefas",
+    "testes",
+    "riscos"
+  ],
+  "properties": {
+    "abordagem": {
+      "type": "string",
+      "description": "Como a história será implementada, em um parágrafo."
+    },
+    "abordagem_fontes": {
+      "type": "array",
+      "items": {
+        "type": "string"
+      },
+      "minItems": 1
+    },
+    "componentes": {
+      "type": "array",
+      "description": "Onde o código muda: contêiner do C4 e o componente/módulo dentro dele.",
+      "items": {
+        "type": "object",
+        "additionalProperties": false,
+        "required": [
+          "conteiner",
+          "componente",
+          "mudanca",
+          "fontes"
+        ],
+        "properties": {
+          "conteiner": {
+            "type": "string",
+            "description": "Nome exato do contêiner no diagrama C4."
+          },
+          "componente": {
+            "type": "string"
+          },
+          "mudanca": {
+            "type": "string",
+            "description": "O que muda nele."
+          },
+          "fontes": {
+            "type": "array",
+            "items": {
+              "type": "string"
+            },
+            "minItems": 1
+          }
+        }
+      }
+    },
+    "adrs": {
+      "type": "array",
+      "description": "Decisões que a implementação precisa seguir.",
+      "items": {
+        "type": "object",
+        "additionalProperties": false,
+        "required": [
+          "adr",
+          "aplicacao",
+          "fontes"
+        ],
+        "properties": {
+          "adr": {
+            "type": "string",
+            "description": "ID da ADR (ex.: ADR-002)."
+          },
+          "aplicacao": {
+            "type": "string",
+            "description": "Como a decisão se aplica a esta história."
+          },
+          "fontes": {
+            "type": "array",
+            "items": {
+              "type": "string"
+            },
+            "minItems": 1
+          }
+        }
+      }
+    },
+    "dados": {
+      "type": "array",
+      "description": "Entidades do DER que a história toca.",
+      "items": {
+        "type": "object",
+        "additionalProperties": false,
+        "required": [
+          "entidade",
+          "operacao",
+          "detalhe",
+          "fontes"
+        ],
+        "properties": {
+          "entidade": {
+            "type": "string",
+            "description": "Nome exato da entidade no DER."
+          },
+          "operacao": {
+            "type": "string",
+            "enum": [
+              "cria",
+              "le",
+              "atualiza",
+              "remove"
+            ]
+          },
+          "detalhe": {
+            "type": "string",
+            "description": "Campos/regras envolvidos; migração necessária, se houver."
+          },
+          "fontes": {
+            "type": "array",
+            "items": {
+              "type": "string"
+            },
+            "minItems": 1
+          }
+        }
+      }
+    },
+    "fluxo": {
+      "type": "array",
+      "description": "Passos do fluxo principal, em ordem, entre participantes (pessoa, contêiner, componente, sistema externo). Vira um diagrama de sequência.",
+      "items": {
+        "type": "object",
+        "additionalProperties": false,
+        "required": [
+          "de",
+          "para",
+          "mensagem",
+          "retorno"
+        ],
+        "properties": {
+          "de": {
+            "type": "string"
+          },
+          "para": {
+            "type": "string"
+          },
+          "mensagem": {
+            "type": "string"
+          },
+          "retorno": {
+            "type": "boolean",
+            "description": "true para uma resposta (seta tracejada)."
+          }
+        }
+      }
+    },
+    "fluxo_fontes": {
+      "type": "array",
+      "items": {
+        "type": "string"
+      },
+      "minItems": 1
+    },
+    "erros": {
+      "type": "array",
+      "items": {
+        "$ref": "#/$defs/sourcedText"
+      },
+      "description": "Falhas previstas e como tratar cada uma."
+    },
+    "seguranca": {
+      "type": "array",
+      "items": {
+        "$ref": "#/$defs/sourcedText"
+      },
+      "description": "Autenticação, autorização, dados sensíveis, validações."
+    },
+    "observabilidade": {
+      "type": "array",
+      "items": {
+        "$ref": "#/$defs/sourcedText"
+      },
+      "description": "Logs, métricas, traces e alertas."
+    },
+    "tarefas": {
+      "type": "array",
+      "minItems": 1,
+      "description": "Passos pequenos, ordenados e verificáveis — testes antes da implementação que eles cobrem.",
+      "items": {
+        "type": "object",
+        "additionalProperties": false,
+        "required": [
+          "id",
+          "titulo",
+          "descricao",
+          "tipo",
+          "criterios",
+          "depende_de",
+          "fontes"
+        ],
+        "properties": {
+          "id": {
+            "type": "string",
+            "description": "T1, T2, … na ordem de execução."
+          },
+          "titulo": {
+            "type": "string"
+          },
+          "descricao": {
+            "type": "string"
+          },
+          "tipo": {
+            "type": "string",
+            "enum": [
+              "teste",
+              "implementacao",
+              "migracao",
+              "configuracao",
+              "documentacao"
+            ]
+          },
+          "criterios": {
+            "type": "array",
+            "items": {
+              "type": "string"
+            },
+            "description": "Critérios de aceite da história cobertos, como CA1, CA2… (CAn = n-ésimo item de criterios_aceite)."
+          },
+          "depende_de": {
+            "type": "array",
+            "items": {
+              "type": "string"
+            },
+            "description": "IDs de tarefas anteriores."
+          },
+          "fontes": {
+            "type": "array",
+            "items": {
+              "type": "string"
+            },
+            "minItems": 1
+          }
+        }
+      }
+    },
+    "testes": {
+      "type": "array",
+      "description": "Estratégia de testes por nível.",
+      "items": {
+        "type": "object",
+        "additionalProperties": false,
+        "required": [
+          "nivel",
+          "descricao",
+          "criterios",
+          "fontes"
+        ],
+        "properties": {
+          "nivel": {
+            "type": "string",
+            "enum": [
+              "unitario",
+              "integracao",
+              "contrato",
+              "e2e"
+            ]
+          },
+          "descricao": {
+            "type": "string"
+          },
+          "criterios": {
+            "type": "array",
+            "items": {
+              "type": "string"
+            },
+            "description": "Critérios de aceite da história cobertos, como CA1, CA2… (CAn = n-ésimo item de criterios_aceite)."
+          },
+          "fontes": {
+            "type": "array",
+            "items": {
+              "type": "string"
+            },
+            "minItems": 1
+          }
+        }
+      }
+    },
+    "riscos": {
+      "type": "array",
+      "items": {
+        "$ref": "#/$defs/sourcedText"
+      },
+      "description": "Riscos técnicos e questões em aberto que podem bloquear a implementação."
+    }
+  }
+}

@@ -40,11 +40,11 @@ type TelemetryData = {
 
 export tool TelemetryDataBuilder {
     build(eventType: string): TelemetryData -> { return {
-            clientId: ""
+            clientId: "senpai"
             userId: os.user()
             environment: os.platform()
             eventType: eventType
-            sessionId: ""
+            sessionId: uuid.v7()
             eventTimestamp: time.now()
             agentName: "senpai"
             context: {

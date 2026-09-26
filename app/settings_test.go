@@ -124,6 +124,54 @@ func TestParseDevinModelsRejectsAnEmptyResponse(t *testing.T) {
 	}
 }
 
+// TestParseCodexModelsFiltersHiddenSlugs mirrors `codex debug models`'s own
+// shape — a flat catalog, not grouped like Devin's — and its "hide"
+// visibility, used for internal/reserved slugs (gpt-reserve,
+// codex-auto-review in a real listing) that a user should never pick
+// directly.
+func TestParseCodexModelsFiltersHiddenSlugs(t *testing.T) {
+	models, err := parseCodexModels([]byte(`{
+		"models": [
+			{"slug": "gpt-reserve", "display_name": "GPT-Reserve", "visibility": "hide"},
+			{"slug": "gpt-5.6-luna", "display_name": "GPT-5.6-Luna", "description": "balanced", "visibility": "list"},
+			{"slug": "gpt-5.5", "display_name": "GPT-5.5", "visibility": "list"}
+		]
+	}`))
+	if err != nil {
+		t.Fatalf("parseCodexModels: %v", err)
+	}
+	if len(models) != 2 || models[0].ID != "gpt-5.6-luna" || models[1].ID != "gpt-5.5" {
+		t.Fatalf("parseCodexModels() = %+v, want only the 2 \"list\"-visibility models", models)
+	}
+	if models[0].Description != "balanced" {
+		t.Errorf("parseCodexModels() dropped description: %+v", models[0])
+	}
+}
+
+func TestParseCodexModelsRejectsAResponseWithNoListedModels(t *testing.T) {
+	if _, err := parseCodexModels([]byte(`{"models":[{"slug":"gpt-reserve","visibility":"hide"}]}`)); err == nil {
+		t.Fatal("parseCodexModels accepted a response with no \"list\"-visibility models")
+	}
+	if _, err := parseCodexModels([]byte(`{"models":[]}`)); err == nil {
+		t.Fatal("parseCodexModels accepted an empty response")
+	}
+}
+
+// TestListClaudeModelsIsAFixedNonEmptyCatalog is the doc'd reason
+// listClaudeModels exists at all: the Claude Code CLI has no runtime "list
+// models" command, so unlike Devin/Codex this never calls out to a CLI.
+func TestListClaudeModelsIsAFixedNonEmptyCatalog(t *testing.T) {
+	models := listClaudeModels()
+	if len(models) == 0 {
+		t.Fatal("listClaudeModels() returned no models")
+	}
+	for _, model := range models {
+		if model.ID == "" || model.Label == "" {
+			t.Errorf("listClaudeModels() has a model with an empty id or label: %+v", model)
+		}
+	}
+}
+
 func TestLoadSettingsIgnoresAMalformedFileRatherThanFailing(t *testing.T) {
 	t.Setenv("SENPAI_APPDATA_DIR", t.TempDir())
 	path, err := settingsFilePath()
@@ -272,6 +320,89 @@ func TestApp_SetDevinModelPersistsAndReconnects(t *testing.T) {
 	}
 	if err := json.Unmarshal([]byte(statusJSON), &status); err != nil || !status.Ready {
 		t.Errorf("SetDevinModel status = %q, want ready bridge (decode error: %v)", statusJSON, err)
+	}
+}
+
+func TestApp_SetCodexModelPersistsAndReconnects(t *testing.T) {
+	app, _ := newTestApp(t)
+	previousMHL := app.mhl
+
+	statusJSON, err := app.SetCodexModel("gpt-5.5")
+	if err != nil {
+		t.Fatalf("SetCodexModel: %v", err)
+	}
+	if app.GetCodexModel() != "gpt-5.5" {
+		t.Errorf("GetCodexModel() = %q, want gpt-5.5", app.GetCodexModel())
+	}
+	if got := loadSettings().CodexModel; got != "gpt-5.5" {
+		t.Errorf("persisted CodexModel = %q, want gpt-5.5", got)
+	}
+	if app.mhl == previousMHL {
+		t.Error("SetCodexModel did not reconnect the bridge")
+	}
+	var status struct {
+		Ready bool `json:"ready"`
+	}
+	if err := json.Unmarshal([]byte(statusJSON), &status); err != nil || !status.Ready {
+		t.Errorf("SetCodexModel status = %q, want ready bridge (decode error: %v)", statusJSON, err)
+	}
+}
+
+func TestApp_SetCodexModelRejectsAnEmptyValue(t *testing.T) {
+	app, _ := newTestApp(t)
+	if _, err := app.SetCodexModel("  "); err == nil {
+		t.Fatal("SetCodexModel(\"  \") succeeded, want an error for an empty model")
+	}
+}
+
+func TestApp_SetClaudeModelPersistsAndReconnects(t *testing.T) {
+	app, _ := newTestApp(t)
+	previousMHL := app.mhl
+
+	statusJSON, err := app.SetClaudeModel("opus")
+	if err != nil {
+		t.Fatalf("SetClaudeModel: %v", err)
+	}
+	if app.GetClaudeModel() != "opus" {
+		t.Errorf("GetClaudeModel() = %q, want opus", app.GetClaudeModel())
+	}
+	if got := loadSettings().ClaudeModel; got != "opus" {
+		t.Errorf("persisted ClaudeModel = %q, want opus", got)
+	}
+	if app.mhl == previousMHL {
+		t.Error("SetClaudeModel did not reconnect the bridge")
+	}
+	var status struct {
+		Ready bool `json:"ready"`
+	}
+	if err := json.Unmarshal([]byte(statusJSON), &status); err != nil || !status.Ready {
+		t.Errorf("SetClaudeModel status = %q, want ready bridge (decode error: %v)", statusJSON, err)
+	}
+}
+
+func TestApp_SetClaudeModelRejectsAnEmptyValue(t *testing.T) {
+	app, _ := newTestApp(t)
+	if _, err := app.SetClaudeModel(""); err == nil {
+		t.Fatal("SetClaudeModel(\"\") succeeded, want an error for an empty model")
+	}
+}
+
+// TestApp_ListClaudeModelsNeverCallsOutToACLI is the behavioral contract
+// that matters here: unlike ListDevinModels/ListCodexModels, this must
+// succeed even with no `claude` binary on PATH and no network — it's a
+// fixed catalog (see listClaudeModels).
+func TestApp_ListClaudeModelsNeverCallsOutToACLI(t *testing.T) {
+	app, _ := newTestApp(t)
+	body, err := app.ListClaudeModels()
+	if err != nil {
+		t.Fatalf("ListClaudeModels: %v", err)
+	}
+	var models []cliModel
+	if err := json.Unmarshal([]byte(body), &models); err != nil {
+		t.Fatalf("decode ListClaudeModels() = %q: %v", body, err)
+	}
+	if len(models) == 0 {
+		t.Fatal("ListClaudeModels() returned no models")
 	}
 }
 

@@ -54,9 +54,6 @@ export async function getRunStatus(runId) {
   return parseJSON(await App.GetRunStatus(runId), 'GetRunStatus');
 }
 
-export async function listRuns() {
-  return parseJSON(await App.ListRuns(), 'ListRuns');
-}
 
 // mcpStatus reports the mhl MCP server's live health (a /healthz probe, not
 // a cached "did startup work") plus its name/version — see app.go's
@@ -122,13 +119,34 @@ export async function setDevinModel(model, costSummary) {
   return parseJSON(await App.SetDevinModel(model, costSummary || ''), 'SetDevinModel');
 }
 
-export async function getRunLogs(runId, since) {
-  return parseJSON(await App.GetRunLogs(runId, since ?? ''), 'GetRunLogs');
+export async function listCodexModels() {
+  return parseJSON(await App.ListCodexModels(), 'ListCodexModels');
 }
+
+export async function getCodexModel() {
+  return App.GetCodexModel();
+}
+
+export async function setCodexModel(model) {
+  return parseJSON(await App.SetCodexModel(model), 'SetCodexModel');
+}
+
+export async function listClaudeModels() {
+  return parseJSON(await App.ListClaudeModels(), 'ListClaudeModels');
+}
+
+export async function getClaudeModel() {
+  return App.GetClaudeModel();
+}
+
+export async function setClaudeModel(model) {
+  return parseJSON(await App.SetClaudeModel(model), 'SetClaudeModel');
+}
+
 
 // getPersistedRunLogs reads a run's log back from disk (see app.go's
 // ReadPersistedRunLogs) — survives past mhl's own in-memory retention and
-// past this process restarting, unlike getRunLogs above. Empty string, not
+// past this process restarting, unlike mhl_run_logs itself. Empty string, not
 // an error, if this run was never persisted.
 export async function getPersistedRunLogs(projectId, runId) {
   return App.ReadPersistedRunLogs(projectId, runId);
@@ -144,12 +162,6 @@ export async function listProjectRunLogs(projectId) {
   return parseJSON(await App.ListProjectRunLogs(projectId), 'ListProjectRunLogs');
 }
 
-// getRunProjectId returns the project_id StartRun associated with runId, or
-// "" if unknown (see app.go's GetRunProjectID) — lets the Logs screen look up
-// that project's prompt_log.jsonl for a selected run.
-export async function getRunProjectId(runId) {
-  return App.GetRunProjectID(runId);
-}
 
 export async function selectRawFiles() {
   return parseJSON(await App.SelectRawFiles(), 'SelectRawFiles');
@@ -314,6 +326,27 @@ export async function workItemUsage(projectId) {
 // (workflows/work_item/actions.mh's WorkItemActions.productivity): total LLM
 // processing time, average review cycle / wait until approval, first-pass
 // approvals, change requests and the last recorded activity.
+// workItemReadiness: the Definition of Ready of every história of the
+// work-item (workflows/shared/artifacts/readiness.mh) — [{path, status,
+// bloqueios, ressalvas, ...}], `path` relative to artifacts/ ("" for
+// Delivery's single story at the root).
+export async function workItemReadiness(projectId) {
+  const result = await callWorkflowOnce('WorkItem', { action: 'readiness', project_id: projectId });
+  return result.readiness || [];
+}
+
+// buildHandoff (re)generates the handoff package in projects/<id>/handoff/
+// (workflows/shared/artifacts/handoff.mh) and returns {total, exportadas,
+// fora}; exportHandoff then copies it to a folder the user picks.
+export async function buildHandoff(projectId) {
+  const result = await callWorkflowOnce('WorkItem', { action: 'handoff', project_id: projectId });
+  return result.handoff;
+}
+
+export async function exportHandoff(projectId) {
+  return App.ExportHandoff(projectId);
+}
+
 export async function workItemProductivity(projectId) {
   const result = await callWorkflowOnce('WorkItem', { action: 'productivity', project_id: projectId });
   return result.productivity;

@@ -1,0 +1,730 @@
+// historia_spec.mh — o que transforma uma historia num artefato de handoff
+// para desenvolvimento (Spec-Driven Development): rastreabilidade ate os
+// artefatos que a sustentam e contratos de interface estruturados. C3: a
+// LLM devolve o MODELO (IDs citados, endpoints, eventos, campos); o OpenAPI/
+// AsyncAPI, as tabelas e as verificacoes sao codigo.
+//
+//   - Traceability: quais IDs existem de fato nos artefatos do work-item
+//     (requisitos, atributos, ADRs, entidades do DER, conteineres do C4) e
+//     quais a historia cita sem existirem — uma referencia inventada vira
+//     aviso, nao passa despercebida.
+//   - Contracts: gera OpenAPI 3.1 dos endpoints e AsyncAPI 3.0 dos eventos
+//     (gravados ao lado da historia como openapi.json/asyncapi.json, prontos
+//     para gerar stubs, mocks e testes de contrato) e verifica a coerencia do
+//     contrato (parametros de caminho, respostas 2xx, corpo em GET/DELETE...).
+//
+// Historias gravadas antes deste modelo (contratos_interface em texto livre,
+// sem rastreabilidade) continuam renderizando — ver is_structured.
+
+import { Cite } from "cite.mh"
+import { Paths } from "../core/paths.mh"
+import { DirClear } from "../core/dir_clear.mh"
+import { DependencyRules } from "backlog_rules.mh"
+
+export tool Traceability {
+    // known: os identificadores que existem hoje nos artefatos do work-item,
+    // lidos do JSON semantico de cada um (ArtifactData). Um artefato ausente
+    // so deixa sua lista vazia — Delivery nao tem atributos, DER e opcional.
+    known(project_id: string): any -> {
+        var requisitos = self.ids_of(self.read_json(project_id, "requisitos.json"), ["funcionais", "integracoes", "dados", "negocio", "regras_negocio"])
+        var atributos = self.ids_of(self.read_json(project_id, "atributos.json"), ["requisitos_nao_funcionais", "restricoes_arquiteturais", "compliance"])
+        return {
+            requisitos: requisitos,
+            atributos: atributos,
+            adrs: self.adr_ids(project_id),
+            entidades: self.der_entities(self.read_json(project_id, "der.json")),
+            conteineres: self.containers(project_id),
+            features: self.features(project_id),
+        }
+    }
+
+    // Features do backlog (Discovery): codigo ("FT006") e titulo — destinos
+    // validos de uma dependencia de historia. Delivery nao tem pasta features/.
+    features(project_id: string): string[] -> {
+        var base = Paths.artifact(project_id, "features")
+        if (!dir.exists(base)) return []
+        var out = []
+        for (var entry in dir.list(base)) {
+            var name = entry.replace(base + "/", "").replace(base + "\\", "")
+            var parts = name.split("-")
+            if (parts.size() >= 1 && !parts[0].is_empty()) out += [parts[0]]
+            var feature = self.read_json(project_id, "features/" + name + "/feature.json")
+            var titulo = feature?.titulo ?? ""
+            if (!titulo.is_empty()) out += [titulo]
+        }
+        return out
+    }
+
+    read_json(project_id: string, relative: string): any -> {
+        var path = Paths.artifact(project_id, relative)
+        if (!fs.exists(path)) return null
+        try {
+            return json.parse(fs.read(path))
+        } catch (err) {
+            return null
+        }
+    }
+
+    ids_of(data: any, keys: string[]): string[] -> {
+        if (data == null) return []
+        var out = []
+        for (var key in keys) {
+            for (var item in (data?.get(key, []) ?? [])) {
+                var id = item?.id ?? ""
+                if (!id.is_empty()) out += [id]
+            }
+        }
+        return out
+    }
+
+    // "ADR-001" de cada arquivo "ADR-001-slug.json" em adr/.
+    adr_ids(project_id: string): string[] -> {
+        var base = Paths.artifact(project_id, "adr")
+        if (!dir.exists(base)) return []
+        var out = []
+        for (var entry in dir.list(base)) {
+            var name = entry.replace(base + "/", "").replace(base + "\\", "")
+            if (name.starts_with("ADR-") && name.ends_with(".html")) {
+                var parts = name.split("-")
+                if (parts.size() >= 2) out += [parts[0] + "-" + parts[1]]
+            }
+        }
+        return out
+    }
+
+    // DER estruturado (DerModel: entidades[].id e .nome) ou legado
+    // (entidades[].entidade). Id e nome valem como referencia: o modelo cita
+    // pelo id que ve no JSON ("trilha-auditoria") tanto quanto pelo nome.
+    der_entities(der: any): string[] -> {
+        if (der == null) return []
+        var out = []
+        for (var e in (der?.entidades ?? [])) {
+            var nome = e?.nome ?? (e?.entidade ?? "")
+            if (!nome.is_empty()) out += [nome]
+            var id = e?.id ?? ""
+            if (!id.is_empty()) out += [id]
+        }
+        return out
+    }
+
+    // Elementos dos diagramas C4 estruturados (C4Diagram), por id e nome —
+    // conteineres e bancos, e tambem pessoas e sistemas externos: uma
+    // historia que cita o sistema externo com que integra ("bureau-credito")
+    // esta referenciando algo que existe, nao inventando.
+    containers(project_id: string): string[] -> {
+        var base = Paths.artifact(project_id, "diagramas")
+        if (!dir.exists(base)) return []
+        var out = []
+        for (var entry in dir.list(base)) {
+            if (entry.ends_with(".json")) {
+                var diagram = null
+                try {
+                    diagram = json.parse(fs.read(entry))
+                } catch (err) {
+                    diagram = null
+                }
+                for (var el in (diagram?.elementos ?? [])) {
+                    if (!out.contains(el.nome)) out += [el.nome]
+                    var id = el?.id ?? ""
+                    if (!id.is_empty() && !out.contains(id)) out += [id]
+                }
+            }
+        }
+        return out
+    }
+
+    normalized(text: string): string -> text.to_lower().trim()
+
+    // Aceita "FR-001" ou a forma de citacao "requisitos/FR-001".
+    strip_prefix(ref: string): string -> {
+        var parts = ref.split("/")
+        return parts[parts.size() - 1].trim()
+    }
+
+    // missing: as referencias de `refs` que nao existem em `known` — comparacao
+    // sem caixa/espacos; para ADRs, pelo prefixo "ADR-NNN".
+    missing(refs: string[], known: string[], adr: bool): string[] -> {
+        if (known.is_empty()) return []
+        var known_norm = known.map((k) -> self.normalized(k))
+        var out = []
+        for (var ref in refs) {
+            var r = self.normalized(self.strip_prefix(ref))
+            if (adr) {
+                var parts = r.split("-")
+                if (parts.size() >= 2) r = parts[0] + "-" + parts[1]
+            }
+            if (!r.is_empty() && !known_norm.contains(r)) out += [ref]
+        }
+        return out
+    }
+
+    // check: avisos de rastreabilidade de UMA historia contra `known`. Uma
+    // historia funcional sem nenhum requisito citado tambem e sinalizada — e o
+    // vinculo que diz POR QUE ela existe.
+    check(rastreabilidade: any, known: any, story_type: string): string[] -> {
+        if (rastreabilidade == null) return []
+        var out = []
+        var requisitos = rastreabilidade?.requisitos ?? []
+        if (story_type == "historia_usuario" && requisitos.is_empty()) out += ["História de usuário sem nenhum requisito rastreado."]
+        var labels = [
+            {key: "requisitos", label: "Requisito"},
+            {key: "atributos", label: "Atributo de qualidade"},
+            {key: "adrs", label: "ADR"},
+            {key: "entidades", label: "Entidade do DER"},
+            {key: "conteineres", label: "Contêiner do C4"},
+        ]
+        // Requisitos e atributos sao conferidos contra os dois conjuntos: o
+        // modelo lista um NFR tambem entre os requisitos — a referencia existe.
+        var requisitos_e_atributos = (known?.requisitos ?? []) + (known?.atributos ?? [])
+        for (var l in labels) {
+            // Categoria que o work-item nao tem (Delivery nao gera atributos)
+            // continua sem conferencia: pool vazio.
+            var own = known?.get(l.key, []) ?? []
+            var pool = if ((l.key == "requisitos" || l.key == "atributos") && !own.is_empty()) requisitos_e_atributos else own
+            var faltando = self.missing(rastreabilidade?.get(l.key, []) ?? [], pool, l.key == "adrs")
+            if (!faltando.is_empty()) out += [l.label + " citado que não existe nos artefatos: " + faltando.join(", ") + "."]
+        }
+        return out
+    }
+
+    // annotate: o que HistoriasGenerate guarda em pending_data — cada historia
+    // com os avisos que dependem do contexto do work-item (avisos_rastreabilidade),
+    // para o preview de UMA historia e o arquivo final mostrarem o mesmo.
+    annotate(data: any, known: any): any -> {
+        var out = []
+        var dependencias = DependencyRules.check_batch(data.historias, (known?.features ?? []) + (known?.conteineres ?? []))
+        var i = 0
+        for (var h in data.historias) {
+            var sistemas = (h?.contratos?.integracoes ?? []).map((ig) -> ig?.sistema ?? "")
+            var sistemas_faltando = self.missing(sistemas, known?.conteineres ?? [], false)
+            var avisos_integracao = if (sistemas_faltando.is_empty()) [] else ["Integração com sistema que não existe no diagrama C4: " + sistemas_faltando.join(", ") + "."]
+            h["avisos_rastreabilidade"] = self.check(h?.rastreabilidade, known, h?.story_type ?? "") + dependencias[i] + avisos_integracao
+            out += [h]
+            i = i + 1
+        }
+        data["historias"] = out
+        return data
+    }
+
+    html(rastreabilidade: any): string -> {
+        if (rastreabilidade == null) return ""
+        var rows = [
+            {label: "Requisitos", key: "requisitos"},
+            {label: "Atributos de qualidade", key: "atributos"},
+            {label: "ADRs", key: "adrs"},
+            {label: "Entidades (DER)", key: "entidades"},
+            {label: "Contêineres (C4)", key: "conteineres"},
+        ]
+        var body = ""
+        for (var r in rows) {
+            var refs = rastreabilidade?.get(r.key, []) ?? []
+            body = body + "<tr><td>" + r.label + "</td><td>" + (if (refs.is_empty()) "—" else html.escape(refs.join(", "))) + "</td></tr>"
+        }
+        return "<h2>Rastreabilidade</h2><table><thead><tr><th>Artefato</th><th>Referências</th></tr></thead><tbody>" + body + "</tbody></table>"
+    }
+}
+
+export tool Contracts {
+    is_structured(historia: any): bool -> historia?.contratos != null
+
+    // --- Esquemas ------------------------------------------------------------
+
+    field_schema(campo: any): any -> match campo?.tipo ?? "string" {
+        "date"     -> {type: "string", format: "date", description: campo?.descricao ?? ""}
+        "datetime" -> {type: "string", format: "date-time", description: campo?.descricao ?? ""}
+        "uuid"     -> {type: "string", format: "uuid", description: campo?.descricao ?? ""}
+        "array"    -> {type: "array", items: {}, description: campo?.descricao ?? ""}
+        "object"   -> {type: "object", description: campo?.descricao ?? ""}
+        _          -> {type: campo?.tipo ?? "string", description: campo?.descricao ?? ""}
+    }
+
+    object_schema(campos: any[]): any -> {
+        var properties = {}
+        var required = []
+        for (var c in campos) {
+            properties[c.nome] = self.field_schema(c)
+            if (c?.obrigatorio ?? false) required += [c.nome]
+        }
+        return {type: "object", required: required, properties: properties}
+    }
+
+    operation_id(endpoint: any): string -> {
+        var id = endpoint?.id ?? ""
+        if (!id.is_empty()) return id
+        return (endpoint.metodo + " " + endpoint.caminho).to_lower().replace("/", "_").replace("{", "").replace("}", "").replace(" ", "")
+    }
+
+    // --- OpenAPI / AsyncAPI ----------------------------------------------------
+
+    openapi(historia: any): any -> {
+        var endpoints = historia?.contratos?.endpoints ?? []
+        if (endpoints.is_empty()) return null
+        var paths = {}
+        for (var e in endpoints) {
+            var parameters = (e?.parametros ?? []).map((p) -> {
+                name: p.nome,
+                "in": if ((p?.local ?? "") == "") "query" else p.local,
+                required: (p?.local ?? "") == "path" || (p?.obrigatorio ?? false),
+                description: p?.descricao ?? "",
+                schema: self.field_schema(p),
+            })
+            var responses = {}
+            for (var r in (e?.respostas ?? [])) {
+                var campos = r?.campos ?? []
+                responses[r.status] = if (campos.is_empty())
+                    {description: r?.descricao ?? ""}
+                else
+                    {description: r?.descricao ?? "", content: {"application/json": {schema: self.object_schema(campos)}}}
+            }
+            var operation = {
+                operationId: self.operation_id(e),
+                summary: e?.resumo ?? "",
+                parameters: parameters,
+                responses: responses,
+            }
+            if ((e?.autenticacao ?? "") != "" && e.autenticacao != "nenhuma") operation["security"] = [{bearerAuth: []}]
+            var corpo = e?.corpo ?? []
+            if (!corpo.is_empty()) operation["requestBody"] = {required: true, content: {"application/json": {schema: self.object_schema(corpo)}}}
+            if (paths.get(e.caminho, null) == null) paths[e.caminho] = {}
+            paths[e.caminho][e.metodo.to_lower()] = operation
+        }
+        return {
+            openapi: "3.1.0",
+            info: {title: historia.titulo, version: "0.1.0"},
+            paths: paths,
+            components: {securitySchemes: {bearerAuth: {type: "http", scheme: "bearer"}}},
+        }
+    }
+
+    asyncapi(historia: any): any -> {
+        var eventos = historia?.contratos?.eventos ?? []
+        if (eventos.is_empty()) return null
+        var channels = {}
+        var operations = {}
+        for (var ev in eventos) {
+            if (channels.get(ev.canal, null) == null) channels[ev.canal] = {address: ev.canal, messages: {}}
+            channels[ev.canal]["messages"][ev.nome] = {name: ev.nome, summary: ev?.resumo ?? "", payload: self.object_schema(ev?.campos ?? [])}
+            var action = if (ev?.direcao == "consome") "receive" else "send"
+            operations[action + "_" + ev.nome] = {
+                action: action,
+                channel: {"$ref": "#/channels/" + ev.canal},
+                messages: [{"$ref": "#/channels/" + ev.canal + "/messages/" + ev.nome}],
+            }
+        }
+        return {asyncapi: "3.0.0", info: {title: historia.titulo, version: "0.1.0"}, channels: channels, operations: operations}
+    }
+
+    // pretty: JSON indentado — json.stringify do mhl so gera a forma compacta,
+    // e estes arquivos vao para o repositorio para serem lidos.
+    pretty(value: any): string -> self.pretty_at(value, "")
+
+    pretty_at(value: any, indent: string): string -> {
+        var t = type_of(value)
+        var inner = indent + "  "
+        if (t == "object") {
+            var keys = value.keys()
+            if (keys.is_empty()) return "{}"
+            return "{\n" + keys.map((k) -> inner + json.stringify(k) + ": " + self.pretty_at(value[k], inner)).join(",\n") + "\n" + indent + "}"
+        }
+        if (t == "array") {
+            if (value.is_empty()) return "[]"
+            return "[\n" + value.map((v) -> inner + self.pretty_at(v, inner)).join(",\n") + "\n" + indent + "]"
+        }
+        return json.stringify(value)
+    }
+
+    // --- Conformidade -----------------------------------------------------------
+
+    path_params(caminho: string): string[] -> {
+        var out = []
+        for (var part in caminho.split("/")) {
+            if (part.starts_with("{") && part.ends_with("}")) out += [part.substring(1, part.size() - 1)]
+        }
+        return out
+    }
+
+    // check: coerencia do contrato de UMA historia, sem depender de contexto.
+    check(historia: any): string[] -> {
+        if (!self.is_structured(historia)) return []
+        var out = []
+        var endpoints = historia?.contratos?.endpoints ?? []
+        var eventos = historia?.contratos?.eventos ?? []
+        var integracoes = historia?.contratos?.integracoes ?? []
+        var seen = []
+        for (var e in endpoints) {
+            var key = e.metodo + " " + e.caminho
+            if (seen.contains(key)) out += ["Endpoint repetido: " + key + "."]
+            else seen += [key]
+            var respostas = e?.respostas ?? []
+            if (respostas.is_empty()) out += ["Endpoint sem respostas documentadas: " + key + "."]
+            else if (!respostas.any((r) -> r.status.starts_with("2"))) out += ["Endpoint sem resposta de sucesso (2xx): " + key + "."]
+            if ((e.metodo == "GET" || e.metodo == "DELETE") && !(e?.corpo ?? []).is_empty()) out += [e.metodo + " com corpo de requisição: " + key + " — use parâmetros."]
+            if ((e.metodo == "POST" || e.metodo == "PUT" || e.metodo == "PATCH") && (e?.corpo ?? []).is_empty()) out += [e.metodo + " sem corpo de requisição: " + key + "."]
+            var declarados = (e?.parametros ?? []).filter((p) -> p?.local == "path").map((p) -> p.nome)
+            for (var p in self.path_params(e.caminho)) {
+                if (!declarados.contains(p)) out += ["Parâmetro de caminho {" + p + "} sem declaração em " + key + "."]
+            }
+            for (var d in declarados) {
+                if (!self.path_params(e.caminho).contains(d)) out += ["Parâmetro de caminho “" + d + "” declarado mas ausente do caminho " + key + "."]
+            }
+        }
+        for (var ev in eventos) {
+            if ((ev?.campos ?? []).is_empty()) out += ["Evento sem payload documentado: " + ev.nome + "."]
+            if ((ev?.canal ?? "").is_empty()) out += ["Evento sem canal: " + ev.nome + "."]
+        }
+        for (var ig in integracoes) {
+            if ((ig?.sistema ?? "").trim().is_empty()) out += ["Integração sem sistema externo identificado: " + (ig?.operacao ?? "") + "."]
+            if ((ig?.falhas ?? "").trim().is_empty()) out += ["Integração com " + (ig?.sistema ?? "?") + " sem tratamento de falha (timeout, indisponibilidade, resposta inválida)."]
+        }
+        var sub = historia?.subclassification ?? ""
+        var interface_alguma = !endpoints.is_empty() || !eventos.is_empty() || !integracoes.is_empty()
+        // Gateway so existe para expor endpoint; backend e worker podem ter so
+        // integracao de saida ou eventos (integracao de saida e uma historia
+        // unica de backend, sem par de gateway).
+        if (sub == "api_gateway" && endpoints.is_empty()) out += ["História de API Gateway sem nenhum endpoint exposto — integração de saída é uma história única de backend, sem gateway."]
+        if (sub == "backend" && !interface_alguma) out += ["História de backend sem endpoint, evento nem integração no contrato."]
+        if (sub == "worker" && eventos.is_empty() && endpoints.is_empty() && integracoes.is_empty()) out += ["História de worker sem evento, endpoint nem integração no contrato."]
+        return out
+    }
+
+    // --- Renderizacao -----------------------------------------------------------
+
+    fields_html(campos: any[]): string -> {
+        if (campos.is_empty()) return "<p>—</p>"
+        return "<table><thead><tr><th>Campo</th><th>Tipo</th><th>Obrigatório</th><th>Descrição</th></tr></thead><tbody>" +
+            campos.map((c) -> "<tr><td><code>" + html.escape(c.nome) + "</code>" + (if ((c?.local ?? "") == "") "" else " <small>(" + html.escape(c.local) + ")</small>") +
+                "</td><td>" + html.escape(c?.tipo ?? "") + "</td><td>" + (if (c?.obrigatorio ?? false) "Sim" else "Não") +
+                "</td><td>" + html.escape(c?.descricao ?? "") + "</td></tr>").join("") +
+            "</tbody></table>"
+    }
+
+    html(historia: any): string -> {
+        var endpoints = historia?.contratos?.endpoints ?? []
+        var eventos = historia?.contratos?.eventos ?? []
+        var integracoes = historia?.contratos?.integracoes ?? []
+        var out = "<h2>Contratos de Interface</h2>"
+        if (endpoints.is_empty() && eventos.is_empty() && integracoes.is_empty()) return out + "<p>Esta história não expõe nem consome interfaces.</p>" + Cite.note(historia?.contratos_fontes ?? [])
+        for (var e in endpoints) {
+            out = out + "<h3><code>" + html.escape(e.metodo + " " + e.caminho) + "</code></h3>" +
+                "<p>" + html.escape(e?.resumo ?? "") + " " + Cite.badges(e?.fontes ?? []) + "</p>" +
+                "<p><strong>Autenticação:</strong> " + html.escape(if ((e?.autenticacao ?? "") == "") "—" else e.autenticacao) + "</p>" +
+                (if ((e?.parametros ?? []).is_empty()) "" else "<p><strong>Parâmetros</strong></p>" + self.fields_html(e.parametros)) +
+                (if ((e?.corpo ?? []).is_empty()) "" else "<p><strong>Corpo da requisição</strong></p>" + self.fields_html(e.corpo)) +
+                "<p><strong>Respostas</strong></p>" +
+                (e?.respostas ?? []).map((r) -> "<p><code>" + html.escape(r.status) + "</code> " + html.escape(r?.descricao ?? "") + "</p>" +
+                    (if ((r?.campos ?? []).is_empty()) "" else self.fields_html(r.campos))).join("")
+        }
+        for (var ev in eventos) {
+            out = out + "<h3>Evento <code>" + html.escape(ev.nome) + "</code> — " + (if (ev?.direcao == "consome") "consome" else "publica") +
+                " em <code>" + html.escape(ev?.canal ?? "") + "</code></h3>" +
+                "<p>" + html.escape(ev?.resumo ?? "") + " " + Cite.badges(ev?.fontes ?? []) + "</p>" + self.fields_html(ev?.campos ?? [])
+        }
+        for (var ig in integracoes) {
+            out = out + "<h3>Integração com <code>" + html.escape(ig?.sistema ?? "") + "</code> — " + html.escape(ig?.operacao ?? "") + "</h3>" +
+                "<p><strong>Protocolo:</strong> " + html.escape(if ((ig?.protocolo ?? "") == "") "—" else ig.protocolo) + " " + Cite.badges(ig?.fontes ?? []) + "</p>" +
+                (if ((ig?.requisicao ?? []).is_empty()) "" else "<p><strong>Requisição</strong></p>" + self.fields_html(ig.requisicao)) +
+                (if ((ig?.resposta ?? []).is_empty()) "" else "<p><strong>Resposta</strong></p>" + self.fields_html(ig.resposta)) +
+                "<p><strong>Tratamento de falhas:</strong> " + html.escape(if ((ig?.falhas ?? "") == "") "—" else ig.falhas) + "</p>"
+        }
+        var openapi = self.openapi(historia)
+        var asyncapi = self.asyncapi(historia)
+        if (openapi != null) out = out + "<details><summary>OpenAPI 3.1 (openapi.json)</summary><pre><code class=\"language-json\">" + html.escape(self.pretty(openapi)) + "</code></pre></details>"
+        if (asyncapi != null) out = out + "<details><summary>AsyncAPI 3.0 (asyncapi.json)</summary><pre><code class=\"language-json\">" + html.escape(self.pretty(asyncapi)) + "</code></pre></details>"
+        return out + Cite.note(historia?.contratos_fontes ?? [])
+    }
+}
+
+// Scenarios — cenarios de aceite estruturados (titulo, dado/quando/entao,
+// criterios CAn que verificam). O Gherkin (pt) e gerado aqui, com as tags
+// @CAn ligando cada cenario aos criterios da historia — o mesmo vinculo que o
+// plano de implementacao usa para tarefas e testes. Historias antigas
+// (cenarios_gherkin em texto livre) nao sao verificadas.
+export tool Scenarios {
+    is_structured(historia: any): bool -> historia?.cenarios != null
+
+    steps(keyword: string, items: string[]): string -> {
+        var out = ""
+        var first = true
+        for (var item in items) {
+            out = out + "    " + (if (first) keyword else "E") + " " + item.trim() + "\n"
+            first = false
+        }
+        return out
+    }
+
+    tags(criterios: string[]): string ->
+        criterios.map((c) -> "@" + c.to_upper().trim()).join(" ")
+
+    gherkin(historia: any): string -> {
+        var out = "# language: pt\nFuncionalidade: " + (historia?.titulo ?? "") + "\n"
+        for (var c in (historia?.cenarios ?? [])) {
+            var tags = self.tags(c?.criterios ?? [])
+            out = out + "\n" + (if (tags.is_empty()) "" else "  " + tags + "\n") +
+                "  Cenário: " + c.titulo + "\n" +
+                self.steps("Dado", c?.dado ?? []) +
+                self.steps("Quando", c?.quando ?? []) +
+                self.steps("Então", c?.entao ?? [])
+        }
+        return out
+    }
+
+    check(historia: any): string[] -> {
+        if (!self.is_structured(historia)) return []
+        var out = []
+        var total = (historia?.criterios_aceite ?? []).size()
+        var cenarios = historia.cenarios
+        if (cenarios.is_empty()) return ["História sem cenários de aceite."]
+        var cobertos = []
+        for (var c in cenarios) {
+            if ((c?.dado ?? []).is_empty() || (c?.quando ?? []).is_empty() || (c?.entao ?? []).is_empty()) out += ["Cenário incompleto (precisa de Dado, Quando e Então): " + c.titulo + "."]
+            if ((c?.criterios ?? []).is_empty()) out += ["Cenário sem critério de aceite relacionado: " + c.titulo + "."]
+            for (var ref in (c?.criterios ?? [])) {
+                var ca = ref.to_upper().trim()
+                var valid = false
+                var k = 1
+                while (k <= total) {
+                    if (ca == "CA${k}") valid = true
+                    k = k + 1
+                }
+                if (!valid) out += ["Cenário “" + c.titulo + "” cita um critério que a história não tem: " + ref + "."]
+                else if (!cobertos.contains(ca)) cobertos += [ca]
+            }
+        }
+        var sem = []
+        var n = 1
+        while (n <= total) {
+            if (!cobertos.contains("CA${n}")) sem += ["CA${n}"]
+            n = n + 1
+        }
+        if (!sem.is_empty()) out += ["Critério de aceite sem cenário: " + sem.join(", ") + "."]
+        return out
+    }
+
+    html(historia: any): string -> {
+        var cenarios = historia?.cenarios ?? []
+        if (cenarios.is_empty()) return ""
+        var fontes = []
+        for (var c in cenarios) {
+            for (var f in (c?.fontes ?? [])) {
+                if (!fontes.contains(f)) fontes += [f]
+            }
+        }
+        return "<h2>Cenários de Aceite</h2><pre><code class=\"language-gherkin\">" + html.escape(self.gherkin(historia)) + "</code></pre>" + Cite.note(fontes)
+    }
+}
+
+// SpikeSpec — o enunciado de um spike estruturado (objeto `spike`); um spike
+// antigo continua usando resultado_tecnico/habilita/evidenciado_por
+// (ArtifactHtml.story_statement).
+export tool SpikeSpec {
+    is_structured(historia: any): bool -> !((historia?.spike?.pergunta ?? "").trim().is_empty())
+
+    html(spike: any): string -> {
+        var rows = [
+            {label: "Pergunta de investigação", value: spike?.pergunta ?? ""},
+            {label: "Timebox", value: spike?.timebox ?? ""},
+            {label: "Método", value: spike?.metodo ?? ""},
+            {label: "Evidência de saída", value: spike?.evidencia_saida ?? ""},
+            {label: "Decisão habilitada", value: spike?.decisao_habilitada ?? ""},
+            {label: "Critério de encerramento", value: spike?.criterio_encerramento ?? ""},
+        ]
+        return "<blockquote>" + rows.filter((r) -> !r.value.trim().is_empty()).map((r) -> "<strong>" + r.label + ":</strong> " + html.escape(r.value)).join("<br>") + "</blockquote>"
+    }
+}
+
+// SpecFiles grava ao lado do HTML/JSON da historia os arquivos que o handoff
+// para o repositorio de codigo leva adiante: openapi.json/asyncapi.json (so
+// com endpoints/eventos) e historia.feature (os cenarios em Gherkin).
+export tool SpecFiles {
+    write(project_id: string, relative_dir: string, historia: any) -> {
+        var prefix = if (relative_dir.is_empty()) "" else relative_dir + "/"
+        var openapi = Contracts.openapi(historia)
+        if (openapi != null) fs.write(Paths.artifact(project_id, prefix + "openapi.json"), Contracts.pretty(openapi))
+        var asyncapi = Contracts.asyncapi(historia)
+        if (asyncapi != null) fs.write(Paths.artifact(project_id, prefix + "asyncapi.json"), Contracts.pretty(asyncapi))
+        if (Scenarios.is_structured(historia) && !historia.cenarios.is_empty()) fs.write(Paths.artifact(project_id, prefix + "historia.feature"), Scenarios.gherkin(historia))
+    }
+}
+
+// Fixtures dos testes abaixo (mhl nao aceita `var` solto no corpo de um
+// `test`, so dentro de cada `describe`).
+tool SpecFixtures {
+    historia(): any -> {
+        titulo: "Consultar ordem",
+        story_type: "historia_usuario",
+        subclassification: "backend",
+        rastreabilidade: {requisitos: ["FR-005", "requisitos/FR-999"], atributos: ["NFR-001"], adrs: ["ADR-001-java", "ADR-009"], entidades: ["Ordem"], conteineres: ["API de Ordens"]},
+        contratos: {
+            endpoints: [
+                {
+                    id: "consultarOrdem", metodo: "GET", caminho: "/ordens/{id}", resumo: "Consulta uma ordem", autenticacao: "JWT",
+                    parametros: [{nome: "id", tipo: "uuid", obrigatorio: true, descricao: "Id da ordem", local: "path"}],
+                    corpo: [],
+                    respostas: [
+                        {status: "200", descricao: "Ordem encontrada", campos: [{nome: "numero", tipo: "string", obrigatorio: true, descricao: "", local: ""}, {nome: "criada_em", tipo: "datetime", obrigatorio: false, descricao: "", local: ""}]},
+                        {status: "404", descricao: "Não encontrada", campos: []},
+                    ],
+                    fontes: ["requisitos/FR-005"],
+                },
+            ],
+            eventos: [
+                {nome: "OrdemConsultada", direcao: "publica", canal: "ordens.consultas", resumo: "", campos: [{nome: "id", tipo: "uuid", obrigatorio: true, descricao: "", local: ""}], fontes: ["inferência"]},
+            ],
+        },
+        contratos_fontes: ["requisitos/FR-005"],
+    }
+
+    known(): any -> {
+        requisitos: ["FR-001", "FR-005"],
+        atributos: ["NFR-001"],
+        adrs: ["ADR-001", "ADR-002"],
+        entidades: ["Ordem", "Investidor"],
+        conteineres: ["API de Ordens"],
+    }
+}
+
+test HistoriaSpecSpec {
+    describe traceability_flags_references_that_do_not_exist {
+        var avisos = Traceability.check(SpecFixtures.historia().rastreabilidade, SpecFixtures.known(), "historia_usuario").join(" | ")
+        is_true(avisos.contains("Requisito citado que não existe nos artefatos: requisitos/FR-999"))
+        is_true(avisos.contains("ADR citado que não existe nos artefatos: ADR-009"))
+        is_true(!avisos.contains("ADR-001-java"))
+        is_true(!avisos.contains("Entidade"))
+    }
+
+    describe traceability_skips_kinds_the_work_item_does_not_have {
+        var known = {requisitos: ["FR-005"], atributos: [], adrs: [], entidades: [], conteineres: []}
+        are_equal(Traceability.check({requisitos: ["FR-005"], atributos: ["NFR-9"], adrs: ["ADR-1"], entidades: [], conteineres: []}, known, "historia_usuario").size(), 0)
+    }
+
+    describe a_user_story_without_requirements_is_flagged {
+        var avisos = Traceability.check({requisitos: [], atributos: [], adrs: [], entidades: [], conteineres: []}, SpecFixtures.known(), "historia_usuario")
+        is_true(avisos[0].contains("sem nenhum requisito"))
+        are_equal(Traceability.check({requisitos: [], atributos: [], adrs: [], entidades: [], conteineres: []}, SpecFixtures.known(), "spike").size(), 0)
+    }
+
+    describe annotate_attaches_warnings_to_each_story {
+        var data = Traceability.annotate({historias: [SpecFixtures.historia()]}, SpecFixtures.known())
+        is_true(data.historias[0].avisos_rastreabilidade.join(" ").contains("FR-999"))
+    }
+
+    describe openapi_is_generated_from_the_structured_contract {
+        var api = Contracts.openapi(SpecFixtures.historia())
+        are_equal(api.openapi, "3.1.0")
+        var op = api.paths["/ordens/{id}"]["get"]
+        are_equal(op.operationId, "consultarOrdem")
+        are_equal(op.parameters[0]["in"], "path")
+        is_true(op.parameters[0].required)
+        are_equal(op.parameters[0].schema.format, "uuid")
+        are_equal(op.responses["200"].content["application/json"].schema.required[0], "numero")
+        are_equal(op.responses["200"].content["application/json"].schema.properties["criada_em"].format, "date-time")
+        are_equal(op.security[0].bearerAuth.size(), 0)
+    }
+
+    describe asyncapi_is_generated_for_events {
+        var api = Contracts.asyncapi(SpecFixtures.historia())
+        are_equal(api.asyncapi, "3.0.0")
+        are_equal(api.operations["send_OrdemConsultada"].action, "send")
+        are_equal(api.channels["ordens.consultas"].messages["OrdemConsultada"].payload.required[0], "id")
+    }
+
+    describe no_contract_means_no_spec_file {
+        are_equal(Contracts.openapi({titulo: "x", contratos: {endpoints: [], eventos: []}}), null)
+        are_equal(Contracts.asyncapi({titulo: "x", contratos: {endpoints: [], eventos: []}}), null)
+    }
+
+    describe pretty_prints_nested_json {
+        are_equal(Contracts.pretty({a: [1, {b: "c"}], d: {}}), "{\n  \"a\": [\n    1,\n    {\n      \"b\": \"c\"\n    }\n  ],\n  \"d\": {}\n}")
+    }
+
+    describe a_coherent_contract_has_no_warnings {
+        are_equal(Contracts.check(SpecFixtures.historia()).size(), 0)
+    }
+
+    describe contract_check_flags_incoherent_endpoints {
+        var h = {
+            subclassification: "backend",
+            contratos: {
+                endpoints: [
+                    {metodo: "GET", caminho: "/a/{id}", parametros: [{nome: "outro", local: "path"}], corpo: [{nome: "x"}], respostas: [{status: "404", campos: []}]},
+                    {metodo: "POST", caminho: "/b", parametros: [], corpo: [], respostas: []},
+                    {metodo: "POST", caminho: "/b", parametros: [], corpo: [], respostas: []},
+                ],
+                eventos: [{nome: "E", canal: "", campos: []}],
+            },
+        }
+        var avisos = Contracts.check(h).join(" | ")
+        is_true(avisos.contains("Endpoint sem resposta de sucesso (2xx): GET /a/{id}"))
+        is_true(avisos.contains("GET com corpo de requisição"))
+        is_true(avisos.contains("Parâmetro de caminho {id} sem declaração"))
+        is_true(avisos.contains("“outro” declarado mas ausente"))
+        is_true(avisos.contains("POST sem corpo de requisição: POST /b"))
+        is_true(avisos.contains("Endpoint repetido: POST /b"))
+        is_true(avisos.contains("Evento sem payload documentado: E"))
+        is_true(avisos.contains("Evento sem canal: E"))
+    }
+
+    describe backend_story_without_endpoints_is_flagged {
+        is_true(Contracts.check({subclassification: "backend", contratos: {endpoints: [], eventos: []}})[0].contains("sem endpoint, evento nem integração"))
+        are_equal(Contracts.check({subclassification: "backend", contratos: {endpoints: [], eventos: [], integracoes: [{sistema: "bureau-credito", operacao: "score", falhas: "retry + circuit breaker"}]}}).size(), 0)
+        is_true(Contracts.check({subclassification: "backend", contratos: {endpoints: [], eventos: [], integracoes: [{sistema: "bureau-credito", operacao: "score", falhas: ""}]}})[0].contains("sem tratamento de falha"))
+        is_true(Contracts.check({subclassification: "api_gateway", contratos: {endpoints: [], eventos: [], integracoes: [{sistema: "b3", falhas: "x"}]}})[0].contains("integração de saída é uma história única de backend"))
+    }
+
+    describe known_reads_ids_from_the_work_item_artifacts_and_spec_files_are_written {
+        var project_id = "spec-test-historia-spec-known"
+        var root = Paths.root(project_id)
+        dir.create(Paths.artifact(project_id, "adr"))
+        dir.create(Paths.artifact(project_id, "diagramas"))
+        dir.create(Paths.artifact(project_id, "historias/US0001-x"))
+        fs.write(Paths.artifact(project_id, "requisitos.json"), json.stringify({funcionais: [{id: "FR-001"}], integracoes: [{id: "IR-001"}], dados: [], negocio: [], regras_negocio: [{id: "RN-001"}]}))
+        fs.write(Paths.artifact(project_id, "atributos.json"), json.stringify({requisitos_nao_funcionais: [{id: "NFR-001"}], restricoes_arquiteturais: [], compliance: []}))
+        fs.write(Paths.artifact(project_id, "adr/ADR-001-usar-java.html"), "<html></html>")
+        fs.write(Paths.artifact(project_id, "adr/ADR-001-usar-java.json"), "{}")
+        fs.write(Paths.artifact(project_id, "der.json"), json.stringify({nivel: "logico", entidades: [{id: "o", nome: "Ordem"}]}))
+        fs.write(Paths.artifact(project_id, "diagramas/conteineres.json"), json.stringify({diagram_type: "c4-container", elementos: [{tipo: "container", nome: "API de Ordens"}, {tipo: "pessoa", nome: "Investidor"}]}))
+
+        var known = Traceability.known(project_id)
+        are_equal(known.requisitos, ["FR-001", "IR-001", "RN-001"])
+        are_equal(known.atributos, ["NFR-001"])
+        are_equal(known.adrs, ["ADR-001"])
+        are_equal(known.entidades, ["Ordem", "o"])
+        are_equal(known.conteineres, ["API de Ordens", "Investidor"])
+
+        SpecFiles.write(project_id, "historias/US0001-x", SpecFixtures.historia())
+        is_true(fs.read(Paths.artifact(project_id, "historias/US0001-x/openapi.json")).contains("\"openapi\": \"3.1.0\""))
+        is_true(fs.read(Paths.artifact(project_id, "historias/US0001-x/asyncapi.json")).contains("\"asyncapi\": \"3.0.0\""))
+
+        DirClear.clear(root)
+        dir.delete(root)
+    }
+
+    describe gherkin_is_generated_with_criteria_tags {
+        var h = {
+            titulo: "Consultar ordem",
+            criterios_aceite: [{texto: "a"}, {texto: "b"}],
+            cenarios: [{titulo: "Ordem existe", dado: ["uma ordem 123", "o investidor dono dela"], quando: ["ele consulta a ordem"], entao: ["recebe o estado atual"], criterios: ["CA1"], fontes: ["x"]}],
+        }
+        are_equal(Scenarios.gherkin(h), "# language: pt\nFuncionalidade: Consultar ordem\n\n  @CA1\n  Cenário: Ordem existe\n    Dado uma ordem 123\n    E o investidor dono dela\n    Quando ele consulta a ordem\n    Então recebe o estado atual\n")
+        is_true(Scenarios.check(h).join(" ").contains("Critério de aceite sem cenário: CA2"))
+    }
+
+    describe scenario_check_flags_incomplete_and_unknown_references {
+        var h = {criterios_aceite: [{texto: "a"}], cenarios: [{titulo: "X", dado: [], quando: ["q"], entao: ["e"], criterios: ["CA1", "CA5"], fontes: []}]}
+        var avisos = Scenarios.check(h).join(" | ")
+        is_true(avisos.contains("Cenário incompleto (precisa de Dado, Quando e Então): X"))
+        is_true(avisos.contains("cita um critério que a história não tem: CA5"))
+        are_equal(Scenarios.check({cenarios_gherkin: "Cenário: legado"}).size(), 0)
+    }
+
+    describe spike_statement_lists_its_structured_fields {
+        var html = SpikeSpec.html({pergunta: "Qual banco?", timebox: "2 dias", metodo: "", evidencia_saida: "benchmark", decisao_habilitada: "ADR-003", criterio_encerramento: "resposta"})
+        is_true(html.contains("<strong>Pergunta de investigação:</strong> Qual banco?"))
+        is_true(html.contains("<strong>Timebox:</strong> 2 dias"))
+        is_true(!html.contains("Método"))
+    }
+
+    describe legacy_story_is_not_checked {
+        are_equal(Contracts.check({contratos_interface: "POST /x"}).size(), 0)
+    }
+}

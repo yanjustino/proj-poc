@@ -13,12 +13,16 @@ import (
 var validAgents = map[string]bool{"": true, "codex": true, "claude": true, "devin": true}
 
 // appSettings is this app's own (not mhl's) persisted preferences: the LLM
-// backend, the selected Devin model and the pricing snapshot published for
-// that selection.
+// backend, the selected model per backend, and the pricing snapshot
+// published for the Devin selection (Codex/Claude have no equivalent
+// machine-readable pricing reference — see app.go's ListCodexModels/
+// ListClaudeModels).
 type appSettings struct {
 	Agent            string `json:"agent,omitempty"`
 	DevinModel       string `json:"devin_model,omitempty"`
 	DevinCostSummary string `json:"devin_cost_summary,omitempty"`
+	CodexModel       string `json:"codex_model,omitempty"`
+	ClaudeModel      string `json:"claude_model,omitempty"`
 }
 
 // settingsFilePath is <senpaiBaseDir>/settings.json — a sibling of state/,

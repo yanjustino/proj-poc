@@ -1,0 +1,16 @@
+<p><strong>História:</strong> ${historia_titulo}</p>
+${avisos_html}
+<h2>Abordagem</h2><p>${abordagem}</p>${abordagem_fontes}
+<h2>Componentes afetados</h2>${componentes_tabela}
+<h2>Decisões arquiteturais aplicáveis</h2>${adrs_tabela}
+<h2>Dados</h2>${dados_tabela}
+<h2>Fluxo principal</h2>${fluxo_html}
+<h2>Tratamento de erros</h2>${erros_lista}
+<h2>Segurança</h2>${seguranca_lista}
+<h2>Observabilidade</h2>${observabilidade_lista}
+<h2>Tarefas</h2>${tarefas_tabela}
+<h2>Estratégia de testes</h2>${testes_tabela}
+${cobertura_html}
+<h2>Riscos e questões em aberto</h2>${riscos_lista}
+<script src="${assets_prefix}assets/mermaid.min.js"></script>
+<script>mermaid.initialize({ startOnLoad: true });</script>

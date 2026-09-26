@@ -65,6 +65,12 @@ type App struct {
 	// from Devin and back.
 	devinModel       string
 	devinCostSummary string
+	// codexModel/claudeModel are passed to the workflow as SENPAI_CODEX_MODEL/
+	// SENPAI_CLAUDE_MODEL, same independence-from-agent reasoning as
+	// devinModel above: a user's choice for one backend survives switching
+	// away and back.
+	codexModel  string
+	claudeModel string
 
 	// emit sends one event to the frontend. Defaults to a real
 	// runtime.EventsEmit(a.ctx, ...) call in startup(), but stays a field
@@ -167,6 +173,8 @@ func (a *App) startup(ctx context.Context) {
 	a.agent = settings.Agent
 	a.devinModel = settings.DevinModel
 	a.devinCostSummary = settings.DevinCostSummary
+	a.codexModel = settings.CodexModel
+	a.claudeModel = settings.ClaudeModel
 
 	if err := a.connectBridge(); err != nil {
 		log.Printf("mhl bridge: failed to start: %v", err)
@@ -187,6 +195,7 @@ func (a *App) connectBridge() error {
 	client, err := mhlbridge.Start(
 		a.ctx, a.mhlPath, a.workflowsDir, a.stateDir, a.dataDir, a.codexCwdDir,
 		a.agent, a.devinModel, devinPricingJSON(a.devinModel, a.devinCostSummary),
+		a.codexModel, a.claudeModel,
 	)
 	if err != nil {
 		return err
@@ -312,6 +321,7 @@ func (a *App) SetAgent(agent string) (string, error) {
 	}
 	if err := saveSettings(appSettings{
 		Agent: agent, DevinModel: a.devinModel, DevinCostSummary: a.devinCostSummary,
+		CodexModel: a.codexModel, ClaudeModel: a.claudeModel,
 	}); err != nil {
 		log.Printf("mhl bridge: save agent setting: %v", err)
 	}
@@ -535,11 +545,172 @@ func (a *App) SetDevinModel(model, costSummary string) (string, error) {
 	}
 	if err := saveSettings(appSettings{
 		Agent: a.agent, DevinModel: model, DevinCostSummary: costSummary,
+		CodexModel: a.codexModel, ClaudeModel: a.claudeModel,
 	}); err != nil {
 		return "", fmt.Errorf("salvar modelo do Devin: %w", err)
 	}
 	a.devinModel = model
 	a.devinCostSummary = costSummary
+	return a.ReconnectMCP()
+}
+
+// codexModelsResponse is `codex debug models`'s own shape (an undocumented
+// debug subcommand, not a stable public API — see ListCodexModels). Only
+// "list" visibility models are surfaced to the picker; "hide" covers
+// internal/reserved slugs (e.g. gpt-reserve, codex-auto-review) never meant
+// for a user to pick directly.
+type codexModelsResponse struct {
+	Models []struct {
+		Slug        string `json:"slug"`
+		DisplayName string `json:"display_name"`
+		Description string `json:"description"`
+		Visibility  string `json:"visibility"`
+	} `json:"models"`
+}
+
+type cliModel struct {
+	ID          string `json:"id"`
+	Label       string `json:"label"`
+	Description string `json:"description,omitempty"`
+}
+
+// ListCodexModels asks the Codex CLI which models it currently offers, via
+// `codex debug models` — a "debug" subcommand (Render the raw model catalog
+// as JSON), not a documented/stable interface. It hits the network by
+// default (unlike --bundled) and its shape may change or disappear in a
+// future Codex CLI release without notice; parseCodexModels fails closed
+// (an error, not a guessed shape) rather than silently misreading it.
+func (a *App) ListCodexModels() (string, error) {
+	ctx := a.ctx
+	if ctx == nil {
+		ctx = context.Background()
+	}
+	ctx, cancel := context.WithTimeout(ctx, 30*time.Second)
+	defer cancel()
+
+	cmd := mhlbridge.CommandContext(ctx, "codex", "debug", "models")
+	out, err := cmd.Output()
+	if err != nil {
+		if ctx.Err() != nil {
+			return "", fmt.Errorf("listar modelos do Codex: %w", ctx.Err())
+		}
+		if exitErr, ok := err.(*exec.ExitError); ok {
+			if detail := strings.TrimSpace(string(exitErr.Stderr)); detail != "" {
+				return "", fmt.Errorf("listar modelos do Codex: %s", detail)
+			}
+		}
+		return "", fmt.Errorf("listar modelos do Codex: %w", err)
+	}
+	models, err := parseCodexModels(out)
+	if err != nil {
+		return "", err
+	}
+	body, err := json.Marshal(models)
+	if err != nil {
+		return "", err
+	}
+	return string(body), nil
+}
+
+func parseCodexModels(data []byte) ([]cliModel, error) {
+	var response codexModelsResponse
+	if err := json.Unmarshal(data, &response); err != nil {
+		return nil, fmt.Errorf("decodificar modelos do Codex: %w", err)
+	}
+	models := make([]cliModel, 0)
+	for _, m := range response.Models {
+		if m.Slug == "" || m.Visibility != "list" {
+			continue
+		}
+		label := m.DisplayName
+		if label == "" {
+			label = m.Slug
+		}
+		models = append(models, cliModel{ID: m.Slug, Label: label, Description: m.Description})
+	}
+	if len(models) == 0 {
+		return nil, fmt.Errorf("o Codex não retornou nenhum modelo disponível")
+	}
+	return models, nil
+}
+
+func (a *App) GetCodexModel() string {
+	return a.codexModel
+}
+
+// SetCodexModel persists model to settings.json, then restarts mhl (its
+// environment — SENPAI_CODEX_MODEL — is fixed when the process starts, same
+// as SetDevinModel). Accepts any non-empty value, not just one that came
+// back from ListCodexModels: the picker also offers a free-text field
+// because ListCodexModels relies on an undocumented CLI subcommand that may
+// stop working, and `codex exec --model` itself accepts any slug.
+func (a *App) SetCodexModel(model string) (string, error) {
+	model = strings.TrimSpace(model)
+	if model == "" {
+		return "", fmt.Errorf("modelo do Codex não pode ser vazio")
+	}
+	if strings.ContainsAny(model, "\x00\r\n") {
+		return "", fmt.Errorf("modelo do Codex inválido")
+	}
+	if err := saveSettings(appSettings{
+		Agent: a.agent, DevinModel: a.devinModel, DevinCostSummary: a.devinCostSummary,
+		CodexModel: model, ClaudeModel: a.claudeModel,
+	}); err != nil {
+		return "", fmt.Errorf("salvar modelo do Codex: %w", err)
+	}
+	a.codexModel = model
+	return a.ReconnectMCP()
+}
+
+// listClaudeModels is the fixed catalog offered for Claude: the Claude Code
+// CLI exposes no runtime "list models" command (confirmed against `claude
+// --help`, `claude doctor`) — only `--model`, which accepts one of these
+// documented aliases or a full model name. Kept as a Go func (not a package
+// var) so it reads like ListCodexModels/ListDevinModels's own shape to the
+// frontend, despite not calling out to any CLI.
+func listClaudeModels() []cliModel {
+	return []cliModel{
+		{ID: "sonnet", Label: "Sonnet (mais recente)"},
+		{ID: "opus", Label: "Opus (mais recente)"},
+		{ID: "fable", Label: "Fable (mais recente)"},
+		{ID: "haiku", Label: "Haiku (mais recente)"},
+	}
+}
+
+// ListClaudeModels mirrors ListCodexModels/ListDevinModels's (string, error)
+// shape for the frontend's benefit even though this list is static, not
+// fetched — see listClaudeModels.
+func (a *App) ListClaudeModels() (string, error) {
+	body, err := json.Marshal(listClaudeModels())
+	if err != nil {
+		return "", err
+	}
+	return string(body), nil
+}
+
+func (a *App) GetClaudeModel() string {
+	return a.claudeModel
+}
+
+// SetClaudeModel persists model to settings.json, then restarts mhl, same
+// rationale as SetCodexModel: a free-text value is accepted so a user can
+// pass a full model name (e.g. "claude-sonnet-5") that isn't one of
+// listClaudeModels's aliases.
+func (a *App) SetClaudeModel(model string) (string, error) {
+	model = strings.TrimSpace(model)
+	if model == "" {
+		return "", fmt.Errorf("modelo do Claude não pode ser vazio")
+	}
+	if strings.ContainsAny(model, "\x00\r\n") {
+		return "", fmt.Errorf("modelo do Claude inválido")
+	}
+	if err := saveSettings(appSettings{
+		Agent: a.agent, DevinModel: a.devinModel, DevinCostSummary: a.devinCostSummary,
+		CodexModel: a.codexModel, ClaudeModel: model,
+	}); err != nil {
+		return "", fmt.Errorf("salvar modelo do Claude: %w", err)
+	}
+	a.claudeModel = model
 	return a.ReconnectMCP()
 }
 
@@ -1545,6 +1716,52 @@ func (a *App) ExportProject(projectID string) (string, error) {
 		return "", nil
 	}
 	return a.exportProjectTo(projectID, destination)
+}
+
+// ExportHandoff copies the handoff package the WorkItem "handoff" action
+// generated in projects/<id>/handoff/ (workflows/shared/artifacts/handoff.mh:
+// specs, plans, tasks, contracts, ADRs, architecture) to a folder the user
+// picks — meant to be dropped into the code repository. The frontend always
+// regenerates the package right before calling this, so it reflects the
+// current artifacts.
+func (a *App) ExportHandoff(projectID string) (string, error) {
+	if err := validateProjectID(projectID); err != nil {
+		return "", err
+	}
+	destination, err := runtime.OpenDirectoryDialog(a.ctx, runtime.OpenDialogOptions{
+		Title:                "Exportar pacote de handoff",
+		CanCreateDirectories: true,
+	})
+	if err != nil {
+		return "", fmt.Errorf("selecionar pasta de exportacao: %w", err)
+	}
+	if destination == "" {
+		return "", nil
+	}
+	return a.exportHandoffTo(projectID, destination)
+}
+
+// exportHandoffTo is ExportHandoff's filesystem part, testable headlessly.
+func (a *App) exportHandoffTo(projectID string, destinationParent string) (string, error) {
+	source, err := a.projectRootDir(projectID, "handoff", []string{"handoff"})
+	if err != nil {
+		return "", err
+	}
+	if info, err := os.Stat(source); err != nil || !info.IsDir() {
+		return "", fmt.Errorf("pacote de handoff ainda nao gerado para %q", projectID)
+	}
+	if info, err := os.Stat(destinationParent); err != nil || !info.IsDir() {
+		return "", fmt.Errorf("destino nao e uma pasta: %q", destinationParent)
+	}
+	if pathIsWithin(source, destinationParent) {
+		return "", fmt.Errorf("a pasta de exportacao nao pode ficar dentro do proprio pacote")
+	}
+	exportDir := uniqueDirectoryDestination(destinationParent, "senpai-handoff-"+projectID)
+	if err := copyDirectory(source, exportDir); err != nil {
+		_ = os.RemoveAll(exportDir)
+		return "", fmt.Errorf("exportar pacote de handoff: %w", err)
+	}
+	return exportDir, nil
 }
 
 // exportProjectTo contains the filesystem part of ExportProject separately

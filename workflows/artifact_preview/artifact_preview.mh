@@ -21,7 +21,7 @@ import { PageShell } from "../shared/artifacts/page_shell.mh"
 workflow ArtifactPreview {
     description: "Renderiza o rascunho de um artefato pausado (Modo Buddy) para pre-visualizacao, sem gravar nada em disco."
 
-    input artifact: string // brief | atributos | requisitos | der | feature | historia | decisao | diagrama | adr | diagramas | features | dependencias | historias
+    input artifact: string // brief | atributos | requisitos | der | feature | historia | decisao | diagrama | adr | diagramas | features | dependencias | historias | plano
     input data: any
 
     var preview_html = ""
@@ -45,9 +45,10 @@ workflow ArtifactPreview {
             "features"   -> Features
             "dependencias" -> Dependencias
             "historias"  -> Historias
+            "plano"      -> Plano
             _            -> fail(
                 "artefato desconhecido para preview: '" + artifact +
-                "' (use brief | atributos | requisitos | der | feature | historia | decisao | diagrama | adr | diagramas | features | dependencias | historias)"
+                "' (use brief | atributos | requisitos | der | feature | historia | decisao | diagrama | adr | diagramas | features | dependencias | historias | plano)"
             )
         }
     }
@@ -79,6 +80,13 @@ workflow ArtifactPreview {
 
     step Dependencias {
         preview_html = PageShell(title: "Mapa de Dependências", body: ArtifactBody.dependencias(data), meta: "Rascunho — ainda não gravado")
+        goto Done
+    }
+
+    // Plano de implementacao de uma historia (plano_model.mh). O caminho dos
+    // assets nao importa aqui: o app injeta o mermaid no preview.
+    step Plano {
+        preview_html = PageShell(title: "Plano de implementação — " + html.escape(data?.historia_titulo ?? ""), body: ArtifactBody.plano(data, "../"), meta: "Rascunho — ainda não gravado")
         goto Done
     }
 
@@ -253,6 +261,163 @@ test ArtifactPreviewSpec {
         is_true(run.ok)
         is_true(run.vars.preview_html.contains("DER no formato anterior"))
         is_true(run.vars.preview_html.contains("CLIENTE ||--o{ PEDIDO"))
+    }
+
+    describe structured_story_renders_traceability_contracts_and_numbered_criteria {
+        var run = ArtifactPreview.run(inputs: {
+            artifact: "historia",
+            data: {
+                titulo: "Consultar ordem", como: "investidor", quero: "consultar", para: "acompanhar",
+                resultado_tecnico: "", habilita: "", evidenciado_por: "", fontes: ["requisitos/FR-005"],
+                work_item_type: "historia", story_type: "historia_usuario", subclassification: "backend", nature: "funcional", specialty: "backend",
+                contexto_negocio: "x", contexto_fontes: ["requisitos"],
+                criterios_aceite: [{texto: "retorna a ordem", fontes: ["requisitos/FR-005"]}, {texto: "404 se não existe", fontes: ["inferência"]}],
+                cenarios_gherkin: "", cenarios_fontes: ["inferência"], regras_negocio: [], definition_of_done: [], dependencias_impedimentos: [], fora_escopo: [],
+                exemplo_uso: "", exemplo_fontes: ["gap"],
+                rastreabilidade: {requisitos: ["FR-005"], atributos: [], adrs: ["ADR-001"], entidades: ["Ordem"], conteineres: ["API de Ordens"]},
+                contratos: {endpoints: [{id: "consultarOrdem", metodo: "GET", caminho: "/ordens/{id}", resumo: "Consulta", autenticacao: "JWT",
+                    parametros: [{nome: "id", tipo: "uuid", obrigatorio: true, descricao: "", local: "path"}], corpo: [],
+                    respostas: [{status: "200", descricao: "ok", campos: [{nome: "numero", tipo: "string", obrigatorio: true, descricao: "", local: ""}]}], fontes: ["requisitos/FR-005"]}], eventos: []},
+                contratos_fontes: ["requisitos/FR-005"],
+                questoes_abertas: [],
+                avisos_rastreabilidade: ["Entidade do DER citado que não existe nos artefatos: Ordem."],
+            }
+        })
+        is_true(run.ok)
+        var page = run.vars.preview_html
+        is_true(page.contains("CA1 — retorna a ordem"))
+        is_true(page.contains("CA2 — 404 se não existe"))
+        is_true(page.contains("<h2>Rastreabilidade</h2>"))
+        is_true(page.contains("<code>GET /ordens/{id}</code>"))
+        is_true(page.contains("OpenAPI 3.1 (openapi.json)"))
+        is_true(page.contains("Conformidade da especificação"))
+        is_true(page.contains("citado que não existe nos artefatos: Ordem"))
+    }
+
+    describe legacy_story_still_renders_its_free_text_contract {
+        var run = ArtifactPreview.run(inputs: {
+            artifact: "historia",
+            data: {
+                titulo: "Antiga", como: "a", quero: "b", para: "c", fontes: ["x"], work_item_type: "historia", story_type: "historia_usuario",
+                subclassification: "backend", nature: "funcional", specialty: "x", contexto_negocio: "", contexto_fontes: ["x"],
+                criterios_aceite: [{texto: "ok", fontes: ["x"]}], cenarios_gherkin: "", cenarios_fontes: ["x"], regras_negocio: [], definition_of_done: [],
+                dependencias_impedimentos: [], fora_escopo: [], exemplo_uso: "", exemplo_fontes: ["x"],
+                contratos_interface: "POST /pedidos", contratos_fontes: ["x"], questoes_abertas: [],
+            }
+        })
+        is_true(run.ok)
+        is_true(run.vars.preview_html.contains("POST /pedidos"))
+        is_true(!run.vars.preview_html.contains("Rastreabilidade"))
+    }
+
+    describe plano_renders_sequence_tasks_and_coverage {
+        var run = ArtifactPreview.run(inputs: {
+            artifact: "plano",
+            data: {
+                historia_titulo: "US0001 — Consultar ordem",
+                criterios_total: 2,
+                abordagem: "Endpoint na API de Ordens", abordagem_fontes: ["inferência"],
+                componentes: [{conteiner: "API de Ordens", componente: "OrdemController", mudanca: "novo endpoint", fontes: ["inferência"]}],
+                adrs: [], dados: [{entidade: "Ordem", operacao: "le", detalhe: "", fontes: ["der"]}],
+                fluxo: [{de: "Investidor", para: "API de Ordens", mensagem: "GET /ordens/{id}", retorno: false}, {de: "API de Ordens", para: "Investidor", mensagem: "200", retorno: true}],
+                fluxo_fontes: ["inferência"],
+                erros: [], seguranca: [], observabilidade: [],
+                tarefas: [{id: "T1", titulo: "Teste", descricao: "", tipo: "teste", criterios: ["CA1"], depende_de: [], fontes: ["inferência"]},
+                          {id: "T2", titulo: "Implementar", descricao: "", tipo: "implementacao", criterios: ["CA1", "CA2"], depende_de: ["T1"], fontes: ["inferência"]}],
+                testes: [], riscos: [],
+                avisos_contexto: [],
+            }
+        })
+        is_true(run.ok)
+        var page = run.vars.preview_html
+        is_true(page.contains("Plano de implementação — US0001 — Consultar ordem"))
+        is_true(page.contains("sequenceDiagram"))
+        is_true(page.contains("<h2>Cobertura dos critérios de aceite</h2>"))
+        is_true(page.contains("Critério de aceite sem teste: CA2"))
+    }
+
+    describe incoherent_story_is_flagged_and_empty_sections_are_omitted {
+        var run = ArtifactPreview.run(inputs: {
+            artifact: "historia",
+            data: {
+                titulo: "Migrar base", como: "desenvolvedor", quero: "migrar", para: "x",
+                resultado_tecnico: "", habilita: "", evidenciado_por: "", fontes: ["inferência"],
+                work_item_type: "historia", story_type: "historia_habilitadora", subclassification: "dados", nature: "funcional", specialty: "dados",
+                contexto_negocio: "", contexto_fontes: [],
+                criterios_aceite: [{texto: "dados migrados", fontes: ["inferência"]}],
+                cenarios_gherkin: "", cenarios_fontes: [], regras_negocio: [], definition_of_done: [], dependencias_impedimentos: [], fora_escopo: [],
+                exemplo_uso: "", exemplo_fontes: [],
+                rastreabilidade: {requisitos: [], atributos: [], adrs: [], entidades: [], conteineres: []},
+                contratos: {endpoints: [], eventos: []}, contratos_fontes: [],
+                gaps: [{texto: "Volume da base atual desconhecido", fontes: ["gap"]}],
+                questoes_abertas: [],
+            }
+        })
+        is_true(run.ok)
+        var page = run.vars.preview_html
+        is_true(page.contains("exige nature &#34;tecnica&#34;"))
+        is_true(page.contains("não usa Como/Quero/Para"))
+        is_true(page.contains("<h2>Lacunas</h2>"))
+        is_true(!page.contains("Exemplo de Uso"))
+        is_true(!page.contains("Cenários Gherkin"))
+        is_true(!page.contains("Regras de Negócio"))
+    }
+
+    describe structured_spike_and_scenarios_render {
+        var run = ArtifactPreview.run(inputs: {
+            artifact: "historia",
+            data: {
+                titulo: "Escolher banco de eventos", como: "", quero: "", para: "",
+                resultado_tecnico: "", habilita: "", evidenciado_por: "",
+                spike: {pergunta: "MongoDB ou EventStoreDB?", timebox: "2 dias", metodo: "benchmark", evidencia_saida: "relatório", decisao_habilitada: "ADR-004", criterio_encerramento: "resposta ou timebox"},
+                fontes: ["adr/ADR-002-nosql"], work_item_type: "historia", story_type: "spike", subclassification: "exploracao", nature: "pesquisa", specialty: "arquitetura",
+                contexto_negocio: "", contexto_fontes: [],
+                criterios_aceite: [{texto: "relatório comparativo publicado", fontes: ["inferência"]}],
+                cenarios: [{titulo: "Comparação concluída", dado: ["os dois bancos instalados"], quando: ["o benchmark roda"], entao: ["o relatório compara latência e custo"], criterios: ["CA1"], fontes: ["inferência"]}],
+                regras_negocio: [], definition_of_done: [], dependencias_impedimentos: [], fora_escopo: [],
+                exemplo_uso: "", exemplo_fontes: [],
+                rastreabilidade: {requisitos: [], atributos: [], adrs: ["ADR-002"], entidades: [], conteineres: []},
+                contratos: {endpoints: [], eventos: []}, contratos_fontes: [],
+                gaps: [], questoes_abertas: [],
+            }
+        })
+        is_true(run.ok)
+        var page = run.vars.preview_html
+        is_true(page.contains("<strong>Pergunta de investigação:</strong> MongoDB ou EventStoreDB?"))
+        is_true(page.contains("<strong>Timebox:</strong> 2 dias"))
+        is_true(page.contains("<h2>Cenários de Aceite</h2>"))
+        is_true(page.contains("@CA1"))
+        is_true(page.contains("Cenário: Comparação concluída"))
+        is_true(!page.contains("Conformidade da especificação"))
+    }
+
+    describe incoherent_feature_is_flagged {
+        var run = ArtifactPreview.run(inputs: {
+            artifact: "feature",
+            data: {
+                tipo_item: "enabler", subtipo_enabler: "nao_aplicavel", classificacao_fontes: ["x"], hipotese_beneficio: "x", hipotese_beneficio_fontes: ["x"],
+                itens_habilitados: [], resumo: "x", resumo_fontes: ["x"], objetivo: "x", objetivo_fontes: ["x"], personas: [], em_escopo: [], fora_escopo: [],
+                regras_negocio: [], interacoes_entidades_dados: [], criterios_aceite: [{texto: "x", fontes: ["x"]}], historias_propostas: [],
+                dependencias_integridade: [], dependencias_sistema: [], gaps: [], questoes_abertas: [],
+            }
+        })
+        is_true(run.ok)
+        is_true(run.vars.preview_html.contains("Enabler sem subtipo"))
+        is_true(run.vars.preview_html.contains("Enabler sem itens habilitados"))
+    }
+
+    describe auto_review_note_is_shown {
+        var run = ArtifactPreview.run(inputs: {
+            artifact: "der",
+            data: {
+                modo: "greenfield", nivel: "conceitual", contexto: "x", contexto_fontes: ["requisitos"], areas: [],
+                entidades: [{id: "a", nome: "A", tipo: "forte", area: "", descricao: "", fontes: ["x"]}],
+                atributos: [], relacionamentos: [], delta_modelo: [], gaps: [], questoes_abertas: [],
+                autorrevisao: {tentada: true, aplicada: true, avisos_antes: 4, avisos_depois: 1},
+            }
+        })
+        is_true(run.ok)
+        is_true(run.vars.preview_html.contains("Revisado automaticamente: 4 aviso(s) na geração → 1 depois da revisão."))
     }
 
     describe decisao_item_renders_standalone_with_its_own_title {

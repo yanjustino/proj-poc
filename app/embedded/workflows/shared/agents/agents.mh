@@ -87,6 +87,7 @@ export agent Claude {
         "Leia o conteúdo abaixo e responda exatamente como ele pede.",
         "--output-format", "json",
         "--json-schema", "${schema}",
+        "--model", env("SENPAI_CLAUDE_MODEL", "sonnet"),
         "--disallowed-tools", "Bash,Read,Write,Edit,MultiEdit,NotebookEdit,WebFetch,WebSearch,Glob,Grep,Task"
     ]
     stdin: "${prompt}"
@@ -144,6 +145,7 @@ export agent Codex {
         "--ignore-user-config",
         "--ignore-rules",
         "--color", "never",
+        "--model", env("SENPAI_CODEX_MODEL", "gpt-5.6-luna"),
         "--json",
         "--output-schema", "${schema}",
         "-"

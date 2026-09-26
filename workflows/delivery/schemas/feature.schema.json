@@ -3,53 +3,317 @@
     "sourcedText": {
       "type": "object",
       "additionalProperties": false,
-      "required": ["texto", "fontes"],
+      "required": [
+        "texto",
+        "fontes"
+      ],
       "properties": {
-        "texto": {"type": "string"},
-        "fontes": {"type": "array", "items": {"type": "string"}, "minItems": 1}
+        "texto": {
+          "type": "string"
+        },
+        "fontes": {
+          "type": "array",
+          "items": {
+            "type": "string"
+          },
+          "minItems": 1
+        }
       }
     },
     "persona": {
       "type": "object",
       "additionalProperties": false,
-      "required": ["persona", "papel", "interacao", "fontes"],
+      "required": [
+        "persona",
+        "papel",
+        "interacao",
+        "fontes"
+      ],
       "properties": {
-        "persona": {"type": "string"},
-        "papel": {"type": "string"},
-        "interacao": {"type": "string"},
-        "fontes": {"type": "array", "items": {"type": "string"}, "minItems": 1}
+        "persona": {
+          "type": "string"
+        },
+        "papel": {
+          "type": "string"
+        },
+        "interacao": {
+          "type": "string"
+        },
+        "fontes": {
+          "type": "array",
+          "items": {
+            "type": "string"
+          },
+          "minItems": 1
+        }
+      }
+    },
+    "mudancaText": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": [
+        "texto",
+        "mudanca",
+        "fontes"
+      ],
+      "properties": {
+        "texto": {
+          "type": "string"
+        },
+        "mudanca": {
+          "type": "string",
+          "enum": [
+            "novo",
+            "modificado",
+            "as_is",
+            "removido"
+          ],
+          "description": "novo: criado por este item; modificado: altera algo existente; as_is: já existe e só é referenciado; removido: deixa de existir."
+        },
+        "fontes": {
+          "type": "array",
+          "items": {
+            "type": "string"
+          },
+          "minItems": 1
+        }
+      }
+    },
+    "proposta": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": [
+        "tipo",
+        "titulo",
+        "resultado",
+        "fontes"
+      ],
+      "properties": {
+        "tipo": {
+          "type": "string",
+          "enum": [
+            "historia_usuario",
+            "historia_habilitadora",
+            "spike"
+          ]
+        },
+        "titulo": {
+          "type": "string"
+        },
+        "resultado": {
+          "type": "string",
+          "description": "O resultado observável que a história entrega."
+        },
+        "fontes": {
+          "type": "array",
+          "items": {
+            "type": "string"
+          },
+          "minItems": 1
+        }
+      }
+    },
+    "medicao": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": [
+        "metrica",
+        "baseline",
+        "meta",
+        "janela",
+        "guardrails",
+        "fontes"
+      ],
+      "description": "Como verificar a hipótese de benefício depois da entrega.",
+      "properties": {
+        "metrica": {
+          "type": "string",
+          "description": "O indicador que muda (ex.: taxa de conversão do onboarding). Para enabler: o indicador técnico ou de risco (ex.: lead time de deploy, incidentes de segurança)."
+        },
+        "baseline": {
+          "type": "string",
+          "description": "Valor atual; vazio (com lacuna registrada em gaps) quando desconhecido."
+        },
+        "meta": {
+          "type": "string",
+          "description": "Valor esperado depois da entrega."
+        },
+        "janela": {
+          "type": "string",
+          "description": "Quando medir (ex.: 30 dias após o lançamento)."
+        },
+        "guardrails": {
+          "type": "array",
+          "items": {
+            "type": "string"
+          },
+          "description": "Indicadores que não podem piorar (ex.: taxa de erro, tempo de resposta)."
+        },
+        "fontes": {
+          "type": "array",
+          "items": {
+            "type": "string"
+          }
+        }
       }
     }
   },
   "type": "object",
   "additionalProperties": false,
   "required": [
-    "tipo_item", "subtipo_enabler", "classificacao_fontes", "hipotese_beneficio", "hipotese_beneficio_fontes", "itens_habilitados",
-    "resumo", "resumo_fontes", "objetivo", "objetivo_fontes", "personas", "em_escopo", "fora_escopo",
-    "regras_negocio", "interacoes_entidades_dados", "criterios_aceite", "historias_propostas",
-    "dependencias_integridade", "dependencias_sistema", "gaps", "questoes_abertas"
+    "tipo_item",
+    "subtipo_enabler",
+    "classificacao_fontes",
+    "hipotese_beneficio",
+    "hipotese_beneficio_fontes",
+    "medicao_beneficio",
+    "itens_habilitados",
+    "resumo",
+    "resumo_fontes",
+    "objetivo",
+    "objetivo_fontes",
+    "personas",
+    "em_escopo",
+    "fora_escopo",
+    "regras_negocio",
+    "interacoes_entidades_dados",
+    "criterios_aceite",
+    "historias_propostas",
+    "dependencias_integridade",
+    "dependencias_sistema",
+    "gaps",
+    "questoes_abertas"
   ],
   "properties": {
-    "tipo_item": {"type": "string", "enum": ["feature_negocio", "enabler"]},
-    "subtipo_enabler": {"type": "string", "enum": ["nao_aplicavel", "exploracao", "arquitetura", "infraestrutura", "conformidade"]},
-    "classificacao_fontes": {"type": "array", "items": {"type": "string"}, "minItems": 1},
-    "hipotese_beneficio": {"type": "string"},
-    "hipotese_beneficio_fontes": {"type": "array", "items": {"type": "string"}, "minItems": 1},
-    "itens_habilitados": {"type": "array", "items": {"$ref": "#/$defs/sourcedText"}},
-    "resumo": {"type": "string"},
-    "resumo_fontes": {"type": "array", "items": {"type": "string"}, "minItems": 1},
-    "objetivo": {"type": "string"},
-    "objetivo_fontes": {"type": "array", "items": {"type": "string"}, "minItems": 1},
-    "personas": {"type": "array", "items": {"$ref": "#/$defs/persona"}},
-    "em_escopo": {"type": "array", "items": {"$ref": "#/$defs/sourcedText"}},
-    "fora_escopo": {"type": "array", "items": {"$ref": "#/$defs/sourcedText"}},
-    "regras_negocio": {"type": "array", "items": {"$ref": "#/$defs/sourcedText"}},
-    "interacoes_entidades_dados": {"type": "array", "items": {"$ref": "#/$defs/sourcedText"}},
-    "criterios_aceite": {"type": "array", "minItems": 1, "items": {"$ref": "#/$defs/sourcedText"}},
-    "historias_propostas": {"type": "array", "items": {"$ref": "#/$defs/sourcedText"}},
-    "dependencias_integridade": {"type": "array", "items": {"$ref": "#/$defs/sourcedText"}},
-    "dependencias_sistema": {"type": "array", "items": {"$ref": "#/$defs/sourcedText"}},
-    "gaps": {"type": "array", "items": {"$ref": "#/$defs/sourcedText"}},
-    "questoes_abertas": {"type": "array", "items": {"$ref": "#/$defs/sourcedText"}}
+    "tipo_item": {
+      "type": "string",
+      "enum": [
+        "feature_negocio",
+        "enabler"
+      ]
+    },
+    "subtipo_enabler": {
+      "type": "string",
+      "enum": [
+        "nao_aplicavel",
+        "exploracao",
+        "arquitetura",
+        "infraestrutura",
+        "conformidade"
+      ]
+    },
+    "classificacao_fontes": {
+      "type": "array",
+      "items": {
+        "type": "string"
+      },
+      "minItems": 1
+    },
+    "hipotese_beneficio": {
+      "type": "string"
+    },
+    "hipotese_beneficio_fontes": {
+      "type": "array",
+      "items": {
+        "type": "string"
+      },
+      "minItems": 1
+    },
+    "medicao_beneficio": {
+      "$ref": "#/$defs/medicao"
+    },
+    "itens_habilitados": {
+      "type": "array",
+      "items": {
+        "$ref": "#/$defs/sourcedText"
+      }
+    },
+    "resumo": {
+      "type": "string"
+    },
+    "resumo_fontes": {
+      "type": "array",
+      "items": {
+        "type": "string"
+      },
+      "minItems": 1
+    },
+    "objetivo": {
+      "type": "string"
+    },
+    "objetivo_fontes": {
+      "type": "array",
+      "items": {
+        "type": "string"
+      },
+      "minItems": 1
+    },
+    "personas": {
+      "type": "array",
+      "items": {
+        "$ref": "#/$defs/persona"
+      }
+    },
+    "em_escopo": {
+      "type": "array",
+      "items": {
+        "$ref": "#/$defs/mudancaText"
+      }
+    },
+    "fora_escopo": {
+      "type": "array",
+      "items": {
+        "$ref": "#/$defs/sourcedText"
+      }
+    },
+    "regras_negocio": {
+      "type": "array",
+      "items": {
+        "$ref": "#/$defs/mudancaText"
+      }
+    },
+    "interacoes_entidades_dados": {
+      "type": "array",
+      "items": {
+        "$ref": "#/$defs/mudancaText"
+      }
+    },
+    "criterios_aceite": {
+      "type": "array",
+      "minItems": 1,
+      "items": {
+        "$ref": "#/$defs/sourcedText"
+      }
+    },
+    "historias_propostas": {
+      "type": "array",
+      "items": {
+        "$ref": "#/$defs/proposta"
+      }
+    },
+    "dependencias_integridade": {
+      "type": "array",
+      "items": {
+        "$ref": "#/$defs/sourcedText"
+      }
+    },
+    "dependencias_sistema": {
+      "type": "array",
+      "items": {
+        "$ref": "#/$defs/mudancaText"
+      }
+    },
+    "gaps": {
+      "type": "array",
+      "items": {
+        "$ref": "#/$defs/sourcedText"
+      }
+    },
+    "questoes_abertas": {
+      "type": "array",
+      "items": {
+        "$ref": "#/$defs/sourcedText"
+      }
+    }
   }
 }
