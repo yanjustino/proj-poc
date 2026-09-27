@@ -366,7 +366,7 @@ workflow Delivery {
         var requisitos_content = Context.artifact(project_id, "requisitos.html")
         if (requisitos_content.is_empty()) fail("gere 'requisitos' antes de 'der'")
         // Contexto opcional — ver o comentario de DerInstruction.
-        var adr_content = Context.artifact_dir(project_id, "adr")
+        var adr_content = Context.adr_context(project_id)
         if (adr_content.is_empty()) adr_content = NoAdr.placeholder()
         var review = AutoReview.generate(
             enabled: autorrevisao,
@@ -407,7 +407,7 @@ workflow Delivery {
         current_artifact = "diagramas"
         var requisitos_content = Context.artifact(project_id, "requisitos.html")
         if (requisitos_content.is_empty()) fail("gere 'requisitos' antes de 'diagramas'")
-        var adr_content = Context.artifact_dir(project_id, "adr")
+        var adr_content = Context.adr_context(project_id)
         if (adr_content.is_empty()) adr_content = NoAdr.placeholder()
         var review = AutoReview.generate(
             enabled: autorrevisao,
@@ -464,7 +464,7 @@ workflow Delivery {
         var requisitos_content = Context.artifact(project_id, "requisitos.html")
         if (requisitos_content.is_empty()) fail("gere 'requisitos' antes de '" + mode + "'")
 
-        var adr_content = Context.artifact_dir(project_id, "adr")
+        var adr_content = Context.adr_context(project_id)
         if (adr_content.is_empty()) adr_content = "(não gerado para este projeto)"
         var der_content = Context.artifact(project_id, "der.html")
         if (der_content.is_empty()) der_content = "(não gerado para este projeto)"

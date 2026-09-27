@@ -821,6 +821,22 @@ export async function renderArtefatosTab(container, project, { onChanged }) {
     return `<span class="dor-badge dor-${r.status}" title="${escapeAttribute(title)}">${escapeHtml(DOR_LABEL[r.status])}</span>`;
   }
 
+  // dorReasonsHtml: the same bloqueios/ressalvas dorBadgeHtml already puts in
+  // its `title` — spelled out as a visible list instead of hover-only text.
+  // A card/table row has no room for this (dorBadgeHtml's tooltip stays the
+  // only affordance there), but the reading pane's dev-files bar does, and
+  // that's exactly where someone opens a história to find out why it's
+  // "Não pronta"/"Com ressalvas" in the first place — a hint that only shows
+  // up on hover is easy to never notice is even there.
+  function dorReasonsHtml(r) {
+    if (!r || (r.bloqueios.length === 0 && r.ressalvas.length === 0)) return '';
+    const items = [
+      ...r.bloqueios.map((b) => `<li class="dor-reason-bloqueio">${escapeHtml(b)}</li>`),
+      ...r.ressalvas.map((x) => `<li class="dor-reason-ressalva">${escapeHtml(x)}</li>`),
+    ].join('');
+    return `<ul class="dor-reasons">${items}</ul>`;
+  }
+
   function updateHandoffControls() {
     const stories = [...readiness.values()];
     handoffButton.hidden = stories.length === 0;
@@ -1854,9 +1870,12 @@ export async function renderArtefatosTab(container, project, { onChanged }) {
     const files = ['openapi.json', 'asyncapi.json', 'historia.feature', 'plano.html'];
     const present = files.filter((f) => (row.devFiles || []).includes(f));
     bar.innerHTML = `
-      <span class="dev-files-title">Arquivos para desenvolvimento</span>
-      ${dorBadgeHtml(r)}
-      ${present.length ? present.map((f) => `<button class="button tertiary small" data-dev-file="${escapeAttribute(f)}">${icon('download', 12)} ${escapeHtml(f)}</button>`).join('') : '<span class="dev-files-empty">Nenhum arquivo gerado — regere a história (e gere o plano).</span>'}
+      <div class="dev-files-bar-row">
+        <span class="dev-files-title">Arquivos para desenvolvimento</span>
+        ${dorBadgeHtml(r)}
+        ${present.length ? present.map((f) => `<button class="button tertiary small" data-dev-file="${escapeAttribute(f)}">${icon('download', 12)} ${escapeHtml(f)}</button>`).join('') : '<span class="dev-files-empty">Nenhum arquivo gerado — regere a história (e gere o plano).</span>'}
+      </div>
+      ${dorReasonsHtml(r)}
     `;
     bar.querySelectorAll('[data-dev-file]').forEach((button) => {
       button.addEventListener('click', async () => {

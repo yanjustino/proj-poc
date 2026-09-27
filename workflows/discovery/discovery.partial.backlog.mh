@@ -82,8 +82,9 @@ partial workflow Discovery {
 
         var atributos_content = Context.artifact(project_id, "atributos.html")
         if (atributos_content.is_empty()) fail("gere 'atributos' antes de 'features'")
+        requisitos_content = Context.dedupe_shared_fields(atributos_content, requisitos_content)
 
-        var adr_content = Context.artifact_dir(project_id, "adr")
+        var adr_content = Context.adr_context(project_id)
         if (adr_content.is_empty()) fail("gere 'adr' antes de 'features'")
 
         var der_content = Context.artifact(project_id, "der.html")

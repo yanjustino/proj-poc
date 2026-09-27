@@ -29,6 +29,7 @@ partial workflow Discovery {
         if (requisitos_content.is_empty()) fail("gere 'requisitos' antes de 'adr'")
         var atributos_content = Context.artifact(project_id, "atributos.html")
         if (atributos_content.is_empty()) fail("gere 'atributos' antes de 'adr'")
+        requisitos_content = Context.dedupe_shared_fields(atributos_content, requisitos_content)
 
         var response = Writer.generate(
             prompt: AdrInstruction(
@@ -89,10 +90,11 @@ partial workflow Discovery {
         if (requisitos_content.is_empty()) fail("gere 'requisitos' antes de 'der'")
         var atributos_content = Context.artifact(project_id, "atributos.html")
         if (atributos_content.is_empty()) fail("gere 'atributos' antes de 'der'")
+        requisitos_content = Context.dedupe_shared_fields(atributos_content, requisitos_content)
         // No Discovery as ADRs sao dependencia: o nivel do DER (fisico so com
         // banco escolhido; conceitual para armazenamento nao relacional)
         // depende delas — ver o comentario de DerInstruction.
-        var adr_content = Context.artifact_dir(project_id, "adr")
+        var adr_content = Context.adr_context(project_id)
         if (adr_content.is_empty()) fail("gere 'adr' antes de 'der'")
         var review = AutoReview.generate(
             enabled: autorrevisao,
@@ -137,10 +139,11 @@ partial workflow Discovery {
         if (requisitos_content.is_empty()) fail("gere 'requisitos' antes de 'diagramas'")
         var atributos_content = Context.artifact(project_id, "atributos.html")
         if (atributos_content.is_empty()) fail("gere 'atributos' antes de 'diagramas'")
+        requisitos_content = Context.dedupe_shared_fields(atributos_content, requisitos_content)
         // No Discovery as ADRs sao dependencia: tecnologias dos conteineres e
         // o diagrama de implantacao saem delas — ver o comentario de
         // DiagramasInstruction.
-        var adr_content = Context.artifact_dir(project_id, "adr")
+        var adr_content = Context.adr_context(project_id)
         if (adr_content.is_empty()) fail("gere 'adr' antes de 'diagramas'")
 
         var review = AutoReview.generate(

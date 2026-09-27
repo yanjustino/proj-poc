@@ -32,6 +32,61 @@ export tool Context {
     artifact_dir(project_id: string, relative_dir: string): string ->
         DirText.concat_artifacts(Paths.artifact(project_id, relative_dir), Paths.artifacts_dir(project_id))
 
+    // adr_context: mesma concatenacao que artifact_dir(project_id, "adr")
+    // faria, mas projeta cada decisao so nos campos que quem CONSOME a
+    // decisao ja tomada (DER, Diagramas, Features/Historia — nunca a propria
+    // ADR, que nao se le como predecessora dela mesma) de fato usa: o que
+    // foi decidido, por que, e as consequencias reais. Fica de fora
+    // `fatores_decisao`, `opcoes_consideradas` e `opcoes_pros_contras` — o
+    // historico de "o que foi avaliado e por que perdeu", que so importa
+    // dentro do proprio documento de ADR. Confirmado nos proprios prompts
+    // (der.prompt.md, diagramas.prompt.md): as instrucoes sempre falam da
+    // decisao ja tomada ("uma ADR ja escolheu um banco relacional"), nunca
+    // de comparar opcoes rejeitadas — e a convencao de citacao so cita uma
+    // ADR inteira pelo nome do arquivo (ex. "adr/ADR-001-titulo"), nunca um
+    // subcampo dela, entao nada aqui perde capacidade de citacao. Medido em
+    // ADRs reais de um work-item: so opcoes_pros_contras ja e ~43% do JSON
+    // de cada ADR, a maior fatia de longe (61,8% de reducao no total ao
+    // remover os tres campos). Um item cujo JSON nao dá parse (formato
+    // inesperado) entra por extenso em vez de arriscar perder conteudo.
+    adr_context(project_id: string): string -> {
+        var dir_path = Paths.artifact(project_id, "adr")
+        if (!dir.exists(dir_path)) return ""
+        var base_dir = Paths.artifacts_dir(project_id)
+        var out = ""
+        for (var file_path in dir.list(dir_path)) {
+            if (file_path.ends_with(".json")) {
+                var html_path = file_path.substring(0, file_path.size() - 5) + ".html"
+                if (fs.exists(html_path)) {
+                    var label = file_path.replace(base_dir + "/", "").replace(".json", "")
+                    var content = fs.read(file_path)
+                    try {
+                        var data = json.parse(content)
+                        content = json.stringify({
+                            titulo: data.get("titulo", null),
+                            status: data.get("status", null),
+                            contexto_e_problema: data.get("contexto_e_problema", null),
+                            contexto_fontes: data.get("contexto_fontes", null),
+                            decisao_final: data.get("decisao_final", null),
+                            consequencias_positivas: data.get("consequencias_positivas", null),
+                            consequencias_negativas: data.get("consequencias_negativas", null),
+                        })
+                    } catch (err) {
+                        // mantem o JSON cru se o parse falhar
+                    }
+                    out = out + "\n\n---\n\n# " + label + "\n\n" + content
+                }
+            } else if (file_path.ends_with(".html")) {
+                var json_path = file_path.substring(0, file_path.size() - 5) + ".json"
+                if (!fs.exists(json_path)) {
+                    var label = file_path.replace(base_dir + "/", "").replace(".html", "")
+                    out = out + "\n\n---\n\n# " + label + "\n\n" + DirText.body_only(fs.read(file_path))
+                }
+            }
+        }
+        return out
+    }
+
     // Mesma coisa que artifact_dir, mas para um predecessor que e uma PASTA
     // DE PASTAS — cada subpasta com seu proprio item_file dentro (ex.
     // "features/FT001-slug/feature.html", "historias/FT001-slug/US001-
@@ -52,6 +107,40 @@ export tool Context {
             if (!content.is_empty()) out = out + "\n\n---\n\n# " + relative_dir + "/" + name + "\n\n" + content
         }
         return out
+    }
+
+    // dedupe_shared_fields: atributos e requisitos (Discovery) declaram, cada
+    // um por conta própria, os mesmos campos de nível-oportunidade
+    // (`exclusoes`, `perguntas_abertas`) — ambos são gerados a partir da
+    // mesma wiki/brief e tendem a restatar exatamente a mesma lista. Medido
+    // numa geração real: os dois arrays saíam byte a byte idênticos. Como
+    // ADR/DER/Diagramas/Features recebem os dois artefatos inteiros lado a
+    // lado no mesmo prompt (Context.artifact não filtra nada), essa
+    // duplicata vai para o modelo duas vezes sem nenhuma informação nova.
+    // Zera o campo em `requisitos_json` (mantém em `atributos_content`,
+    // textualmente o primeiro dos dois no prompt) só quando os dois valores
+    // são exatamente iguais — `contexto`, `contexto_fontes` e `gaps`
+    // legitimamente divergem entre os dois artefatos (cada um cita
+    // fontes/gaps próprios) e nunca são tocados aqui. Falha fechado: um JSON
+    // inválido em qualquer um dos dois devolve `requisitos_json` sem
+    // alteração — nunca perde conteúdo por causa de um parse que deu errado.
+    dedupe_shared_fields(atributos_json: string, requisitos_json: string): string -> {
+        if (atributos_json.is_empty() || requisitos_json.is_empty()) return requisitos_json
+        try {
+            var atributos = json.parse(atributos_json)
+            var requisitos = json.parse(requisitos_json)
+            var changed = false
+            for (var field in ["exclusoes", "perguntas_abertas"]) {
+                var shared = atributos.get(field, null)
+                if (shared != null && shared == requisitos.get(field, null)) {
+                    requisitos[field] = []
+                    changed = true
+                }
+            }
+            return if (changed) json.stringify(requisitos) else requisitos_json
+        } catch (err) {
+            return requisitos_json
+        }
     }
 }
 
@@ -105,6 +194,105 @@ test ContextSpec {
 
         dir.delete(base + "/FT001-a")
         dir.delete(base)
+        dir.delete(Paths.artifacts_dir(project_id))
+        dir.delete(Paths.root(project_id))
+    }
+
+    describe dedupe_shared_fields_zeroes_a_requisitos_field_thats_byte_identical_to_atributos {
+        var atributos = json.stringify({
+            contexto: "resumo dos atributos",
+            exclusoes: [{texto: "recomendação personalizada"}],
+            perguntas_abertas: [{texto: "modelo de cálculo de IOF"}],
+        })
+        var requisitos = json.stringify({
+            contexto: "resumo dos requisitos",
+            exclusoes: [{texto: "recomendação personalizada"}],
+            perguntas_abertas: [{texto: "modelo de cálculo de IOF"}],
+            gaps: [{texto: "gap só do requisitos"}],
+        })
+        var result = json.parse(Context.dedupe_shared_fields(atributos, requisitos))
+        are_equal(result.exclusoes, [])
+        are_equal(result.perguntas_abertas, [])
+        // contexto e gaps nunca sao tocados, mesmo quando so existem num dos dois.
+        are_equal(result.contexto, "resumo dos requisitos")
+        are_equal(result.gaps, [{texto: "gap só do requisitos"}])
+    }
+
+    describe dedupe_shared_fields_keeps_a_field_that_genuinely_differs_between_the_two {
+        var atributos = json.stringify({exclusoes: [{texto: "só dos atributos"}], perguntas_abertas: []})
+        var requisitos = json.stringify({exclusoes: [{texto: "só do requisitos"}], perguntas_abertas: []})
+        var result = json.parse(Context.dedupe_shared_fields(atributos, requisitos))
+        are_equal(result.exclusoes, [{texto: "só do requisitos"}])
+    }
+
+    describe dedupe_shared_fields_returns_requisitos_unchanged_when_nothing_matches {
+        var requisitos = json.stringify({exclusoes: [{texto: "único"}]})
+        are_equal(Context.dedupe_shared_fields(json.stringify({exclusoes: [{texto: "outro"}]}), requisitos), requisitos)
+    }
+
+    describe dedupe_shared_fields_fails_closed_on_invalid_json {
+        are_equal(Context.dedupe_shared_fields("not json", "{\"exclusoes\":[]}"), "{\"exclusoes\":[]}")
+        are_equal(Context.dedupe_shared_fields("{\"exclusoes\":[]}", "not json"), "not json")
+    }
+
+    describe dedupe_shared_fields_is_a_no_op_for_empty_inputs {
+        are_equal(Context.dedupe_shared_fields("", "{\"exclusoes\":[]}"), "{\"exclusoes\":[]}")
+        are_equal(Context.dedupe_shared_fields("{\"exclusoes\":[]}", ""), "")
+    }
+
+    describe adr_context_projects_each_decision_to_only_the_downstream_relevant_fields {
+        var project_id = "spec-test-context-adr-slim"
+        var adr_dir = Paths.artifact(project_id, "adr")
+        dir.create(adr_dir)
+        fs.write(adr_dir + "/ADR-001-titulo.json", json.stringify({
+            titulo: "Usar Postgres",
+            status: "aceita",
+            contexto_e_problema: "Qual banco usar?",
+            contexto_fontes: ["requisitos/FR-001"],
+            fatores_decisao: [{texto: "peso descartável", fontes: ["gap"]}],
+            opcoes_consideradas: ["Postgres", "MySQL"],
+            decisao_final: {opcao_escolhida: "Postgres", justificativa: "equipe conhece", fontes: ["gap"]},
+            consequencias_positivas: [{texto: "familiaridade", fontes: ["gap"]}],
+            consequencias_negativas: [{texto: "custo", fontes: ["gap"]}],
+            opcoes_pros_contras: [{opcao: "Postgres", pros: [{texto: "descartável", fontes: ["gap"]}], contras: [{texto: "descartável", fontes: ["gap"]}]}],
+            links: [],
+        }))
+        fs.write(adr_dir + "/ADR-001-titulo.html", "<html><body>ADR-001</body></html>")
+
+        var out = Context.adr_context(project_id)
+
+        is_true(out.contains("adr/ADR-001-titulo"))
+        is_true(out.contains("Usar Postgres"))
+        is_true(out.contains("equipe conhece"))
+        is_true(out.contains("familiaridade"))
+        is_true(!out.contains("fatores_decisao"))
+        is_true(!out.contains("opcoes_consideradas"))
+        is_true(!out.contains("opcoes_pros_contras"))
+        is_true(!out.contains("descartável"))
+
+        fs.delete(adr_dir + "/ADR-001-titulo.json")
+        fs.delete(adr_dir + "/ADR-001-titulo.html")
+        dir.delete(adr_dir)
+        dir.delete(Paths.artifacts_dir(project_id))
+        dir.delete(Paths.root(project_id))
+    }
+
+    describe adr_context_is_empty_for_a_missing_directory {
+        are_equal(Context.adr_context("spec-test-context-adr-nonexistent"), "")
+    }
+
+    describe adr_context_falls_back_to_the_full_body_for_an_adr_without_json {
+        var project_id = "spec-test-context-adr-legacy"
+        var adr_dir = Paths.artifact(project_id, "adr")
+        dir.create(adr_dir)
+        fs.write(adr_dir + "/ADR-002-legado.html", "<html><body>ADR legado completo</body></html>")
+
+        var out = Context.adr_context(project_id)
+        is_true(out.contains("ADR legado completo"))
+        is_true(out.contains("adr/ADR-002-legado"))
+
+        fs.delete(adr_dir + "/ADR-002-legado.html")
+        dir.delete(adr_dir)
         dir.delete(Paths.artifacts_dir(project_id))
         dir.delete(Paths.root(project_id))
     }

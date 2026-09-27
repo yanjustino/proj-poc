@@ -412,16 +412,28 @@ body.pane-resizing iframe { pointer-events: none; }
 .artifact-card-classification.enabler { background: #eeebff; color: #6551af; }
 .data-row-classification { white-space: nowrap; }
 /* Definition of Ready de uma história (readiness.mh) — selo na lista e na
-   barra "Arquivos para desenvolvimento"; os motivos ficam no tooltip. */
+   barra "Arquivos para desenvolvimento". Na lista/card o tooltip do badge
+   continua sendo a única pista (sem espaço pra mais); na barra, que tem
+   espaço de sobra, os motivos (.dor-reasons) ficam escritos por extenso —
+   um hover não é uma pista confiável quando é a única forma de saber por
+   que uma história está "Não pronta". */
 .dor-badge { display: inline-flex; align-items: center; margin: 4px 0 0 6px; padding: 2px 8px; border-radius: 999px; font: 600 10px var(--sans); white-space: nowrap; }
 .dor-badge.dor-pronta { background: #e5f5eb; color: #28724e; }
 .dor-badge.dor-pronta_com_ressalvas { background: rgba(210,139,38,.14); color: var(--amber); }
 .dor-badge.dor-nao_pronta { background: rgba(200,58,55,.12); color: var(--red); }
 .dor-summary { font: 500 11px var(--mono); color: var(--muted); white-space: nowrap; }
-.dev-files-bar { display: flex; flex-wrap: wrap; align-items: center; gap: 6px 8px; padding: 8px 0 10px; border-bottom: 1px solid var(--line); margin-bottom: 10px; }
+.dev-files-bar { display: flex; flex-direction: column; gap: 8px; padding: 8px 0 10px; border-bottom: 1px solid var(--line); margin-bottom: 10px; }
+.dev-files-bar-row { display: flex; flex-wrap: wrap; align-items: center; gap: 6px 8px; }
 .dev-files-title { font: 600 11px var(--sans); color: var(--ink); text-transform: uppercase; letter-spacing: .04em; }
 .dev-files-bar .dor-badge { margin: 0; }
 .dev-files-empty { font-size: 11px; color: var(--muted); }
+.dor-reasons { margin: 0; padding: 0; list-style: none; display: flex; flex-direction: column; gap: 4px; }
+.dor-reasons li { position: relative; padding-left: 16px; font-size: 11px; line-height: 1.5; }
+.dor-reasons li::before { position: absolute; left: 0; }
+.dor-reason-bloqueio { color: var(--red); }
+.dor-reason-bloqueio::before { content: "✗"; }
+.dor-reason-ressalva { color: var(--amber); }
+.dor-reason-ressalva::before { content: "•"; }
 .artifact-card-foot { min-height: 38px; display: flex; align-items: center; gap: 7px; margin: 0 15px; padding: 10px 0 12px; color: var(--muted); font: 500 9px var(--mono); border-top: 1px solid #f0eee8; }
 /* .artifact-card-foot-actions: groups whichever of Exportar/Atualizar/Gerar
    apply to this row and pushes the group as a whole to the right — the
