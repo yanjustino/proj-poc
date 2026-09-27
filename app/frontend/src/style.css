@@ -278,16 +278,18 @@ body.pane-resizing iframe { pointer-events: none; }
 .artifact-map-title span { padding: 3px 8px; border-radius: 999px; background: var(--surface-3); color: var(--muted); font: 10px var(--mono); }
 .artifact-map-head p { margin: 5px 0 0; color: var(--muted); font-size: 11px; }
 .artifact-map-controls { display: flex; flex-direction: row; align-items: center; flex-wrap: wrap; justify-content: flex-end; gap: 14px; }
-.artifact-filters { display: flex; gap: 5px; }
+.artifact-filters { display: flex; gap: 5px; flex: none; }
 .artifact-filter { border: 1px solid var(--line); background: var(--surface); border-radius: 999px; padding: 6px 9px; color: var(--muted); font-size: 10px; }
-/* Its own row below the header, same treatment as tab-wiki.js's own group
-   tabs (.collection-filters/.wiki-group-filters) — same .artifact-filter
-   pill buttons as the status filter above, not a native <select>, per
-   direct feedback: other screens (Wiki's Fontes/Entidades/Conceitos) filter
-   with buttons, this one should match instead of standing out as a
-   dropdown. overflow-x:auto mirrors those two for the same reason: a
-   work-item with many categories shouldn't force the row to wrap. */
-.artifact-category-filters { display: flex; gap: 5px; margin: 0 0 12px; overflow-x: auto; }
+/* One row above the table, category pills and status pills on opposite
+   sides — same .artifact-filter pill buttons on both sides, not a native
+   <select>, per direct feedback: other screens (Wiki's Fontes/Entidades/
+   Conceitos) filter with buttons, this one should match instead of standing
+   out as a dropdown. overflow-x:auto on the category side mirrors those two
+   for the same reason: a work-item with many categories shouldn't force the
+   whole row to wrap; flex-wrap on the row itself is the fallback for narrow
+   widths where both sides can't fit side by side at all. */
+.artifact-filters-row { display: flex; align-items: center; justify-content: space-between; flex-wrap: wrap; gap: 10px 14px; margin: 0 0 12px; }
+.artifact-category-filters { display: flex; gap: 5px; margin: 0; overflow-x: auto; }
 .artifact-filter:hover { border-color: #c9c5ba; color: var(--ink); }
 .artifact-filter.active { background: var(--ink); border-color: var(--ink); color: var(--surface); }
 /* Cards vs. table — added once a work-item's full artifact volume (Brief,

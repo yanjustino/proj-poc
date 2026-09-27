@@ -59,6 +59,16 @@ const ARTIFACT_DESCRIPTIONS = {
   plano: 'Componentes, dados, fluxo, tarefas e testes para implementar a história.',
 };
 
+// GROUP_DESCRIPTIONS: the card description for a synthetic category-group
+// row (see groupRowFor) — written by hand instead of falling back to
+// ARTIFACT_DESCRIPTIONS[row.entry.artifact] because "Decisões e modelos"
+// combines two different artifacts (ADRs + DER) that no single existing
+// description covers accurately.
+const GROUP_DESCRIPTIONS = {
+  'Decisões e modelos': 'Decisões arquiteturais (ADRs) e o modelo de entidades e relacionamentos (DER) da solução.',
+  Diagramas: 'Visões dos componentes, limites e principais fluxos do sistema.',
+};
+
 const ARTIFACT_ICONS = {
   brief: 'zap', atributos: 'checkCircle', requisitos: 'fileText', adr: 'layers', der: 'inbox',
   diagramas: 'maximize', features: 'layers', dependencias: 'layers', historias: 'fileText', feature: 'layers', historia: 'fileText', plano: 'list',
@@ -93,6 +103,7 @@ function classificationLabelOf(classification) {
 }
 
 function descriptionFor(row) {
+  if (row.isCategoryGroup) return GROUP_DESCRIPTIONS[row.category] || 'Documento gerado a partir do contexto do work-item.';
   if (row.groupKey) return `Documento da coleção ${labelFor(row.entry.artifact)}.`;
   if (row.featureId) return `Histórias vinculadas ao item ${row.featureId}.`;
   if (row.plan) return 'Plano de implementação da história — componentes, tarefas e testes.';
@@ -197,7 +208,6 @@ export async function renderArtefatosTab(container, project, { onChanged }) {
         <p>Explore, gere e revise os documentos deste work-item.</p>
       </div>
       <div class="artifact-map-controls">
-        <button class="button secondary small" data-generate-all-historias hidden title="Cada feature pendente dispara sua própria geração — mhl_run_start é assíncrono e o servidor já roda até 4 runs em paralelo, então isto não é uma fila sequencial.">${icon('layers', 14)} Gerar histórias pendentes</button>
         <span class="dor-summary" data-dor-summary hidden></span>
         <button class="button secondary small" data-handoff hidden title="Gera o pacote de handoff (specs, planos, tarefas, contratos, ADRs e arquitetura) com as histórias prontas e exporta para uma pasta — para levar ao repositório de código.">${icon('layers', 14)} Pacote de handoff</button>
         <button class="button secondary small" data-export-all title="Exportar toda a Wiki e todos os Artefatos">${icon('download', 14)} Exportar tudo</button>
@@ -205,15 +215,17 @@ export async function renderArtefatosTab(container, project, { onChanged }) {
           <button class="view-toggle-btn" data-view="cards" title="Ver como cards">${icon('grid', 15)}</button>
           <button class="view-toggle-btn" data-view="table" title="Ver como tabela">${icon('list', 15)}</button>
         </div>
-        <div class="artifact-filters">
-          <button class="artifact-filter active" data-filter="all">Todos</button>
-          <button class="artifact-filter" data-filter="ready">Prontos</button>
-          <button class="artifact-filter" data-filter="pending">Pendentes</button>
-          <button class="artifact-filter" data-filter="stale">Desatualizados</button>
-        </div>
       </div>
     </div>
-    <div class="artifact-category-filters" data-category-filters></div>
+    <div class="artifact-filters-row">
+      <div class="artifact-category-filters" data-category-filters></div>
+      <div class="artifact-filters">
+        <button class="artifact-filter active" data-filter="all">Todos</button>
+        <button class="artifact-filter" data-filter="ready">Prontos</button>
+        <button class="artifact-filter" data-filter="pending">Pendentes</button>
+        <button class="artifact-filter" data-filter="stale">Desatualizados</button>
+      </div>
+    </div>
     <div class="export-status" data-export-status hidden></div>
     <div class="list-area" data-list></div>
   `;
@@ -226,7 +238,6 @@ export async function renderArtefatosTab(container, project, { onChanged }) {
   const handoffButton = container.querySelector('[data-handoff]');
   const dorSummaryEl = container.querySelector('[data-dor-summary]');
   const exportStatusEl = container.querySelector('[data-export-status]');
-  const generateAllHistoriasButton = container.querySelector('[data-generate-all-historias]');
   const viewButtons = [...container.querySelectorAll('[data-view]')];
   showEmpty('Selecione um artefato para ler ou gerar.');
 
@@ -621,7 +632,80 @@ export async function renderArtefatosTab(container, project, { onChanged }) {
       }
       rows.push(row, ...planChildRows(row));
     }
-    return rows;
+    return groupCategories(rows);
+  }
+
+  // GROUPED_CATEGORIES: categories whose flat, top-level rows collapse
+  // behind one synthetic "<categoria>" parent row (badge shows the item
+  // count) instead of each item showing directly in the top-level list —
+  // same chevron/expand mechanism as a Feature's own histórias
+  // (expandedFeatures, childCounts), just grouping by category instead of by
+  // a single artifact's own sub-items. Requested specifically for "Decisões
+  // e modelos" (ADR-001..N + DER — two different `sequence` entries sharing
+  // one category) and "Diagramas" (one collection entry). Discovery's own
+  // category (Brief/Atributos/Requisitos) and "Backlog da solução"
+  // (Features, already nested one-by-one, plus "Mapa de dependências") are
+  // deliberately left flat — nobody asked to collapse those, and Backlog
+  // already has its own per-feature nesting.
+  const GROUPED_CATEGORIES = new Set(['Decisões e modelos', 'Diagramas']);
+
+  // GROUP_REPRESENTATIVE_ARTIFACT: which existing entry.artifact each
+  // grouped category borrows for its icon/color/description (see
+  // groupRowFor) — reuses ARTIFACT_ICONS/kindClass/ARTIFACT_DESCRIPTIONS'
+  // existing entries instead of a second synthetic dictionary to keep in
+  // sync. "Decisões e modelos" borrows 'adr' (its own kindClass is already
+  // 'decision', same as 'der') rather than a made-up name.
+  const GROUP_REPRESENTATIVE_ARTIFACT = { 'Decisões e modelos': 'adr', Diagramas: 'diagramas' };
+
+  // groupRowFor fabricates the category's own parent row — no real artifact
+  // behind it, never itself done/ready/stale/generatable on its own (see
+  // isRowDone/isRowReady/staleInfoFor's `row.isCategoryGroup` branches and
+  // rowViewModel's `clickable` below); just a label plus a place for
+  // childCounts/expandedFeatures to hang off of, exactly like a Feature row
+  // is for its own histórias.
+  function groupRowFor(category) {
+    return {
+      key: 'group:' + category,
+      label: category,
+      category,
+      entry: { artifact: GROUP_REPRESENTATIVE_ARTIFACT[category], deps: [] },
+      isCategoryGroup: true,
+    };
+  }
+
+  // groupCategories collapses each GROUPED_CATEGORIES category's flat,
+  // top-level, ALREADY-GENERATED rows behind one synthetic group-header row
+  // per category — a post-pass over the already-built flat list, so it
+  // doesn't disturb how adr/der/diagramas are each still constructed as
+  // separate sequence entries above; it only regroups their OUTPUT rows.
+  // Deliberately excludes a row that isn't done yet (isRowDone(row) false —
+  // the collection's own "pronto para gerar"/"depende de..." placeholder,
+  // e.g. before any ADR exists) or is mid-regeneration
+  // (hasActiveGroupRegeneration(row.key) — the flat in-flight row a whole-
+  // batch "Solicitar mudança" replaces its items with, see rowsToRender's
+  // own top branch): either one is exactly the row a user needs to see and
+  // act on directly, not hidden behind a collapsed parent. Already-nested
+  // rows (row.parentKey set, e.g. a feature's histórias) are left untouched
+  // — grouping only ever applies one level up, at the top level.
+  function groupCategories(rows) {
+    const out = [];
+    const groups = new Map(); // category -> its group row, first time it's seen
+    for (const row of rows) {
+      const groupable = !row.parentKey && GROUPED_CATEGORIES.has(row.category) && isRowDone(row) && !hasActiveGroupRegeneration(row.key);
+      if (!groupable) {
+        out.push(row);
+        continue;
+      }
+      let group = groups.get(row.category);
+      if (!group) {
+        group = groupRowFor(row.category);
+        groups.set(row.category, group);
+        out.push(group);
+      }
+      row.parentKey = group.key;
+      out.push(row);
+    }
+    return out;
   }
 
   async function refreshDoneState() {
@@ -801,6 +885,7 @@ export async function renderArtefatosTab(container, project, { onChanged }) {
   }
 
   function isRowDone(row) {
+    if (row.isCategoryGroup) return true; // built only once it has ≥1 done child — see groupCategories
     if (row.groupKey) return true; // expanded item rows only ever exist once their group is done
     if (row.plan) return row.planDone;
     if (row.historiasRow) return true; // nested história rows only exist once committed
@@ -809,6 +894,7 @@ export async function renderArtefatosTab(container, project, { onChanged }) {
   }
 
   function isRowReady(row) {
+    if (row.isCategoryGroup) return true;
     if (row.groupKey || row.historiasRow || row.plan) return true;
     if (row.featureId) return true; // features already done, per rowsToRender's gating
     return isReady(row.entry, doneNames);
@@ -830,6 +916,7 @@ export async function renderArtefatosTab(container, project, { onChanged }) {
       const stale = row.planDone && !Number.isNaN(plan) && !Number.isNaN(historia) && historia - plan > 2000;
       return { stale, staleDeps: stale ? ['historia'] : [] };
     }
+    if (row.isCategoryGroup) return null; // no single staleness verdict for a whole category — its own children carry theirs
     if (row.featureId || row.historiasRow) return null;
     const artifact = row.groupKey || row.entry.artifact;
     return staleness.get(artifact) || null;
@@ -877,17 +964,6 @@ export async function renderArtefatosTab(container, project, { onChanged }) {
     return text;
   }
 
-  // pendingHistoriasRows: every per-feature "Histórias — X" row that's ready
-  // to generate, not generated yet, and not already running — exactly the
-  // set "Gerar histórias pendentes" fires generate() on. Discovery-only
-  // (Delivery's own historias is a single flat row, not one per feature —
-  // see rowsToRender's own comment on why that split exists).
-  function pendingHistoriasRows() {
-    return featureRowsForHistorias()
-      .map(historiasRowFor)
-      .filter((row) => !isRowDone(row) && !trackers.has(row.key));
-  }
-
   // hasPendingHistorias: a Discovery feature row whose histórias haven't
   // been generated yet — counts as "Pendente" in the status filter even
   // though the feature document itself is done, since that's where the
@@ -895,34 +971,6 @@ export async function renderArtefatosTab(container, project, { onChanged }) {
   function hasPendingHistorias(row) {
     return project.level === 'discovery' && row.groupKey === 'features' && Boolean(row.folderName) && !historiasDoneFeatureIds.has(featureIdOf(row.folderName));
   }
-
-  // Each pending row fires its own generate() — its own mhl_run_start, not
-  // one call fanning out internally. That's deliberate, not a stopgap for a
-  // "real" parallel primitive: mhl's `spawn` needs a literal <Agent>.run(...)
-  // at the call site, but Writer.generate (agents.mh) is a tool wrapping
-  // Devin/Claude/Codex behind one adapter — spawn can't reach through that.
-  // mhl_run_start already returns immediately (the LLM call runs server-side
-  // after the response), the server already runs up to 4 runs concurrently
-  // (mhlbridge.go's maxConcurrentRuns), and firing several requests for the
-  // same pipeline at once was a real crash here before — root-caused and
-  // fixed at the transport layer (mhlbridge.go's postRPC), not by queuing
-  // client-side (see appendPausedPreview's own comment) — so N plain
-  // generate() calls already get real concurrent execution without needing
-  // spawn at all.
-  function generateAllPendingHistorias() {
-    const pending = pendingHistoriasRows();
-    if (pending.length === 0) return;
-    selectedKey = pending[0].key;
-    for (const row of pending) generate(row);
-  }
-
-  function updateGenerateAllHistoriasButton() {
-    const pending = pendingHistoriasRows();
-    generateAllHistoriasButton.hidden = pending.length === 0;
-    generateAllHistoriasButton.innerHTML = `${icon('layers', 14)} Gerar histórias pendentes (${pending.length})`;
-  }
-
-  generateAllHistoriasButton.addEventListener('click', generateAllPendingHistorias);
 
   // rowViewModel computes every derived value a rendered row needs (status
   // text/dot, whether it can be generated/exported right now, its card
@@ -948,7 +996,13 @@ export async function renderArtefatosTab(container, project, { onChanged }) {
     // has its own action in the reading pane (Tentar novamente / Aprovar e
     // continuar), right next to the content that explains why.
     const showGenerate = ready && !done && !state;
-    const clickable = ready || done || Boolean(state);
+    // A category group is never itself openable — it has no document of its
+    // own, only children (see groupRowFor) — clicking it should just toggle
+    // expand/collapse (data-toggle), wired independently of data-key/
+    // clickable below; renderList's own selection-fallback guard keeps it
+    // from ever becoming selectedKey on its own, so renderDetail never has
+    // to handle it as "the current row" either.
+    const clickable = !row.isCategoryGroup && (ready || done || Boolean(state));
     const exportPath = done ? row.previewPath || row.entry.path : '';
     const artifactName = row.entry.artifact;
     const kindClass = ['adr', 'der'].includes(artifactName)
@@ -1005,6 +1059,10 @@ export async function renderArtefatosTab(container, project, { onChanged }) {
     return `${count} ${count === 1 ? 'história' : 'histórias'}`;
   }
 
+  function itemCountLabel(count) {
+    return `${count} ${count === 1 ? 'item' : 'itens'}`;
+  }
+
   function generatePlanButtonHtml(row) {
     return `<button class="artifact-card-generate" data-generate-plan="${escapeAttribute(row.key)}" title="Gerar o plano de implementação de ${escapeAttribute(row.label)}">Gerar plano →</button>`;
   }
@@ -1031,7 +1089,7 @@ export async function renderArtefatosTab(container, project, { onChanged }) {
         <footer class="artifact-card-foot">
           <span class="status-dot ${vm.dot}"></span><span>${escapeHtml(vm.statusText)}</span>
           <div class="artifact-card-foot-actions">
-            ${vm.childCount ? `<button class="artifact-card-toggle ${vm.expanded ? 'expanded' : ''}" data-toggle="${escapeAttribute(row.key)}" aria-expanded="${vm.expanded}" title="${vm.expanded ? 'Recolher' : 'Expandir'} histórias">${icon('chevronRight', 12)} ${escapeHtml(vm.historiasCount || row.groupKey === 'features' ? historiasCountLabel(vm.historiasCount || vm.childCount) : 'Plano')}</button>` : ''}
+            ${vm.childCount ? `<button class="artifact-card-toggle ${vm.expanded ? 'expanded' : ''}" data-toggle="${escapeAttribute(row.key)}" aria-expanded="${vm.expanded}" title="${vm.expanded ? 'Recolher' : 'Expandir'} ${row.isCategoryGroup ? 'itens' : 'histórias'}">${icon('chevronRight', 12)} ${escapeHtml(row.isCategoryGroup ? itemCountLabel(vm.childCount) : vm.historiasCount || row.groupKey === 'features' ? historiasCountLabel(vm.historiasCount || vm.childCount) : 'Plano')}</button>` : ''}
             ${vm.canGenerateHistorias ? generateHistoriasButtonHtml(row) : ''}
             ${vm.canGeneratePlan ? generatePlanButtonHtml(row) : ''}
             ${vm.showApprove ? approveButtonHtml(row, vm) : ''}
@@ -1059,14 +1117,14 @@ export async function renderArtefatosTab(container, project, { onChanged }) {
         <td class="data-row-name">
           ${
             vm.childCount
-              ? `<button class="data-row-toggle ${vm.expanded ? 'expanded' : ''}" data-toggle="${escapeAttribute(row.key)}" aria-expanded="${vm.expanded}" title="${vm.expanded ? 'Recolher' : 'Expandir'} histórias">${icon('chevronRight', 12)}</button>`
+              ? `<button class="data-row-toggle ${vm.expanded ? 'expanded' : ''}" data-toggle="${escapeAttribute(row.key)}" aria-expanded="${vm.expanded}" title="${vm.expanded ? 'Recolher' : 'Expandir'} ${row.isCategoryGroup ? 'itens' : 'histórias'}">${icon('chevronRight', 12)}</button>`
               : row.groupKey === 'features' && project.level === 'discovery'
                 ? '<span class="data-row-toggle-spacer"></span>'
                 : ''
           }
           <i>${icon(ARTIFACT_ICONS[vm.artifactName] || 'fileText', 14)}</i>
           <span>${escapeHtml(row.parentKey ? row.nestedLabel || row.label : row.label)}</span>
-          ${vm.historiasCount ? `<span class="data-row-count">${escapeHtml(historiasCountLabel(vm.historiasCount))}</span>` : ''}
+          ${row.isCategoryGroup ? `<span class="data-row-count">${escapeHtml(itemCountLabel(vm.childCount))}</span>` : vm.historiasCount ? `<span class="data-row-count">${escapeHtml(historiasCountLabel(vm.historiasCount))}</span>` : ''}
           ${vm.stale?.stale ? `<span class="artifact-card-stale" title="${escapeAttribute(vm.staleTitle)}">${icon('alertCircle', 12)} Desatualizado</span>` : ''}
         </td>
         <td class="data-row-classification">${vm.classificationLabel ? `<span class="artifact-card-classification ${vm.classification.tipoItem === 'enabler' ? 'enabler' : 'business'}">${escapeHtml(vm.classificationLabel)}</span>` : ''}${dorBadgeHtml(readinessFor(row))}</td>
@@ -1153,10 +1211,15 @@ export async function renderArtefatosTab(container, project, { onChanged }) {
     const visibleRows = filteredRows.filter((row) => !row.parentKey || expandedFeatures.has(row.parentKey));
     // Checked against filteredRows, not visibleRows: a selected história
     // inside a feature the user just collapsed is still a valid selection.
-    if (!selectedKey || !filteredRows.some((r) => r.key === selectedKey)) selectedKey = visibleRows[0]?.key ?? null;
+    // Never falls back onto a category-group row (isCategoryGroup) — it has
+    // no document of its own to show in the reading pane; it's never
+    // clickable either (rowViewModel), so this is the only other path that
+    // could otherwise assign it to selectedKey.
+    if (!selectedKey || !filteredRows.some((r) => r.key === selectedKey)) {
+      selectedKey = visibleRows.find((r) => !r.isCategoryGroup)?.key ?? null;
+    }
     const topLevelCount = rows.filter((row) => !row.parentKey).length;
     countEl.textContent = `${topLevelCount} ${topLevelCount === 1 ? 'item' : 'itens'}`;
-    updateGenerateAllHistoriasButton();
     updateHandoffControls();
 
     if (visibleRows.length === 0) {
