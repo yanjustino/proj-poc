@@ -118,6 +118,10 @@ export function MarkRawIngested(arg1, arg2) {
   return window['go']['main']['App']['MarkRawIngested'](arg1, arg2);
 }
 
+export function OpenHTMLInBrowser(arg1) {
+  return window['go']['main']['App']['OpenHTMLInBrowser'](arg1);
+}
+
 export function ReadPersistedRunLogs(arg1, arg2) {
   return window['go']['main']['App']['ReadPersistedRunLogs'](arg1, arg2);
 }

@@ -59,6 +59,8 @@ export function MCPStatus():Promise<string>;
 
 export function MarkRawIngested(arg1:string,arg2:string):Promise<string>;
 
+export function OpenHTMLInBrowser(arg1:string):Promise<void>;
+
 export function ReadPersistedRunLogs(arg1:string,arg2:string):Promise<string>;
 
 export function ReadProjectFile(arg1:string,arg2:string,arg3:string):Promise<string>;

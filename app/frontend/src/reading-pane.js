@@ -7,9 +7,18 @@
 // reads something, and keeps "where does the document go" consistent
 // regardless of which tab is active.
 import { icon } from './icons.js';
+import { OpenHTMLInBrowser } from '../wailsjs/go/main/App';
+import { inlineMermaidStandalone } from './mermaid-inline.js';
 
 let els = null;
 let fullscreenTarget = null;
+// externalHtml holds a full standalone HTML document for whatever is
+// currently shown, or null when nothing shown has one (showEmpty,
+// beginCustom/showAction/showLoading's custom bodies, a paused run's live
+// tracker) — set by showMarkdownDoc/showHtmlDoc, reset by setHeader (the
+// same choke point clearFooter already uses), and read by the "abrir no
+// navegador" button's click handler.
+let externalHtml = null;
 
 export function mountReadingPane(container) {
   container.innerHTML = `
@@ -20,6 +29,7 @@ export function mountReadingPane(container) {
       </div>
       <div class="doc-tools">
         <span data-rp-tools></span>
+        <button class="button tertiary small icon-only" data-rp-open-external title="Abrir no navegador">${icon('externalLink', 14)}</button>
         <button class="button tertiary small icon-only" data-rp-expand title="Expandir para tela cheia">${icon('maximize', 14)}</button>
       </div>
     </header>
@@ -34,12 +44,17 @@ export function mountReadingPane(container) {
     body: container.querySelector('[data-rp-body]'),
     footer: container.querySelector('[data-rp-footer]'),
     expandBtn: container.querySelector('[data-rp-expand]'),
+    openExternalBtn: container.querySelector('[data-rp-open-external]'),
   };
   fullscreenTarget = container;
   els.expandBtn.addEventListener('click', () => {
     const expanded = fullscreenTarget.classList.toggle('pane-fullscreen');
     els.expandBtn.innerHTML = icon(expanded ? 'x' : 'maximize', 14);
     els.expandBtn.title = expanded ? 'Sair da tela cheia' : 'Expandir para tela cheia';
+  });
+  els.openExternalBtn.addEventListener('click', () => {
+    if (!externalHtml) return;
+    OpenHTMLInBrowser(externalHtml).catch((err) => console.error('OpenHTMLInBrowser failed', err));
   });
   showEmpty();
 }
@@ -53,6 +68,12 @@ function setHeader(title, type) {
   // whatever was open before) gets dropped. A caller that still wants one
   // calls setFooter() again right after.
   clearFooter();
+  setExternalHtml(null);
+}
+
+function setExternalHtml(html) {
+  externalHtml = html;
+  els.openExternalBtn.disabled = !html;
 }
 
 // setFooter mounts a persistent action bar below .doc-body — its own flex
@@ -149,6 +170,7 @@ export function showMarkdownDoc(title, html) {
   els.tools.innerHTML = '';
   els.body.className = 'doc-body wiki-doc';
   els.body.innerHTML = html;
+  setExternalHtml(`<!doctype html><html><head><meta charset="utf-8"><title>${escapeHtml(title || '')}</title></head><body>${html}</body></html>`);
 }
 
 // Every artifact's own HTML has a fixed body{max-width:...} baked in at
@@ -223,6 +245,11 @@ export function buildDocFrame(rawHtml, { mermaid, inlineMermaid, autoHeight, all
 // diagram renders inside the app without depending on any file on disk.
 export function showHtmlDoc(title, rawHtml, { mermaid, inlineMermaid, allowScripts } = {}) {
   setHeader(title, 'HTML');
+  // A standalone file opened by an external browser process can't resolve
+  // the Blob URL buildDocFrame's own inlineMermaid produces below (scoped to
+  // this app's webview) — inline the actual mermaid source into this copy
+  // instead, the one setExternalHtml hands to "abrir no navegador".
+  setExternalHtml(mermaid ? inlineMermaidStandalone(rawHtml) : rawHtml);
   let showingSource = false;
 
   function render() {

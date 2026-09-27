@@ -10,6 +10,7 @@ import (
 	"os/exec"
 	"path/filepath"
 	"regexp"
+	goruntime "runtime"
 	"runtime/debug"
 	"slices"
 	"sort"
@@ -737,6 +738,49 @@ func (a *App) DataDir() string {
 // guaranteed the same across platforms/window managers.
 func (a *App) ToggleMaximise() {
 	runtime.WindowToggleMaximise(a.ctx)
+}
+
+// OpenHTMLInBrowser writes rawHtml to a temp file and opens it in the OS
+// default browser — used by the reading pane's "abrir no navegador" button.
+// Previews render inside a sandboxed <iframe srcdoc>, which has no URL of
+// its own the OS could open, so the content is materialized to disk first.
+//
+// Deliberately shells out to the OS's own opener instead of Wails'
+// runtime.BrowserOpenURL: that helper's URL validator
+// (wails v2.15.0's internal/frontend/utils.ValidateAndSanitizeURL) rejects
+// the file:// scheme outright ("scheme not allowed") — it only ever logs
+// the rejection internally, so the call looked like it succeeded from the
+// frontend's side while silently never opening anything.
+func (a *App) OpenHTMLInBrowser(rawHtml string) error {
+	dir, err := os.MkdirTemp("", "senpai-preview-*")
+	if err != nil {
+		return fmt.Errorf("criar diretorio temporario para preview: %w", err)
+	}
+	path := filepath.Join(dir, "preview.html")
+	if err := os.WriteFile(path, []byte(rawHtml), 0o644); err != nil {
+		return fmt.Errorf("gravar preview temporario: %w", err)
+	}
+	return openPathInDefaultApp(path)
+}
+
+// openPathInDefaultApp hands path to the OS's native "open" facility, which
+// resolves it to whatever app is registered as the default for its
+// extension (a .html file opens in the default browser).
+func openPathInDefaultApp(path string) error {
+	var cmd *exec.Cmd
+	switch goruntime.GOOS {
+	case "darwin":
+		cmd = exec.Command("open", path)
+	case "windows":
+		cmd = exec.Command("rundll32", "url.dll,FileProtocolHandler", path)
+	default:
+		cmd = exec.Command("xdg-open", path)
+	}
+	if err := cmd.Start(); err != nil {
+		return fmt.Errorf("abrir preview no navegador: %w", err)
+	}
+	go func() { _ = cmd.Wait() }()
+	return nil
 }
 
 // senpaiSubdir resolves <user config dir>/senpai/<name>, creating it if

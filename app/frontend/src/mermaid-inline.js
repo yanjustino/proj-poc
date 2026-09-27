@@ -50,5 +50,31 @@ function mermaidScriptUrl() {
 export function inlineMermaid(html) {
   if (typeof html !== 'string') return html;
   if (!ASSET_SCRIPT_TAG.test(html)) return html;
-  return html.replace(ASSET_SCRIPT_TAG, `<script src="${mermaidScriptUrl()}"></script>`);
+  // A replacer function, not a template string: String.replace treats a
+  // string replacement's own "$&", "$`", "$'", "$$" etc. as substitution
+  // patterns, and mermaidScriptUrl()'s blob: URL is short but that gotcha
+  // still applies on principle — a function's return value is spliced in
+  // verbatim, no exceptions.
+  return html.replace(ASSET_SCRIPT_TAG, () => `<script src="${mermaidScriptUrl()}"></script>`);
+}
+
+// inlineMermaidStandalone embeds mermaid's actual source instead of a Blob
+// URL — reading-pane.js's "abrir no navegador" writes the artifact out to
+// its own temp file for an external browser process to open, where a
+// blob: URL (scoped to this app's own webview) can't resolve at all, unlike
+// inlineMermaid's use inside this app's own iframe.
+export function inlineMermaidStandalone(html) {
+  if (typeof html !== 'string') return html;
+  if (!ASSET_SCRIPT_TAG.test(html)) return html;
+  // Must be a replacer FUNCTION here, not a template string handed to
+  // .replace() as its second argument: mermaidSource is ~5.5MB of minified
+  // JS almost certain to contain a "$&"/"$`"/"$'"/"$<digit>" byte sequence
+  // somewhere, and String.replace treats those specially in a STRING
+  // replacement — splicing in random surrounding-context text at that
+  // point and corrupting the embedded script (confirmed: this silently
+  // produced a script tag mermaid.min.js could no longer parse as valid
+  // JS, which is why `mermaid` came back undefined at the init call right
+  // after it, even though replacement "succeeded" with no error). A
+  // function's return value is inserted as-is, with no such interpretation.
+  return html.replace(ASSET_SCRIPT_TAG, () => `<script>${mermaidSource}</script>`);
 }
