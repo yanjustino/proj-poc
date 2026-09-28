@@ -176,8 +176,8 @@ export agent Codex {
 // montar ANTES de rodar o agente — e `router.delegate()` nao deixa consultar
 // essa decisao de fora. `tool AgentSelector` + `match` + `.run()` direto em
 // cada agente resolve isso sem esbarrar nesse limite.
-tool AgentSelector {
-    pick(prompt: string): string -> {
+export tool AgentSelector {
+    pick(): string -> {
         var selected = match env("SENPAI_AGENT", "codex") {
             "devin" -> nameof(Devin)
             "claude" -> nameof(Claude)
@@ -186,6 +186,17 @@ tool AgentSelector {
         }
 
         return selected
+    }
+
+    pick_model(): string -> {
+        var model = match env("SENPAI_AGENT", "codex") {
+            "devin" -> env("SENPAI_DEVIN_MODEL", "swe-1-6-slow")
+            "claude" -> env("SENPAI_CLAUDE_MODEL", "sonnet")
+            "codex" -> env("SENPAI_CODEX_MODEL", "gpt-5.6-luna")
+            _ -> env("SENPAI_CODEX_MODEL", "gpt-5.6-luna")
+        }
+
+        return model
     }
 }
 
@@ -248,7 +259,7 @@ export tool Writer {
         cache_creation_tokens: number, cache_read_tokens: number,
         cost_usd: number, cost_source: string
     } -> {
-        var picked = AgentSelector.pick(prompt: prompt)
+        var picked = AgentSelector.pick()
         // Duracao da chamada (inclui as retentativas do proprio agent), em
         // segundos — alimenta o "tempo de processamento" do resumo de
         // produtividade do work-item (WorkItemActions.productivity).
