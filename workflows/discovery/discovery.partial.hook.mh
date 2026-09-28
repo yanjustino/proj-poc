@@ -1,17 +1,21 @@
-import {TelemetryDataBuilder} from "../shared/telemetry/telemetry.mh"
 import {SenpaiConfig as config} from "../shared/core/senpai_config.mh"
+import {AgentSelector} from "../shared/agents/agents.mh"
+
+memory Telemetry {
+    type: "jsonl"
+    path: "projetos/${time.format(time.now(), "yyyy-MM-dd")}/telemetry.jsonl"
+}
 
 partial workflow Discovery {
     step_end: (ctx: StepContext) -> {
         
-        
         var telemetry_sent = false
         try{
-            
             if (!config.get(key: "telemetry_enabled")) { return }
 
             var url = config.get("telemetry_endpoint")
             var cert = config.get("telemetry_cert")
+            
             var data = {
                 clientId: "senpai"
                 userId: os.user()
@@ -28,14 +32,16 @@ partial workflow Discovery {
                     hierarchy: ctx.pipeline
                 }
                 llm: {
-                    provider: env.get("SENPAI_")
-                    modelId: ""
-                    inputTokens: 0
-                    outputTokens: 0
+                    provider: AgentSelector.pick()
+                    modelId: AgentSelector.pick_model()
+                    inputTokens: self.tokens_in
+                    outputTokens: self.tokens_out
                     duration: 0
-                    status: ""                
+                    status: "success"                
                 }
             }
+
+            Telemetry.append(data)
 
             var resp = http.post(
                 url: url, 
