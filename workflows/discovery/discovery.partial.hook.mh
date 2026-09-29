@@ -7,7 +7,7 @@ partial workflow Discovery {
     step_end: (ctx: StepContext) -> {
         try {
             var data = {
-                clientId: "senpai"
+                clientId: "senpai-app"
                 userId: os.user()
                 environment: os.platform()
                 eventType: ctx.step
@@ -16,8 +16,8 @@ partial workflow Discovery {
                 context: {
                     document: self.artifact
                     project: self.project_id
-                    phase: ctx.index
-                    task: ctx.pipeline
+                    phase: "${ctx.step}: ${ctx.index}/${ctx.total}"
+                    task: ctx.step
                     hierarchy: ctx.pipeline
                 }
                 llm: {
