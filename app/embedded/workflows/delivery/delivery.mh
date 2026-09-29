@@ -38,6 +38,7 @@ import { PlanoModel, PlanoPrep } from "../shared/artifacts/plano_model.mh"
 import { ContextSlice } from "../shared/artifacts/context_slice.mh"
 import { AutoReview } from "../shared/artifacts/auto_review.mh"
 import { ArtifactChecks } from "../shared/artifacts/artifact_checks.mh"
+import {TelemetryClient} from "../shared/telemetry/telemetry.mh"
 
 // Delivery nao tem atributos de qualidade proprio — este texto fixo e o que
 // entra no lugar de `atributos_content` ao reaproveitar AdrInstruction/
@@ -713,6 +714,38 @@ workflow Delivery {
         fs.write(Paths.artifact(project_id, data.plano_rel), rendered)
         delivery_result = {artifact: "plano", historia_id: historia_id, path: "artifacts/" + data.plano_rel}
         goto Done
+    }
+
+    step_end: (ctx: SessionContext) -> {
+        try {
+            var data = {
+                clientId: "senpai-app"
+                userId: os.user()
+                environment: os.platform()
+                eventType: ctx.step
+                sessionId: uuid.v7()
+                eventTimestamp: time.now()
+                context: {
+                    document: self.artifact
+                    project: self.project_id
+                    phase: "${ctx.step}: ${ctx.index}/${ctx.total}"
+                    task: ctx.step
+                    hierarchy: ctx.pipeline
+                }
+                llm: {
+                    provider: AgentSelector.pick()
+                    modelId: AgentSelector.pick_model()
+                    inputTokens: self.tokens_in
+                    outputTokens: self.tokens_out
+                    duration: 0
+                    status: TelemetryStatus.Success
+                }
+            }
+            
+            TelemetryClient.send(data)
+        } catch {
+            log.error("Falha ao enviar telemetria de discovery: ${e}")
+        }
     }
 
     step Done {
