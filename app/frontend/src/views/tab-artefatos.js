@@ -209,7 +209,7 @@ export async function renderArtefatosTab(container, project, { onChanged }) {
       </div>
       <div class="artifact-map-controls">
         <span class="dor-summary" data-dor-summary hidden></span>
-        <button class="button secondary small" data-handoff hidden title="Gera o pacote de handoff (specs, planos, tarefas, contratos, ADRs e arquitetura) com as histórias prontas e exporta para uma pasta — para levar ao repositório de código.">${icon('layers', 14)} Pacote de handoff</button>
+        <button class="button secondary small" data-handoff hidden title="Gera o pacote de handoff (specs, planos, tarefas, contratos, ADRs e arquitetura) com todas as histórias — as que ainda não estão prontas entram marcadas, não ficam de fora — e exporta para uma pasta, para levar ao repositório de código.">${icon('layers', 14)} Pacote de handoff</button>
         <button class="button secondary small" data-export-all title="Exportar toda a Wiki e todos os Artefatos">${icon('download', 14)} Exportar tudo</button>
         <div class="view-toggle" data-view-toggle>
           <button class="view-toggle-btn" data-view="cards" title="Ver como cards">${icon('grid', 15)}</button>
@@ -371,8 +371,8 @@ export async function renderArtefatosTab(container, project, { onChanged }) {
       const summary = await buildHandoff(project.id);
       const destination = await exportHandoff(project.id);
       if (destination) {
-        const fora = summary?.fora ? ` · ${summary.fora} ainda não pronta(s), listada(s) no README` : '';
-        showExportStatus(`Pacote de handoff exportado para ${destination} — ${summary?.exportadas ?? 0} história(s) pronta(s)${fora}.`);
+        const naoProntas = summary?.nao_prontas ? ` (${summary.nao_prontas} ainda não pronta(s), marcada(s) em cada spec.md e no README)` : '';
+        showExportStatus(`Pacote de handoff exportado para ${destination} — ${summary?.total ?? 0} história(s)${naoProntas}.`);
       }
     } catch (err) {
       showExportStatus(`Não foi possível gerar o pacote de handoff: ${String(err.message || err)}`, 'error');
@@ -1861,7 +1861,9 @@ export async function renderArtefatosTab(container, project, { onChanged }) {
   // buildDevFilesBar: "Arquivos para desenvolvimento" of a história — each
   // file generated next to it (openapi.json, asyncapi.json, historia.feature,
   // plano.html) exportable on its own, plus its Definition of Ready. The
-  // package with every ready story comes from "Pacote de handoff".
+  // full package — every story, ready or not, each one's own spec.md
+  // showing its Definition of Ready and (if blocked) why — comes from
+  // "Pacote de handoff".
   function buildDevFilesBar(row) {
     const dir = storyDir(row);
     const bar = document.createElement('div');

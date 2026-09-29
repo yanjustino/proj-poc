@@ -15,8 +15,24 @@ import { Slug } from "../core/slug.mh"
 import { Markdown } from "../core/markdown.mh"
 
 export tool WikiPages {
-    write_source(project_id: string, slug: string, title: string, summary: string) ->
-        fs.write(Paths.wiki(project_id, "sources/" + slug + ".md"), "# " + title + "\n\n" + summary + "\n")
+    // natureza (ingest.schema.json) entra como uma linha logo apos o titulo,
+    // nao so no indice — e o proprio conteudo da fonte que WikiContext.
+    // all_pages concatena pra brief/atributos/requisitos, entao o rotulo
+    // precisa estar aqui pra chegar citavel a esses artefatos mesmo quando
+    // ninguem le o indice separadamente.
+    write_source(project_id: string, slug: string, title: string, summary: string, natureza: string) ->
+        fs.write(Paths.wiki(project_id, "sources/" + slug + ".md"), "# " + title + "\n\n" + self.natureza_line(natureza) + summary + "\n")
+
+    // Texto puro, sem `**negrito**`: WikiHtmlExport.md_to_html so interpreta
+    // #/##/listas — negrito dentro de paragrafo sairia como asteriscos
+    // literais no visualizador estatico da wiki (ver o proprio comentario de
+    // topo desse tool).
+    natureza_line(natureza: string): string -> match natureza {
+        "sistema_atual" -> "Natureza: Sistema atual — já existe e roda hoje.\n\n"
+        "pedido_novo"   -> "Natureza: Pedido novo — ainda não implementado.\n\n"
+        "ambos"         -> "Natureza: Sistema atual e pedido novo — descreve o que existe e propõe uma mudança.\n\n"
+        _               -> ""
+    }
 
     upsert_entity(project_id: string, title: string, facts: string[]) ->
         self.upsert_fact_page(project_id, "entities", title, facts)
@@ -45,6 +61,19 @@ export memory WikiLog {
     path_guard: "no_traversal"
 }
 
-// Sem `test` aqui: todo metodo deste tool e I/O (fs.write/fs.append) sobre um
-// caminho real — cobertura fica pro `mhl run` de ponta a ponta do workflow
-// Wiki (mesmo padrao do WorkItem na Fase 1), nao um `test` fingindo I/O.
+// Sem `test` pro resto do tool: cada outro metodo e I/O (fs.write/fs.append)
+// sobre um caminho real — cobertura fica pro `mhl run` de ponta a ponta do
+// workflow Wiki (mesmo padrao do WorkItem na Fase 1), nao um `test` fingindo
+// I/O. natureza_line e a unica logica pura aqui, entao ganha teste normal.
+test WikiPagesSpec {
+    describe natureza_line_labels_each_known_value {
+        is_true(WikiPages.natureza_line("sistema_atual").contains("Sistema atual"))
+        is_true(WikiPages.natureza_line("pedido_novo").contains("Pedido novo"))
+        is_true(WikiPages.natureza_line("ambos").contains("Sistema atual e pedido novo"))
+    }
+
+    describe natureza_line_is_empty_for_an_unknown_or_missing_value {
+        are_equal(WikiPages.natureza_line(""), "")
+        are_equal(WikiPages.natureza_line("bogus"), "")
+    }
+}

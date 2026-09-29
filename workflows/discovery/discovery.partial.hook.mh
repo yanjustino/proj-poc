@@ -1,67 +1,36 @@
-import {SenpaiConfig as config} from "../shared/core/senpai_config.mh"
 import {AgentSelector} from "../shared/agents/agents.mh"
+import {TelemetryClient} from "../shared/telemetry/telemetry.mh"
 
-memory Telemetry {
-    type: "jsonl"
-    path: "projetos/${time.format(time.now(), "yyyy-MM-dd")}/telemetry.jsonl"
-}
+enum TelemetryStatus { Success, Fail }
 
 partial workflow Discovery {
     step_end: (ctx: StepContext) -> {
-        
-        var telemetry_sent = false
-        try{
-            if (!config.get(key: "telemetry_enabled")) { return }
-
-            var url = config.get("telemetry_endpoint")
-            var cert = config.get("telemetry_cert")
-            
-            var data = {
-                clientId: "senpai"
-                userId: os.user()
-                environment: os.platform()
-                eventType: eventType
-                sessionId: uuid.v7()
-                eventTimestamp: time.now()
-                agentName: "senpai"
-                context: {
-                    documents: [self.artifact]
-                    project: self.project_id
-                    phase: ctx.index
-                    task: ctx.pipeline
-                    hierarchy: ctx.pipeline
-                }
-                llm: {
-                    provider: AgentSelector.pick()
-                    modelId: AgentSelector.pick_model()
-                    inputTokens: self.tokens_in
-                    outputTokens: self.tokens_out
-                    duration: 0
-                    status: "success"                
-                }
+        var data = {
+            clientId: "senpai"
+            userId: os.user()
+            environment: os.platform()
+            eventType: ctx.step
+            sessionId: uuid.v7()
+            eventTimestamp: time.now()
+            context: {
+                document: self.artifact
+                project: self.project_id
+                phase: ctx.index
+                task: ctx.pipeline
+                hierarchy: ctx.pipeline
             }
-
-            Telemetry.append(data)
-
-            var resp = http.post(
-                url: url, 
-                body: json.stringify(data), 
-                headers: {
-                    "Content-Type": "application/json"
-                    "x-correlation-id": uuid.v7()
-                },
-                tls: {ca: cert}
-            )
-
-            telemetry_sent = if (resp.ok) true else false
-        } catch (e) {
-            log.error("Failed to build telemetry data: ${e}")
-        } finally {
-            if (!telemetry_sent) {
-                log.warn("Telemetry data could not be sent. Please check your network connection and configuration.")
-            } else {
-                log.info("Telemetry data sent successfully.")
+            llm: {
+                provider: AgentSelector.pick()
+                modelId: AgentSelector.pick_model()
+                inputTokens: self.tokens_in
+                outputTokens: self.tokens_out
+                duration: 0
+                status: TelemetryStatus.Success
             }
         }
+        
+        TelemetryClient.send(data)
     }
 }
+
+

@@ -11,7 +11,23 @@ import { DirText } from "../core/dir_text.mh"
 import { ArtifactData } from "artifact_data.mh"
 
 export tool Context {
-    wiki(project_id: string): string -> WikiContext.all_pages(project_id)
+    // wiki: conteudo da wiki prefixado pelo bloco de continuidade do
+    // work-item (`continuidade_de` em project.json, preenchido opcionalmente
+    // na criacao — ver WorkItemActions.create). Fica aqui, nao dentro de
+    // WikiContext, porque nao e uma pagina da wiki (nada foi ingerido): e
+    // metadado do proprio work-item, mas precisa chegar como texto citavel
+    // aos mesmos artefatos que ja leem Context.wiki (brief, atributos,
+    // requisitos) — os unicos que sempre rodam mesmo quando ADR/DER, onde a
+    // continuidade tambem aparece, sao pulados (opcionais em Delivery).
+    wiki(project_id: string): string -> self.continuity_block(project_id) + WikiContext.all_pages(project_id)
+
+    continuity_block(project_id: string): string -> {
+        var path = Paths.project_file(project_id)
+        if (!fs.exists(path)) return ""
+        var texto = json.parse(fs.read(path)).get("continuidade_de", "")
+        if (texto.is_empty()) return ""
+        return "# work-item/continuidade\n\n" + texto + "\n\n---\n\n"
+    }
 
     // Le um artefato predecessor ja gerado (ex. "requisitos.html"). O HTML
     // continua sendo o marcador de commit e a projecao visual do frontend,
@@ -153,6 +169,30 @@ export tool NoAdr {
 }
 
 test ContextSpec {
+    describe wiki_prefixes_the_continuity_block_when_the_work_item_declares_one {
+        var project_id = "spec-test-context-continuity"
+        dir.create(Paths.root(project_id))
+        fs.write(Paths.project_file(project_id), json.stringify({id: project_id, name: "x", continuidade_de: "Checkout atual — fluxo PIX"}))
+
+        var out = Context.wiki(project_id)
+        is_true(out.starts_with("# work-item/continuidade\n\nCheckout atual — fluxo PIX"))
+
+        fs.delete(Paths.project_file(project_id))
+        dir.delete(Paths.root(project_id))
+    }
+
+    describe wiki_has_no_continuity_block_when_the_work_item_does_not_declare_one {
+        var project_id = "spec-test-context-continuity-empty"
+        dir.create(Paths.root(project_id))
+        fs.write(Paths.project_file(project_id), json.stringify({id: project_id, name: "x", continuidade_de: ""}))
+
+        var out = Context.wiki(project_id)
+        is_true(!out.contains("work-item/continuidade"))
+
+        fs.delete(Paths.project_file(project_id))
+        dir.delete(Paths.root(project_id))
+    }
+
     describe artifact_dir_of_dirs_concatenates_item_file_from_each_subfolder {
         var project_id = "spec-test-context-dirofdirs"
         var base = Paths.artifact(project_id, "features")

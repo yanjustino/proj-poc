@@ -359,7 +359,13 @@ export tool Contracts {
             if (respostas.is_empty()) out += ["Endpoint sem respostas documentadas: " + key + "."]
             else if (!respostas.any((r) -> r.status.starts_with("2"))) out += ["Endpoint sem resposta de sucesso (2xx): " + key + "."]
             if ((e.metodo == "GET" || e.metodo == "DELETE") && !(e?.corpo ?? []).is_empty()) out += [e.metodo + " com corpo de requisição: " + key + " — use parâmetros."]
-            if ((e.metodo == "POST" || e.metodo == "PUT" || e.metodo == "PATCH") && (e?.corpo ?? []).is_empty()) out += [e.metodo + " sem corpo de requisição: " + key + "."]
+            // PATCH fora da lista: ao contrario de POST (criar) e PUT
+            // (substituir), que sempre carregam uma representacao do
+            // recurso, PATCH tambem e usado como acao/transicao de estado
+            // dirigida so pelo path (ex.: "completar", "cancelar",
+            // "aprovar") — legitimamente sem corpo. Exigir corpo de todo
+            // PATCH gerava falso positivo real num endpoint desse tipo.
+            if ((e.metodo == "POST" || e.metodo == "PUT") && (e?.corpo ?? []).is_empty()) out += [e.metodo + " sem corpo de requisição: " + key + "."]
             var declarados = (e?.parametros ?? []).filter((p) -> p?.local == "path").map((p) -> p.nome)
             for (var p in self.path_params(e.caminho)) {
                 if (!declarados.contains(p)) out += ["Parâmetro de caminho {" + p + "} sem declaração em " + key + "."]
@@ -377,12 +383,17 @@ export tool Contracts {
             if ((ig?.falhas ?? "").trim().is_empty()) out += ["Integração com " + (ig?.sistema ?? "?") + " sem tratamento de falha (timeout, indisponibilidade, resposta inválida)."]
         }
         var sub = historia?.subclassification ?? ""
-        var interface_alguma = !endpoints.is_empty() || !eventos.is_empty() || !integracoes.is_empty()
-        // Gateway so existe para expor endpoint; backend e worker podem ter so
-        // integracao de saida ou eventos (integracao de saida e uma historia
-        // unica de backend, sem par de gateway).
+        // Gateway so existe pra expor endpoint — e a propria definicao do
+        // subtipo, entao continua exigido. `backend` NAO entra mais aqui:
+        // muito trabalho de backend e processamento interno/transacional
+        // puro (calculo, validacao, transicao de estado) sem endpoint,
+        // evento nem integracao nenhuma — e historia de teste (subclassification
+        // "backend" mas o "resultado" e cobertura de testes, nao interface)
+        // e o mesmo caso. Exigir contrato de todo `backend` gerava falso
+        // positivo real, bloqueando historias legitimas na Definition of
+        // Ready (readiness.mh trata todo aviso de Contracts.check como
+        // bloqueio, nao so um lembrete).
         if (sub == "api_gateway" && endpoints.is_empty()) out += ["História de API Gateway sem nenhum endpoint exposto — integração de saída é uma história única de backend, sem gateway."]
-        if (sub == "backend" && !interface_alguma) out += ["História de backend sem endpoint, evento nem integração no contrato."]
         if (sub == "worker" && eventos.is_empty() && endpoints.is_empty() && integracoes.is_empty()) out += ["História de worker sem evento, endpoint nem integração no contrato."]
         return out
     }
@@ -664,11 +675,29 @@ test HistoriaSpecSpec {
         is_true(avisos.contains("Evento sem canal: E"))
     }
 
-    describe backend_story_without_endpoints_is_flagged {
-        is_true(Contracts.check({subclassification: "backend", contratos: {endpoints: [], eventos: []}})[0].contains("sem endpoint, evento nem integração"))
+    describe patch_without_a_body_is_not_flagged_unlike_post_and_put {
+        // PATCH tambem serve como acao/transicao de estado dirigida so pelo
+        // path (ex.: "completar", "cancelar") — legitimamente sem corpo,
+        // ao contrario de POST (criar) e PUT (substituir).
+        are_equal(Contracts.check({contratos: {endpoints: [
+            {metodo: "PATCH", caminho: "/tasks/{id}/complete", parametros: [{nome: "id", local: "path"}], corpo: [], respostas: [{status: "200", campos: []}]},
+        ]}}).size(), 0)
+        is_true(Contracts.check({contratos: {endpoints: [
+            {metodo: "PUT", caminho: "/tasks/{id}", parametros: [{nome: "id", local: "path"}], corpo: [], respostas: [{status: "200", campos: []}]},
+        ]}})[0].contains("PUT sem corpo de requisição"))
+    }
+
+    describe backend_story_without_any_contract_is_not_flagged {
+        // Trabalho de backend legitimamente pode ser processamento interno
+        // puro (sem endpoint/evento/integração) — ex.: cálculo, validação,
+        // transição de estado — ou uma história de teste classificada como
+        // backend. Só `api_gateway` (que por definição expõe endpoint) e
+        // `worker` continuam exigindo algum contrato.
+        are_equal(Contracts.check({subclassification: "backend", contratos: {endpoints: [], eventos: [], integracoes: []}}).size(), 0)
         are_equal(Contracts.check({subclassification: "backend", contratos: {endpoints: [], eventos: [], integracoes: [{sistema: "bureau-credito", operacao: "score", falhas: "retry + circuit breaker"}]}}).size(), 0)
         is_true(Contracts.check({subclassification: "backend", contratos: {endpoints: [], eventos: [], integracoes: [{sistema: "bureau-credito", operacao: "score", falhas: ""}]}})[0].contains("sem tratamento de falha"))
         is_true(Contracts.check({subclassification: "api_gateway", contratos: {endpoints: [], eventos: [], integracoes: [{sistema: "b3", falhas: "x"}]}})[0].contains("integração de saída é uma história única de backend"))
+        is_true(Contracts.check({subclassification: "worker", contratos: {endpoints: [], eventos: [], integracoes: []}})[0].contains("sem evento, endpoint nem integração"))
     }
 
     describe known_reads_ids_from_the_work_item_artifacts_and_spec_files_are_written {

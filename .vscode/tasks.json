@@ -63,9 +63,25 @@
             // task exits non-zero (last command in the chain), and VS Code
             // aborts the launch instead of quietly debugging yesterday's
             // stale build.
+            //
+            // `pkill -f` first, before any of that: this task always builds
+            // a genuinely fresh bundle, but if a previous run of the app is
+            // still open (its window just never got closed — starting a new
+            // debug session here does NOT kill an already-running instance,
+            // whether that one was launched by the debugger or by
+            // double-clicking the .app), you keep looking at yesterday's
+            // frontend/workflow logic in that stale window while a correct
+            // new binary sits unused on disk — this bit twice in the same
+            // session before the cause was found (stale bundle timestamp,
+            // confirmed via `strings` on the binary). Matches by the
+            // bundle's own executable path, not a generic process name, so
+            // it can never kill something unrelated. `2>/dev/null` +
+            // relying on `;` (not `&&`) after it: pkill exits non-zero when
+            // nothing matched (nothing was running) — that must never abort
+            // the rest of the build.
             "label": "build app bundle (debug)",
             "type": "shell",
-            "command": "rm -rf build/bin/senpai-app.app; CGO_LDFLAGS=\"-framework UniformTypeIdentifiers\" /Users/yanjustino/go/bin/wails build -debug -clean; xattr -cr build/bin/senpai-app.app && codesign --force --deep -s - build/bin/senpai-app.app",
+            "command": "pkill -f 'senpai-app.app/Contents/MacOS/app' 2>/dev/null; rm -rf build/bin/senpai-app.app; CGO_LDFLAGS=\"-framework UniformTypeIdentifiers\" /Users/yanjustino/go/bin/wails build -debug -clean; xattr -cr build/bin/senpai-app.app && codesign --force --deep -s - build/bin/senpai-app.app",
             "options": {
                 "cwd": "${workspaceFolder}/app"
             },

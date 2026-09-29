@@ -1,11 +1,21 @@
+// Delivery e o nivel de CONTINUIDADE: ao contrario do Discovery (que explora
+// uma Oportunidade nova, do zero), um projeto de Delivery — Feature/enabler
+// ou Historia standalone — tipicamente evolui um sistema que ja existe em
+// producao. Por isso as *Instruction de feature/historia (prompts/feature.
+// prompt.md, prompts/historia.prompt.md) nunca assumem greenfield por
+// padrao: classificam cada item por `mudanca` (as_is/modificado/novo/
+// removido) sempre que os artefatos indicarem algo pre-existente.
+//
 // Gera artefatos para projetos Feature ou Historia standalone. Artefatos
 // comuns reutilizam os contratos de shared; feature/historia finais mantêm
-// contratos próprios. Requisitos são obrigatórios para o artefato final;
-// ADR, DER e diagramas são contextos opcionais.
+// contratos próprios. Sequencia totalmente encadeada: brief -> requisitos ->
+// adr -> der/diagramas -> feature/historia -> historias — cada um falha se o
+// predecessor direto ainda nao existir (mesmo padrao de fail() do Discovery,
+// workflows/discovery/discovery.partial.tecnicos.mh).
 
 import { Paths } from "../shared/core/paths.mh"
 import { Writer } from "../shared/agents/agents.mh"
-import { Context, NoAdr } from "../shared/artifacts/context.mh"
+import { Context } from "../shared/artifacts/context.mh"
 import { ArtifactData } from "../shared/artifacts/artifact_data.mh"
 import { Slug } from "../shared/core/slug.mh"
 import { ArtifactId } from "../shared/artifacts/artifact_id.mh"
@@ -280,13 +290,12 @@ workflow Delivery {
         goto Done
     }
 
-    // brief e opcional em Delivery (SENPAI-REFINAMENTO-VISAO-GERAL.md): ao
-    // contrario do Discovery, 'requisitos' nao falha se 'brief' nao existir —
-    // so usa um texto fixo no lugar.
+    // brief agora e obrigatorio em Delivery, igual ao Discovery — sequencia
+    // totalmente encadeada (ver comentario de topo do arquivo).
     step RequisitosGenerate {
         current_artifact = "requisitos"
         var brief_content = Context.artifact(project_id, "brief.html")
-        if (brief_content.is_empty()) brief_content = "(não gerado para este projeto)"
+        if (brief_content.is_empty()) fail("gere 'brief' antes de 'requisitos'")
         var response = Writer.generate(
             prompt: RequisitosInstruction(
                 schema_conventions: ArtifactSchema(),
@@ -321,6 +330,7 @@ workflow Delivery {
 
     step AdrGenerate {
         current_artifact = "adr"
+        if (Context.artifact(project_id, "brief.html").is_empty()) fail("gere 'brief' antes de 'adr'")
         var requisitos_content = Context.artifact(project_id, "requisitos.html")
         if (requisitos_content.is_empty()) fail("gere 'requisitos' antes de 'adr'")
         var response = Writer.generate(
@@ -365,9 +375,11 @@ workflow Delivery {
         current_artifact = "der"
         var requisitos_content = Context.artifact(project_id, "requisitos.html")
         if (requisitos_content.is_empty()) fail("gere 'requisitos' antes de 'der'")
-        // Contexto opcional — ver o comentario de DerInstruction.
+        // ADR agora e dependencia obrigatoria (nao mais contexto opcional):
+        // o nivel do DER (fisico so com banco escolhido) depende dela, mesmo
+        // motivo do Discovery — ver DerInstruction.
         var adr_content = Context.adr_context(project_id)
-        if (adr_content.is_empty()) adr_content = NoAdr.placeholder()
+        if (adr_content.is_empty()) fail("gere 'adr' antes de 'der'")
         var review = AutoReview.generate(
             enabled: autorrevisao,
             prompt: DerInstruction(
@@ -407,8 +419,10 @@ workflow Delivery {
         current_artifact = "diagramas"
         var requisitos_content = Context.artifact(project_id, "requisitos.html")
         if (requisitos_content.is_empty()) fail("gere 'requisitos' antes de 'diagramas'")
+        // ADR agora e dependencia obrigatoria — tecnologia dos conteineres e
+        // o diagrama de implantacao vem dela, mesmo motivo do Discovery.
         var adr_content = Context.adr_context(project_id)
-        if (adr_content.is_empty()) adr_content = NoAdr.placeholder()
+        if (adr_content.is_empty()) fail("gere 'adr' antes de 'diagramas'")
         var review = AutoReview.generate(
             enabled: autorrevisao,
             prompt: DiagramasInstruction(
@@ -456,20 +470,21 @@ workflow Delivery {
     }
 
     // FinalGenerate/FinalCommit produzem o detalhamento final (feature ou
-    // historia) — unico artefato que nao existe em Discovery. So 'requisitos'
-    // e obrigatorio; adr/der/diagramas entram como contexto se existirem, mas
-    // nunca bloqueiam (sao "opcional" na sequencia do protocolo original).
+    // historia) — unico artefato que nao existe em Discovery. Agora depende
+    // de TODOS os predecessores (brief, requisitos, adr, der, diagramas) —
+    // sequencia totalmente encadeada, ver comentario de topo do arquivo.
     step FinalGenerate {
         current_artifact = mode
+        if (Context.artifact(project_id, "brief.html").is_empty()) fail("gere 'brief' antes de '" + mode + "'")
         var requisitos_content = Context.artifact(project_id, "requisitos.html")
         if (requisitos_content.is_empty()) fail("gere 'requisitos' antes de '" + mode + "'")
 
         var adr_content = Context.adr_context(project_id)
-        if (adr_content.is_empty()) adr_content = "(não gerado para este projeto)"
+        if (adr_content.is_empty()) fail("gere 'adr' antes de '" + mode + "'")
         var der_content = Context.artifact(project_id, "der.html")
-        if (der_content.is_empty()) der_content = "(não gerado para este projeto)"
+        if (der_content.is_empty()) fail("gere 'der' antes de '" + mode + "'")
         var diagramas_content = Context.artifact_dir(project_id, "diagramas")
-        if (diagramas_content.is_empty()) diagramas_content = "(não gerado para este projeto)"
+        if (diagramas_content.is_empty()) fail("gere 'diagramas' antes de '" + mode + "'")
 
         var changes_content = ChangesBlock.for_artifact(project_id, mode, "")
 
@@ -738,10 +753,21 @@ test DeliveryWorkflowSpec {
         is_true(run.error.contains("artefato desconhecido"))
     }
 
-    describe adr_requires_requisitos_first {
+    describe adr_requires_brief_first {
         var run = Delivery.run(inputs: {project_id: "spec-test-project", mode: "feature", artifact: "adr"})
         is_false(run.ok)
+        is_true(run.error.contains("gere 'brief' antes de 'adr'"))
+    }
+
+    describe adr_requires_requisitos_after_brief {
+        var project_id = "spec-test-delivery-adr-requisitos"
+        dir.create(Paths.artifacts_dir(project_id))
+        fs.write(Paths.artifact(project_id, "brief.html"), "<html><body>brief</body></html>")
+        var run = Delivery.run(inputs: {project_id: project_id, mode: "feature", artifact: "adr"})
+        is_false(run.ok)
         is_true(run.error.contains("gere 'requisitos' antes de 'adr'"))
+        DirClear.clear(Paths.root(project_id))
+        dir.delete(Paths.root(project_id))
     }
 
     describe der_requires_requisitos_first {
@@ -750,22 +776,87 @@ test DeliveryWorkflowSpec {
         is_true(run.error.contains("gere 'requisitos' antes de 'der'"))
     }
 
+    describe der_requires_adr_after_requisitos {
+        var project_id = "spec-test-delivery-der-adr"
+        dir.create(Paths.artifacts_dir(project_id))
+        fs.write(Paths.artifact(project_id, "requisitos.html"), "<html><body>FR-001</body></html>")
+        var run = Delivery.run(inputs: {project_id: project_id, mode: "feature", artifact: "der"})
+        is_false(run.ok)
+        is_true(run.error.contains("gere 'adr' antes de 'der'"))
+        DirClear.clear(Paths.root(project_id))
+        dir.delete(Paths.root(project_id))
+    }
+
     describe diagramas_requires_requisitos_first {
         var run = Delivery.run(inputs: {project_id: "spec-test-project", mode: "feature", artifact: "diagramas"})
         is_false(run.ok)
         is_true(run.error.contains("gere 'requisitos' antes de 'diagramas'"))
     }
 
-    describe feature_final_requires_requisitos_first {
-        var run = Delivery.run(inputs: {project_id: "spec-test-project", mode: "feature", artifact: "feature"})
+    describe diagramas_requires_adr_after_requisitos {
+        var project_id = "spec-test-delivery-diagramas-adr"
+        dir.create(Paths.artifacts_dir(project_id))
+        fs.write(Paths.artifact(project_id, "requisitos.html"), "<html><body>FR-001</body></html>")
+        var run = Delivery.run(inputs: {project_id: project_id, mode: "feature", artifact: "diagramas"})
         is_false(run.ok)
-        is_true(run.error.contains("gere 'requisitos' antes de 'feature'"))
+        is_true(run.error.contains("gere 'adr' antes de 'diagramas'"))
+        DirClear.clear(Paths.root(project_id))
+        dir.delete(Paths.root(project_id))
     }
 
-    describe historia_final_requires_requisitos_first {
+    describe feature_final_requires_brief_first {
+        var run = Delivery.run(inputs: {project_id: "spec-test-project", mode: "feature", artifact: "feature"})
+        is_false(run.ok)
+        is_true(run.error.contains("gere 'brief' antes de 'feature'"))
+    }
+
+    // Encadeamento completo do artefato final: cada predecessor cai no
+    // proprio gate antes do proximo, um mesmo projeto avancando etapa a
+    // etapa (mesmo padrao de discovery.mh ::
+    // der_and_diagramas_require_adr_first).
+    describe feature_final_chains_through_every_predecessor {
+        var project_id = "spec-test-delivery-feature-chain"
+        dir.create(Paths.artifacts_dir(project_id))
+
+        var run = Delivery.run(inputs: {project_id: project_id, mode: "feature", artifact: "feature"})
+        is_false(run.ok)
+        is_true(run.error.contains("gere 'brief' antes de 'feature'"))
+
+        fs.write(Paths.artifact(project_id, "brief.html"), "<html><body>brief</body></html>")
+        run = Delivery.run(inputs: {project_id: project_id, mode: "feature", artifact: "feature"})
+        is_false(run.ok)
+        is_true(run.error.contains("gere 'requisitos' antes de 'feature'"))
+
+        fs.write(Paths.artifact(project_id, "requisitos.html"), "<html><body>FR-001</body></html>")
+        run = Delivery.run(inputs: {project_id: project_id, mode: "feature", artifact: "feature"})
+        is_false(run.ok)
+        is_true(run.error.contains("gere 'adr' antes de 'feature'"))
+
+        var adr_dir = Paths.artifact(project_id, "adr")
+        dir.create(adr_dir)
+        fs.write(adr_dir + "/ADR-001-titulo.json", json.stringify({
+            titulo: "x", status: "aceita", contexto_e_problema: "y", contexto_fontes: ["gap"],
+            decisao_final: {opcao_escolhida: "x", justificativa: "y", fontes: ["gap"]},
+            consequencias_positivas: [], consequencias_negativas: [],
+        }))
+        fs.write(adr_dir + "/ADR-001-titulo.html", "<html><body>ADR-001</body></html>")
+        run = Delivery.run(inputs: {project_id: project_id, mode: "feature", artifact: "feature"})
+        is_false(run.ok)
+        is_true(run.error.contains("gere 'der' antes de 'feature'"))
+
+        fs.write(Paths.artifact(project_id, "der.html"), "<html><body>der</body></html>")
+        run = Delivery.run(inputs: {project_id: project_id, mode: "feature", artifact: "feature"})
+        is_false(run.ok)
+        is_true(run.error.contains("gere 'diagramas' antes de 'feature'"))
+
+        DirClear.clear(Paths.root(project_id))
+        dir.delete(Paths.root(project_id))
+    }
+
+    describe historia_final_requires_brief_first {
         var run = Delivery.run(inputs: {project_id: "spec-test-project", mode: "historia", artifact: "historia"})
         is_false(run.ok)
-        is_true(run.error.contains("gere 'requisitos' antes de 'historia'"))
+        is_true(run.error.contains("gere 'brief' antes de 'historia'"))
     }
 
     describe historias_requires_a_feature_artifact_first {

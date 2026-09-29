@@ -8,7 +8,6 @@ memory Telemetry {
 
 partial workflow Discovery {
     step_end: (ctx: StepContext) -> {
-        
         var telemetry_sent = false
         try{
             if (!config.get(key: "telemetry_enabled")) { return }
@@ -20,7 +19,7 @@ partial workflow Discovery {
                 clientId: "senpai"
                 userId: os.user()
                 environment: os.platform()
-                eventType: eventType
+                eventType: ctx.pipeline
                 sessionId: uuid.v7()
                 eventTimestamp: time.now()
                 agentName: "senpai"

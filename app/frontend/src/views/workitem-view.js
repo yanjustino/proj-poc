@@ -90,6 +90,7 @@ export async function renderWorkItemView(container, project, { initialTab = 'art
         <div class="eyebrow">${LEVEL_LABEL[project.level] || project.level}</div>
         <h1>${escapeHtml(project.name)}</h1>
         <p>${formatDate(project.created_at)} · ${escapeHtml(project.id)}</p>
+        ${project.continuidade_de ? `<p class="hero-continuidade">Continuidade de: ${escapeHtml(project.continuidade_de)}</p>` : ''}
       </div>
       <button class="icon-btn" aria-label="Excluir work-item" title="Excluir work-item" data-delete>${icon('trash', 15)}</button>
     </div>

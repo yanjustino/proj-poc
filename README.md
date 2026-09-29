@@ -8,9 +8,12 @@ Aplicação desktop para transformar documentos de negócio e engenharia em uma 
 
 O Senpai organiza o trabalho por **Oportunidade**, **Feature** ou **História**, usa LLM para extrair e sintetizar conhecimento e mantém o usuário no controle por meio de revisão antes da publicação dos artefatos.
 
+**Discovery** (Oportunidade) explora uma oportunidade nova, do zero. **Delivery** (Feature/enabler ou História) é o nível de **continuidade**: tipicamente detalha a evolução de um sistema que já existe em produção, não uma iniciativa greenfield — por isso seus artefatos finais classificam cada regra, entidade ou dependência como `as_is` (já existe), `modificado`, `novo` ou `removido` em vez de assumir que tudo é novo.
+
 ## Principais recursos
 
-- Ingestão de fontes em `.txt`, `.md` e `.pdf`.
+- Ingestão de fontes em `.txt`, `.md`, `.json`, `.yml`, `.yaml`, `.sql`, `.feature` e `.pdf` — os cinco primeiros formatos plain-text cobrem contratos, schemas de dados, configuração e cenários já implementados de um sistema existente, comuns em Delivery.
+- Cada fonte ingerida é classificada quanto à `natureza`: descreve o sistema atual, um pedido novo, ou ambos — visível na página da fonte e no índice da wiki, e usada pelos artefatos gerados para distinguir o que já existe do que é novo.
 - Wiki incremental organizada em fontes, entidades, conceitos e respostas arquivadas.
 - Consulta e verificação de consistência da wiki com apoio de LLM.
 - Geração guiada de brief, requisitos, ADRs, DER, diagramas, features de negócio, enablers e histórias.
@@ -36,11 +39,13 @@ O Senpai organiza o trabalho por **Oportunidade**, **Feature** ou **História**,
 
 | Tipo | Pipeline |
 | --- | --- |
-| Oportunidade | Brief → Atributos de qualidade → Requisitos → ADRs / DER / Diagramas → Backlog da solução (features e enablers) → Dependências → Histórias |
-| Feature | Brief opcional → Requisitos → ADRs / DER / Diagramas → Detalhamento da feature ou enabler → Histórias |
-| História | Brief opcional → Requisitos → ADRs / DER / Diagramas → Detalhamento da história |
+| Oportunidade | Brief → Atributos de qualidade → Requisitos → ADRs → DER / Diagramas → Backlog da solução (features e enablers) → Dependências → Histórias |
+| Feature | Brief → Requisitos → ADRs → DER / Diagramas → Detalhamento da feature ou enabler → Histórias |
+| História | Brief → Requisitos → ADRs → DER / Diagramas → Detalhamento da história |
 
-ADRs, DER e diagramas podem ser opcionais em alguns fluxos de Delivery. A interface informa quais dependências são obrigatórias antes de cada geração.
+Em ambos os níveis a sequência é totalmente encadeada: cada artefato exige que seu predecessor direto já exista (brief antes de requisitos, requisitos antes de ADR, ADR antes de DER/Diagramas, e assim até o detalhamento final). A interface bloqueia a geração e indica qual predecessor falta antes de cada etapa.
+
+Como Delivery normalmente parte de um sistema existente, o brief e os requisitos devem descrever o que já existe hoje (comportamento, entidades, integrações) sempre que as fontes sustentarem isso — não apenas o que está sendo adicionado. Essa distinção alimenta o campo `mudanca` do detalhamento final e do DER.
 
 No backlog da solução, uma `feature_negocio` representa valor percebido diretamente por usuário ou stakeholder. Um `enabler` representa trabalho de exploração, arquitetura, infraestrutura ou conformidade que habilita entregas próximas. Ambos ocupam o mesmo nível e usam o mesmo mapa de dependências; histórias podem ser classificadas como `historia_usuario`, `historia_habilitadora` ou `spike`.
 

@@ -169,9 +169,18 @@ export tool WikiHtmlExport {
     render_index_section(category: {dir: string, label: string}, entries: any[]): string -> {
         var items = entries
             .map((entry) -> "<li><a href=\"" + category.dir + "/" + entry.slug + ".html\"><strong>" +
-                html.escape(entry.title) + "</strong><small>" + html.escape(entry.summary) + "</small></a></li>")
+                html.escape(entry.title) + self.natureza_html(entry) + "</strong><small>" + html.escape(entry.summary) + "</small></a></li>")
             .join("")
         return "<section class=\"wiki-index-section\"><h2>" + html.escape(category.label) + "</h2><ul class=\"wiki-index-list\">" + items + "</ul></section>"
+    }
+
+    // natureza (so em "sources") no indice estatico — o mesmo rotulo que
+    // WikiIndex.render ja poe em wiki/index.md, so que aqui como <span> em
+    // vez de crase, porque este HTML nao passa por md_to_html.
+    natureza_html(entry: any): string -> {
+        var n = entry?.natureza ?? ""
+        if (n.is_empty()) return ""
+        return " <span class=\"wiki-natureza wiki-natureza-" + n.replace("_", "-") + "\">" + html.escape(WikiIndex.natureza_label(n)) + "</span>"
     }
 
     build_search_entries(state: any): any[] -> {
@@ -204,7 +213,8 @@ export tool WikiHtmlExport {
         ".wiki-index-list a{display:block;padding:9px 10px;border-radius:8px;text-decoration:none;color:inherit}" +
         ".wiki-index-list a:hover{background:#ece9df}" +
         ".wiki-index-list strong{display:block;font-size:14px}" +
-        ".wiki-index-list small{display:block;color:#82806f;font-size:12px;margin-top:2px}"
+        ".wiki-index-list small{display:block;color:#82806f;font-size:12px;margin-top:2px}" +
+        ".wiki-natureza{display:inline-block;font-size:10px;font-weight:400;text-transform:uppercase;letter-spacing:.04em;padding:1px 6px;border-radius:999px;margin-left:6px;background:#ece9df;color:#57544a}"
 }
 
 test WikiHtmlExportSpec {
@@ -241,6 +251,18 @@ test WikiHtmlExportSpec {
         is_true(section.contains("<h2>Fontes</h2>"))
         is_true(section.contains("href=\"sources/ata.html\""))
         is_true(section.contains("Ata"))
+    }
+
+    describe render_index_section_shows_the_natureza_badge_only_when_the_entry_has_one {
+        var section = WikiHtmlExport.render_index_section(
+            {dir: "sources", label: "Fontes"},
+            [
+                {slug: "ata", title: "Ata", summary: "resumo da ata", natureza: "pedido_novo"},
+                {slug: "schema", title: "Schema", summary: "resumo do schema"},
+            ]
+        )
+        is_true(section.contains("<span class=\"wiki-natureza wiki-natureza-pedido-novo\">pedido novo</span>"))
+        is_true(section.contains("Schema</strong>"))
     }
 
     describe build_search_entries_flattens_every_category {

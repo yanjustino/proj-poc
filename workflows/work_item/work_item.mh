@@ -12,6 +12,7 @@ workflow WorkItem {
     input action: string             // "create" | "list" | "get" | "archive" | "usage" | "prompt_log" | "changes" | "productivity" | "readiness" | "handoff"
     input name: string = ""          // obrigatorio (valor) so para action:"create"
     input item_type: string = ""     // "oportunidade" | "feature" | "historia"; so para action:"create"
+    input continuidade_de: string = "" // opcional, so para action:"create" — sistema existente que este item evolui
     input project_id: string = ""    // obrigatorio (valor) para get/archive/usage/prompt_log/changes
 
     var project = null
@@ -55,7 +56,7 @@ workflow WorkItem {
     }
 
     step Create {
-        project = WorkItemActions.create(name, item_type)
+        project = WorkItemActions.create(name, item_type, continuidade_de)
         goto Done
     }
 

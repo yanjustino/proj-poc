@@ -8,7 +8,11 @@
 import { Paths } from "../core/paths.mh"
 
 export tool WikiIndex {
-    upsert_source(project_id: string, entry: {slug: string, title: string, summary: string}) ->
+    // Unico dos 4 upsert_* com `natureza` (ingest.schema.json) — so uma
+    // fonte e classificada; entidades/conceitos/respostas nunca carregam o
+    // campo, entao `upsert`/`render_section` leem com `?? ""` em vez de
+    // exigi-lo no tipo compartilhado.
+    upsert_source(project_id: string, entry: {slug: string, title: string, summary: string, natureza: string}) ->
         self.upsert(project_id, "sources", entry)
 
     upsert_entity(project_id: string, entry: {slug: string, title: string, summary: string}) ->
@@ -20,7 +24,7 @@ export tool WikiIndex {
     upsert_answer(project_id: string, entry: {slug: string, title: string, summary: string}) ->
         self.upsert(project_id, "answers", entry)
 
-    upsert(project_id: string, category: string, entry: {slug: string, title: string, summary: string}) -> {
+    upsert(project_id: string, category: string, entry: any) -> {
         var state = self.load(project_id)
         var list = state.get(category, [])
         list = list.filter((existing) -> existing.slug != entry.slug)
@@ -53,9 +57,22 @@ export tool WikiIndex {
         if (entries.is_empty()) return ""
         var lines = "## " + title + "\n\n"
         for (var entry in entries) {
-            lines = lines + "- [" + entry.title + "](" + dir + "/" + entry.slug + ".md) — " + entry.summary + "\n"
+            lines = lines + "- [" + entry.title + "](" + dir + "/" + entry.slug + ".md)" + self.natureza_badge(entry) + " — " + entry.summary + "\n"
         }
         return lines + "\n"
+    }
+
+    natureza_badge(entry: any): string -> {
+        var n = entry?.natureza ?? ""
+        if (n.is_empty()) return ""
+        return " `[" + self.natureza_label(n) + "]`"
+    }
+
+    natureza_label(natureza: string): string -> match natureza {
+        "sistema_atual" -> "sistema atual"
+        "pedido_novo"   -> "pedido novo"
+        "ambos"         -> "ambos"
+        _               -> natureza
     }
 }
 
@@ -70,5 +87,13 @@ test WikiIndexSpec {
 
     describe render_section_of_empty_list_is_empty_string {
         are_equal(WikiIndex.render_section("Fontes", "sources", []), "")
+    }
+
+    describe render_section_shows_the_natureza_badge_only_when_the_entry_has_one {
+        var section = WikiIndex.render_section("Fontes", "sources", [
+            {slug: "a", title: "Ata", summary: "resumo a", natureza: "sistema_atual"},
+            {slug: "b", title: "Benchmark", summary: "resumo b"},
+        ])
+        are_equal(section, "## Fontes\n\n- [Ata](sources/a.md) `[sistema atual]` — resumo a\n- [Benchmark](sources/b.md) — resumo b\n\n")
     }
 }

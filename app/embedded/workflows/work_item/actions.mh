@@ -4,7 +4,15 @@
 import { Paths } from "../shared/core/paths.mh"
 
 export tool WorkItemActions {
-    create(name: string, item_type: string): any -> {
+    // continuidade_de: texto livre e opcional descrevendo qual sistema já
+    // existente este work-item evolui (ex.: "Checkout atual — apenas o
+    // fluxo de pagamento PIX"). Nunca obrigatório — uma Oportunidade
+    // genuinamente greenfield deixa vazio. Context.wiki injeta isso como um
+    // bloco citável no início do conteúdo da wiki, então mesmo um Delivery
+    // que nunca gera brief/DER (ambos opcionais) ainda carrega o sinal de
+    // continuidade nos artefatos que sempre leem a wiki (brief, atributos,
+    // requisitos).
+    create(name: string, item_type: string, continuidade_de: string = ""): any -> {
         if (name.is_empty()) fail("'name' e obrigatorio para action: \"create\"")
 
         var new_id = uuid.v7()
@@ -13,6 +21,7 @@ export tool WorkItemActions {
             name: name,
             type: item_type,
             level: self.level_for(item_type),
+            continuidade_de: continuidade_de,
             created_at: time.format(time.now(), "2006-01-02T15:04:05Z07:00"),
             archived: false
         }
@@ -334,6 +343,29 @@ export tool WorkItemActions {
 }
 
 test WorkItemActionsSpec {
+    describe create_records_the_continuity_field_when_given {
+        var record = WorkItemActions.create("Checkout renovado", "feature", "Checkout atual — fluxo de pagamento PIX")
+        are_equal(record.continuidade_de, "Checkout atual — fluxo de pagamento PIX")
+        are_equal(json.parse(fs.read(Paths.project_file(record.id))).continuidade_de, "Checkout atual — fluxo de pagamento PIX")
+
+        fs.delete(Paths.project_file(record.id))
+        dir.delete(Paths.raw_dir(record.id))
+        dir.delete(Paths.wiki_dir(record.id))
+        dir.delete(Paths.artifacts_dir(record.id))
+        dir.delete(Paths.root(record.id))
+    }
+
+    describe create_defaults_continuity_to_empty_when_not_given {
+        var record = WorkItemActions.create("Oportunidade nova", "oportunidade")
+        are_equal(record.continuidade_de, "")
+
+        fs.delete(Paths.project_file(record.id))
+        dir.delete(Paths.raw_dir(record.id))
+        dir.delete(Paths.wiki_dir(record.id))
+        dir.delete(Paths.artifacts_dir(record.id))
+        dir.delete(Paths.root(record.id))
+    }
+
     describe productivity_sums_llm_time_and_measures_review_cycles {
         var usage = [
             {value: {artifact: "brief", tokens_in: 1, tokens_out: 1, duration_s: 40}, ts: "2026-09-25T10:00:40Z"},

@@ -1,0 +1,30 @@
+import { SenpaiConfig } from "../core/senpai_config.mh"
+
+export tool TelemetryClient {
+    send (data: any) : boolean -> {
+        try
+        {
+            if (!SenpaiConfig.get(key: "telemetry_enabled")) return false
+
+            var url = SenpaiConfig.get("telemetry_endpoint")
+            var cert = SenpaiConfig.get("telemetry_cert")
+            
+            var resp = http.post(
+                url: url, 
+                body: json.stringify(data), 
+                headers: {
+                    "Content-Type": "application/json"
+                    "x-correlation-id": uuid.v7()
+                },
+                tls: {
+                    ca: cert
+                }
+            )
+
+            if (resp.ok) log.info("Telemetry data sent successfully.") 
+            else log.warn("Telemetry data could not be sent. Please check your network connection and configuration.")
+        } catch (e) {
+            log.error("Failed to build telemetry data: ${e}")
+        }
+    }    
+}

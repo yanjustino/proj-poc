@@ -312,8 +312,8 @@ export async function workItemList() {
   return result.projects ?? [];
 }
 
-export async function workItemCreate(name, itemType) {
-  const result = await callWorkflowOnce('WorkItem', { action: 'create', name, item_type: itemType });
+export async function workItemCreate(name, itemType, continuidadeDe = '') {
+  const result = await callWorkflowOnce('WorkItem', { action: 'create', name, item_type: itemType, continuidade_de: continuidadeDe });
   return result.project;
 }
 
@@ -337,7 +337,9 @@ export async function workItemReadiness(projectId) {
 
 // buildHandoff (re)generates the handoff package in projects/<id>/handoff/
 // (workflows/shared/artifacts/handoff.mh) and returns {total, exportadas,
-// fora}; exportHandoff then copies it to a folder the user picks.
+// nao_prontas} — every story is exported (exportadas === total always now),
+// nao_prontas just counts how many are marked not-ready in their own
+// spec.md; exportHandoff then copies the package to a folder the user picks.
 export async function buildHandoff(projectId) {
   const result = await callWorkflowOnce('WorkItem', { action: 'handoff', project_id: projectId });
   return result.handoff;

@@ -14,11 +14,12 @@ export tool WikiActions {
         concepts_touched: number
     } -> {
         var source_slug = Slug.from_title(data.source_title)
-        WikiPages.write_source(project_id, source_slug, data.source_title, data.source_summary)
+        WikiPages.write_source(project_id, source_slug, data.source_title, data.source_summary, data.natureza)
         WikiIndex.upsert_source(project_id, {
             slug: source_slug,
             title: data.source_title,
-            summary: data.index_summary
+            summary: data.index_summary,
+            natureza: data.natureza
         })
 
         for (var entity in data.entities) {

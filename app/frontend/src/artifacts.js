@@ -33,7 +33,8 @@ export const DISCOVERY_SEQUENCE = [
   // picked the database) all come from the ADRs — and declaring it here is
   // what marks them "Desatualizado" when an ADR is regenerated. Mirrors the
   // fail() gates in discovery.partial.tecnicos.mh's DerGenerate/
-  // DiagramasGenerate. (Delivery keeps ADRs optional — see below.)
+  // DiagramasGenerate. (Delivery's own DER/diagramas now require ADR too —
+  // see DELIVERY_SEQUENCE below.)
   { artifact: 'der', deps: ['requisitos', 'atributos', 'adr'], path: 'der.html', category: 'Decisões e modelos' },
   { artifact: 'diagramas', deps: ['requisitos', 'atributos', 'adr'], dir: 'diagramas', collectionKind: 'files', category: 'Diagramas' },
   // der is real context for features when present, but never blocks it —
@@ -51,17 +52,19 @@ export const DISCOVERY_SEQUENCE = [
 ];
 
 export const DELIVERY_SEQUENCE = [
-  // brief and requisitos are each other's only almost-dependency, and it's
-  // optional both ways (brief missing just means a placeholder context, see
-  // delivery.mh's NoAtributos-style handling) — neither blocks the other.
+  // Sequencia totalmente encadeada, mesmo padrao do Discovery: brief ->
+  // requisitos -> adr -> der/diagramas -> final -> historias. Cada `deps`
+  // abaixo espelha 1:1 os fail() de delivery.mh — brief e requisitos
+  // deixaram de ser opcionais, e ADR deixou de ser contexto opcional para
+  // der/diagramas/final.
   { artifact: 'brief', deps: [], path: 'brief.html', category: 'Contexto' },
-  { artifact: 'requisitos', deps: [], path: 'requisitos.html', category: 'Contexto' },
-  { artifact: 'adr', deps: ['requisitos'], dir: 'adr', collectionKind: 'files', category: 'Decisões e modelos' },
-  { artifact: 'der', deps: ['requisitos'], path: 'der.html', category: 'Decisões e modelos' },
-  { artifact: 'diagramas', deps: ['requisitos'], dir: 'diagramas', collectionKind: 'files', category: 'Diagramas' },
+  { artifact: 'requisitos', deps: ['brief'], path: 'requisitos.html', category: 'Contexto' },
+  { artifact: 'adr', deps: ['brief', 'requisitos'], dir: 'adr', collectionKind: 'files', category: 'Decisões e modelos' },
+  { artifact: 'der', deps: ['requisitos', 'adr'], path: 'der.html', category: 'Decisões e modelos' },
+  { artifact: 'diagramas', deps: ['requisitos', 'adr'], dir: 'diagramas', collectionKind: 'files', category: 'Diagramas' },
   // `final`'s real artifact name is the project's own mode ("feature" or
   // "historia") — resolved by finalArtifactName() below, never hardcoded.
-  { artifact: 'final', deps: ['requisitos'], path: null, category: 'Entrega' },
+  { artifact: 'final', deps: ['brief', 'requisitos', 'adr', 'der', 'diagramas'], path: null, category: 'Entrega' },
   // historias only applies when mode === "feature"; see sequenceFor().
   { artifact: 'historias', deps: ['final'], dir: 'historias', collectionKind: 'folders', itemFile: 'historia.html', category: 'Entrega' },
 ];

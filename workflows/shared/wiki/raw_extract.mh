@@ -4,21 +4,63 @@
 // binario `mhl` (mesma logica de C6). Sem pdftotext instalado, falha com uma
 // mensagem clara em vez de mandar bytes binarios pro prompt da LLM.
 //
-// v1 suporta .txt/.md (leitura direta) e .pdf (via pdftotext). Imagens e
-// outros formatos ficam fora do escopo desta fase — ver PLANO-MACRO-MHL-SENPAI.md
+// v1 suporta .txt/.md/.json/.yml/.yaml/.sql/.feature (leitura direta — todos
+// texto plano, nenhum precisa de parser) e .pdf (via pdftotext). json/yml/sql/
+// feature entraram para cobrir fontes de continuidade (Delivery): contratos,
+// schemas de dados, configuracao e cenarios ja implementados de um sistema
+// existente costumam viver nesses formatos, nao em prosa. Imagens e outros
+// formatos ficam fora do escopo desta fase — ver PLANO-MACRO-MHL-SENPAI.md
 // Fase 2.
-
 export tool RawExtract {
+    // Extensoes de texto puro — mesmo branch de leitura, sem parser algum:
+    // o conteudo bruto do arquivo vira o `source_text` do prompt de ingest,
+    // que ja e format-agnostico (ver ingest.prompt.md).
+    plain_text_extensions(): string[] -> [".txt", ".md", ".json", ".yml", ".yaml", ".sql", ".feature"]
+
     text(path: string): string -> {
         var lower = path.to_lower()
-        if (lower.ends_with(".txt") || lower.ends_with(".md")) return fs.read(path)
+        for (var ext in self.plain_text_extensions()) {
+            if (lower.ends_with(ext)) return fs.read(path)
+        }
         if (lower.ends_with(".pdf")) return self.from_pdf(path)
-        fail("tipo de arquivo nao suportado no ingest desta versao: '" + path + "' (use .txt, .md ou .pdf)")
+        fail("tipo de arquivo nao suportado no ingest desta versao: '" + path + "' (use " + self.plain_text_extensions().join(", ") + " ou .pdf)")
     }
 
     from_pdf(path: string): string -> {
         var result = cmd.exec(["pdftotext", path, "-"], timeout: 30s)
         if (result.exit_code != 0) fail("falha ao extrair texto de '" + path + "' via pdftotext: " + result.stderr)
         return result.stdout
+    }
+}
+
+test RawExtractSpec {
+    describe reads_each_new_plain_text_extension_directly {
+        var dir_path = "projects/spec-test-raw-extract/raw"
+        dir.create(dir_path)
+        for (var ext in [".json", ".yml", ".yaml", ".sql", ".feature"]) {
+            var path = dir_path + "/fonte" + ext
+            fs.write(path, "conteudo de " + ext)
+            are_equal(RawExtract.text(path), "conteudo de " + ext)
+            fs.delete(path)
+        }
+        dir.delete(dir_path)
+        dir.delete("projects/spec-test-raw-extract")
+    }
+
+    describe fails_clearly_for_an_extension_still_out_of_scope {
+        var dir_path = "projects/spec-test-raw-extract-unsupported/raw"
+        dir.create(dir_path)
+        var path = dir_path + "/imagem.png"
+        fs.write(path, "nao e texto de verdade")
+        try {
+            RawExtract.text(path)
+            is_true(false)
+        } catch (err) {
+            is_true(err.contains("tipo de arquivo nao suportado"))
+            is_true(err.contains(".feature"))
+        }
+        fs.delete(path)
+        dir.delete(dir_path)
+        dir.delete("projects/spec-test-raw-extract-unsupported")
     }
 }
