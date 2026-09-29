@@ -7,7 +7,7 @@ export tool TelemetryClient {
             if (!SenpaiConfig.get(key: "telemetry_enabled")) return false
 
             var url = SenpaiConfig.get("telemetry_endpoint")
-            var cert = SenpaiConfig.get("telemetry_cert")
+            var cert = SenpaiConfig.certif_file()
             
             var resp = http.post(
                 url: url, 
