@@ -1,0 +1,2605 @@
+<!doctype html>
+<html lang="pt-BR">
+
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1">
+  <meta name="description"
+    content="Apresentação visual v3 da metodologia HLP, organizada em metodologia, instância do processo e cadeia de execução.">
+  <link rel="icon" type="image/png" href="HLP-simbolo-tons-laranja.png">
+  <title>HLP v3 — Metodologia de engenharia de software</title>
+  <style>
+    :root {
+      --bg: #f7f7f7;
+      --surface: #fff;
+      --ink: #202020;
+      --muted: #656565;
+      --line: #d9d9d9;
+      --soft: #ededed;
+      --h: #ff6b00;
+      --l: #ff6b00;
+      --p: #ff6b00;
+      --h-ink: #b84a00;
+      --l-ink: #b84a00;
+      --p-ink: #b84a00;
+      --h-soft: #fff0e5;
+      --l-soft: #fff0e5;
+      --p-soft: #fff0e5;
+      --dark: #202020;
+    }
+
+    * {
+      box-sizing: border-box
+    }
+
+    html {
+      scroll-behavior: smooth
+    }
+
+    body {
+      margin: 0;
+      background: var(--bg);
+      color: var(--ink);
+      font: 16px/1.6 -apple-system, BlinkMacSystemFont, "Segoe UI", system-ui, sans-serif;
+      -webkit-font-smoothing: antialiased
+    }
+
+    a {
+      color: inherit;
+      text-underline-offset: 3px
+    }
+
+    button {
+      font: inherit
+    }
+
+    h1,
+    h2,
+    h3,
+    p {
+      margin-top: 0
+    }
+
+    h1,
+    h2,
+    h3 {
+      font-weight: 650
+    }
+
+    h1 {
+      font-size: clamp(3.2rem, 6.6vw, 6.4rem);
+      line-height: 1.02;
+      letter-spacing: -.075em;
+      margin-bottom: 30px;
+      max-width: 820px
+    }
+
+    h2 {
+      font-size: clamp(2rem, 3.4vw, 3.1rem);
+      line-height: 1.13;
+      letter-spacing: -.055em;
+      margin-bottom: 17px
+    }
+
+    h3 {
+      font-size: 1.14rem;
+      letter-spacing: -.025em;
+      line-height: 1.25
+    }
+
+    .wrap {
+      max-width: 1290px;
+      margin: auto;
+      padding: 0 34px
+    }
+
+    .eyebrow {
+      font-size: .68rem;
+      font-weight: 750;
+      letter-spacing: .17em;
+      text-transform: uppercase
+    }
+
+    .muted {
+      color: var(--muted)
+    }
+
+    .brand-acronym {
+      color: var(--h-ink);
+      font-weight: 700
+    }
+
+    header {
+      background: var(--bg);
+      border-bottom: 1px solid var(--line)
+    }
+
+    nav {
+      display: flex;
+      align-items: center;
+      justify-content: space-between;
+      padding: 29px 0;
+      gap: 20px;
+      border-bottom: 1px solid var(--line)
+    }
+
+    nav .brand {
+      display: inline-flex;
+      align-items: center;
+      text-decoration: none
+    }
+
+    nav .brand img {
+      display: block;
+      width: 120px;
+      height: auto;
+      max-width: 100%
+    }
+
+    nav .links {
+      display: flex;
+      gap: 28px;
+      flex-wrap: wrap
+    }
+
+    nav .links a {
+      text-decoration: none;
+      color: var(--muted);
+      font-size: .83rem;
+      font-weight: 550;
+      transition: color .2s
+    }
+
+    nav .links a:hover {
+      color: var(--ink)
+    }
+
+    .hero {
+      position: relative;
+      isolation: isolate;
+      overflow: hidden;
+      display: flex;
+      align-items: center;
+      min-height: 520px;
+      margin-top: 30px;
+      padding: 90px 48px;
+      border-radius: 5px
+    }
+
+    .hero::before {
+      content: "";
+      position: absolute;
+      inset: 0;
+      z-index: 0;
+      background: url("HLP-capa.png") center/cover no-repeat
+    }
+
+    .hero::after {
+      content: "";
+      position: absolute;
+      inset: 0;
+      z-index: 1;
+      background: linear-gradient(90deg, rgba(247, 247, 247, .97) 0%, rgba(247, 247, 247, .89) 35%, rgba(247, 247, 247, .23) 67%, rgba(247, 247, 247, .03) 100%)
+    }
+
+    .hero>div {
+      position: relative;
+      z-index: 2
+    }
+
+    .hero h1 {
+      max-width: 610px
+    }
+
+    .hero p {
+      max-width: 560px;
+      color: #4a4a4a;
+      font-size: 1.15rem;
+      line-height: 1.65;
+      margin: 0
+    }
+
+    .hero .eyebrow {
+      color: var(--h-ink);
+      margin-bottom: 21px
+    }
+
+    .hero-card {
+      display: grid;
+      grid-template-columns: repeat(3, minmax(0, 1fr));
+      margin: 29px 0 0;
+      border-top: 1px solid var(--ink);
+      border-bottom: 1px solid var(--line)
+    }
+
+    .hero-card .row {
+      display: flex;
+      align-items: flex-start;
+      gap: 18px;
+      padding: 22px 18px 23px 0;
+      border-right: 1px solid var(--line)
+    }
+
+    .hero-card .row:not(:first-child) {
+      padding-left: 18px
+    }
+
+    .hero-card .row:last-child {
+      border-right: 0
+    }
+
+    .letter {
+      display: grid;
+      place-items: center;
+      flex: none;
+      width: 38px;
+      height: 38px;
+      border-radius: 50%;
+      font-size: 1.2rem;
+      font-weight: 720
+    }
+
+    .h-bg {
+      background: var(--h-soft);
+      color: var(--h-ink)
+    }
+
+    .l-bg {
+      background: var(--l-soft);
+      color: var(--l-ink)
+    }
+
+    .p-bg {
+      background: var(--p-soft);
+      color: var(--p-ink)
+    }
+
+    .hero-card strong {
+      display: block;
+      font-size: 1.04rem;
+      line-height: 1.2;
+      margin: 1px 0 5px
+    }
+
+    .hero-card small {
+      display: block;
+      color: var(--muted);
+      line-height: 1.45;
+      font-size: .81rem
+    }
+
+    main section {
+      padding: 95px 0;
+      border-bottom: 1px solid var(--line)
+    }
+
+    main {
+      display: flex;
+      flex-direction: column
+    }
+
+    main section {
+      width: 100%
+    }
+
+    #arquitetura {
+      order: 1
+    }
+
+    #pilares {
+      order: 2;
+      background: #fff
+    }
+
+    #ciclo {
+      order: 3;
+      background: var(--bg)
+    }
+
+    #praticas {
+      order: 4
+    }
+
+    #squad {
+      order: 5
+    }
+
+    #atribuicoes {
+      order: 6;
+      background: #fff
+    }
+
+    #visoes {
+      order: 7
+    }
+
+    #evidencias {
+      order: 8;
+      background: #fff
+    }
+
+    .layer-name a {
+      text-decoration: none
+    }
+
+    #ciclo,
+    #praticas {
+      background: #fff
+    }
+
+    .section-head {
+      max-width: 850px;
+      margin-bottom: 44px
+    }
+
+    .section-head .eyebrow {
+      margin-bottom: 16px
+    }
+
+    .section-head p {
+      color: var(--muted);
+      max-width: 710px;
+      margin: 0
+    }
+
+    .card {
+      background: transparent;
+      border: 0;
+      border-radius: 0;
+      box-shadow: none
+    }
+
+    .three {
+      display: grid;
+      grid-template-columns: repeat(3, minmax(0, 1fr));
+      gap: 34px
+    }
+
+    .pillar {
+      padding: 22px 0 0;
+      border-top: 2px solid var(--line)
+    }
+
+    .pillar.h {
+      border-color: var(--h)
+    }
+
+    .pillar.l {
+      border-color: var(--l)
+    }
+
+    .pillar.p {
+      border-color: var(--p)
+    }
+
+    .pillar .eyebrow {
+      margin-bottom: 17px
+    }
+
+    .pillar.h .eyebrow {
+      color: var(--h-ink)
+    }
+
+    .pillar.l .eyebrow {
+      color: var(--l-ink)
+    }
+
+    .pillar.p .eyebrow {
+      color: var(--p-ink)
+    }
+
+    .pillar h3 {
+      font-size: 1.5rem;
+      margin-bottom: 14px
+    }
+
+    .pillar p {
+      color: var(--muted);
+      margin: 0;
+      font-size: .94rem
+    }
+
+    .note {
+      border-left: 2px solid var(--h);
+      padding: 9px 0 9px 18px;
+      color: var(--muted);
+      font-size: .86rem;
+      max-width: 880px
+    }
+
+    .flow-wrap {
+      overflow: visible;
+      padding: 0 0 16px
+    }
+
+    .diagram {
+      width: 100%;
+      min-width: 0
+    }
+
+    .diagram-line {
+      display: grid;
+      grid-template-columns: 132px repeat(6, minmax(0, 1fr));
+      gap: 0;
+      border-top: 1px solid var(--line);
+      align-items: stretch
+    }
+
+    .diagram-line:last-of-type {
+      border-bottom: 1px solid var(--line)
+    }
+
+    .diagram-label {
+      padding: 23px 18px 23px 0;
+      align-self: center;
+      font-size: .66rem;
+      font-weight: 770;
+      text-transform: uppercase;
+      letter-spacing: .11em;
+      color: var(--muted);
+      line-height: 1.45
+    }
+
+    .diagram-cell {
+      padding: 21px 12px 24px;
+      border-left: 1px solid var(--line);
+      min-width: 0;
+      min-height: 148px;
+      overflow-wrap: anywhere
+    }
+
+    .diagram-cell strong {
+      display: block;
+      font-size: .96rem;
+      line-height: 1.24;
+      margin-bottom: 8px;
+      font-weight: 680
+    }
+
+    .diagram-cell p {
+      font-size: .78rem;
+      line-height: 1.5;
+      color: var(--muted);
+      margin: 0
+    }
+
+    .diagram-line.phase {
+      background: var(--soft)
+    }
+
+    .diagram-line.phase .diagram-cell {
+      min-height: 78px;
+      padding-top: 20px;
+      padding-bottom: 18px
+    }
+
+    .diagram-line.phase .diagram-cell strong {
+      margin: 0;
+      font-size: .9rem
+    }
+
+    .diagram-line.phase .diagram-cell p {
+      margin-top: 4px
+    }
+
+    .diagram-cell.phase-last {
+      grid-column: span 2
+    }
+
+    .diagram-line.activities .diagram-cell {
+      position: relative;
+      min-height: 190px;
+      background: #fff
+    }
+
+    .diagram-line.activities .diagram-cell:before {
+      content: "";
+      position: absolute;
+      top: 0;
+      left: 0;
+      right: 0;
+      height: 3px;
+      background: var(--h)
+    }
+
+    .diagram-line.activities .diagram-cell:nth-child(5):before {
+      background: var(--l)
+    }
+
+    .diagram-line.activities .diagram-cell:nth-child(6):before,
+    .diagram-line.activities .diagram-cell:nth-child(7):before {
+      background: var(--p)
+    }
+
+    .diagram-cell .number {
+      display: inline-block;
+      font-size: .67rem;
+      font-weight: 790;
+      letter-spacing: .06em;
+      color: var(--h-ink);
+      margin-bottom: 16px
+    }
+
+    .diagram-line.activities .diagram-cell:nth-child(5) .number {
+      color: var(--l-ink)
+    }
+
+    .diagram-line.activities .diagram-cell:nth-child(6) .number,
+    .diagram-line.activities .diagram-cell:nth-child(7) .number {
+      color: var(--p-ink)
+    }
+
+    .diagram-line.tools .diagram-cell {
+      min-height: 170px;
+      background: #fafafa
+    }
+
+    .diagram-line.tools .diagram-cell strong {
+      font-size: .85rem
+    }
+
+    .diagram-line.tools .diagram-cell p {
+      font-size: .76rem
+    }
+
+    .diagram-return {
+      margin: 16px 0 0 132px;
+      padding: 10px 0;
+      color: var(--h-ink);
+      font-size: .84rem;
+      font-weight: 650
+    }
+
+    .diagram-return span {
+      font-size: 1.15rem;
+      margin-right: 8px
+    }
+
+    .tabs {
+      display: flex;
+      gap: 32px;
+      flex-wrap: wrap;
+      margin: 0 0 32px;
+      border-bottom: 1px solid var(--line)
+    }
+
+    .tabs button {
+      border: 0;
+      border-bottom: 2px solid transparent;
+      background: none;
+      padding: 0 0 14px;
+      cursor: pointer;
+      color: var(--muted);
+      font-size: .9rem;
+      font-weight: 570;
+      transition: color .2s, border-color .2s
+    }
+
+    .tabs button:hover {
+      color: var(--ink)
+    }
+
+    .tabs button[aria-selected="true"] {
+      border-color: var(--ink);
+      color: var(--ink);
+      font-weight: 700
+    }
+
+    .tabs button:focus-visible,
+    nav a:focus-visible {
+      outline: 2px solid var(--h);
+      outline-offset: 4px
+    }
+
+    .view {
+      display: none
+    }
+
+    .view.active {
+      display: block
+    }
+
+    .matrix {
+      overflow-x: auto
+    }
+
+    .matrix table {
+      width: 100%;
+      border-collapse: collapse;
+      table-layout: fixed;
+      min-width: 850px
+    }
+
+    .matrix th,
+    .matrix td {
+      width: 25%;
+      padding: 18px 16px;
+      text-align: left;
+      border-bottom: 1px solid var(--line);
+      vertical-align: top
+    }
+
+    .matrix th {
+      font-size: .7rem;
+      text-transform: uppercase;
+      letter-spacing: .1em;
+      color: #737373;
+      font-weight: 720
+    }
+
+    .matrix td:first-child {
+      font-weight: 700
+    }
+
+    .matrix td {
+      font-size: .88rem;
+      line-height: 1.5;
+      color: #737373
+    }
+
+    .matrix tr:last-child td {
+      border: 0
+    }
+
+    .matrix td.h-text,
+    .matrix td.l-text,
+    .matrix td.p-text {
+      color: var(--h-ink);
+      font-weight: 670
+    }
+
+    .handoff {
+      display: grid;
+      grid-template-columns: repeat(3, minmax(0, 1fr));
+      gap: 38px
+    }
+
+    .handoff article {
+      padding: 22px 0;
+      border-top: 2px solid var(--line)
+    }
+
+    .handoff .arrow {
+      font-size: 1.5rem;
+      font-weight: 650;
+      letter-spacing: -.04em;
+      margin-bottom: 17px
+    }
+
+    .handoff .h {
+      border-color: var(--h)
+    }
+
+    .handoff .l {
+      border-color: var(--l)
+    }
+
+    .handoff .p {
+      border-color: var(--p)
+    }
+
+    .handoff .h .arrow {
+      color: var(--h-ink)
+    }
+
+    .handoff .l .arrow {
+      color: var(--l-ink)
+    }
+
+    .handoff .p .arrow {
+      color: var(--p-ink)
+    }
+
+    .handoff p {
+      color: var(--muted);
+      font-size: .89rem
+    }
+
+    .handoff ul {
+      padding-left: 19px;
+      margin-bottom: 0;
+      font-size: .87rem
+    }
+
+    .handoff li {
+      margin: 6px 0
+    }
+
+    .execution-chain {
+      display: grid;
+      grid-template-columns: repeat(4, minmax(0, 1fr));
+      gap: 1px;
+      border: 1px solid var(--line);
+      background: var(--line)
+    }
+
+    .execution-node {
+      position: relative;
+      min-height: 285px;
+      padding: 24px 22px;
+      background: var(--surface)
+    }
+
+    .execution-node:first-child {
+      border-top: 3px solid var(--h)
+    }
+
+    .execution-node:last-child {
+      background: var(--dark);
+      color: #fff
+    }
+
+    .execution-node:not(:last-child)::after {
+      content: "→";
+      position: absolute;
+      z-index: 2;
+      right: -10px;
+      top: 30px;
+      width: 20px;
+      height: 20px;
+      display: grid;
+      place-items: center;
+      color: var(--h-ink);
+      background: var(--bg);
+      font-weight: 800
+    }
+
+    .execution-node .execution-number {
+      display: block;
+      margin-bottom: 24px;
+      color: var(--h-ink);
+      font-size: .68rem;
+      font-weight: 800;
+      letter-spacing: .12em
+    }
+
+    .execution-node:last-child .execution-number,
+    .execution-node:last-child .eyebrow {
+      color: #ff9d57
+    }
+
+    .execution-node .eyebrow {
+      margin-bottom: 10px;
+      color: var(--muted)
+    }
+
+    .execution-node h3 {
+      margin-bottom: 13px;
+      font-size: 1.35rem
+    }
+
+    .execution-node p {
+      margin-bottom: 18px;
+      color: var(--muted);
+      font-size: .86rem;
+      line-height: 1.55
+    }
+
+    .execution-node:last-child p {
+      color: #d0d0d0
+    }
+
+    .execution-node small {
+      display: block;
+      padding-top: 13px;
+      border-top: 1px solid var(--line);
+      color: var(--muted);
+      font-size: .72rem;
+      line-height: 1.45
+    }
+
+    .execution-node:last-child small {
+      border-color: #505050;
+      color: #cfcfcf
+    }
+
+    .tool-link {
+      display: inline-block;
+      margin-top: 20px;
+      color: var(--h-ink);
+      font-size: .8rem;
+      font-weight: 650
+    }
+
+    .tool-link:hover {
+      color: var(--ink)
+    }
+
+    .tool-link:focus-visible {
+      outline: 2px solid var(--h);
+      outline-offset: 4px
+    }
+
+    .execution-contract {
+      display: grid;
+      grid-template-columns: repeat(3, minmax(0, 1fr));
+      margin-top: 28px;
+      border-top: 1px solid var(--line);
+      border-bottom: 1px solid var(--line)
+    }
+
+    .execution-contract>div {
+      padding: 19px 18px 20px 0
+    }
+
+    .execution-contract>div+div {
+      padding-left: 18px;
+      border-left: 1px solid var(--line)
+    }
+
+    .execution-contract strong,
+    .execution-contract small {
+      display: block
+    }
+
+    .execution-contract strong {
+      margin-bottom: 5px;
+      font-size: .86rem
+    }
+
+    .execution-contract small {
+      color: var(--muted);
+      font-size: .75rem;
+      line-height: 1.5
+    }
+
+    .practice-grid {
+      display: grid;
+      grid-template-columns: repeat(3, minmax(0, 1fr));
+      gap: 0 34px
+    }
+
+    .practice-grid.governance-practices {
+      grid-template-columns: repeat(2, minmax(0, 1fr))
+    }
+
+    .practice-grid article {
+      padding: 24px 0 28px;
+      border-top: 1px solid var(--line)
+    }
+
+    .practice-grid p {
+      color: var(--muted);
+      font-size: .88rem;
+      margin: 0
+    }
+
+    .practice-grid .mini {
+      font-size: .65rem;
+      text-transform: uppercase;
+      letter-spacing: .12em;
+      color: var(--h-ink);
+      font-weight: 750;
+      margin-bottom: 11px
+    }
+
+    .artifact {
+      padding: 0;
+      border-top: 1px solid var(--line);
+      border-bottom: 1px solid var(--line)
+    }
+
+    .artifact-path {
+      display: grid;
+      grid-template-columns: repeat(6, minmax(0, 1fr));
+      gap: 0
+    }
+
+    .artifact-path div {
+      padding: 24px 13px 26px 0;
+      min-height: 130px
+    }
+
+    .artifact-path div:not(:first-child) {
+      border-left: 1px solid var(--line);
+      padding-left: 15px
+    }
+
+    .artifact-path strong {
+      display: block;
+      font-size: .88rem;
+      margin-bottom: 11px
+    }
+
+    .artifact-path small {
+      color: var(--muted);
+      font-size: .76rem;
+      line-height: 1.45;
+      display: block
+    }
+
+    .artifact-path div:not(:last-child):after {
+      content: "→";
+      float: right;
+      color: var(--h-ink);
+      font-weight: 700
+    }
+
+    .metric-grid {
+      display: grid;
+      grid-template-columns: repeat(4, minmax(0, 1fr));
+      gap: 30px
+    }
+
+    .metric {
+      padding: 17px 0;
+      border-top: 1px solid var(--line)
+    }
+
+    .metric strong {
+      display: block;
+      font-size: 1.27rem;
+      color: var(--ink);
+      font-weight: 650;
+      letter-spacing: -.04em
+    }
+
+    .metric small {
+      color: var(--muted);
+      font-size: .79rem
+    }
+
+    .pilot-hypothesis {
+      display: grid;
+      grid-template-columns: 165px 1fr;
+      align-items: center;
+      border-top: 3px solid var(--h);
+      background: var(--dark);
+      color: #fff
+    }
+
+    .pilot-hypothesis .eyebrow {
+      padding: 25px;
+      color: #ff9d57
+    }
+
+    .pilot-hypothesis p {
+      margin: 0;
+      padding: 24px 28px;
+      border-left: 1px solid #505050;
+      color: #e1e1e1;
+      font-size: 1rem;
+      line-height: 1.6
+    }
+
+    .pilot-loop {
+      display: grid;
+      grid-template-columns: repeat(4, minmax(0, 1fr));
+      margin-top: 42px;
+      border-top: 1px solid var(--line);
+      border-bottom: 1px solid var(--line)
+    }
+
+    .pilot-loop>div {
+      position: relative;
+      padding: 20px 22px 22px 0
+    }
+
+    .pilot-loop>div+div {
+      padding-left: 22px;
+      border-left: 1px solid var(--line)
+    }
+
+    .pilot-loop>div:not(:last-child)::after {
+      content: "→";
+      position: absolute;
+      right: -8px;
+      top: 20px;
+      z-index: 2;
+      color: var(--h-ink);
+      background: #fff;
+      font-weight: 800
+    }
+
+    .pilot-loop span,
+    .pilot-loop strong,
+    .pilot-loop small {
+      display: block
+    }
+
+    .pilot-loop span {
+      margin-bottom: 12px;
+      color: var(--h-ink);
+      font-size: .65rem;
+      font-weight: 800;
+      letter-spacing: .11em
+    }
+
+    .pilot-loop strong {
+      margin-bottom: 6px;
+      font-size: .86rem
+    }
+
+    .pilot-loop small {
+      color: var(--muted);
+      font-size: .74rem;
+      line-height: 1.45
+    }
+
+    .layers {
+      display: grid;
+      gap: 12px;
+      max-width: 1080px
+    }
+
+    .layer {
+      display: grid;
+      grid-template-columns: 190px 1fr;
+      align-items: center;
+      border: 1px solid var(--line);
+      background: var(--surface);
+      min-height: 94px
+    }
+
+    .layer-name {
+      height: 100%;
+      display: flex;
+      align-items: center;
+      padding: 21px;
+      font-size: .7rem;
+      font-weight: 780;
+      letter-spacing: .12em;
+      text-transform: uppercase;
+      border-right: 1px solid var(--line)
+    }
+
+    .layer-content {
+      padding: 20px 24px
+    }
+
+    .layer-content strong {
+      display: block;
+      margin-bottom: 4px
+    }
+
+    .layer-content p {
+      margin: 0;
+      color: var(--muted);
+      font-size: .88rem
+    }
+
+    .layer.method {
+      border-top: 3px solid var(--h)
+    }
+
+    .layer.instance {
+      margin: 0 5%;
+      border-top: 3px solid var(--ink)
+    }
+
+    .layer.foundation {
+      margin: 0 10%;
+      background: #202020;
+      color: #fff;
+      border-color: #202020
+    }
+
+    .layer.foundation .layer-name {
+      border-color: #515151
+    }
+
+    .layer.foundation p {
+      color: #d0d0d0
+    }
+
+    .mandatory {
+      display: grid;
+      grid-template-columns: repeat(4, minmax(0, 1fr));
+      gap: 0;
+      margin-top: 30px;
+      border-top: 1px solid var(--line);
+      border-bottom: 1px solid var(--line)
+    }
+
+    .mandatory div {
+      padding: 19px 16px
+    }
+
+    .mandatory div+div {
+      border-left: 1px solid var(--line)
+    }
+
+    .mandatory strong {
+      display: block;
+      font-size: .88rem;
+      margin-bottom: 5px
+    }
+
+    .mandatory small {
+      color: var(--muted);
+      font-size: .75rem;
+      line-height: 1.4;
+      display: block
+    }
+
+    .org {
+      display: grid;
+      grid-template-columns: 1fr 1.2fr 1.2fr;
+      gap: 28px;
+      align-items: start
+    }
+
+    .org article {
+      border-top: 2px solid var(--line);
+      padding-top: 21px
+    }
+
+    .org article:first-child {
+      border-color: var(--h)
+    }
+
+    .org h3 {
+      margin-bottom: 10px
+    }
+
+    .org p,
+    .org li {
+      color: var(--muted);
+      font-size: .86rem
+    }
+
+    .org ul {
+      padding-left: 18px;
+      margin: 12px 0 0
+    }
+
+    .org-flow {
+      display: flex;
+      align-items: center;
+      gap: 10px;
+      margin: 31px 0 0;
+      padding: 16px 0;
+      border-top: 1px solid var(--line);
+      border-bottom: 1px solid var(--line);
+      font-size: .78rem;
+      font-weight: 680;
+      color: var(--muted);
+      flex-wrap: wrap
+    }
+
+    .org-flow b {
+      color: var(--h-ink)
+    }
+
+    .topology {
+      display: grid;
+      grid-template-columns: .8fr 1.1fr 1.45fr 1.45fr;
+      gap: 38px;
+      align-items: stretch;
+      margin-bottom: 42px
+    }
+
+    .topology-node {
+      position: relative;
+      background: var(--surface);
+      border: 1px solid var(--line);
+      border-top: 3px solid var(--h);
+      padding: 20px;
+      min-height: 170px
+    }
+
+    .topology-node:not(:last-child)::after {
+      content: "→";
+      position: absolute;
+      right: -27px;
+      top: 50%;
+      transform: translateY(-50%);
+      color: var(--h-ink);
+      font-size: 1.25rem;
+      font-weight: 750
+    }
+
+    .topology-node.dark {
+      background: var(--dark);
+      color: #fff;
+      border-color: var(--dark)
+    }
+
+    .topology-node.dark p,
+    .topology-node.dark small {
+      color: #cfcfcf
+    }
+
+    .topology-node .eyebrow {
+      color: var(--h-ink);
+      margin-bottom: 18px
+    }
+
+    .topology-node.dark .eyebrow {
+      color: #ff9d57
+    }
+
+    .topology-node h3 {
+      font-size: 1.25rem;
+      margin-bottom: 9px
+    }
+
+    .topology-node p {
+      font-size: .8rem;
+      line-height: 1.5;
+      color: var(--muted);
+      margin: 0
+    }
+
+    .topology-members {
+      display: grid;
+      gap: 7px;
+      margin-top: 14px
+    }
+
+    .topology-members span {
+      display: block;
+      border-top: 1px solid var(--line);
+      padding-top: 7px;
+      font-size: .75rem;
+      color: var(--muted)
+    }
+
+    .topology-node:nth-child(2) .topology-members::before {
+      content: "Coordenadores";
+      display: block;
+      border-top: 1px solid var(--line);
+      padding-top: 7px;
+      font-size: .75rem;
+      color: var(--muted)
+    }
+
+    .topology-node.dark .topology-members span {
+      border-color: #4a4a4a;
+      color: #ddd
+    }
+
+    .topology-count {
+      display: inline-block;
+      margin-top: 12px;
+      color: var(--h-ink);
+      font-size: .69rem;
+      font-weight: 780;
+      letter-spacing: .08em;
+      text-transform: uppercase
+    }
+
+    .figure {
+      margin: 42px 0 0;
+      border-top: 1px solid var(--line);
+      padding-top: 24px
+    }
+
+    .figure img {
+      display: block;
+      width: 100%;
+      height: auto;
+      border: 1px solid var(--line);
+      background: #fff
+    }
+
+    .figure figcaption {
+      margin-top: 13px;
+      color: var(--muted);
+      font-size: .8rem;
+      line-height: 1.5;
+      max-width: 880px
+    }
+
+    .team-model {
+      margin-top: 42px;
+      border-top: 1px solid var(--line);
+      padding-top: 24px
+    }
+
+    .team-shared {
+      display: grid;
+      grid-template-columns: 1.35fr repeat(3, minmax(0, 1fr));
+      align-items: center;
+      gap: 1px;
+      background: #4c4c4c;
+      border: 1px solid var(--dark)
+    }
+
+    .team-shared>div {
+      min-height: 92px;
+      padding: 18px;
+      background: var(--dark);
+      color: #fff
+    }
+
+    .team-shared .team-intro small {
+      display: block;
+      margin-top: 5px;
+      color: #cfcfcf;
+      font-size: .74rem;
+      line-height: 1.45
+    }
+
+    .team-shared .team-capability {
+      display: flex;
+      align-items: center;
+      color: #ffb27b;
+      font-size: .78rem;
+      font-weight: 700
+    }
+
+    .team-squads {
+      display: grid;
+      grid-template-columns: repeat(3, minmax(0, 1fr));
+      gap: 18px;
+      padding: 24px 5% 0
+    }
+
+    .team-squad {
+      border: 1px solid var(--line);
+      border-top: 3px solid var(--h);
+      background: var(--surface);
+      padding: 18px
+    }
+
+    .team-squad strong,
+    .team-squad small {
+      display: block
+    }
+
+    .team-squad small {
+      margin-top: 5px;
+      color: var(--muted);
+      font-size: .74rem
+    }
+
+    .team-model-caption {
+      margin: 15px 5% 0;
+      color: var(--muted);
+      font-size: .8rem;
+      line-height: 1.5;
+      max-width: 900px
+    }
+
+    .flowmap {
+      margin-top: 8px;
+      overflow-x: auto;
+      padding-bottom: 6px
+    }
+
+    .flowmap-grid {
+      min-width: 1020px;
+      display: grid;
+      grid-template-columns: 132px repeat(6, minmax(0, 1fr));
+      gap: 0;
+      border: 1px solid var(--line);
+      background: var(--surface)
+    }
+
+    .flowmap-grid>div {
+      border-right: 1px solid var(--line);
+      border-bottom: 1px solid var(--line);
+      padding: 16px 14px
+    }
+
+    .flowmap-grid>div:nth-child(7n) {
+      border-right: 0
+    }
+
+    .flowmap-row-label {
+      background: var(--soft);
+      font-size: .66rem;
+      text-transform: uppercase;
+      letter-spacing: .11em;
+      font-weight: 770;
+      color: var(--muted);
+      display: flex;
+      align-items: center
+    }
+
+    .flowmap-phase {
+      background: var(--soft);
+      font-size: .76rem;
+      line-height: 1.35;
+      color: var(--ink);
+      font-weight: 700
+    }
+
+    .flowmap-phase small {
+      display: block;
+      margin-top: 3px;
+      color: var(--muted);
+      font-size: .68rem;
+      font-weight: 500
+    }
+
+    .flowmap-step {
+      background: var(--dark);
+      color: #fff;
+      position: relative
+    }
+
+    .flowmap-step .num {
+      display: block;
+      font-size: .65rem;
+      letter-spacing: .1em;
+      font-weight: 790;
+      color: #ff9d57;
+      margin-bottom: 6px
+    }
+
+    .flowmap-step strong {
+      display: block;
+      font-size: .88rem;
+      line-height: 1.3;
+      font-weight: 680
+    }
+
+    .flowmap-step:not(:last-child)::after {
+      content: none
+    }
+
+    .flowmap-role {
+      font-size: .8rem;
+      line-height: 1.45;
+      color: var(--ink);
+      font-weight: 660
+    }
+
+    .flowmap-role small {
+      display: block;
+      margin-top: 6px;
+      font-weight: 450;
+      color: var(--muted);
+      font-size: .74rem;
+      line-height: 1.45
+    }
+
+    .flowmap-tool span {
+      display: inline-block;
+      border: 1px solid var(--line);
+      background: var(--soft);
+      font-size: .7rem;
+      font-weight: 700;
+      padding: 4px 8px;
+      margin: 0 4px 4px 0
+    }
+
+    .flowmap-artifact {
+      font-size: .76rem;
+      line-height: 1.5;
+      color: var(--muted)
+    }
+
+    .flowmap-artifact b {
+      display: block;
+      color: var(--ink);
+      font-size: .79rem;
+      margin-bottom: 4px
+    }
+
+    .flowmap-support {
+      min-width: 1020px;
+      display: grid;
+      grid-template-columns: 132px minmax(0, 1fr);
+      border: 1px solid var(--line);
+      border-top: 0;
+      background: var(--soft)
+    }
+
+    .flowmap-support>div {
+      padding: 16px 14px
+    }
+
+    .flowmap-support>div:first-child {
+      border-right: 1px solid var(--line);
+      font-size: .66rem;
+      text-transform: uppercase;
+      letter-spacing: .11em;
+      font-weight: 770;
+      color: var(--muted);
+      display: flex;
+      align-items: center
+    }
+
+    .flowmap-support-bar {
+      display: flex;
+      flex-wrap: wrap;
+      gap: 8px 10px;
+      align-items: center
+    }
+
+    .flowmap-support-bar b {
+      border: 1px solid var(--h);
+      color: var(--h-ink);
+      font-size: .72rem;
+      font-weight: 740;
+      padding: 5px 10px;
+      background: var(--surface)
+    }
+
+    .flowmap-support-bar small {
+      color: var(--muted);
+      font-size: .76rem;
+      line-height: 1.5
+    }
+
+    .flowmap-loop {
+      min-width: 1020px;
+      border: 1px solid var(--line);
+      border-top: 0;
+      padding: 13px 14px;
+      font-size: .78rem;
+      color: var(--h-ink);
+      font-weight: 650;
+      background: var(--surface)
+    }
+
+    .flowmap-loop span {
+      font-size: 1.1rem;
+      margin-right: 8px
+    }
+
+    .flowmap-legend {
+      display: flex;
+      flex-wrap: wrap;
+      gap: 10px 24px;
+      margin-top: 17px;
+      font-size: .74rem;
+      color: var(--muted)
+    }
+
+    .flowmap-legend span {
+      display: flex;
+      align-items: center;
+      gap: 7px
+    }
+
+    .flowmap-legend i {
+      width: 11px;
+      height: 11px;
+      display: inline-block;
+      border: 1px solid var(--line)
+    }
+
+    .flowmap-legend i.dark {
+      background: var(--dark);
+      border-color: var(--dark)
+    }
+
+    .flowmap-legend i.soft {
+      background: var(--soft)
+    }
+
+    .flowmap-legend i.acc {
+      background: var(--surface);
+      border-color: var(--h)
+    }
+
+    footer {
+      background: var(--soft);
+      color: var(--muted);
+      padding: 48px 0;
+      font-size: .82rem
+    }
+
+    footer p {
+      margin-bottom: 19px
+    }
+
+    footer a {
+      color: var(--ink)
+    }
+
+    .sources {
+      display: flex;
+      gap: 10px 22px;
+      flex-wrap: wrap
+    }
+
+    .sources a {
+      text-decoration: none;
+      border-bottom: 1px solid #adadad
+    }
+
+    @media(max-width:1150px) {
+      .diagram-line {
+        grid-template-columns: repeat(3, minmax(0, 1fr))
+      }
+
+      .diagram-label {
+        grid-column: 1/-1;
+        padding: 12px 0 8px
+      }
+
+      .diagram-cell {
+        border-top: 1px solid var(--line)
+      }
+
+      .diagram-return {
+        margin-left: 0
+      }
+    }
+
+    @media(max-width:930px) {
+      .hero {
+        min-height: 470px
+      }
+
+      .hero-card {
+        grid-template-columns: 1fr
+      }
+
+      .hero-card .row,
+      .hero-card .row:not(:first-child) {
+        padding: 17px 0;
+        border-right: 0;
+        border-bottom: 1px solid var(--line)
+      }
+
+      .hero-card .row:last-child {
+        border-bottom: 0
+      }
+
+      .three,
+      .handoff {
+        gap: 22px
+      }
+
+      .execution-chain,
+      .pilot-loop {
+        grid-template-columns: repeat(2, 1fr)
+      }
+
+      .execution-node:nth-child(2)::after {
+        content: "↓";
+        right: auto;
+        left: 50%;
+        top: auto;
+        bottom: -11px;
+        transform: translateX(-50%)
+      }
+
+      .pilot-loop>div:nth-child(2)::after {
+        content: "↓";
+        right: auto;
+        left: 50%;
+        top: auto;
+        bottom: -9px;
+        transform: translateX(-50%)
+      }
+
+      .execution-contract {
+        grid-template-columns: 1fr
+      }
+
+      .execution-contract>div+div {
+        padding-left: 0;
+        border-left: 0;
+        border-top: 1px solid var(--line)
+      }
+
+      .practice-grid {
+        grid-template-columns: repeat(2, 1fr)
+      }
+
+      .artifact-path {
+        grid-template-columns: repeat(3, 1fr)
+      }
+
+      .artifact-path div:nth-child(4) {
+        border-left: 0;
+        padding-left: 0
+      }
+
+      .metric-grid {
+        grid-template-columns: repeat(2, 1fr)
+      }
+
+      .mandatory {
+        grid-template-columns: repeat(2, 1fr)
+      }
+
+      .mandatory div:nth-child(3) {
+        border-left: 0;
+        border-top: 1px solid var(--line)
+      }
+
+      .mandatory div:nth-child(4) {
+        border-top: 1px solid var(--line)
+      }
+
+      .org {
+        grid-template-columns: 1fr
+      }
+
+      .topology {
+        grid-template-columns: repeat(2, 1fr);
+        gap: 28px
+      }
+
+      .team-shared {
+        grid-template-columns: repeat(3, 1fr)
+      }
+
+      .team-shared .team-intro {
+        grid-column: 1/-1
+      }
+
+      .topology-node:nth-child(2)::after {
+        content: "↓";
+        right: auto;
+        left: 50%;
+        top: auto;
+        bottom: -27px;
+        transform: translateX(-50%)
+      }
+
+      .topology-node:nth-child(3)::after {
+        content: "→"
+      }
+    }
+
+    @media(max-width:650px) {
+      .wrap {
+        padding: 0 20px
+      }
+
+      nav {
+        align-items: flex-start;
+        flex-direction: column;
+        gap: 18px
+      }
+
+      nav .links {
+        gap: 10px 18px
+      }
+
+      .hero {
+        min-height: 470px;
+        padding: 46px 26px;
+        margin-top: 20px
+      }
+
+      .hero::before {
+        background-position: 64% center
+      }
+
+      .hero::after {
+        background: linear-gradient(90deg, rgba(247, 247, 247, .96), rgba(247, 247, 247, .8) 65%, rgba(247, 247, 247, .35))
+      }
+
+      .hero h1 {
+        font-size: clamp(3rem, 11vw, 4.4rem)
+      }
+
+      .hero p {
+        font-size: 1rem
+      }
+
+      main section {
+        padding: 68px 0
+      }
+
+      .section-head {
+        margin-bottom: 32px
+      }
+
+      .three,
+      .handoff,
+      .practice-grid,
+      .metric-grid {
+        grid-template-columns: 1fr
+      }
+
+      .execution-chain,
+      .pilot-loop {
+        grid-template-columns: 1fr
+      }
+
+      .execution-node {
+        min-height: 0
+      }
+
+      .execution-node:not(:last-child)::after,
+      .execution-node:nth-child(2)::after {
+        content: "↓";
+        right: auto;
+        left: 50%;
+        top: auto;
+        bottom: -11px;
+        transform: translateX(-50%)
+      }
+
+      .pilot-hypothesis {
+        grid-template-columns: 1fr
+      }
+
+      .pilot-hypothesis p {
+        border-left: 0;
+        border-top: 1px solid #505050
+      }
+
+      .pilot-loop>div+div {
+        padding-left: 0;
+        border-left: 0;
+        border-top: 1px solid var(--line)
+      }
+
+      .pilot-loop>div:not(:last-child)::after {
+        content: "↓";
+        right: auto;
+        left: 50%;
+        top: auto;
+        bottom: -9px;
+        transform: translateX(-50%)
+      }
+
+      .pillar,
+      .handoff article {
+        padding-top: 18px
+      }
+
+      .artifact-path {
+        grid-template-columns: repeat(2, 1fr)
+      }
+
+      .artifact-path div:nth-child(odd) {
+        border-left: 0;
+        padding-left: 0
+      }
+
+      .artifact-path div:nth-child(even) {
+        border-left: 1px solid var(--line);
+        padding-left: 15px
+      }
+
+      .tabs {
+        gap: 20px
+      }
+
+      .tabs button {
+        font-size: .82rem
+      }
+
+      .diagram-line {
+        grid-template-columns: repeat(2, minmax(0, 1fr))
+      }
+
+      .layer {
+        grid-template-columns: 1fr
+      }
+
+      .layer-name {
+        border-right: 0;
+        border-bottom: 1px solid var(--line);
+        padding: 13px 18px
+      }
+
+      .layer.instance,
+      .layer.foundation {
+        margin: 0
+      }
+
+      .mandatory {
+        grid-template-columns: 1fr
+      }
+
+      .mandatory div+div,
+      .mandatory div:nth-child(3) {
+        border-left: 0;
+        border-top: 1px solid var(--line)
+      }
+
+      .topology {
+        grid-template-columns: 1fr;
+        gap: 32px
+      }
+
+      .team-shared,
+      .team-squads {
+        grid-template-columns: 1fr
+      }
+
+      .team-shared .team-intro {
+        grid-column: auto
+      }
+
+      .topology-node:not(:last-child)::after,
+      .topology-node:nth-child(2)::after,
+      .topology-node:nth-child(3)::after {
+        content: "↓";
+        right: auto;
+        left: 50%;
+        top: auto;
+        bottom: -29px;
+        transform: translateX(-50%)
+      }
+    }
+
+    @media(max-width:420px) {
+      .diagram-line {
+        grid-template-columns: 1fr
+      }
+
+      .diagram-cell.phase-last {
+        grid-column: span 1
+      }
+
+      .diagram-cell {
+        border-left: 0;
+        padding-left: 0;
+        padding-right: 0;
+        min-height: 0 !important
+      }
+
+      .diagram-line.activities .diagram-cell,
+      .diagram-line.tools .diagram-cell {
+        min-height: 0
+      }
+
+      .diagram-label {
+        padding-top: 16px
+      }
+    }
+
+    @media print {
+
+      body,
+      header,
+      #ciclo,
+      #praticas {
+        background: #fff
+      }
+
+      nav .links,
+      .tabs {
+        display: none
+      }
+
+      .hero {
+        padding: 25px 0
+      }
+
+      .view {
+        display: block !important;
+        margin-bottom: 20px
+      }
+
+      .flow-wrap {
+        overflow: visible
+      }
+
+      .diagram {
+        min-width: 0
+      }
+
+      .diagram-line {
+        grid-template-columns: 80px repeat(6, minmax(0, 1fr))
+      }
+
+      .diagram-cell {
+        padding: 8px;
+        min-height: 0 !important
+      }
+
+      .diagram-cell p {
+        font-size: .6rem
+      }
+
+      .diagram-return {
+        margin-left: 80px
+      }
+
+      .flowmap {
+        overflow: visible
+      }
+
+      .flowmap-grid,
+      .flowmap-support,
+      .flowmap-loop {
+        min-width: 0
+      }
+
+      .flowmap-grid {
+        grid-template-columns: 80px repeat(6, minmax(0, 1fr))
+      }
+
+      .flowmap-grid>div {
+        padding: 8px
+      }
+
+      .flowmap-artifact,
+      .flowmap-role,
+      .flowmap-role small {
+        font-size: .62rem
+      }
+
+      .card,
+      article {
+        break-inside: avoid
+      }
+
+      main section {
+        padding: 26px 0
+      }
+
+      footer {
+        background: #fff
+      }
+    }
+  </style>
+</head>
+
+<body>
+  <header id="inicio">
+    <div class="wrap">
+      <nav aria-label="Navegação principal"><a class="brand" href="#inicio"><img src="HLP-simbolo-tons-laranja.png"
+            alt="HLP — Help"></a>
+        <div class="links"><a href="#arquitetura">Estrutura</a><a href="#pilares">Metodologia</a><a
+            href="#ciclo">Instância</a><a href="#praticas">Governança</a><a href="#squad">Papéis</a><a
+            href="#atribuicoes">Responsabilidades</a><a href="#visoes">Execução</a><a href="#evidencias">Validação</a>
+        </div>
+      </nav>
+      <div class="hero">
+        <div>
+          <div class="eyebrow">Versão 3 · Metodologia em elaboração · Engenharia de software</div>
+          <h1>Da ideia à operação.</h1>
+          <p>Uma metodologia organizada em três níveis: a HLP define como trabalhar, cada iniciativa configura sua
+            instância e a cadeia técnica executa as decisões com governança, construção e operação.</p>
+        </div>
+      </div>
+      <div class="hero-card" aria-label="Três pilares do HLP">
+        <div class="row"><span class="letter h-bg">H</span>
+          <div><strong>Harness</strong><small>Entender, planejar, modelar e auxiliar a construir com IA
+              governada.</small></div>
+        </div>
+        <div class="row"><span class="letter l-bg">L</span>
+          <div><strong>Low-Code</strong><small>Construir, reutilizar, evoluir e testar aplicações.</small></div>
+        </div>
+        <div class="row"><span class="letter p-bg">P</span>
+          <div><strong>Plataforma</strong><small>Publicar, operar e recuperar com caminhos aprovados.</small></div>
+        </div>
+      </div>
+    </div>
+  </header>
+  <main>
+    <section id="pilares">
+      <div class="wrap">
+        <div class="section-head">
+          <div class="eyebrow muted">02 / Metodologia HLP</div>
+          <h2>Princípios e capacidades que orientam o método</h2>
+          <p><span class="brand-acronym">HLP</span> não é um catálogo de ferramentas. É a metodologia que organiza
+            decisões e responsabilidades, preservando governança, verificabilidade e reutilização ao longo do SDLC.</p>
+        </div>
+        <div class="three">
+          <article class="card pillar h">
+            <div class="eyebrow">H / Harness</div>
+            <h3>Inteligência sob controle</h3>
+            <p>Contexto, fontes, políticas, verificações e supervisão humana orientam o uso de IA. O
+              <strong>MHL</strong> torna os workflows executáveis, legíveis, testáveis e auditáveis, mantendo o programa
+              no controle do fluxo.
+            </p>
+          </article>
+          <article class="card pillar l">
+            <div class="eyebrow">L / Low-Code</div>
+            <h3>Velocidade quando fizer sentido</h3>
+            <p>O <strong>Radahn</strong> acelera a construção de aplicações modernas por meio de especificações,
+              componentes e integrações reutilizáveis. Seu uso é uma opção da instância: código tradicional continua
+              válido e ambos seguem versionamento, revisão e testes.</p>
+          </article>
+          <article class="card pillar p">
+            <div class="eyebrow">P / Plataforma</div>
+            <h3>Base operacional comum</h3>
+            <p>Autosserviço, políticas, implantação, observabilidade e recuperação tornam a entrega repetível.
+              <strong>Kubernetes/EKS</strong> sustenta essa capacidade e conecta especificação à operação.
+            </p>
+          </article>
+        </div>
+      </div>
+    </section>
+    <section id="arquitetura">
+      <div class="wrap">
+        <div class="section-head">
+          <div class="eyebrow muted">01 / Estrutura da documentação</div>
+          <h2>Metodologia acima, execução abaixo</h2>
+          <p>A v3 segue esta hierarquia: a metodologia define como trabalhar, a instância traduz as regras para o
+            contexto do produto e a cadeia técnica implementa as decisões.</p>
+        </div>
+        <div class="layers" aria-label="Camadas da metodologia HLP">
+          <div class="layer method">
+            <div class="layer-name"><a href="#pilares">Metodologia HLP</a></div>
+            <div class="layer-content"><strong>Princípios, processo e critérios de decisão</strong>
+              <p>Define o que deve permanecer governado, verificável e reutilizável ao longo de todo o SDLC.</p>
+            </div>
+          </div>
+          <div class="layer instance">
+            <div class="layer-name"><a href="#ciclo">Instância do processo</a></div>
+            <div class="layer-content"><strong>Papéis, gates, políticas e evidências</strong>
+              <p>Contextualiza a metodologia segundo necessidade, risco, produto e organização.</p>
+            </div>
+          </div>
+          <div class="layer foundation">
+            <div class="layer-name"><a href="#visoes">Cadeia de execução</a></div>
+            <div class="layer-content"><strong>MHL → Radahn → Operator → Kubernetes/EKS</strong>
+              <p>MHL controla e audita workflows de IA; Radahn expressa e constrói a aplicação; o Operator materializa a
+                especificação; Kubernetes/EKS fornece a base operacional.</p>
+            </div>
+          </div>
+        </div>
+        <div class="mandatory" aria-label="Escolhas obrigatórias e opcionais">
+          <div><strong>IA governada com MHL</strong><small>Fluxo determinístico, políticas explícitas, testes e trilha
+              de execução.</small></div>
+          <div><strong>Estado auditável</strong><small>Entradas, saídas, tentativas, custos e checkpoints deixam
+              evidências.</small></div>
+          <div><strong>Comitê WAR</strong><small>Decisões arquiteturais avaliadas antes da construção.</small></div>
+          <div><strong>Construção flexível</strong><small>Radahn acelera a construção; código tradicional pode
+              complementar a instância.</small></div>
+        </div>
+      </div>
+    </section>
+    <section id="ciclo">
+      <div class="wrap">
+        <div class="section-head">
+          <div class="eyebrow muted">03.1 / Instância do processo · Fluxo</div>
+          <h2>Instância do processo</h2>
+          <p>O fluxo cobre o ciclo completo, do enquadramento à operação. MHL governa os workflows de IA usados ao longo
+            do ciclo; Kubernetes/EKS sustenta a passagem da construção para implantação, operação e aprendizado.</p>
+        </div>
+        <div class="section-head">
+          <h3>Fluxo de ponta a ponta: atividade, papel e artefato</h3>
+          <p>Uma leitura única do ciclo: cada atividade mostra quem responde por ela, qual componente a apoia e qual
+            artefato ela deixa registrado. As capacidades compartilhadas atravessam todo o fluxo e existem antes da
+            demanda chegar.</p>
+        </div>
+        <div class="flowmap" aria-label="Fluxo conectando etapas, papéis, componentes de apoio e artefatos">
+          <div class="flowmap-grid">
+            <div class="flowmap-row-label">Framework</div>
+            <div class="flowmap-phase">Comunicação</div>
+            <div class="flowmap-phase">Planejamento</div>
+            <div class="flowmap-phase">Modelagem<small>Análise</small></div>
+            <div class="flowmap-phase">Modelagem<small>Design</small></div>
+            <div class="flowmap-phase">Construção<small>Inclui testes</small></div>
+            <div class="flowmap-phase">Implantação<small>Entrega e feedback</small></div>
+
+            <div class="flowmap-row-label">Atividade</div>
+            <div class="flowmap-step"><span class="num">01</span><strong>Identificar oportunidade e desejo</strong>
+            </div>
+            <div class="flowmap-step"><span class="num">02</span><strong>Explorar e refinar</strong></div>
+            <div class="flowmap-step"><span class="num">03</span><strong>Definir artefatos de decisão</strong></div>
+            <div class="flowmap-step"><span class="num">04</span><strong>Modelar no Comitê WAR</strong></div>
+            <div class="flowmap-step"><span class="num">05</span><strong>Construir e entregar</strong></div>
+            <div class="flowmap-step"><span class="num">06</span><strong>Implantar e operar</strong></div>
+
+            <div class="flowmap-row-label">Papéis</div>
+            <div class="flowmap-role">PM<small>Representa o negócio e leva a oportunidade ao Steward Context Engineer e
+                ao SME de Portfólio.</small></div>
+            <div class="flowmap-role">PM · Steward · SME<small>Os três conduzem o ciclo de discovery e o refinamento da
+                demanda.</small></div>
+            <div class="flowmap-role">Steward Context Engineer · Comitê WAR<small>Consolidam e mantêm os artefatos
+                consistentes e rastreáveis.</small></div>
+            <div class="flowmap-role">Staff SWE · Solutions Architect · Engineering Manager<small>O comitê produz,
+                valida e documenta toda a modelagem.</small></div>
+            <div class="flowmap-role">Developers · Steward Context Engineer<small>Constroem o low-code e os testes
+                automatizados.</small></div>
+            <div class="flowmap-role">Platform Engineers<small>Publicam e operam sobre caminhos aprovados.</small></div>
+
+            <div class="flowmap-row-label">Apoio</div>
+            <div class="flowmap-tool"><span>JIP</span><span>Contexto de negócio</span></div>
+            <div class="flowmap-tool"><span>MHL</span><span>Senpai</span></div>
+            <div class="flowmap-tool"><span>Senpai</span><span>Backlog governado</span></div>
+            <div class="flowmap-tool"><span>MHL</span><span>WAR</span><span>Architecture Control Plane</span></div>
+            <div class="flowmap-tool"><span>MHL</span><span>Radahn-Agent</span></div>
+            <div class="flowmap-tool"><span>Operator</span><span>Kubernetes/EKS</span></div>
+
+            <div class="flowmap-row-label">Artefatos</div>
+            <div class="flowmap-artifact"><b>Oportunidade qualificada</b>Contexto de negócio, valor, risco e prioridade.
+            </div>
+            <div class="flowmap-artifact"><b>Artefatos de planejamento</b>Requisitos refinados, PRD e plano versionados.
+            </div>
+            <div class="flowmap-artifact"><b>C4 · ADR · Features</b>Histórias e backlog priorizado, prontos para
+              delivery.</div>
+            <div class="flowmap-artifact"><b>O COMO FAZER</b>Arquitetura decidida, padrões e caminho de construção.
+            </div>
+            <div class="flowmap-artifact"><b>Incremento verificável</b>Aplicação versionada e testes automatizados.
+            </div>
+            <div class="flowmap-artifact"><b>Evidência de operação</b>Logs, métricas e telemetria para o próximo ciclo.
+            </div>
+          </div>
+          <div class="flowmap-support">
+            <div>Base contínua</div>
+            <div class="flowmap-support-bar"><b>Platform Engineers</b><b>Data Engineer</b><small>Atuam antes da demanda
+                existir e atravessam todas as etapas: features, pipelines e facilitadores fazem a aplicação nascer com
+                observabilidade, escalabilidade, segurança, resiliência e expansão; SOR, SOT e SPEC retiram a
+                responsabilidade de dados do squad. Ambos suportam N squads <span
+                  class="brand-acronym">HLP</span>.</small></div>
+          </div>
+          <div class="flowmap-loop"><span>↶</span> Os sinais de operação retornam à oportunidade, ao discovery ou à
+            modelagem, conforme o que foi descoberto, mantendo o ciclo auditável de ponta a ponta.</div>
+        </div>
+        <div class="flowmap-legend" aria-label="Legenda do fluxo"><span><i class="dark"></i>Atividade do
+            ciclo</span><span><i></i>Papel responsável</span><span><i class="soft"></i>Componente de
+            apoio</span><span><i class="acc"></i>Capacidade compartilhada entre N squads</span></div>
+
+      </div>
+    </section>
+    <section id="visoes">
+      <div class="wrap">
+        <div class="section-head">
+          <div class="eyebrow muted">04 / Cadeia de execução</div>
+          <h2>Como as decisões viram software em operação</h2>
+          <p>A instância define papéis, gates e artefatos. A cadeia de execução recebe essas decisões e as transforma em
+            uma aplicação construída, implantada e observável, sem redefinir o processo.</p>
+        </div>
+        <div class="execution-chain" aria-label="Cadeia técnica do MHL ao Kubernetes e EKS">
+          <article class="execution-node">
+            <span class="execution-number">01 · HARNESS</span>
+            <div class="eyebrow">Governar</div>
+            <h3>MHL</h3>
+            <p>Executa workflows de IA com agentes, prompts, ferramentas, memória, políticas, testes, estado auditável e
+              supervisão humana.</p>
+            <small>Senpai, C3PM, IUPops e outras capacidades podem participar dentro do fluxo controlado.</small>
+            <a class="tool-link" href="mhl-one-page.html" target="_blank" rel="noopener"
+              aria-label="Apresentar subconceitos do MHL (abre em nova aba)">Apresentar subconceitos <span
+                aria-hidden="true">↗</span></a>
+          </article>
+          <article class="execution-node">
+            <span class="execution-number">02 · CONSTRUÇÃO</span>
+            <div class="eyebrow">Especificar e implementar</div>
+            <h3>Radahn ou código</h3>
+            <p>Transforma a decisão arquitetural em aplicação, componentes, configurações e testes versionados.</p>
+            <small>Radahn acelera a construção; código tradicional ou uma composição dos dois continuam válidos.</small>
+            <a class="tool-link" href="radahn-one-page.html" target="_blank" rel="noopener"
+              aria-label="Apresentar subconceitos do Radahn (abre em nova aba)">Apresentar subconceitos <span
+                aria-hidden="true">↗</span></a>
+          </article>
+          <article class="execution-node">
+            <span class="execution-number">03 · MATERIALIZAÇÃO</span>
+            <div class="eyebrow">Preparar a entrega</div>
+            <h3>Radahn Operator</h3>
+            <p>Converte a especificação e a configuração aprovadas em recursos prontos para implantação pelos caminhos da
+              plataforma.</p>
+            <small>A passagem mantém versionamento, políticas e evidências produzidas pela instância.</small>
+          </article>
+          <article class="execution-node">
+            <span class="execution-number">04 · PLATAFORMA</span>
+            <div class="eyebrow">Publicar e operar</div>
+            <h3>Kubernetes/EKS</h3>
+            <p>Fornece implantação, políticas, observabilidade, escalabilidade, segurança, resiliência e recuperação.</p>
+            <small>Logs, métricas e telemetria retornam como sinais para o piloto e para o próximo ciclo.</small>
+          </article>
+        </div>
+        <div class="execution-contract" aria-label="Contrato entre a instância e a cadeia de execução">
+          <div><strong>Entrada da cadeia</strong><small>Requisitos, arquitetura, políticas, critérios de aceitação e o
+              COMO FAZER definidos pela instância.</small></div>
+          <div><strong>Saída operacional</strong><small>Aplicação versionada, testada, implantada e observável sobre
+              caminhos aprovados.</small></div>
+          <div><strong>Retorno para o método</strong><small>Sinais de operação alimentam aprendizado e validação sem
+              substituir as decisões humanas.</small></div>
+        </div>
+      </div>
+    </section>
+    <section id="praticas">
+      <div class="wrap">
+        <div class="section-head">
+          <div class="eyebrow muted">03.2 / Instância do processo · Governança</div>
+          <h2>Práticas que dão ritmo e controle</h2>
+          <p>O <span class="brand-acronym">HLP</span> preserva e integra práticas de planejamento, decisão arquitetural,
+            qualidade e melhoria contínua. Os componentes técnicos que apoiam essas práticas aparecem na cadeia de
+            execução da seção 04 e não são tratados como práticas.</p>
+        </div>
+        <div class="practice-grid governance-practices">
+          <article class="card">
+            <div class="mini">Planejar</div>
+            <h3>Planning + Fóruns</h3>
+            <p>Planejamento da release ou sprint e discussão de temas ou formação das equipes.</p>
+          </article>
+          <article class="card">
+            <div class="mini">Avaliar arquitetura</div>
+            <h3>WAR</h3>
+            <p>O grupo Well Architecture Review avalia a solução antes do desenvolvimento; o Architecture Control Plane
+              registra ADRs, RFCs, paved roads e métricas.</p>
+          </article>
+          <article class="card">
+            <div class="mini">Qualidade em todo o ciclo</div>
+            <h3>Engenharia da Qualidade</h3>
+            <p>Define critérios e reúne revisões, testes, verificação, validação e medição. Code Review e testes
+              integram esse conjunto.</p>
+          </article>
+          <article class="card">
+            <div class="mini">Validar e melhorar</div>
+            <h3>Demo + PDCA</h3>
+            <p>Demonstra a entrega, coleta feedback e define ações para a próxima iteração.</p>
+          </article>
+        </div>
+      </div>
+    </section>
+    <section id="squad">
+      <div class="wrap">
+        <div class="section-head">
+          <div class="eyebrow muted">03.3 / Instância do processo · Papéis</div>
+          <h2>Time pequeno, sustentado por capacidades compartilhadas</h2>
+          <p>Para operar o <span class="brand-acronym">HLP</span>, o squad tem composição definida e foco único:
+            <strong>refinar e desenvolver</strong>. Plataforma e dados entram como capacidades compartilhadas entre
+            vários squads, e produto e domínio podem ser compartilhados entre contextos. O ganho do método vem dessa
+            divisão: quem constrói software não carrega infraestrutura nem engenharia de dados.
+          </p>
+        </div>
+        <div class="card matrix">
+          <table>
+            <thead>
+              <tr>
+                <th>Papel</th>
+                <th>Quantidade</th>
+                <th>Alocação</th>
+                <th>Responsabilidade no squad</th>
+              </tr>
+            </thead>
+            <tbody>
+              <tr>
+                <td>SME — Subject Matter Expert de Portfólio</td>
+                <td>1</td>
+                <td class="h-text">Compartilhável entre contextos</td>
+                <td>Conhecimento profundo do portfólio e do domínio para sustentar decisões de negócio.</td>
+              </tr>
+              <tr>
+                <td>PM — Product Manager</td>
+                <td>1</td>
+                <td class="h-text">Compartilhável entre contextos</td>
+                <td>Visão de produto, objetivos e prioridades do contexto.</td>
+              </tr>
+              <tr>
+                <td>Steward Context Engineer</td>
+                <td>1</td>
+                <td>Dedicado ao squad</td>
+                <td>Analista de sistemas especialista em refinamento, com forte conhecimento de negócio.</td>
+              </tr>
+              <tr>
+                <td>Developers</td>
+                <td>2</td>
+                <td>Dedicados ao squad</td>
+                <td>Engenheiros de software que constroem e testam; recomendado ao menos um sênior.</td>
+              </tr>
+              <tr>
+                <td>Platform Engineers</td>
+                <td>2</td>
+                <td class="p-text">Suportam N squads HLP</td>
+                <td>SMEs de plataforma em SRE, observabilidade, infraestrutura, cloud e FinOps.</td>
+              </tr>
+              <tr>
+                <td>Data Engineer</td>
+                <td>1</td>
+                <td class="p-text">Suporta N squads HLP</td>
+                <td>Engenheiro de dados, no mínimo pleno, responsável por SOR, SOT, SPEC e democratização de dados.</td>
+              </tr>
+            </tbody>
+          </table>
+        </div>
+        <div class="org-flow" aria-label="Cardinalidade do modelo de squad"><b>1 SME + 1 PM</b><span>↔</span><b>1..N
+            contextos</b><span>↔</span><b>Squad HLP: 1 Steward + 2 Developers</b><span>↔</span><b>2 Platform Engineers +
+            1 Data Engineer</b><span>↔</span><b>1..N squads HLP</b></div>
+        <div class="section-head" style="margin-top:45px">
+          <h3>Premissas para o modelo funcionar</h3>
+          <p>A composição só entrega o ganho esperado se as três condições abaixo forem verdadeiras. Sem elas, a carga
+            volta para o squad e o método perde o efeito.</p>
+        </div>
+        <div class="three">
+          <article class="card pillar h">
+            <div class="eyebrow">Premissa 01</div>
+            <h3>Foco exclusivo em refinar e desenvolver</h3>
+            <p>O time não assume atividades fora do refinamento e da construção. Todo o resto é absorvido por
+              capacidades compartilhadas.</p>
+          </article>
+          <article class="card pillar p">
+            <div class="eyebrow">Premissa 02</div>
+            <h3>Plataformização retira a carga operacional</h3>
+            <p>O time de plataforma assume observabilidade, infraestrutura, SRE, FinOps e cloud, entregando caminhos
+              aprovados de autosserviço.</p>
+          </article>
+          <article class="card pillar l">
+            <div class="eyebrow">Premissa 03</div>
+            <h3>Engenharia de dados centralizada</h3>
+            <p>O Data Engineer assume a democratização de dados e a criação de SOR, SOT e SPEC, liberando o squad dessa
+              responsabilidade.</p>
+          </article>
+        </div>
+        <div class="mandatory" aria-label="Efeitos esperados do modelo">
+          <div><strong>Squad dedicado</strong><small>1 Steward Context Engineer e 2 Developers, com ao menos um
+              sênior.</small></div>
+          <div><strong>Capacidade compartilhada</strong><small>2 Platform Engineers e 1 Data Engineer atendem N squads
+              HLP.</small></div>
+          <div><strong>Produto elástico</strong><small>PM e SME podem cobrir mais de um contexto.</small></div>
+          <div><strong>Foco preservado</strong><small>O squad decide e constrói; a plataforma publica e opera.</small>
+          </div>
+        </div>
+        <div class="section-head" style="margin-top:45px">
+          <h3>Modelagem resolvida no Comitê WAR</h3>
+          <p>A demanda de modelagem não fica no squad: ela é absorvida pelo <strong>Comitê WAR</strong>. Staff Software
+            Engineers, Solutions Architects e Engineering Managers sustentam essa capacidade para todos os squads. O
+            time entra no comitê com o problema e <strong>sai com o COMO FAZER</strong> — arquitetura decidida, padrões
+            definidos e caminho de construção acordado.</p>
+        </div>
+        <div class="three">
+          <article class="card pillar h">
+            <div class="eyebrow">Comitê WAR</div>
+            <h3>Staff Software Engineers</h3>
+            <p>Profundidade técnica na solução: padrões de implementação, decomposição, riscos de engenharia e
+              viabilidade do caminho proposto.</p>
+          </article>
+          <article class="card pillar l">
+            <div class="eyebrow">Comitê WAR</div>
+            <h3>Solutions Architects</h3>
+            <p>Desenho da arquitetura, integrações, contratos e aderência aos paved roads, registrados em ADRs e RFCs.
+            </p>
+          </article>
+          <article class="card pillar p">
+            <div class="eyebrow">Comitê WAR</div>
+            <h3>Engineering Managers</h3>
+            <p>Viabilidade, capacidade, dependências entre times e compromisso com a decisão tomada no comitê.</p>
+          </article>
+        </div>
+        <div class="org-flow" aria-label="Fluxo da modelagem pelo Comitê WAR"><b>Squad traz o
+            problema</b><span>→</span><b>Comitê WAR: Staff SWE + Solutions Architect + Engineering
+            Manager</b><span>→</span><b>Decisão registrada em ADR/RFC</b><span>→</span><b>Squad sai com o COMO
+            FAZER</b><span>→</span><b>Construção</b></div>
+        <div class="team-model" aria-label="Modelo de squad HLP com capacidades compartilhadas atendendo vários squads">
+          <div class="team-shared">
+            <div class="team-intro"><strong>Capacidades compartilhadas</strong><small>Especializações disponíveis antes
+                da demanda e distribuídas entre N squads.</small></div>
+            <div class="team-capability">Comitê WAR</div>
+            <div class="team-capability">Platform Engineers</div>
+            <div class="team-capability">Data Engineer</div>
+          </div>
+          <div class="team-squads">
+            <div class="team-squad"><strong>Squad HLP 01</strong><small>1 Steward + 2 Developers</small></div>
+            <div class="team-squad"><strong>Squad HLP 02</strong><small>1 Steward + 2 Developers</small></div>
+            <div class="team-squad"><strong>Squad HLP 1..N</strong><small>1 Steward + 2 Developers</small></div>
+          </div>
+          <p class="team-model-caption">As especializações compartilhadas — Comitê WAR com Staff Software Engineers,
+            Solutions Architects e Engineering Managers, além de Platform Engineers e Data Engineer — atendem N squads,
+            que permanecem focados em refinar e desenvolver.</p>
+        </div>
+      </div>
+    </section>
+    <section id="atribuicoes">
+      <div class="wrap">
+        <div class="section-head">
+          <div class="eyebrow muted">03.4 / Instância do processo · Responsabilidades</div>
+          <h2>Quem faz o quê, em cada etapa do ciclo</h2>
+          <p>O fluxo vai da oportunidade de negócio à aplicação em operação sem transferir carga acessória para quem
+            constrói. Cada etapa tem responsáveis nomeados, uma ferramenta de apoio e um artefato que permanece
+            auditável. Plataforma e dados atuam antes da demanda existir, para que a aplicação já nasça pronta para
+            produção.</p>
+        </div>
+        <div class="card matrix">
+          <table>
+            <thead>
+              <tr>
+                <th>Etapa</th>
+                <th>Papéis envolvidos</th>
+                <th>Principais atividades</th>
+                <th>Saída esperada</th>
+              </tr>
+            </thead>
+            <tbody>
+              <tr>
+                <td>Oportunidade e desejo</td>
+                <td class="h-text">PM · Steward Context Engineer · SME de Portfólio</td>
+                <td>O PM, representando o negócio, levanta a oportunidade ou o desejo de implementação e leva ao Steward
+                  Context Engineer e ao SME de Portfólio para enquadramento de valor, risco e prioridade.</td>
+                <td>Oportunidade qualificada e contexto de negócio compartilhado.</td>
+              </tr>
+              <tr>
+                <td>Discovery e refinamento</td>
+                <td class="h-text">PM · Steward Context Engineer · SME de Portfólio</td>
+                <td>Os três conduzem o ciclo de discovery usando <strong>MHL + Senpai</strong> para refinar a demanda e
+                  produzir os artefatos de planejamento de forma governada e rastreável.</td>
+                <td>Requisitos refinados e artefatos de planejamento versionados.</td>
+              </tr>
+              <tr>
+                <td>Artefatos de decisão</td>
+                <td class="h-text">Steward Context Engineer · Comitê WAR</td>
+                <td>Com o apoio do <strong>Senpai</strong>, os artefatos são gerados e mantidos consistentes: C4 Model,
+                  ADRs, features, histórias e backlog priorizado.</td>
+                <td>C4 Model, ADR, features, histórias e backlog prontos para delivery.</td>
+              </tr>
+              <tr>
+                <td>Modelagem e arquitetura</td>
+                <td class="h-text">Comitê WAR: Staff Software Engineers · Solutions Architects · Engineering Managers
+                </td>
+                <td>O trio de negócio aciona o Comitê WAR, onde toda a modelagem é produzida, validada e documentada. O
+                  squad entra com o problema e sai com o <strong>COMO FAZER</strong>.</td>
+                <td>Arquitetura decidida, padrões definidos e caminho de construção acordado.</td>
+              </tr>
+              <tr>
+                <td>Delivery e construção</td>
+                <td class="l-text">Developers · Steward Context Engineer</td>
+                <td>O time usa o <strong>MHL</strong> para interagir com o <strong>Radahn-Agent</strong>, gerar o
+                  low-code necessário e realizar o deploy, mantendo revisão por pares e evidências.</td>
+                <td>Aplicação construída, versionada e implantada.</td>
+              </tr>
+              <tr>
+                <td>Base pronta para produção</td>
+                <td class="p-text">Platform Engineers</td>
+                <td>A plataforma provê, previamente à demanda, features, pipelines e facilitadores. A aplicação nasce
+                  com observabilidade, escalabilidade, segurança, resiliência e capacidade de expansão.</td>
+                <td>Paved roads, pipelines e capacidades operacionais disponíveis por autosserviço.</td>
+              </tr>
+              <tr>
+                <td>Dados</td>
+                <td class="p-text">Data Engineer</td>
+                <td>Assume a democratização de dados e a construção de SOR, SOT e SPEC, retirando essa responsabilidade
+                  do squad.</td>
+                <td>Dados disponíveis, governados e reutilizáveis entre contextos.</td>
+              </tr>
+              <tr>
+                <td>Qualidade e foco do squad</td>
+                <td class="l-text">Developers</td>
+                <td>Com infraestrutura e dados absorvidos pelas capacidades compartilhadas, o foco do time fica no uso
+                  do low-code e na construção dos testes automatizados.</td>
+                <td>Cobertura de testes automatizados e incremento verificável.</td>
+              </tr>
+            </tbody>
+          </table>
+        </div>
+        <div class="mandatory" aria-label="Efeitos das atribuições">
+          <div><strong>Decisão antes da construção</strong><small>A modelagem é resolvida no WAR, não durante o
+              desenvolvimento.</small></div>
+          <div><strong>Artefato como evidência</strong><small>C4, ADR, features e histórias nascem do Senpai e
+              permanecem auditáveis.</small></div>
+          <div><strong>Produção por padrão</strong><small>Observabilidade, segurança, resiliência e escala vêm da
+              plataforma.</small></div>
+          <div><strong>Squad concentrado</strong><small>Low-code e testes automatizados são o trabalho do time.</small>
+          </div>
+        </div>
+      </div>
+    </section>
+    <section id="evidencias">
+      <div class="wrap">
+        <div class="section-head">
+          <div class="eyebrow muted">05 / Validação e aprendizado</div>
+          <h2>O piloto fecha o ciclo da metodologia</h2>
+          <p>Os artefatos da instância e os sinais produzidos pela cadeia deixam de ser apenas rastreabilidade: juntos,
+            tornam possível avaliar se a metodologia entrega velocidade sem elevar falhas, retrabalho ou risco.</p>
+        </div>
+        <div class="pilot-hypothesis" aria-label="Hipótese do piloto HLP">
+          <div class="eyebrow">Hipótese do piloto</div>
+          <p><span class="brand-acronym">HLP</span> poderá reduzir o tempo até a entrega sem elevar falhas, retrabalho
+            ou risco operacional.</p>
+        </div>
+        <div class="section-head" style="margin-top:45px">
+          <h3>Quatro lentes para avaliar o resultado</h3>
+          <p>O piloto combina indicadores de entrega e operação com a percepção de quem constrói, governa e usa a
+            solução.</p>
+        </div>
+        <div class="metric-grid">
+          <div class="card metric"><strong>Tempo</strong><small>Lead time e frequência de implantação</small></div>
+          <div class="card metric"><strong>Estabilidade</strong><small>Falhas de mudança e recuperação</small></div>
+          <div class="card metric"><strong>Qualidade</strong><small>Testes, defeitos e retrabalho</small></div>
+          <div class="card metric"><strong>Valor</strong><small>Feedback de devs, gestores e clientes;
+              manutenção</small></div>
+        </div>
+        <div class="pilot-loop" aria-label="Ciclo de validação e evolução da metodologia">
+          <div><span>01</span><strong>Executar uma instância</strong><small>Aplicar o fluxo, os papéis, os gates e a
+              cadeia técnica em um contexto real.</small></div>
+          <div><span>02</span><strong>Observar o resultado</strong><small>Reunir métricas operacionais, evidências de
+              qualidade e feedback dos envolvidos.</small></div>
+          <div><span>03</span><strong>Testar a hipótese</strong><small>Comparar velocidade, estabilidade, qualidade e valor
+              sem esconder risco ou retrabalho.</small></div>
+          <div><span>04</span><strong>Evoluir a metodologia</strong><small>Usar Demo e PDCA para ajustar regras, práticas e
+              componentes antes de ampliar a adoção.</small></div>
+        </div>
+      </div>
+    </section>
+  </main>
+  <footer>
+    <div class="wrap">
+      <p><span class="brand-acronym">HLP</span> v3 é uma metodologia em validação. A apresentação segue a hierarquia
+        entre metodologia HLP, instância do processo e cadeia de execução, concluindo com o piloto que orienta sua
+        evolução.</p>
+      <div class="sources" aria-label="Referências"><a href="HLP.md">Descrição completa</a><a
+          href="GLOSSARIO.md">Glossário</a><a href="TOPOLOGIA.md">Topologia de times</a><a
+          href="https://www.mheducation.com/highered/product/Software-Engineering-A-Practitioners-Approach-Pressman">Pressman
+          &amp; Maxim</a><a href="https://www.nist.gov/itl/ai-risk-management-framework">NIST AI RMF</a><a
+          href="https://dora.dev/guides/dora-metrics/">DORA Métricas</a></div>
+    </div>
+  </footer>
+  <script>
+    const sectionOrder = ['arquitetura', 'pilares', 'ciclo', 'praticas', 'squad', 'atribuicoes', 'visoes', 'evidencias'];
+    const main = document.querySelector('main');
+    sectionOrder.forEach(id => main.appendChild(document.getElementById(id)));
+  </script>
+</body>
+
+</html>
