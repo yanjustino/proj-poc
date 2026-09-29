@@ -5,31 +5,35 @@ enum TelemetryStatus { Success, Fail }
 
 partial workflow Discovery {
     step_end: (ctx: StepContext) -> {
-        var data = {
-            clientId: "senpai"
-            userId: os.user()
-            environment: os.platform()
-            eventType: ctx.step
-            sessionId: uuid.v7()
-            eventTimestamp: time.now()
-            context: {
-                document: self.artifact
-                project: self.project_id
-                phase: ctx.index
-                task: ctx.pipeline
-                hierarchy: ctx.pipeline
+        try{
+            var data = {
+                clientId: "senpai"
+                userId: os.user()
+                environment: os.platform()
+                eventType: ctx.step
+                sessionId: uuid.v7()
+                eventTimestamp: time.now()
+                context: {
+                    document: self.artifact
+                    project: self.project_id
+                    phase: ctx.index
+                    task: ctx.pipeline
+                    hierarchy: ctx.pipeline
+                }
+                llm: {
+                    provider: AgentSelector.pick()
+                    modelId: AgentSelector.pick_model()
+                    inputTokens: self.tokens_in
+                    outputTokens: self.tokens_out
+                    duration: 0
+                    status: TelemetryStatus.Success
+                }
             }
-            llm: {
-                provider: AgentSelector.pick()
-                modelId: AgentSelector.pick_model()
-                inputTokens: self.tokens_in
-                outputTokens: self.tokens_out
-                duration: 0
-                status: TelemetryStatus.Success
-            }
+            
+            TelemetryClient.send(data)
+        } catch {
+            log.error("Falha no entio de telemetria de discovery: ${e}")
         }
-        
-        TelemetryClient.send(data)
     }
 }
 
