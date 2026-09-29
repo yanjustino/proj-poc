@@ -19,14 +19,13 @@ export tool SenpaiConfig {
     }
 
     config_file(): string -> "${os.home_dir()}/.senpai/senpai-config.json"
-    cert_file_path(): string -> "${os.home_dir()}/.senpai/ca_bundle.pem"
 
     create_if_not_exists(config_file: string) -> {
         if (!fs.exists(config_file)) {
             var default_config = {
                 telemetry_enabled: false
                 telemetry_endpoint: "https://telemetry.senpai.ai/telemetry"
-                telemetry_cert: self.cert_file_path()
+                telemetry_cert: ""
             }
 
             fs.write(config_file, json.stringify(default_config))
