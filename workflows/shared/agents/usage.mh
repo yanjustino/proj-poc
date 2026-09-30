@@ -108,6 +108,12 @@ export tool UsageParser {
     // input_tokens:2, cache_creation_input_tokens:21260 — a maior parte do
     // prompt vira criacao de cache, nao input "novo"; sem esses dois campos,
     // o ledger fazia parecer que a chamada quase nao usou tokens de entrada.
+    // Diferente de Codex/Devin, o Claude reporta input_tokens SO com a parte
+    // nao cacheada — cache_creation/cache_read vem fora dele. Todo o resto do
+    // app (UI "% do input veio do cache", UsageCost) assume que o cache e um
+    // SUBCONJUNTO de tokens_in, entao aqui tokens_in vira o input total
+    // (novo + criacao + leitura de cache); sem isso, 15 tokens novos e 14.9k
+    // lidos do cache davam "99647% do input veio do cache".
     extract_claude(raw: string): {
         tokens_in: number, tokens_out: number, content: string,
         cache_creation_tokens: number, cache_read_tokens: number,
@@ -118,12 +124,14 @@ export tool UsageParser {
         var structured = envelope.get("structured_output", null)
         if (structured != null) content = json.stringify(structured)
         var reported_cost = envelope.get("total_cost_usd", null)
+        var cache_creation = envelope.usage.cache_creation_input_tokens
+        var cache_read = envelope.usage.cache_read_input_tokens
         return {
-            tokens_in: envelope.usage.input_tokens,
+            tokens_in: envelope.usage.input_tokens + cache_creation + cache_read,
             tokens_out: envelope.usage.output_tokens,
             content: content,
-            cache_creation_tokens: envelope.usage.cache_creation_input_tokens,
-            cache_read_tokens: envelope.usage.cache_read_input_tokens,
+            cache_creation_tokens: cache_creation,
+            cache_read_tokens: cache_read,
             usage_available: true,
             cost_usd: reported_cost ?? 0,
             cost_source: if (reported_cost != null) "reported" else "unavailable",
@@ -333,12 +341,22 @@ test UsageParserSpec {
             "\"input_tokens\":2,\"output_tokens\":4," +
             "\"cache_creation_input_tokens\":21260,\"cache_read_input_tokens\":0}}"
         var parsed = UsageParser.extract_claude(raw)
-        are_equal(parsed.tokens_in, 2)
+        // 2 novos + 21260 criacao de cache + 0 leitura = input total.
+        are_equal(parsed.tokens_in, 21262)
         are_equal(parsed.tokens_out, 4)
         are_equal(parsed.content, "{\"ok\":true}")
         are_equal(parsed.cache_creation_tokens, 21260)
         are_equal(parsed.cache_read_tokens, 0)
         are_equal(parsed.cost_usd, 0.128202)
+    }
+
+    describe claude_tokens_in_includes_cache_so_cache_read_never_exceeds_it {
+        var raw = "{\"result\":\"ok\",\"total_cost_usd\":0.1,\"usage\":{" +
+            "\"input_tokens\":15,\"output_tokens\":1606," +
+            "\"cache_creation_input_tokens\":300,\"cache_read_input_tokens\":14947}}"
+        var parsed = UsageParser.extract_claude(raw)
+        are_equal(parsed.tokens_in, 15262)
+        is_true(parsed.cache_read_tokens <= parsed.tokens_in)
     }
 
     describe falls_back_to_claude_result_when_structured_output_is_absent {
