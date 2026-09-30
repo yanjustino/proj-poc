@@ -13,3 +13,10 @@ var vendoredMHLBinary []byte
 
 const vendoredMHLBinaryName = ""
 const vendoredMHLAvailable = false
+
+// Same for pdftotext: ensureVendoredPdftotext skips extraction and the
+// workflow falls back to whatever pdftotext is on PATH.
+var vendoredPdftotextBinary []byte
+
+const vendoredPdftotextBinaryName = ""
+const vendoredPdftotextAvailable = false

@@ -135,6 +135,13 @@ func (a *App) startup(ctx context.Context) {
 	}
 	a.mhlPath = mhlPath
 
+	// Non-fatal: without it, .pdf ingest falls back to a pdftotext on PATH.
+	if pdfDir, err := ensureVendoredPdftotext(); err != nil {
+		log.Printf("mhl bridge: %v (ingest de .pdf depende de pdftotext no PATH)", err)
+	} else if pdfDir != "" {
+		prependToPath(pdfDir)
+	}
+
 	workflowsDir, err := resolveWorkflowsDir()
 	if err != nil {
 		log.Printf("mhl bridge: resolve workflows dir: %v", err)

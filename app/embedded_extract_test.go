@@ -3,6 +3,7 @@ package main
 import (
 	"context"
 	"os"
+	"os/exec"
 	"path/filepath"
 	"strings"
 	"testing"
@@ -78,5 +79,59 @@ func TestExtractVendoredWorkflows_IsARealRunnableTree(t *testing.T) {
 	}
 	if status.State != "completed" {
 		t.Fatalf("expected the embedded tree to run WorkItem successfully, got state %q (error: %s)", status.State, status.Error)
+	}
+}
+
+// minimalPDF is a one-page PDF whose only content is the text "Ola Senpai".
+// The xref table is deliberately omitted: poppler rebuilds it, which keeps
+// the fixture readable instead of hand-counting byte offsets.
+const minimalPDF = `%PDF-1.4
+1 0 obj << /Type /Catalog /Pages 2 0 R >> endobj
+2 0 obj << /Type /Pages /Kids [3 0 R] /Count 1 >> endobj
+3 0 obj << /Type /Page /Parent 2 0 R /MediaBox [0 0 200 100] /Contents 4 0 R /Resources << /Font << /F1 5 0 R >> >> >> endobj
+4 0 obj << /Length 44 >> stream
+BT /F1 18 Tf 20 50 Td (Ola Senpai) Tj ET
+endstream endobj
+5 0 obj << /Type /Font /Subtype /Type1 /BaseFont /Helvetica >> endobj
+trailer << /Root 1 0 R /Size 6 >>
+%%EOF
+`
+
+// TestEnsureVendoredPdftotext_ExtractsARunnableBinary is what RawExtract
+// depends on: after the extraction the returned directory must hold a
+// pdftotext that runs on its own (no poppler on the machine) and turns a PDF
+// into text, with PATH pointing at it first.
+func TestEnsureVendoredPdftotext_ExtractsARunnableBinary(t *testing.T) {
+	if !vendoredPdftotextAvailable {
+		t.Skip("no vendored pdftotext for this GOOS/GOARCH")
+	}
+	t.Setenv("SENPAI_APPDATA_DIR", t.TempDir())
+
+	dir, err := ensureVendoredPdftotext()
+	if err != nil {
+		t.Fatalf("ensureVendoredPdftotext: %v", err)
+	}
+	bin := filepath.Join(dir, vendoredPdftotextBinaryName)
+	if _, err := os.Stat(bin); err != nil {
+		t.Fatalf("extracted binary missing: %v", err)
+	}
+
+	pdf := filepath.Join(t.TempDir(), "ata.pdf")
+	if err := os.WriteFile(pdf, []byte(minimalPDF), 0o644); err != nil {
+		t.Fatal(err)
+	}
+	// Empty PATH: only the extracted binary may satisfy the call.
+	t.Setenv("PATH", "")
+	prependToPath(dir)
+	cmd := exec.Command("pdftotext", pdf, "-")
+	if filepath.Base(cmd.Path) != vendoredPdftotextBinaryName || filepath.Dir(cmd.Path) != dir {
+		t.Fatalf("pdftotext resolved to %q, want the vendored copy in %q", cmd.Path, dir)
+	}
+	out, err := cmd.CombinedOutput()
+	if err != nil {
+		t.Fatalf("running vendored pdftotext: %v\n%s", err, out)
+	}
+	if !strings.Contains(string(out), "Ola Senpai") {
+		t.Fatalf("expected the PDF text in the output, got: %q", out)
 	}
 }

@@ -61,6 +61,43 @@ func ensureVendoredMHL() (string, error) {
 	return dest, nil
 }
 
+// ensureVendoredPdftotext extracts this build's embedded pdftotext (poppler)
+// next to the vendored mhl and returns the directory that holds it, so the
+// caller can put it on PATH — RawExtract (workflows/shared/wiki/raw_extract.mh)
+// invokes a bare "pdftotext" through mhl's cmd.exec, and this is what makes
+// .pdf ingestion work on a machine without poppler installed. Returns
+// ("", nil) when this GOOS/GOARCH has no vendored copy: not an error, the
+// workflow then falls back to whatever pdftotext is on PATH (and fails with
+// its own clear message when there is none).
+func ensureVendoredPdftotext() (string, error) {
+	if !vendoredPdftotextAvailable {
+		return "", nil
+	}
+	binDir, err := senpaiSubdir(filepath.Join("embedded", "bin"))
+	if err != nil {
+		return "", fmt.Errorf("resolve vendored bin dir: %w", err)
+	}
+	dest := filepath.Join(binDir, vendoredPdftotextBinaryName)
+	if err := extractIfChanged(dest, vendoredPdftotextBinary, 0o755); err != nil {
+		return "", fmt.Errorf("extract vendored pdftotext: %w", err)
+	}
+	log.Printf("mhl bridge: usando pdftotext vendorizado em %s (sha256 %x)", dest, sha256.Sum256(vendoredPdftotextBinary))
+	return binDir, nil
+}
+
+// prependToPath puts dir first on this process's PATH — mhlbridge.Start
+// builds the mhl child's environment from os.Environ() (this process's PATH
+// wins over the login-shell PATH it appends), so the vendored pdftotext
+// shadows any system copy for every workflow run.
+func prependToPath(dir string) {
+	current := os.Getenv("PATH")
+	if current == "" {
+		os.Setenv("PATH", dir)
+		return
+	}
+	os.Setenv("PATH", dir+string(os.PathListSeparator)+current)
+}
+
 // resolveWorkflowsDir finds the workflows/ tree mhl should serve, preferring
 // a live checkout over the embedded copy — unlike the mhl binary above,
 // workflows/*.mh is this repo's own code, edited constantly during

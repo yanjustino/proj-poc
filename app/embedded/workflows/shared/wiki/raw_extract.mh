@@ -1,8 +1,11 @@
 // tool RawExtract — le uma fonte de raw/ como texto plano para entrar num
 // prompt. MHL nao tem um native op de extracao de PDF; usamos `pdftotext`
-// (poppler) via cmd.exec — vendorizado por plataforma na Fase 7, junto do
-// binario `mhl` (mesma logica de C6). Sem pdftotext instalado, falha com uma
-// mensagem clara em vez de mandar bytes binarios pro prompt da LLM.
+// (poppler) via cmd.exec. O app empacota um pdftotext estatico por plataforma
+// (app/embedded/bin/pdftotext-*, gerado por app/embedded/build-pdftotext.sh),
+// extrai ao lado do `mhl` e o poe na frente do PATH — ver
+// ensureVendoredPdftotext em app/embedded_extract.go. Fora do app (mhl direto
+// no terminal) vale o pdftotext do PATH. Sem nenhum, falha com uma mensagem
+// clara em vez de mandar bytes binarios pro prompt da LLM.
 //
 // v1 suporta .txt/.md/.json/.yml/.yaml/.sql/.feature (leitura direta — todos
 // texto plano, nenhum precisa de parser) e .pdf (via pdftotext). json/yml/sql/
