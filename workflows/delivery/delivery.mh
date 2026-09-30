@@ -35,6 +35,8 @@ import {
     HistoriasSchemaFile, PlanoInstruction, PlanoSchemaFile
 } from "../shared/artifacts/artifacts_common.mh"
 import { PlanoModel, PlanoPrep } from "../shared/artifacts/plano_model.mh"
+import { RadahnModel } from "../shared/radahn/radahn_model.mh"
+import { RadahnAssess } from "../shared/radahn/radahn_assess.mh"
 import { ContextSlice } from "../shared/artifacts/context_slice.mh"
 import { AutoReview } from "../shared/artifacts/auto_review.mh"
 import { ArtifactChecks } from "../shared/artifacts/artifact_checks.mh"
@@ -699,6 +701,11 @@ workflow Delivery {
         data["autorrevisao"] = review.revisao
         data["plano_rel"] = plano_rel
         data["assets_prefix"] = assets_prefix
+        // Segunda etapa, com o plano ja pronto: aderencia ao Radahn (data.radahn).
+        var radahn = RadahnAssess.annotate(data, Context.artifact(project_id, historia_rel), der_content, adr_content, autorrevisao, project_id)
+        data = radahn.data
+        tokens_in = tokens_in + radahn.tokens_in
+        tokens_out = tokens_out + radahn.tokens_out
         pending_data = data
         goto Gate
     }
@@ -712,7 +719,8 @@ workflow Delivery {
         )
         ArtifactData.write(project_id, data.plano_rel, data)
         fs.write(Paths.artifact(project_id, data.plano_rel), rendered)
-        delivery_result = {artifact: "plano", historia_id: historia_id, path: "artifacts/" + data.plano_rel}
+        var radahn_yaml = RadahnModel.persist(project_id, data.plano_rel, data)
+        delivery_result = {artifact: "plano", historia_id: historia_id, path: "artifacts/" + data.plano_rel, radahn: !radahn_yaml.is_empty()}
         goto Done
     }
 
@@ -743,7 +751,7 @@ workflow Delivery {
             }
             
             TelemetryClient.send(data)
-        } catch {
+        } catch (e) {
             log.error("Falha ao enviar telemetria de discovery: ${e}")
         }
     }

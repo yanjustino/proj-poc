@@ -1741,27 +1741,6 @@ func (a *App) ReadProjectFile(projectID string, root string, relative string) (s
 	return string(content), nil
 }
 
-// ExportProject lets the user choose a destination directory, then exports
-// the complete wiki/ and artifacts/ trees into a new, non-overwriting
-// senpai-<projectID>/ folder. The returned path is empty when the dialog is
-// cancelled, otherwise it is the absolute directory that was created.
-func (a *App) ExportProject(projectID string) (string, error) {
-	if err := validateProjectID(projectID); err != nil {
-		return "", err
-	}
-	destination, err := runtime.OpenDirectoryDialog(a.ctx, runtime.OpenDialogOptions{
-		Title:                "Exportar Wiki e Artefatos",
-		CanCreateDirectories: true,
-	})
-	if err != nil {
-		return "", fmt.Errorf("selecionar pasta de exportacao: %w", err)
-	}
-	if destination == "" {
-		return "", nil
-	}
-	return a.exportProjectTo(projectID, destination)
-}
-
 // ExportHandoff copies the handoff package the WorkItem "handoff" action
 // generated in projects/<id>/handoff/ (workflows/shared/artifacts/handoff.mh:
 // specs, plans, tasks, contracts, ADRs, architecture) to a folder the user
@@ -1805,70 +1784,6 @@ func (a *App) exportHandoffTo(projectID string, destinationParent string) (strin
 		_ = os.RemoveAll(exportDir)
 		return "", fmt.Errorf("exportar pacote de handoff: %w", err)
 	}
-	return exportDir, nil
-}
-
-// exportProjectTo contains the filesystem part of ExportProject separately
-// from the native dialog so it can be tested headlessly.
-func (a *App) exportProjectTo(projectID string, destinationParent string) (string, error) {
-	if err := validateProjectID(projectID); err != nil {
-		return "", err
-	}
-	if a.dataDir == "" {
-		return "", fmt.Errorf("data dir nao resolvido — veja o log de startup")
-	}
-	projectDir := filepath.Join(a.dataDir, "projects", projectID)
-	if info, err := os.Stat(projectDir); err != nil {
-		if os.IsNotExist(err) {
-			return "", fmt.Errorf("work-item nao encontrado: %q", projectID)
-		}
-		return "", fmt.Errorf("ler work-item para exportacao: %w", err)
-	} else if !info.IsDir() {
-		return "", fmt.Errorf("work-item nao e um diretorio: %q", projectID)
-	}
-
-	parentInfo, err := os.Stat(destinationParent)
-	if err != nil {
-		return "", fmt.Errorf("ler pasta de destino: %w", err)
-	}
-	if !parentInfo.IsDir() {
-		return "", fmt.Errorf("destino nao e uma pasta: %q", destinationParent)
-	}
-
-	exportDir := uniqueDirectoryDestination(destinationParent, "senpai-"+projectID)
-	for _, root := range []string{"wiki", "artifacts"} {
-		source, err := a.projectRootDir(projectID, root, []string{"wiki", "artifacts"})
-		if err != nil {
-			return "", err
-		}
-		if pathIsWithin(source, exportDir) {
-			return "", fmt.Errorf("a pasta de exportacao nao pode ficar dentro de %s/", root)
-		}
-	}
-
-	if err := os.Mkdir(exportDir, 0o755); err != nil {
-		return "", fmt.Errorf("criar pasta de exportacao: %w", err)
-	}
-	completed := false
-	defer func() {
-		if !completed {
-			_ = os.RemoveAll(exportDir)
-		}
-	}()
-
-	for _, root := range []string{"wiki", "artifacts"} {
-		source := filepath.Join(projectDir, root)
-		if _, err := os.Stat(source); err != nil {
-			if os.IsNotExist(err) {
-				continue
-			}
-			return "", fmt.Errorf("ler %s para exportacao: %w", root, err)
-		}
-		if err := copyDirectory(source, filepath.Join(exportDir, root)); err != nil {
-			return "", fmt.Errorf("exportar %s: %w", root, err)
-		}
-	}
-	completed = true
 	return exportDir, nil
 }
 

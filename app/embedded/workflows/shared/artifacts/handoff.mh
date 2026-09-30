@@ -13,6 +13,7 @@
 //   docs/adr/ADR-NNN-*.md           decisoes arquiteturais (MADR)
 //   specs/<feature>/<historia>/     so historias prontas (com ou sem ressalvas):
 //       spec.md  plan.md  tasks.md  openapi.json  asyncapi.json  historia.feature
+//       radahn.yaml (so quando o assessment do plano diz que o Radahn se aplica)
 
 import { Paths } from "../core/paths.mh"
 import { DirClear } from "../core/dir_clear.mh"
@@ -20,6 +21,7 @@ import { Readiness } from "readiness.mh"
 import { C4Diagram } from "c4_diagram.mh"
 import { DerModel } from "der_model.mh"
 import { PlanoModel } from "plano_model.mh"
+import { RadahnModel } from "../radahn/radahn_model.mh"
 import { BacklogHtml } from "backlog_rules.mh"
 
 export tool HandoffMd {
@@ -149,7 +151,22 @@ export tool HandoffMd {
         out = out + "## Tratamento de erros\n\n" + self.bullets(p?.erros ?? []) + "\n## Segurança\n\n" + self.bullets(p?.seguranca ?? []) + "\n## Observabilidade\n\n" + self.bullets(p?.observabilidade ?? []) + "\n"
         var testes = p?.testes ?? []
         if (!testes.is_empty()) out = out + "## Estratégia de testes\n\n| Nível | O que testa | Critérios |\n|---|---|---|\n" + testes.map((t) -> "| " + PlanoModel.level_label(t.nivel) + " | " + self.cell(t?.descricao) + " | " + (t?.criterios ?? []).join(", ") + " |").join("\n") + "\n\n"
-        out = out + "## Riscos e questões em aberto\n\n" + self.bullets(p?.riscos ?? []) + "\nAs tarefas, em ordem, estão em `tasks.md`.\n"
+        out = out + self.radahn(p) + "## Riscos e questões em aberto\n\n" + self.bullets(p?.riscos ?? []) + "\nAs tarefas, em ordem, estão em `tasks.md`.\n"
+        return out
+    }
+
+    // Assessment de aderencia ao Radahn (plano.radahn). Aplicavel: aponta o
+    // radahn.yaml que vai na mesma pasta; senao, so registra o porque.
+    radahn(p: any): string -> {
+        var r = p?.radahn
+        if (r == null) return ""
+        var out = "## Aderência ao Radahn\n\n"
+        if (!RadahnModel.applicable(p)) return out + "**" + RadahnModel.aderencia_label(r?.aderencia ?? "nao_aplicavel") + ".** " + self.line(r?.justificativa) + "\n\n"
+        out = out + "**Radahn aplicável — " + RadahnModel.aderencia_label(r?.aderencia ?? "") + ".** " + self.line(r?.justificativa) + "\n\n" +
+            "O `radahn.yaml` desta pasta é o ponto de partida: revise-o e complete as lacunas antes de subir. Segredos e URLs de infraestrutura vêm de variáveis de ambiente, nunca do YAML.\n\n"
+        if (!(r?.skills ?? []).is_empty()) out = out + "**Skills:** " + r.skills.map((s) -> "`" + self.line(s) + "`").join(", ") + "\n\n"
+        if (!(r?.variaveis_ambiente ?? []).is_empty()) out = out + "**Variáveis de ambiente:** " + r.variaveis_ambiente.map((v) -> "`" + self.line(v) + "`").join(", ") + "\n\n"
+        if (!(r?.lacunas ?? []).is_empty()) out = out + "**Lacunas para fechar o YAML:**\n\n" + self.bullets(r.lacunas) + "\n"
         return out
     }
 
@@ -184,7 +201,8 @@ export tool HandoffMd {
         "3. Os contratos são a fonte da verdade da interface: `openapi.json` (endpoints expostos), `asyncapi.json` (eventos). Não mude um contrato sem registrar a mudança na spec.\n" +
         "4. Os cenários de `historia.feature` (Gherkin, tags `@CAn`) precisam passar — são os testes de aceitação.\n" +
         "5. Respeite as decisões em `docs/adr/` e os contêineres e entidades de `docs/arquitetura.md`.\n" +
-        "6. Uma história de API Gateway e a de Backend do mesmo endpoint expõem o mesmo contrato; implemente a de Backend primeiro.\n\n" +
+        "6. Uma história de API Gateway e a de Backend do mesmo endpoint expõem o mesmo contrato; implemente a de Backend primeiro.\n" +
+        "7. Se a pasta da história tem um `radahn.yaml`, o assessment do `plan.md` concluiu que o Radahn (motor low-code de APIs REST configurado por YAML) implementa a história: use esse arquivo como base em vez de escrever código. Ele é um rascunho — revise-o contra os contratos e os critérios de aceite, feche as lacunas listadas no `plan.md` e nunca coloque segredos nele (só `FROM_ENV(NOME)`).\n\n" +
         "## O que não fazer\n\n" +
         "- Toda história do backlog está em `specs/`, pronta ou não — confira a **Definition of Ready** no topo de cada `spec.md`. Se estiver marcada **Não pronta**, leia \"Bloqueios da Definition of Ready\" antes de implementar: a decisão de seguir mesmo assim é de quem está te orientando, não sua — não implemente uma história bloqueada sem essa confirmação.\n" +
         "- Não invente comportamento fora dos critérios de aceite; lacunas e questões em aberto de cada `spec.md` precisam de resposta de quem refinou.\n"
@@ -204,8 +222,8 @@ export tool HandoffMd {
             "## Histórias\n\n"
         if (items.is_empty()) out = out + "Nenhuma ainda.\n\n"
         else {
-            out = out + "| História | Feature | Definition of Ready | Pasta |\n|---|---|---|---|\n" +
-                items.map((i) -> "| " + self.cell(i.titulo) + " | " + self.cell(i.feature_dir) + " | " + self.status_label(i.status) + " | `" + i.spec_dir + "` |").join("\n") + "\n\n"
+            out = out + "| História | Feature | Definition of Ready | Radahn | Pasta |\n|---|---|---|---|---|\n" +
+                items.map((i) -> "| " + self.cell(i.titulo) + " | " + self.cell(i.feature_dir) + " | " + self.status_label(i.status) + " | " + (if (i?.radahn ?? false) "Aplicável" else "—") + " | `" + i.spec_dir + "` |").join("\n") + "\n\n"
         }
         if (!nao_prontas.is_empty()) {
             out = out + "## Bloqueios das histórias não prontas\n\n" +
@@ -258,6 +276,7 @@ export tool Handoff {
             var folder = if (it.path.is_empty()) "historia" else it.path.split("/")[it.path.split("/").size() - 1]
             var feature = if (it.feature_dir.is_empty()) "" else it.feature_dir
             it["spec_dir"] = "specs/" + (if (feature.is_empty()) folder else feature + "/" + folder)
+            it["radahn"] = fs.exists((if (it.path.is_empty()) Paths.artifacts_dir(project_id) else Paths.artifact(project_id, it.path)) + "/radahn.yaml")
             items += [it]
         }
 
@@ -303,7 +322,7 @@ export tool Handoff {
                 fs.write(dest + "/plan.md", HandoffMd.plan(p, codigo))
                 fs.write(dest + "/tasks.md", HandoffMd.tasks(p, codigo))
             }
-            for (var file in ["openapi.json", "asyncapi.json", "historia.feature"]) {
+            for (var file in ["openapi.json", "asyncapi.json", "historia.feature", "radahn.yaml"]) {
                 if (fs.exists(source + "/" + file)) fs.write(dest + "/" + file, fs.read(source + "/" + file))
             }
             exportadas = exportadas + 1
@@ -324,16 +343,29 @@ test HandoffSpec {
         is_true(md.contains("- [ ] **T2** (Implementação) Implementar — cobre CA1, CA2 — depende de T1\n  Usar o repositório"))
     }
 
+    describe plan_md_carries_the_radahn_assessment_only_when_present {
+        var aplicavel = HandoffMd.plan({abordagem: "x", radahn: {aplicavel: true, aderencia: "alta", justificativa: "GET simples", skills: ["PostgresQuery"], variaveis_ambiente: ["DB_URL"], lacunas: ["shape da resposta"], yaml: "kind: ApplicationWorkflow"}}, "US001")
+        is_true(aplicavel.contains("## Aderência ao Radahn"))
+        is_true(aplicavel.contains("**Radahn aplicável — Aderência alta.** GET simples"))
+        is_true(aplicavel.contains("**Skills:** `PostgresQuery`"))
+        is_true(aplicavel.contains("**Variáveis de ambiente:** `DB_URL`"))
+        is_true(aplicavel.contains("- shape da resposta"))
+        var nao = HandoffMd.plan({abordagem: "x", radahn: {aplicavel: false, aderencia: "nao_aplicavel", justificativa: "É uma tela.", yaml: ""}}, "US001")
+        is_true(nao.contains("**Não aplicável.** É uma tela."))
+        is_true(!nao.contains("radahn.yaml"))
+        is_true(!HandoffMd.plan({abordagem: "x"}, "US001").contains("Radahn"))
+    }
+
     describe readme_lists_every_story_and_still_calls_out_why_blocked_ones_are_blocked {
         var md = HandoffMd.readme("Plataforma", [
-            {titulo: "Cadastro", feature_dir: "FT001-a", status: "pronta", bloqueios: [], spec_dir: "specs/FT001-a/US001-b"},
+            {titulo: "Cadastro", feature_dir: "FT001-a", status: "pronta", bloqueios: [], spec_dir: "specs/FT001-a/US001-b", radahn: true},
             {titulo: "Papéis", feature_dir: "FT001-a", status: "nao_pronta", bloqueios: ["Sem plano de implementação."], spec_dir: "specs/FT001-a/US002-c"},
         ])
         is_true(md.contains("1 de 2 história(s) prontas"))
-        is_true(md.contains("| Cadastro | FT001-a | Pronta | `specs/FT001-a/US001-b` |"))
+        is_true(md.contains("| Cadastro | FT001-a | Pronta | Aplicável | `specs/FT001-a/US001-b` |"))
         // Nao pronta tambem entra na tabela, com seu proprio spec_dir — nao
         // fica so como bullet sem link, como no comportamento antigo.
-        is_true(md.contains("| Papéis | FT001-a | Não pronta | `specs/FT001-a/US002-c` |"))
+        is_true(md.contains("| Papéis | FT001-a | Não pronta | — | `specs/FT001-a/US002-c` |"))
         is_true(md.contains("- **Papéis** (FT001-a): Sem plano de implementação."))
     }
 

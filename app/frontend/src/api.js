@@ -191,6 +191,16 @@ export async function exportProject(projectId) {
   return App.ExportProject(projectId);
 }
 
+// importProject opens a native file picker for a package made by
+// exportProject and recreates the work-item. Resolves to null when the
+// dialog is cancelled, otherwise {project_id, name, original_id, copied} —
+// copied is true when the original id was already in use and the package
+// was imported under a new id instead of overwriting anything.
+export async function importProject() {
+  const result = await App.ImportProject();
+  return result ? parseJSON(result, 'ImportProject') : null;
+}
+
 export async function exportProjectFile(projectId, root, relative) {
   return App.ExportProjectFile(projectId, root, relative);
 }

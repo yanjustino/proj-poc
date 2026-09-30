@@ -118,7 +118,7 @@ export prompt HistoriaBody(statement: string, statement_fontes: string, avisos_h
 // PlanoBody — o plano mora na pasta da historia (historias/<...>/<USxxx>/
 // plano.html), dois ou tres niveis abaixo de artifacts/ conforme o workflow:
 // `assets_prefix` e o caminho relativo ate artifacts/ para o mermaid.min.js.
-export prompt PlanoBody(historia_titulo: string, avisos_html: string, abordagem: string, abordagem_fontes: string, componentes_tabela: string, adrs_tabela: string, dados_tabela: string, fluxo_html: string, erros_lista: string, seguranca_lista: string, observabilidade_lista: string, tarefas_tabela: string, testes_tabela: string, cobertura_html: string, riscos_lista: string, assets_prefix: string) from "templates/plano_body.html"
+export prompt PlanoBody(historia_titulo: string, radahn_badge: string, avisos_html: string, abordagem: string, abordagem_fontes: string, componentes_tabela: string, adrs_tabela: string, dados_tabela: string, fluxo_html: string, erros_lista: string, seguranca_lista: string, observabilidade_lista: string, tarefas_tabela: string, testes_tabela: string, cobertura_html: string, radahn_html: string, riscos_lista: string, assets_prefix: string) from "templates/plano_body.html"
 
 // DependenciasBody — Discovery-only (a "dependência entre features" só faz
 // sentido quando o work-item tem um backlog de mais de uma feature; Delivery

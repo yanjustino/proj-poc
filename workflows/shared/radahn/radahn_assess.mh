@@ -1,0 +1,75 @@
+// tool RadahnAssess — segunda etapa da geracao do plano: com o plano JÁ
+// gerado nas maos, uma chamada propria avalia se a historia pode ser
+// implementada com o Radahn e, se puder, escreve o radahn.yaml. Separado da
+// geracao do plano de proposito: o plano nao paga o custo da documentacao do
+// Radahn (~50 KB), o assessment ve o plano de verdade (nao gera os dois de
+// uma vez) e o resultado e so anexado ao plano (data.radahn).
+//
+// Usa AutoReview (no maximo uma correcao, com os avisos de RadahnModel) e e
+// melhor-esforco: se a chamada falhar, o plano segue sem assessment e o erro
+// fica registrado em data.radahn_erro — o plano nunca falha por causa dele.
+
+import { AutoReview } from "../artifacts/auto_review.mh"
+import { RadahnModel } from "radahn_model.mh"
+import { RadahnPrompt, RadahnSchemaFile } from "radahn_prompts.mh"
+
+export tool RadahnAssess {
+    // O que a LLM precisa ver do plano — sem as anotacoes internas
+    // (avisos de contexto, autorrevisao, caminhos).
+    plan_view(plano: any): any -> {
+        abordagem: plano?.abordagem, componentes: plano?.componentes ?? [], adrs: plano?.adrs ?? [], dados: plano?.dados ?? [],
+        fluxo: plano?.fluxo ?? [], erros: plano?.erros ?? [], seguranca: plano?.seguranca ?? [], tarefas: plano?.tarefas ?? [], testes: plano?.testes ?? []
+    }
+
+    // attach: o plano com o assessment (ou o erro) anexado. Mapas passados a uma
+    // tool chegam por valor — alterar `plano` la dentro nao muda o do chamador —,
+    // entao o plano anotado e DEVOLVIDO, nunca mutado no lugar.
+    attach(plano: any, assessment: any, erro: string): any -> {
+        if (assessment != null) plano["radahn"] = assessment
+        if (!erro.is_empty()) plano["radahn_erro"] = erro
+        return plano
+    }
+
+    // annotate: roda o assessment e devolve {data, tokens_in, tokens_out}: `data`
+    // e o plano com data.radahn (use-o no lugar do original) e os tokens sao
+    // a somar aos da geracao do plano.
+    annotate(plano: any, historia_content: string, der_content: string, adr_content: string, autorrevisao: bool, project_id: string): any -> {
+        try {
+            var review = AutoReview.generate(
+                enabled: autorrevisao,
+                prompt: RadahnPrompt.build(json.stringify(self.plan_view(plano)), historia_content, der_content, adr_content),
+                schema_file: RadahnSchemaFile.get(), project_id: project_id, artifact: "radahn",
+                prepare: (raw) -> json.parse(raw),
+                check: (d) -> RadahnModel.check_assessment(d)
+            )
+            return {data: self.attach(plano, review.data, ""), tokens_in: review.tokens_in, tokens_out: review.tokens_out}
+        } catch (err) {
+            return {data: self.attach(plano, null, "${err}"), tokens_in: 0, tokens_out: 0}
+        }
+    }
+}
+
+tool RadahnAssessFixtures {
+    plano(): any -> {abordagem: "x", componentes: [{conteiner: "API"}], fluxo: [], tarefas: [{id: "T1"}], testes: [], avisos_contexto: ["x"], autorrevisao: {tentada: true}, historia_dir: "h"}
+}
+
+test RadahnAssessSpec {
+    describe attach_returns_the_annotated_plan_without_touching_the_caller_copy {
+        var original = RadahnAssessFixtures.plano()
+        var com = RadahnAssess.attach(original, {aplicavel: true}, "")
+        is_true(com.radahn.aplicavel)
+        is_true(original?.radahn == null)
+        are_equal(RadahnAssess.attach(original, null, "timeout").radahn_erro, "timeout")
+        is_true(RadahnAssess.attach(original, null, "timeout")?.radahn == null)
+    }
+
+    describe plan_view_drops_internal_annotations_and_defaults_missing_lists {
+        var v = RadahnAssess.plan_view(RadahnAssessFixtures.plano())
+        are_equal(v.abordagem, "x")
+        are_equal(v.tarefas.size(), 1)
+        are_equal(v.dados.size(), 0)
+        is_true(!json.stringify(v).contains("avisos_contexto"))
+        is_true(!json.stringify(v).contains("autorrevisao"))
+        is_true(!json.stringify(v).contains("historia_dir"))
+    }
+}

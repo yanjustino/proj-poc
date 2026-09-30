@@ -16,6 +16,8 @@ import { ChangesBlock } from "../shared/artifacts/changes_log.mh"
 import { ArtifactSchema, SpecConventions, HistoriasInstruction, HistoriasSchemaFile, PlanoInstruction, PlanoSchemaFile } from "../shared/artifacts/artifacts_common.mh"
 import { Traceability, SpecFiles } from "../shared/artifacts/historia_spec.mh"
 import { PlanoModel, PlanoPrep } from "../shared/artifacts/plano_model.mh"
+import { RadahnModel } from "../shared/radahn/radahn_model.mh"
+import { RadahnAssess } from "../shared/radahn/radahn_assess.mh"
 import { ContextSlice } from "../shared/artifacts/context_slice.mh"
 import { AutoReview } from "../shared/artifacts/auto_review.mh"
 import { ArtifactChecks } from "../shared/artifacts/artifact_checks.mh"
@@ -340,6 +342,11 @@ partial workflow Discovery {
         var data = review.data
         data["autorrevisao"] = review.revisao
         data["historia_dir"] = historia_rel
+        // Segunda etapa, com o plano ja pronto: aderencia ao Radahn (data.radahn).
+        var radahn = RadahnAssess.annotate(data, Context.artifact(project_id, historia_rel + "/historia.html"), der_content, ContextSlice.adrs(project_id, refs), autorrevisao, project_id)
+        data = radahn.data
+        self.tokens_in = self.tokens_in + radahn.tokens_in
+        self.tokens_out = self.tokens_out + radahn.tokens_out
         self.pending_data = data
         goto Gate
     }
@@ -354,7 +361,8 @@ partial workflow Discovery {
         )
         ArtifactData.write(project_id, relative, data)
         fs.write(Paths.artifact(project_id, relative), rendered)
-        self.discovery_result = {artifact: "plano", feature_id: feature_id, historia_id: historia_id, path: "artifacts/" + relative}
+        var radahn_yaml = RadahnModel.persist(project_id, relative, data)
+        self.discovery_result = {artifact: "plano", feature_id: feature_id, historia_id: historia_id, path: "artifacts/" + relative, radahn: !radahn_yaml.is_empty()}
         goto Done
     }
 }

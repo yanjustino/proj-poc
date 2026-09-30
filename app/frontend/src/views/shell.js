@@ -18,6 +18,7 @@ import {
   getClaudeModel,
   setClaudeModel,
   appVersion,
+  importProject,
 } from '../api.js';
 import { openNewWorkItemModal } from './new-workitem.js';
 import { renderWorkItemView } from './workitem-view.js';
@@ -61,6 +62,7 @@ export async function mountShell(root) {
           <div class="sidebar-top-actions">
             <button class="icon-btn sidebar-toggle-collapsed" aria-label="Expandir menu lateral" title="Expandir menu lateral" data-toggle-sidebar>${icon('panelLeft', 15)}</button>
             <button class="icon-btn" aria-label="Novo work-item" title="Novo work-item" data-create>${icon('plus', 15)}</button>
+            <button class="icon-btn" aria-label="Importar projeto" title="Importar projeto (.zip)" data-import>${icon('upload', 15)}</button>
             <button class="icon-btn" aria-label="Maximizar janela" title="Maximizar/restaurar janela" data-toggle-maximise>${icon('maximize', 15)}</button>
             <button class="icon-btn" aria-label="Usar tema claro" title="Usar tema claro" data-theme-toggle>${icon('sun', 15)}</button>
           </div>
@@ -173,7 +175,7 @@ export async function mountShell(root) {
     // when it's needed. Always-visible costs nothing when things are fine
     // (reconnectMCP() respawning a healthy mhl is just a brief blip) and
     // guarantees a way out when the probe and reality disagree.
-    const reconnectButton = `<button class="button secondary small sidebar-status-reconnect" data-mcp-reconnect ${reconnecting ? 'disabled' : ''} title="Reiniciar a conexão com o mhl">${reconnecting ? 'Reconectando…' : 'Reconectar'}</button>`;
+    const reconnectButton = `<button class="icon-btn sidebar-status-reconnect${reconnecting ? ' is-spinning' : ''}" data-mcp-reconnect ${reconnecting ? 'disabled' : ''} aria-label="Reconectar ao mhl" title="${reconnecting ? 'Reconectando…' : 'Reiniciar a conexão com o mhl'}">${icon('refreshCw', 14)}</button>`;
     mcpStatusEl.title = plain; // the only readable status when the sidebar is collapsed to a dot
     mcpStatusEl.innerHTML = `<span class="status-dot ${dot}"></span><span class="sidebar-status-copy" title="${escapeHtml(plain)}">${html}</span>${reconnectButton}`;
 
@@ -652,6 +654,23 @@ export async function mountShell(root) {
     openWorkItem(project.id, 'fontes');
   });
 
+
+  root.querySelector('[data-import]').addEventListener('click', async () => {
+    try {
+      const imported = await importProject();
+      if (!imported) return;
+      await loadProjects();
+      openWorkItem(imported.project_id, 'fontes');
+      if (imported.copied) {
+        showWarningDialog(
+          'Projeto importado como cópia',
+          `Já existe um work-item com o id ${imported.original_id}; o pacote foi importado como "${imported.name}".`,
+        );
+      }
+    } catch (err) {
+      showWarningDialog('Não foi possível importar o projeto', String(err.message || err));
+    }
+  });
 
   subscribe(() => renderNav());
 

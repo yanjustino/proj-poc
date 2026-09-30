@@ -333,55 +333,6 @@ func TestProjectFileAccess_RejectsPathTraversal(t *testing.T) {
 	}
 }
 
-func TestExportProjectToCopiesWikiAndArtifacts(t *testing.T) {
-	dataDir := t.TempDir()
-	app := &App{dataDir: dataDir}
-	projectID := "export-test"
-	projectDir := filepath.Join(dataDir, "projects", projectID)
-	if err := os.MkdirAll(filepath.Join(projectDir, "wiki", "entities"), 0o755); err != nil {
-		t.Fatalf("mkdir wiki: %v", err)
-	}
-	if err := os.MkdirAll(filepath.Join(projectDir, "artifacts", "features"), 0o755); err != nil {
-		t.Fatalf("mkdir artifacts: %v", err)
-	}
-	if err := os.WriteFile(filepath.Join(projectDir, "wiki", "entities", "cliente.md"), []byte("# Cliente\n"), 0o644); err != nil {
-		t.Fatalf("write wiki page: %v", err)
-	}
-	if err := os.WriteFile(filepath.Join(projectDir, "artifacts", "features", "checkout.html"), []byte("<h1>Checkout</h1>"), 0o644); err != nil {
-		t.Fatalf("write artifact: %v", err)
-	}
-
-	destinationParent := t.TempDir()
-	exported, err := app.exportProjectTo(projectID, destinationParent)
-	if err != nil {
-		t.Fatalf("exportProjectTo: %v", err)
-	}
-	if filepath.Base(exported) != "senpai-"+projectID {
-		t.Fatalf("unexpected export directory: %s", exported)
-	}
-
-	assertExported := func(relative string, want string) {
-		t.Helper()
-		got, err := os.ReadFile(filepath.Join(exported, relative))
-		if err != nil {
-			t.Fatalf("read exported %s: %v", relative, err)
-		}
-		if string(got) != want {
-			t.Fatalf("exported %s = %q, want %q", relative, got, want)
-		}
-	}
-	assertExported(filepath.Join("wiki", "entities", "cliente.md"), "# Cliente\n")
-	assertExported(filepath.Join("artifacts", "features", "checkout.html"), "<h1>Checkout</h1>")
-
-	second, err := app.exportProjectTo(projectID, destinationParent)
-	if err != nil {
-		t.Fatalf("second exportProjectTo: %v", err)
-	}
-	if filepath.Base(second) != "senpai-"+projectID+" (2)" {
-		t.Fatalf("second export should not overwrite the first: %s", second)
-	}
-}
-
 func TestExportProjectToRejectsDestinationInsideArtifacts(t *testing.T) {
 	dataDir := t.TempDir()
 	app := &App{dataDir: dataDir}

@@ -39,6 +39,8 @@ p.fontes{margin:-4px 0 16px;line-height:2}
 .c4-swatch-relation{height:0;width:22px;border-top:2px dashed #707070;border-radius:0}
 .c4-warnings{padding:12px 16px 12px 34px;background:#fdf6e7;border-left:3px solid #d28b26;font-size:14px}
 .c4-warnings li{margin-bottom:6px}
+.radahn-badge{display:inline-block;font-family:ui-monospace,monospace;font-size:11px;font-weight:700;letter-spacing:.04em;text-transform:uppercase;padding:4px 9px;border-radius:999px;background:#e3f0fb;color:#1c5a8f;vertical-align:middle}
+.radahn-yaml{background:#f6f4ee;border:1px solid #e0dccf;border-radius:4px;padding:12px 14px;font-size:12px;overflow:auto;white-space:pre}
 .autorrevisao{padding:8px 12px;background:#eef3ee;border-left:3px solid #2c7a4b;font-size:13px;color:#2c5a3b}
 .er-legend{list-style:none;padding:0;display:flex;flex-wrap:wrap;gap:6px 22px;font-size:13px}
 .er-legend li{margin:0}

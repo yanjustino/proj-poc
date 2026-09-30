@@ -8,6 +8,7 @@ import { DerModel } from "der_model.mh"
 import { StoryRules, FeatureRules } from "backlog_rules.mh"
 import { Contracts, Scenarios } from "historia_spec.mh"
 import { PlanoModel } from "plano_model.mh"
+import { RadahnModel } from "../radahn/radahn_model.mh"
 
 export tool ArtifactChecks {
     // Lote de diagramas ja anotado (C4Diagram.annotate: avisos_lote).
@@ -38,5 +39,5 @@ export tool ArtifactChecks {
     }
 
     // Plano ja anotado (avisos_contexto, criterios_total).
-    plano(data: any): string[] -> PlanoModel.check(data) + (data?.avisos_contexto ?? [])
+    plano(data: any): string[] -> PlanoModel.check(data) + (data?.avisos_contexto ?? []) + RadahnModel.check(data)
 }

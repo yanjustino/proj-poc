@@ -70,6 +70,10 @@ export function GetWorkflowManifest(arg1) {
   return window['go']['main']['App']['GetWorkflowManifest'](arg1);
 }
 
+export function ImportProject() {
+  return window['go']['main']['App']['ImportProject']();
+}
+
 export function IsReady() {
   return window['go']['main']['App']['IsReady']();
 }

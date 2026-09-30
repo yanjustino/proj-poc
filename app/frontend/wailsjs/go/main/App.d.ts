@@ -35,6 +35,8 @@ export function GetRunStatus(arg1:string):Promise<string>;
 
 export function GetWorkflowManifest(arg1:string):Promise<string>;
 
+export function ImportProject():Promise<string>;
+
 export function IsReady():Promise<boolean>;
 
 export function ListClaudeModels():Promise<string>;

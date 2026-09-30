@@ -210,7 +210,7 @@ export async function renderArtefatosTab(container, project, { onChanged }) {
       <div class="artifact-map-controls">
         <span class="dor-summary" data-dor-summary hidden></span>
         <button class="button secondary small" data-handoff hidden title="Gera o pacote de handoff (specs, planos, tarefas, contratos, ADRs e arquitetura) com todas as histórias — as que ainda não estão prontas entram marcadas, não ficam de fora — e exporta para uma pasta, para levar ao repositório de código.">${icon('layers', 14)} Pacote de handoff</button>
-        <button class="button secondary small" data-export-all title="Exportar toda a Wiki e todos os Artefatos">${icon('download', 14)} Exportar tudo</button>
+        <button class="button secondary small" data-export-all title="Exportar o projeto (fontes, wiki, artefatos, histórico e uso) em um .zip">${icon('download', 14)} Exportar tudo</button>
         <div class="view-toggle" data-view-toggle>
           <button class="view-toggle-btn" data-view="cards" title="Ver como cards">${icon('grid', 15)}</button>
           <button class="view-toggle-btn" data-view="table" title="Ver como tabela">${icon('list', 15)}</button>
@@ -385,7 +385,7 @@ export async function renderArtefatosTab(container, project, { onChanged }) {
     exportAllButton.disabled = true;
     try {
       const destination = await exportProject(project.id);
-      if (destination) showExportStatus(`Wiki e artefatos exportados para ${destination}`);
+      if (destination) showExportStatus(`Projeto exportado para ${destination}`);
     } catch (err) {
       showExportStatus(`Não foi possível exportar: ${String(err.message || err)}`, 'error');
     } finally {
@@ -538,6 +538,7 @@ export async function renderArtefatosTab(container, project, { onChanged }) {
       modifiedAt: planModifiedAt,
       historiaModifiedAt: fileMtime(files, 'historia.html'),
       planDone: Boolean(planModifiedAt),
+      radahn: fileNames(files).includes('radahn.yaml'),
       parentKey,
       deep,
       plan: { featureId: featureId || '', historiaId: historiaId || '' },
@@ -813,6 +814,16 @@ export async function renderArtefatosTab(container, project, { onChanged }) {
   }
 
   const DOR_LABEL = { pronta: 'Pronta p/ dev', pronta_com_ressalvas: 'Com ressalvas', nao_pronta: 'Não pronta' };
+
+  // radahnBadgeHtml: the plan's Radahn assessment concluded the história can
+  // be built with Radahn — radahn.yaml sits next to plano.html (written only
+  // then, see RadahnModel.persist), so its presence is the signal. Shown on
+  // the plan row and on its história row.
+  function radahnBadgeHtml(row) {
+    const applies = row.plan ? row.radahn : (row.devFiles || []).includes('radahn.yaml');
+    if (!applies) return '';
+    return `<span class="radahn-badge" title="O plano indica que o Radahn (motor low-code de APIs REST) pode implementar esta história — há um radahn.yaml gerado junto com o plano.">${icon('zap', 10)} Radahn</span>`;
+  }
 
   function dorBadgeHtml(r) {
     if (!r) return '';
@@ -1098,7 +1109,7 @@ export async function renderArtefatosTab(container, project, { onChanged }) {
           <span class="artifact-card-kind"><i>${icon(ARTIFACT_ICONS[vm.artifactName] || 'fileText', 14)}</i>${escapeHtml(row.category || labelFor(vm.artifactName))}</span>
           <strong>${escapeHtml(row.parentKey ? row.nestedLabel || row.label : row.label)}</strong>
           ${vm.classificationLabel ? `<span class="artifact-card-classification ${vm.classification.tipoItem === 'enabler' ? 'enabler' : 'business'}">${escapeHtml(vm.classificationLabel)}</span>` : ''}
-          ${dorBadgeHtml(readinessFor(row))}
+          ${dorBadgeHtml(readinessFor(row))}${radahnBadgeHtml(row)}
           <span class="artifact-card-description">${escapeHtml(descriptionFor(row))}</span>
           ${vm.stale?.stale ? `<span class="artifact-card-stale" title="${escapeAttribute(vm.staleTitle)}">${icon('alertCircle', 12)} Desatualizado</span>` : ''}
         </button>
@@ -1143,7 +1154,7 @@ export async function renderArtefatosTab(container, project, { onChanged }) {
           ${row.isCategoryGroup ? `<span class="data-row-count">${escapeHtml(itemCountLabel(vm.childCount))}</span>` : vm.historiasCount ? `<span class="data-row-count">${escapeHtml(historiasCountLabel(vm.historiasCount))}</span>` : ''}
           ${vm.stale?.stale ? `<span class="artifact-card-stale" title="${escapeAttribute(vm.staleTitle)}">${icon('alertCircle', 12)} Desatualizado</span>` : ''}
         </td>
-        <td class="data-row-classification">${vm.classificationLabel ? `<span class="artifact-card-classification ${vm.classification.tipoItem === 'enabler' ? 'enabler' : 'business'}">${escapeHtml(vm.classificationLabel)}</span>` : ''}${dorBadgeHtml(readinessFor(row))}</td>
+        <td class="data-row-classification">${vm.classificationLabel ? `<span class="artifact-card-classification ${vm.classification.tipoItem === 'enabler' ? 'enabler' : 'business'}">${escapeHtml(vm.classificationLabel)}</span>` : ''}${dorBadgeHtml(readinessFor(row))}${radahnBadgeHtml(row)}</td>
         <td class="data-row-category">${escapeHtml(row.category || labelFor(vm.artifactName))}</td>
         <td class="data-row-status">${escapeHtml(vm.statusText)}</td>
         <td class="data-row-when">${escapeHtml(when)}</td>
@@ -1869,12 +1880,12 @@ export async function renderArtefatosTab(container, project, { onChanged }) {
     const bar = document.createElement('div');
     bar.className = 'dev-files-bar';
     const r = readinessFor(row);
-    const files = ['openapi.json', 'asyncapi.json', 'historia.feature', 'plano.html'];
+    const files = ['openapi.json', 'asyncapi.json', 'historia.feature', 'plano.html', 'radahn.yaml'];
     const present = files.filter((f) => (row.devFiles || []).includes(f));
     bar.innerHTML = `
       <div class="dev-files-bar-row">
         <span class="dev-files-title">Arquivos para desenvolvimento</span>
-        ${dorBadgeHtml(r)}
+        ${dorBadgeHtml(r)}${radahnBadgeHtml(row)}
         ${present.length ? present.map((f) => `<button class="button tertiary small" data-dev-file="${escapeAttribute(f)}">${icon('download', 12)} ${escapeHtml(f)}</button>`).join('') : '<span class="dev-files-empty">Nenhum arquivo gerado — regere a história (e gere o plano).</span>'}
       </div>
       ${dorReasonsHtml(r)}

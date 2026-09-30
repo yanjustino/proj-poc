@@ -172,7 +172,10 @@ body.pane-resizing iframe { pointer-events: none; }
 .sidebar-status { flex: none; margin-top: 10px; padding-top: 10px; padding-left: 7px; border-top: 1px solid var(--line); display: flex; align-items: center; gap: 8px; font-size: 11px; color: var(--muted); font-family: var(--mono); }
 .sidebar-status-copy { min-width: 0; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
 .sidebar-status-copy b { color: var(--ink); font-weight: 600; font-family: var(--sans); }
-.sidebar-status-reconnect { flex: none; white-space: nowrap; }
+.sidebar-status-reconnect { flex: none; margin-left: auto; }
+.sidebar-status-reconnect:hover:not(:disabled) { color: var(--ink); }
+.sidebar-status-reconnect.is-spinning svg { animation: sidebar-reconnect-spin 0.9s linear infinite; }
+@keyframes sidebar-reconnect-spin { to { transform: rotate(360deg); } }
 .sidebar-version { flex: none; padding: 5px 7px 0; color: var(--muted); font: 10px var(--mono); opacity: .8; }
 
 /* Agent picker — sits just above .sidebar-status (its own top border reads
@@ -426,7 +429,8 @@ body.pane-resizing iframe { pointer-events: none; }
 .dev-files-bar { display: flex; flex-direction: column; gap: 8px; padding: 8px 0 10px; border-bottom: 1px solid var(--line); margin-bottom: 10px; }
 .dev-files-bar-row { display: flex; flex-wrap: wrap; align-items: center; gap: 6px 8px; }
 .dev-files-title { font: 600 11px var(--sans); color: var(--ink); text-transform: uppercase; letter-spacing: .04em; }
-.dev-files-bar .dor-badge { margin: 0; }
+.radahn-badge { display: inline-flex; align-items: center; gap: 4px; margin: 4px 0 0 6px; padding: 2px 8px; border-radius: 999px; font: 600 10px var(--sans); white-space: nowrap; background: #e3f0fb; color: #1c5a8f; }
+.dev-files-bar .dor-badge, .dev-files-bar .radahn-badge { margin: 0; }
 .dev-files-empty { font-size: 11px; color: var(--muted); }
 .dor-reasons { margin: 0; padding: 0; list-style: none; display: flex; flex-direction: column; gap: 4px; }
 .dor-reasons li { position: relative; padding-left: 16px; font-size: 11px; line-height: 1.5; }

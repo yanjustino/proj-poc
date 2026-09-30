@@ -1,0 +1,75 @@
+{
+  "type": "object",
+  "additionalProperties": false,
+  "required": [
+    "aplicavel",
+    "aderencia",
+    "justificativa",
+    "sinais",
+    "impedimentos",
+    "skills",
+    "variaveis_ambiente",
+    "lacunas",
+    "yaml"
+  ],
+  "properties": {
+    "aplicavel": {
+      "type": "boolean",
+      "description": "true somente se o Radahn implementa a parte principal da história com o catálogo de skills existente (aderência alta ou média)."
+    },
+    "aderencia": {
+      "type": "string",
+      "enum": [
+        "alta",
+        "media",
+        "baixa",
+        "nao_aplicavel"
+      ],
+      "description": "alta: a história inteira cabe em rotas/pipelines do Radahn; media: a maior parte cabe, com pontos a resolver; baixa: só uma parte marginal cabe; nao_aplicavel: não é uma API REST orientada a dados/integrações."
+    },
+    "justificativa": {
+      "type": "string",
+      "description": "Por que o Radahn é (ou não é) adequado, ligando aos endpoints, fontes de dados e regras da história."
+    },
+    "sinais": {
+      "type": "array",
+      "description": "Características da história que favorecem o Radahn (ex.: endpoint de consulta a Postgres, BFF agregando APIs).",
+      "items": {
+        "type": "string"
+      }
+    },
+    "impedimentos": {
+      "type": "array",
+      "description": "Características que o Radahn não cobre ou que exigem código customizado. Vazio se não houver.",
+      "items": {
+        "type": "string"
+      }
+    },
+    "skills": {
+      "type": "array",
+      "description": "Skills/control steps do catálogo do Radahn que o pipeline usaria (ex.: PostgresQuery, HttpSearch, Parallel). Vazio se não aplicável.",
+      "items": {
+        "type": "string"
+      }
+    },
+    "variaveis_ambiente": {
+      "type": "array",
+      "description": "Nomes das variáveis de ambiente necessárias (nunca valores). Vazio se não aplicável.",
+      "items": {
+        "type": "string"
+      }
+    },
+    "lacunas": {
+      "type": "array",
+      "description": "Informações que faltam na história para fechar o radahn.yaml (shape de resposta de subsistema, tabelas, autenticação...). Vazio se não houver.",
+      "items": {
+        "type": "string"
+      }
+    },
+    "yaml": {
+      "type": "string",
+      "description": "Conteúdo completo do radahn.yaml (kind: ApplicationWorkflow), só com skills do catálogo, sem segredos, indentado com espaços. String vazia quando aplicavel=false."
+    }
+  },
+  "description": "Assessment de aderência de uma história ao Radahn (motor low-code de APIs REST configurado por radahn.yaml)."
+}

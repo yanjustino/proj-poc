@@ -16,6 +16,7 @@ import { C4Diagram } from "c4_diagram.mh"
 import { DerModel } from "der_model.mh"
 import { Traceability, Contracts, Scenarios, SpikeSpec } from "historia_spec.mh"
 import { PlanoModel } from "plano_model.mh"
+import { RadahnModel } from "../radahn/radahn_model.mh"
 import { StoryRules, FeatureRules, BacklogHtml } from "backlog_rules.mh"
 import { AutoReview } from "auto_review.mh"
 import {
@@ -264,7 +265,8 @@ export tool ArtifactBody {
     // `assets_prefix`: caminho relativo ate artifacts/ (ver PlanoBody).
     plano(data: any, assets_prefix: string): string -> Cite.finalize(PlanoBody(
         historia_titulo: html.escape(data?.historia_titulo ?? ""),
-        avisos_html: AutoReview.note_html(data) + PlanoModel.warnings_html(data),
+        radahn_badge: RadahnModel.badge_html(data),
+        avisos_html: AutoReview.note_html(data) + PlanoModel.warnings_html(data) + RadahnModel.warnings_html(data),
         abordagem: html.escape(data.abordagem),
         abordagem_fontes: Cite.note(data.abordagem_fontes),
         componentes_tabela: PlanoModel.components_html(data?.componentes ?? []),
@@ -277,6 +279,7 @@ export tool ArtifactBody {
         tarefas_tabela: PlanoModel.tasks_html(data?.tarefas ?? []),
         testes_tabela: PlanoModel.tests_html(data?.testes ?? []),
         cobertura_html: PlanoModel.coverage_html(data),
+        radahn_html: RadahnModel.section_html(data),
         riscos_lista: Cite.list(data?.riscos ?? []),
         assets_prefix: assets_prefix
     ))
