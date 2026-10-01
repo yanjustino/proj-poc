@@ -3,13 +3,24 @@
 
 import { WorkItemActions } from "actions.mh"
 import { Paths } from "../shared/core/paths.mh"
+import { Closed } from "../shared/core/closed_set.mh"
 import { Readiness } from "../shared/artifacts/readiness.mh"
 import { Handoff } from "../shared/artifacts/handoff.mh"
+
+enum WorkItemAction { create, list, get, archive, usage, prompt_log, changes, productivity, readiness, handoff }
+
+tool WorkItemActionKind {
+    parse(name: string): WorkItemAction -> Closed.parse("acao desconhecida", name, [
+        WorkItemAction.create, WorkItemAction.list, WorkItemAction.get, WorkItemAction.archive,
+        WorkItemAction.usage, WorkItemAction.prompt_log, WorkItemAction.changes,
+        WorkItemAction.productivity, WorkItemAction.readiness, WorkItemAction.handoff,
+    ])
+}
 
 workflow WorkItem {
     description: "Ciclo de vida de um work-item do Senpai: create, list, get, archive, usage, prompt_log, changes, productivity, readiness, handoff."
 
-    input action: string             // "create" | "list" | "get" | "archive" | "usage" | "prompt_log" | "changes" | "productivity" | "readiness" | "handoff"
+    input action: string             // WorkItemAction
     input name: string = ""          // obrigatorio (valor) so para action:"create"
     input item_type: string = ""     // "oportunidade" | "feature" | "historia"; so para action:"create"
     input continuidade_de: string = "" // opcional, so para action:"create" — sistema existente que este item evolui
@@ -38,106 +49,97 @@ workflow WorkItem {
         error: error_message,
     }
 
+    route ActionRouter(action: WorkItemAction) {
+        WorkItemAction.create       -> Create
+        WorkItemAction.list         -> List
+        WorkItemAction.get          -> Get
+        WorkItemAction.archive      -> Archive
+        WorkItemAction.usage        -> Usage
+        WorkItemAction.prompt_log   -> PromptLog
+        WorkItemAction.changes      -> Changes
+        WorkItemAction.productivity -> Productivity
+        WorkItemAction.readiness    -> Readiness
+        WorkItemAction.handoff      -> Handoff
+    }
+
     step Dispatch {
-        if (action == "create") goto Create
-        if (action == "list") goto List
-        if (action == "get") goto Get
-        if (action == "archive") goto Archive
-        if (action == "usage") goto Usage
-        if (action == "prompt_log") goto PromptLog
-        if (action == "changes") goto Changes
-        if (action == "productivity") goto Productivity
-        if (action == "readiness") goto Readiness
-        if (action == "handoff") goto Handoff
-        fail(
-            "acao desconhecida: '" + action +
-            "' (use create | list | get | archive | usage | prompt_log | changes | productivity | readiness | handoff)"
-        )
+        goto ActionRouter(WorkItemActionKind.parse(action))
     }
 
     step Create {
-        project = WorkItemActions.create(name, item_type, continuidade_de)
+        self.project = WorkItemActions.create(name, item_type, continuidade_de)
         goto Done
     }
 
     step List {
-        projects = WorkItemActions.list()
+        self.projects = WorkItemActions.list()
         goto Done
     }
 
     step Get {
-        project = WorkItemActions.get(project_id)
+        self.project = WorkItemActions.get(project_id)
         goto Done
     }
 
     step Archive {
-        project = WorkItemActions.archive(project_id)
+        self.project = WorkItemActions.archive(project_id)
         goto Done
     }
 
     step Usage {
-        usage = WorkItemActions.usage(project_id)
+        self.usage = WorkItemActions.usage(project_id)
         goto Done
     }
 
     step PromptLog {
-        prompt_log = WorkItemActions.prompt_log(project_id)
+        self.prompt_log = WorkItemActions.prompt_log(project_id)
         goto Done
     }
 
     step Changes {
-        changes = WorkItemActions.changes_log(project_id)
+        self.changes = WorkItemActions.changes_log(project_id)
         goto Done
     }
 
     step Productivity {
-        productivity = WorkItemActions.productivity(project_id)
+        self.productivity = WorkItemActions.productivity(project_id)
         goto Done
     }
 
     // Definition of Ready de cada historia (readiness.mh).
     step Readiness {
-        readiness = Readiness.batch(Paths.ensure_valid(project_id))
+        self.readiness = Readiness.batch(Paths.ensure_valid(project_id))
         goto Done
     }
 
     // Gera o pacote de handoff em projects/<id>/handoff/ (handoff.mh); o app
     // exporta a pasta para onde o usuario escolher.
     step Handoff {
-        handoff = Handoff.build(project_id)
+        self.handoff = Handoff.build(project_id)
         goto Done
     }
 
-    step Done {
-        // ponto de convergencia unico — mantem `reached` enxuto para a UI
-        // (ex.: ["Dispatch","Create","Done"]), nunca os 5 branches inteiros.
-    }
+    step Done { complete() }
 }
 
-// WorkItemWorkflowSpec testa o workflow INTEIRO (Dispatch + goto), nao so
-// WorkItemActions isolado (ja coberto por actions.mh :: WorkItemActionsSpec)
-// — via `Name.run(inputs:)`, novo em mhl 1.4.0-beta.7 (MHL-Melhorias.md
-// #13), que fecha a lacuna registrada desde a Fase 1 ("create/list/get/
-// archive/usage do WorkItem em si foram validados via mhl run manual, nao
-// via bloco test").
-//
-// Escopo deliberado — SO os caminhos de falha rapida (Dispatch/validacao),
-// nenhum action:"create"/"archive" de verdade: `Name.run(...)` NAO isola
-// `fs`/`dir` num diretorio temporario descartavel, apesar do que a nota de
-// status do item 13 sugere ("sandbox isolado... diretorio temporario") —
-// confirmado por spike, um `fs.write` dentro de um `Name.run()` grava no
-// CWD real de quem roda `mhl test`, nao em lugar nenhum descartado (nem
-// mesmo isolado entre chamadas/describes diferentes no mesmo arquivo — o
-// mesmo `fs.write` de uma chamada e visto pela proxima). Testar
-// action:"create" aqui deixaria uma pasta `projects/<uuid-real>/` de
-// verdade a cada `mhl test workflows` — poluicao de disco a cada rodada,
-// inaceitavel num bloco test versionado. Ver FASE5-ACHADOS.md.
+// Cobre so caminhos que nao gravam em disco: `Name.run()` roda no CWD real,
+// sem sandbox de fs/dir.
 test WorkItemWorkflowSpec {
+    // O lint nao exige que um route cubra todo o enum; este teste exige.
+    // handoff fica de fora porque grava projects/<id>/handoff/.
+    describe every_action_reaches_its_own_step {
+        for (var name in ["create", "list", "get", "archive", "usage", "prompt_log", "changes", "productivity", "readiness"]) {
+            var run = WorkItem.run(inputs: {action: name, project_id: "spec-nao-existe-de-verdade"})
+            is_false((run.error ?? "").contains("no arm matched"))
+            are_equal(run.executed.size() > 1, true)
+        }
+    }
+
     describe rejects_an_unknown_action_before_touching_disk {
         var run = WorkItem.run(inputs: {action: "bogus"})
         is_false(run.ok)
         are_equal(run.state, "failed")
-        is_true(run.error.contains("acao desconhecida"))
+        is_true(run.error.contains("acao desconhecida: 'bogus' (use create | list | get | archive | usage | prompt_log | changes | productivity | readiness | handoff)"))
         are_equal(run.executed, ["Dispatch"])
     }
 

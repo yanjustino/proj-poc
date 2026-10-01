@@ -29,6 +29,12 @@ import (
 // loopback process that's doing real work (an LLM call can take 10s-60s+).
 const runPollInterval = 500 * time.Millisecond
 
+const (
+	startupStarting = "starting"
+	startupReady    = "ready"
+	startupFailed   = "failed"
+)
+
 // App struct
 type App struct {
 	ctx context.Context
@@ -108,6 +114,11 @@ type App struct {
 	// background goroutine, taking the whole app down.
 	mhlMu sync.RWMutex
 
+	// startupState/startupErr: ver runStartup.
+	startupMu    sync.Mutex
+	startupState string
+	startupErr   string
+
 	// ingestedMu serializes MarkRawIngested's read-modify-write of
 	// raw/.ingested.json — Wails runs bound methods concurrently, so two
 	// ingests finishing at the same moment could otherwise each read the old
@@ -127,11 +138,49 @@ func (a *App) startup(ctx context.Context) {
 	a.emit = func(eventName string, data any) {
 		runtime.EventsEmit(a.ctx, eventName, data)
 	}
+	a.runStartup()
+}
 
+// runStartup prepara os arquivos e sobe o mhl, registrando o resultado em
+// startupState/startupErr — o frontend (StartupStatus) distingue "ainda
+// iniciando" de "falhou, e por quê", em vez de só esperar IsReady expirar.
+// Uma chamada concorrente (RetryStartup durante a inicialização) não faz
+// nada: a que já está em andamento decide o resultado.
+func (a *App) runStartup() {
+	a.startupMu.Lock()
+	if a.startupState == startupStarting {
+		a.startupMu.Unlock()
+		return
+	}
+	a.startupState, a.startupErr = startupStarting, ""
+	a.startupMu.Unlock()
+
+	err := a.prepareAndConnect()
+	if err != nil {
+		log.Printf("mhl bridge: falha ao iniciar: %v", err)
+	}
+	a.setStartupResult(err)
+}
+
+func (a *App) setStartupResult(err error) {
+	a.startupMu.Lock()
+	defer a.startupMu.Unlock()
+	if err != nil {
+		a.startupState, a.startupErr = startupFailed, err.Error()
+		return
+	}
+	a.startupState, a.startupErr = startupReady, ""
+}
+
+// prepareAndConnect resolve os arquivos que o mhl precisa e sobe o bridge.
+// Idempotente, para que RetryStartup possa refazer tudo depois de uma
+// falha em qualquer etapa. O tempo de cada fase vai para o app.log: uma
+// inicialização lenta ou que falha "às vezes" só é diagnosticável assim.
+func (a *App) prepareAndConnect() error {
+	began := time.Now()
 	mhlPath, err := ensureVendoredMHL()
 	if err != nil {
-		log.Printf("mhl bridge: %v", err)
-		return
+		return fmt.Errorf("extrair o mhl embutido: %w", err)
 	}
 	a.mhlPath = mhlPath
 
@@ -144,8 +193,7 @@ func (a *App) startup(ctx context.Context) {
 
 	workflowsDir, err := resolveWorkflowsDir()
 	if err != nil {
-		log.Printf("mhl bridge: resolve workflows dir: %v", err)
-		return
+		return fmt.Errorf("localizar os workflows: %w", err)
 	}
 	a.workflowsDir = workflowsDir
 
@@ -184,14 +232,45 @@ func (a *App) startup(ctx context.Context) {
 	a.codexModel = settings.CodexModel
 	a.claudeModel = settings.ClaudeModel
 
+	prepared := time.Now()
+	log.Printf("mhl bridge: arquivos prontos em %s", prepared.Sub(began).Round(time.Millisecond))
 	if err := a.connectBridge(); err != nil {
-		log.Printf("mhl bridge: failed to start: %v", err)
-		return
+		return fmt.Errorf("iniciar o mhl: %w", err)
 	}
 	log.Printf(
-		"mhl bridge: ready, serving %s (state-dir: %s, data-dir: %s, codex-cwd: %s)",
+		"mhl bridge: ready em %s (total %s), serving %s (state-dir: %s, data-dir: %s, codex-cwd: %s)",
+		time.Since(prepared).Round(time.Millisecond), time.Since(began).Round(time.Millisecond),
 		workflowsDir, stateDir, dataDir, codexCwdDir,
 	)
+	return nil
+}
+
+// StartupStatus reporta a inicialização do bridge: state "starting" (também
+// antes de OnStartup começar), "ready" ou "failed", com a causa em error.
+func (a *App) StartupStatus() string {
+	a.startupMu.Lock()
+	state, startupErr := a.startupState, a.startupErr
+	a.startupMu.Unlock()
+	if state == "" {
+		state = startupStarting
+	}
+	body, _ := json.Marshal(map[string]string{"state": state, "error": startupErr})
+	return string(body)
+}
+
+// RetryStartup é o "Tentar novamente" do frontend. Com um bridge de pé,
+// equivale a ReconnectMCP; sem nenhum (a inicialização falhou em alguma
+// etapa), refaz a inicialização inteira — ReconnectMCP sozinho não basta,
+// porque depende dos caminhos que essa falha pode nunca ter resolvido.
+func (a *App) RetryStartup() (string, error) {
+	if a.bridge() != nil {
+		if _, err := a.ReconnectMCP(); err != nil {
+			return "", err
+		}
+		return a.StartupStatus(), nil
+	}
+	a.runStartup()
+	return a.StartupStatus(), nil
 }
 
 // connectBridge spawns an mhl child process using whatever startup() last
@@ -230,13 +309,21 @@ func (a *App) IsReady() bool {
 // MCPStatus reports whether the mhl MCP server is answering right now (a
 // live /healthz probe via mhlbridge.Client.Info, not just "did startup
 // succeed at some point") plus its name/version from the MCP initialize
-// handshake — feeds the sidebar's status panel. ready:false with no error
-// (not requireBridge's usual error) when the bridge never started at all —
-// that's a normal, displayable state for the panel, not a call failure.
+// handshake — feeds the sidebar's status panel. With no bridge at all it
+// returns ready:false plus the startup failure's cause, if any (not
+// requireBridge's usual error) — a normal, displayable state for the panel,
+// not a call failure.
 func (a *App) MCPStatus() (string, error) {
 	client := a.bridge()
 	if client == nil {
-		return `{"ready":false}`, nil
+		a.startupMu.Lock()
+		startupErr := a.startupErr
+		a.startupMu.Unlock()
+		body, err := json.Marshal(map[string]any{"ready": false, "error": startupErr})
+		if err != nil {
+			return "", err
+		}
+		return string(body), nil
 	}
 	name, version, healthy := client.Info(a.ctx)
 	body, err := json.Marshal(map[string]any{
@@ -272,7 +359,9 @@ func (a *App) ReconnectMCP() (string, error) {
 		}
 	}
 
-	if err := a.connectBridge(); err != nil {
+	err := a.connectBridge()
+	a.setStartupResult(err)
+	if err != nil {
 		log.Printf("mhl bridge: reconnect: failed to start: %v", err)
 		body, marshalErr := json.Marshal(map[string]any{"ready": false, "error": err.Error()})
 		if marshalErr != nil {

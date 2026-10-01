@@ -73,6 +73,8 @@ export function ReconnectMCP():Promise<string>;
 
 export function ResumeRun(arg1:string,arg2:string):Promise<string>;
 
+export function RetryStartup():Promise<string>;
+
 export function SelectRawFiles():Promise<string>;
 
 export function SetAgent(arg1:string):Promise<string>;
@@ -86,6 +88,8 @@ export function SetDevinModel(arg1:string,arg2:string):Promise<string>;
 export function ShowWarningDialog(arg1:string,arg2:string):Promise<void>;
 
 export function StartRun(arg1:string,arg2:string):Promise<string>;
+
+export function StartupStatus():Promise<string>;
 
 export function ToggleMaximise():Promise<void>;
 

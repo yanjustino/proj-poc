@@ -55,8 +55,10 @@ for target in "${bin_targets[@]}"; do
     continue
   fi
 
-  cp "$src" "$dest"
-  chmod 755 "$dest"
+  # Cópia temporária + mv, nunca cp por cima — ver sync-dev-mhl.sh.
+  cp "$src" "$dest.tmp"
+  chmod 755 "$dest.tmp"
+  mv -f "$dest.tmp" "$dest"
   echo "synced $src -> bin/$embedded_name (sha256 $(shasum -a 256 "$dest" | cut -d' ' -f1))"
 done
 

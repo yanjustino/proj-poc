@@ -302,7 +302,10 @@ func Start(ctx context.Context, mhlPath, workflowsDir, stateDir, dataDir, codexC
 		}
 	}()
 
-	if err := c.waitReady(ctx, 10*time.Second); err != nil {
+	// 30s, não 10s: numa partida a frio (logo após ligar a máquina, ou com o
+	// binário recém-extraído sendo verificado pelo macOS) o mhl pode passar
+	// bem dos ~4s habituais, e estourar aqui derruba a inicialização inteira.
+	if err := c.waitReady(ctx, readyTimeout); err != nil {
 		c.killQuietly()
 		return nil, fmt.Errorf("mhlbridge: mhl did not become ready: %w (stderr: %s)", err, stderr.String())
 	}
@@ -327,6 +330,8 @@ func freeLoopbackAddr() (string, error) {
 	defer l.Close()
 	return l.Addr().String(), nil
 }
+
+const readyTimeout = 30 * time.Second
 
 func (c *Client) waitReady(ctx context.Context, timeout time.Duration) error {
 	deadline := time.Now().Add(timeout)

@@ -146,6 +146,10 @@ export function ResumeRun(arg1, arg2) {
   return window['go']['main']['App']['ResumeRun'](arg1, arg2);
 }
 
+export function RetryStartup() {
+  return window['go']['main']['App']['RetryStartup']();
+}
+
 export function SelectRawFiles() {
   return window['go']['main']['App']['SelectRawFiles']();
 }
@@ -172,6 +176,10 @@ export function ShowWarningDialog(arg1, arg2) {
 
 export function StartRun(arg1, arg2) {
   return window['go']['main']['App']['StartRun'](arg1, arg2);
+}
+
+export function StartupStatus() {
+  return window['go']['main']['App']['StartupStatus']();
 }
 
 export function ToggleMaximise() {

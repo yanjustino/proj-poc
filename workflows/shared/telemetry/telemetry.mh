@@ -1,4 +1,5 @@
 import { SenpaiConfig } from "../core/senpai_config.mh"
+import { AgentSelector } from "../agents/agents.mh"
 
 export tool TelemetryClient {
     send (data: any) : boolean -> {
@@ -28,4 +29,55 @@ export tool TelemetryClient {
             log.error("Failed to build telemetry data: ${e}")
         }
     }    
+}
+
+export enum TelemetryStatus { Success, Fail }
+
+// Telemetry.step_end e o corpo do hook `step_end` de todo workflow que gera
+// artefatos: o workflow so repassa o proprio estado. Nunca falha — um hook
+// que lanca erro aborta a run (Docs-Reference §14, LIFECYCLE HOOKS), e
+// telemetria nao pode derrubar uma geracao.
+export tool Telemetry {
+    step_end(ctx: StepContext, project_id: string, artifact: string, tokens_in: number, tokens_out: number) -> {
+        try {
+            TelemetryClient.send(self.event(ctx, project_id, artifact, tokens_in, tokens_out))
+        } catch (e) {
+            log.error("Falha ao enviar telemetria de ${ctx.pipeline}: ${e}")
+        }
+    }
+
+    event(ctx: StepContext, project_id: string, artifact: string, tokens_in: number, tokens_out: number): any -> {
+        clientId: "senpai-app"
+        userId: os.user()
+        environment: os.platform()
+        eventType: ctx.step
+        sessionId: uuid.v7()
+        eventTimestamp: time.now()
+        context: {
+            document: artifact
+            project: project_id
+            phase: "${ctx.step}: ${ctx.index}/${ctx.total}"
+            task: ctx.step
+            hierarchy: ctx.pipeline
+        }
+        llm: {
+            provider: AgentSelector.pick()
+            modelId: AgentSelector.pick_model()
+            inputTokens: tokens_in
+            outputTokens: tokens_out
+            duration: 0
+            status: if (ctx.error == null) TelemetryStatus.Success else TelemetryStatus.Fail
+        }
+    }
+}
+
+test TelemetrySpec {
+    describe event_reports_the_step_outcome {
+        var ok = Telemetry.event({pipeline: "Delivery", step: "Generate", index: 2, total: 5, error: null}, "p", "adr", 3, 4)
+        are_equal(ok.context.phase, "Generate: 2/5")
+        are_equal(ok.llm.inputTokens, 3)
+        are_equal("${ok.llm.status}", "Success")
+        var failed = Telemetry.event({pipeline: "Delivery", step: "Generate", index: 2, total: 5, error: "boom"}, "p", "adr", 0, 0)
+        are_equal("${failed.llm.status}", "Fail")
+    }
 }

@@ -24,9 +24,9 @@
 // one generic code path instead of a hand-written branch per artifact — see
 // its buildItemRows().
 export const DISCOVERY_SEQUENCE = [
-  { artifact: 'brief', deps: [], path: 'brief.html', category: 'Discovery' },
-  { artifact: 'atributos', deps: ['brief'], path: 'atributos.html', category: 'Discovery' },
-  { artifact: 'requisitos', deps: ['brief'], path: 'requisitos.html', category: 'Discovery' },
+  { artifact: 'brief', deps: [], readsWiki: true, path: 'brief.html', category: 'Discovery' },
+  { artifact: 'atributos', deps: ['brief'], readsWiki: true, path: 'atributos.html', category: 'Discovery' },
+  { artifact: 'requisitos', deps: ['brief'], readsWiki: true, path: 'requisitos.html', category: 'Discovery' },
   { artifact: 'adr', deps: ['requisitos', 'atributos'], dir: 'adr', collectionKind: 'files', category: 'Decisões e modelos' },
   // der and diagramas depend on adr: the container diagram's technologies,
   // the deployment diagram and the DER's level (physical only once an ADR
@@ -57,8 +57,8 @@ export const DELIVERY_SEQUENCE = [
   // abaixo espelha 1:1 os fail() de delivery.mh — brief e requisitos
   // deixaram de ser opcionais, e ADR deixou de ser contexto opcional para
   // der/diagramas/final.
-  { artifact: 'brief', deps: [], path: 'brief.html', category: 'Contexto' },
-  { artifact: 'requisitos', deps: ['brief'], path: 'requisitos.html', category: 'Contexto' },
+  { artifact: 'brief', deps: [], readsWiki: true, path: 'brief.html', category: 'Contexto' },
+  { artifact: 'requisitos', deps: ['brief'], readsWiki: true, path: 'requisitos.html', category: 'Contexto' },
   { artifact: 'adr', deps: ['brief', 'requisitos'], dir: 'adr', collectionKind: 'files', category: 'Decisões e modelos' },
   { artifact: 'der', deps: ['requisitos', 'adr'], path: 'der.html', category: 'Decisões e modelos' },
   { artifact: 'diagramas', deps: ['requisitos', 'adr'], dir: 'diagramas', collectionKind: 'files', category: 'Diagramas' },
@@ -187,7 +187,12 @@ export function latestMtimeOf(entry, byName) {
 // Returns a Map keyed by artifact name -> { stale: boolean, staleDeps:
 // string[] } (staleDeps names exactly which dependency is newer, for a
 // precise tooltip instead of a generic "something changed").
-export function computeStaleness(sequence, doneNames, byName) {
+// readsWiki (brief, atributos, requisitos — os que leem Context.wiki) tornam a
+// própria wiki uma dependência: `wikiMtime` é a data do wiki/index.md, que só
+// é reescrito quando uma fonte é ingerida ou uma resposta arquivada (a
+// verificação da wiki escreve nas páginas, nunca no índice). Fica "wiki" em
+// staleDeps.
+export function computeStaleness(sequence, doneNames, byName, wikiMtime = null) {
   const mtimeByArtifact = new Map();
   for (const entry of sequence) {
     if (!doneNames.has(entry.artifact)) continue;
@@ -205,6 +210,7 @@ export function computeStaleness(sequence, doneNames, byName) {
         const depMtime = mtimeByArtifact.get(dep);
         if (depMtime !== null && depMtime - ownMtime > STALE_EPSILON_MS) staleDeps.push(dep);
       }
+      if (entry.readsWiki && wikiMtime !== null && wikiMtime - ownMtime > STALE_EPSILON_MS) staleDeps.push('wiki');
     }
     result.set(entry.artifact, { stale: staleDeps.length > 0, staleDeps });
   }

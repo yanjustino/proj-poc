@@ -2,6 +2,8 @@
 // quando executá-los; esta tool concentra páginas, índice, slugs e auditoria.
 
 import { Slug } from "../shared/core/slug.mh"
+import { Paths } from "../shared/core/paths.mh"
+import { Fixture } from "../shared/core/fixture.mh"
 import { WikiIndex } from "../shared/wiki/wiki_index.mh"
 import { WikiPages, WikiLog } from "../shared/wiki/wiki_pages.mh"
 import { WikiLint } from "../shared/wiki/wiki_lint.mh"
@@ -23,25 +25,8 @@ export tool WikiActions {
             natureza: data.natureza
         })
 
-        for (var entity in data.entities) {
-            var entity_slug = Slug.from_title(entity.title)
-            WikiPages.upsert_entity(project_id, entity.title, entity.facts)
-            WikiIndex.upsert_entity(project_id, {
-                slug: entity_slug,
-                title: entity.title,
-                summary: entity.facts[0]
-            })
-        }
-
-        for (var concept in data.concepts) {
-            var concept_slug = Slug.from_title(concept.title)
-            WikiPages.upsert_concept(project_id, concept.title, concept.facts)
-            WikiIndex.upsert_concept(project_id, {
-                slug: concept_slug,
-                title: concept.title,
-                summary: concept.facts[0]
-            })
-        }
+        for (var entity in data.entities) self.upsert_fact(project_id, "entities", entity)
+        for (var concept in data.concepts) self.upsert_fact(project_id, "concepts", concept)
 
         self.log(project_id, "ingest", data.source_title)
         WikiHtmlExport.sync(project_id)
@@ -51,6 +36,15 @@ export tool WikiActions {
             entities_touched: data.entities.size(),
             concepts_touched: data.concepts.size()
         }
+    }
+
+    // Uma entidade/conceito cujo titulo (ou alias) ja tem pagina entra nela;
+    // o titulo usado pela fonte vira alias, para a busca e o proximo catalogo.
+    upsert_fact(project_id: string, category: string, item: any) -> {
+        var title = WikiIndex.canonical_title(project_id, category, item.title)
+        var aliases = (item?.aliases ?? []) + (if (title == item.title) [] else [item.title])
+        WikiPages.upsert_fact_page(project_id, category, title, item.facts)
+        WikiIndex.upsert(project_id, category, {slug: Slug.from_title(title), title: title, summary: item.facts[0], aliases: aliases})
     }
 
     file_answer(project_id: string, title: string, body: string, question: string): string -> {
@@ -97,4 +91,38 @@ export tool WikiActions {
             "## [" + time.format(time.now(), "yyyy-MM-dd") + "] " +
             action + " | " + description
         )
+}
+
+test WikiActionsSpec {
+    // Uma segunda fonte que chama o mesmo conceito por um alias ja conhecido
+    // acrescenta fatos a pagina existente em vez de criar outra, e o indice
+    // de busca do app traz o titulo, os aliases e o texto.
+    describe ingest_reuses_the_page_of_a_known_alias_and_feeds_the_search_index {
+        var id = Fixture.project("spec-test-wiki-ingest-alias")
+        dir.create(Paths.wiki(id, "sources"))
+        dir.create(Paths.wiki(id, "entities"))
+        dir.create(Paths.wiki(id, "concepts"))
+        WikiActions.commit_ingest(id, {
+            source_title: "Ata 1", source_summary: "Resumo 1", natureza: "pedido_novo", index_summary: "ata 1",
+            entities: [],
+            concepts: [{title: "Compliance regulatório", aliases: ["Conformidade"], facts: ["Exige trilha de auditoria"]}],
+        })
+        WikiActions.commit_ingest(id, {
+            source_title: "Ata 2", source_summary: "Resumo 2", natureza: "pedido_novo", index_summary: "ata 2",
+            entities: [],
+            concepts: [{title: "conformidade", aliases: ["Regulação CVM"], facts: ["Relatórios mensais à CVM"]}],
+        })
+        are_equal(dir.list(Paths.wiki(id, "concepts")).size(), 1)
+        var page = fs.read(Paths.wiki(id, "concepts/compliance-regulatorio.md"))
+        is_true(page.contains("Exige trilha de auditoria"))
+        is_true(page.contains("Relatórios mensais à CVM"))
+
+        var search = json.parse(fs.read(Paths.wiki(id, "html/search.json")))
+        var concept = search.find((e) -> e.group == "concepts")
+        are_equal(concept.title, "Compliance regulatório")
+        are_equal(concept.aliases, ["Conformidade", "Regulação CVM"])
+        is_true(concept.text.contains("Relatórios mensais à CVM"))
+        are_equal(search.filter((e) -> e.group == "sources").size(), 2)
+        Fixture.drop(id)
+    }
 }

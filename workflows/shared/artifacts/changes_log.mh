@@ -33,6 +33,7 @@
 // toda diretiva já pedida pra esse artefato especificamente, em vez de só a
 // última.
 import { Paths } from "../core/paths.mh"
+import { Fixture } from "../core/fixture.mh"
 
 export memory ChangesLog {
     type: "jsonl"
@@ -41,6 +42,11 @@ export memory ChangesLog {
 }
 
 export tool ChangesBlock {
+    // Unico ponto de escrita: grava o pedido antes da regeneracao, entao o
+    // for_artifact da proxima geracao ja o le junto com os anteriores.
+    record(project_id: string, artifact: string, feature_id: string, feedback: string) ->
+        ChangesLog.append({artifact: artifact, feature_id: feature_id, feedback: feedback})
+
     // for_artifact devolve o bloco de instrução pronto pra entrar no prompt
     // via `feedback_content` (o mesmo parâmetro que antes só carregava o
     // último comentário — o nome do parâmetro não mudou nos *Instruction/
@@ -78,7 +84,7 @@ test ChangesBlockSpec {
     }
 
     describe for_artifact_numbers_every_matching_entry_in_order_and_ignores_other_artifacts_and_features {
-        var project_id = "spec-test-changes-block"
+        var project_id = Fixture.project("spec-test-changes-block")
         var path = Paths.changes_file(project_id)
         fs.write(path,
             json.stringify({value: {artifact: "adr", feature_id: "", feedback: "mude dotnet para Java"}}) + "\n" +
@@ -94,12 +100,11 @@ test ChangesBlockSpec {
         is_false(out.contains("outro artefato"))
         is_false(out.contains("outra feature"))
 
-        fs.delete(path)
-        dir.delete(Paths.root(project_id))
+        Fixture.drop(project_id)
     }
 
     describe for_artifact_filters_historias_by_feature_id {
-        var project_id = "spec-test-changes-block-historias"
+        var project_id = Fixture.project("spec-test-changes-block-historias")
         var path = Paths.changes_file(project_id)
         fs.write(path,
             json.stringify({value: {artifact: "historias", feature_id: "FT001", feedback: "diretiva da FT001"}}) + "\n" +
@@ -111,7 +116,6 @@ test ChangesBlockSpec {
         is_true(out.contains("diretiva da FT001"))
         is_false(out.contains("diretiva da FT002"))
 
-        fs.delete(path)
-        dir.delete(Paths.root(project_id))
+        Fixture.drop(project_id)
     }
 }

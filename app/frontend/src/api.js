@@ -25,17 +25,34 @@ function parseJSON(raw, context) {
 // EventsOn subscription) on purpose: it only depends on bound methods,
 // which this app already trusts for everything else, not on the separate
 // events subsystem also being fully wired up this early.
+//
+// StartupStatus separa "ainda iniciando" de "falhou": uma falha aparece na
+// hora, com a causa real (vinda do Go), em vez de virar um "não ficou pronto"
+// genérico depois do prazo. O prazo cobre a espera do próprio bridge pelo
+// mhl (30s, mhlbridge.readyTimeout) mais a extração dos arquivos.
 const READY_POLL_INTERVAL_MS = 100;
-const READY_TIMEOUT_MS = 20000;
+const READY_TIMEOUT_MS = 60000;
 
 export async function waitUntilReady() {
   const deadline = Date.now() + READY_TIMEOUT_MS;
   while (!(await App.IsReady())) {
+    const status = JSON.parse(await App.StartupStatus());
+    if (status.state === 'failed') {
+      throw new Error(`não foi possível iniciar o mhl: ${status.error || 'erro desconhecido'}`);
+    }
     if (Date.now() > deadline) {
-      throw new Error(`o backend (mhl bridge) não ficou pronto em ${READY_TIMEOUT_MS}ms`);
+      throw new Error(`o mhl ainda não respondeu depois de ${READY_TIMEOUT_MS / 1000}s`);
     }
     await new Promise((resolve) => setTimeout(resolve, READY_POLL_INTERVAL_MS));
   }
+}
+
+// retryStartup refaz a inicialização quando ela falhou (sem bridge de pé);
+// com o bridge já pronto, não faz nada — quem precisa só recarregar a
+// lista não deve derrubar uma conexão que funciona.
+export async function retryStartup() {
+  if (await App.IsReady()) return;
+  await App.RetryStartup();
 }
 
 export async function appVersion() {

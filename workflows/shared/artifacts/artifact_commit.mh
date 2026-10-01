@@ -1,0 +1,146 @@
+// ArtifactCommit grava um rascunho aprovado em artifacts/. Cada pagina grava
+// o JSON primeiro e o HTML por ultimo: o HTML e o marcador de
+// disponibilidade que Context usa (ver artifact_data.mh).
+//
+// Colecoes (adr/, diagramas/, features/, historias/) sao sempre o lote
+// inteiro, nunca um delta: `reset` esvazia a pasta antes de gravar, porque
+// os ids sequenciais contam o que ja existe em disco (ArtifactId) e um
+// titulo alterado mudaria o slug do arquivo.
+
+import { Paths } from "../core/paths.mh"
+import { DirClear } from "../core/dir_clear.mh"
+import { Slug } from "../core/slug.mh"
+import { ArtifactData } from "artifact_data.mh"
+import { ArtifactBody } from "artifact_body.mh"
+import { ArtifactId } from "artifact_id.mh"
+import { PageShell, ArtifactMeta } from "page_shell.mh"
+import { SpecFiles } from "historia_spec.mh"
+import { Draft } from "draft.mh"
+import { RadahnModel } from "../radahn/radahn_model.mh"
+
+export tool ArtifactCommit {
+    page(project_id: string, relative: string, title: string, body: string, data: any, draft: Draft) -> {
+        var meta = ArtifactMeta.line("artifacts/${relative}", draft.tokens_in, draft.tokens_out)
+        ArtifactData.write(project_id, relative, data)
+        fs.write(Paths.artifact(project_id, relative), PageShell(title: title, body: body, meta: meta))
+    }
+
+    reset(project_id: string, relative_dir: string) -> {
+        var path = Paths.artifact(project_id, relative_dir)
+        DirClear.clear(path)
+        dir.create(path)
+    }
+
+    single(project_id: string, artifact: string, title: string, body: string, draft: Draft): any -> {
+        self.page(project_id, "${artifact}.html", title, body, draft.data, draft)
+        return {artifact: artifact, path: "artifacts/${artifact}.html"}
+    }
+
+    brief(project_id: string, draft: Draft): any ->
+        self.single(project_id, "brief", "Brief", ArtifactBody.brief(draft.data), draft)
+
+    atributos(project_id: string, draft: Draft): any ->
+        self.single(project_id, "atributos", "Atributos de Qualidade", ArtifactBody.atributos(draft.data), draft)
+
+    requisitos(project_id: string, draft: Draft): any ->
+        self.single(project_id, "requisitos", "Requisitos", ArtifactBody.requisitos(draft.data), draft)
+
+    der(project_id: string, draft: Draft): any ->
+        self.single(project_id, "der", "DER", ArtifactBody.der(draft.data), draft)
+
+    dependencias(project_id: string, draft: Draft): any ->
+        self.single(project_id, "dependencias", "Mapa de Dependências", ArtifactBody.dependencias(draft.data), draft)
+
+    adr(project_id: string, draft: Draft): any -> {
+        self.reset(project_id, "adr")
+        var written = []
+        for (var decision in draft.data.decisions) {
+            var id = ArtifactId.next_adr_id(project_id)
+            var folder = ArtifactId.folder_name(id, decision.titulo)
+            self.page(project_id, "adr/${folder}.html", html.escape("${id} — ${decision.titulo}"), ArtifactBody.adr(decision), decision, draft)
+            written += [folder]
+        }
+        return {artifact: "adr", written: written}
+    }
+
+    diagramas(project_id: string, draft: Draft): any -> {
+        self.reset(project_id, "diagramas")
+        var written = []
+        for (var diagrama in draft.data.diagramas) {
+            var slug = Slug.from_title(diagrama.titulo)
+            self.page(project_id, "diagramas/${slug}.html", html.escape(diagrama.titulo), ArtifactBody.diagrama(diagrama), diagrama, draft)
+            written += [slug]
+        }
+        return {artifact: "diagramas", written: written}
+    }
+
+    // Um backlog novo invalida todas as historias: as de uma feature que
+    // deixou de existir ficariam orfas em disco.
+    features(project_id: string, draft: Draft): any -> {
+        self.reset(project_id, "features")
+        DirClear.clear(Paths.artifact(project_id, "historias"))
+        var written = []
+        for (var feature in draft.data.features) {
+            var id = ArtifactId.next_feature_id(project_id)
+            var folder = ArtifactId.folder_name(id, feature.titulo)
+            dir.create(Paths.artifact(project_id, "features/${folder}"))
+            self.page(project_id, "features/${folder}/feature.html", html.escape("${id} — ${feature.titulo}"), ArtifactBody.feature(feature), feature, draft)
+            written += [folder]
+        }
+        return {artifact: "features", written: written}
+    }
+
+    // `feature_dir` vazio: historias da feature implicita de um projeto de
+    // Delivery, gravadas direto em historias/.
+    historias(project_id: string, feature_dir: string, draft: Draft): any -> {
+        var base = if (feature_dir.is_empty()) "historias" else "historias/${feature_dir}"
+        self.reset(project_id, base)
+        var written = []
+        for (var historia in draft.data.historias) {
+            var id = ArtifactId.next_historia_id(project_id, feature_dir)
+            var folder = ArtifactId.folder_name(id, historia.titulo)
+            dir.create(Paths.artifact(project_id, "${base}/${folder}"))
+            SpecFiles.write(project_id, "${base}/${folder}", historia)
+            self.page(project_id, "${base}/${folder}/historia.html", html.escape("${id} — ${historia.titulo}"), ArtifactBody.historia(historia), historia, draft)
+            written += [folder]
+        }
+        return {artifact: "historias", written: written}
+    }
+
+    // `assets_prefix` e o caminho de volta ate artifacts/ (mermaid.min.js).
+    plano(project_id: string, relative: string, assets_prefix: string, draft: Draft): any -> {
+        var data = draft.data
+        self.page(project_id, relative, "Plano de implementação — ${html.escape(data.historia_titulo)}", ArtifactBody.plano(data, assets_prefix), data, draft)
+        var radahn_yaml = RadahnModel.persist(project_id, relative, data)
+        return {artifact: "plano", path: "artifacts/${relative}", radahn: !radahn_yaml.is_empty()}
+    }
+}
+
+import { Fixture } from "../core/fixture.mh"
+
+test ArtifactCommitSpec {
+    describe regenerating_adrs_replaces_the_previous_batch {
+        var id = Fixture.project("spec-test-commit-adr")
+        var decision = {
+            titulo: "Banco", status: "aceita", contexto_e_problema: "y", contexto_fontes: ["gap"],
+            decisao_final: {opcao_escolhida: "x", justificativa: "y", fontes: ["gap"]},
+            consequencias_positivas: [], consequencias_negativas: [],
+            fatores_decisao: [], opcoes_consideradas: [], opcoes_pros_contras: [], links: [],
+        }
+        var draft = {data: {decisions: [decision, decision]}, tokens_in: 1, tokens_out: 2}
+        ArtifactCommit.adr(id, draft)
+        var result = ArtifactCommit.adr(id, draft)
+        are_equal(result.written, ["ADR-001-banco", "ADR-002-banco"])
+        are_equal(dir.list(Paths.artifact(id, "adr")).filter((p) -> p.ends_with(".html")).size(), 2)
+        Fixture.drop(id)
+    }
+
+    describe single_writes_json_then_the_page_with_its_footer {
+        var id = Fixture.project("spec-test-commit-single")
+        var result = ArtifactCommit.single(id, "dependencias", "Mapa", "<p>corpo</p>", {data: {x: 1}, tokens_in: 7, tokens_out: 8})
+        are_equal(result.path, "artifacts/dependencias.html")
+        are_equal(json.parse(fs.read(Paths.artifact(id, "dependencias.json"))).x, 1)
+        is_true(fs.read(Paths.artifact(id, "dependencias.html")).contains("7 → 8 tokens"))
+        Fixture.drop(id)
+    }
+}

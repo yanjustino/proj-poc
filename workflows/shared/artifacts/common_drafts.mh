@@ -1,0 +1,131 @@
+// CommonDrafts gera os artefatos que Discovery e Delivery compartilham. Cada
+// metodo recebe ja resolvido o contexto que exige — o que e obrigatorio,
+// opcional ou substituido por texto fixo muda por workflow (DiscoveryDrafts,
+// DeliveryDrafts); a instrucao, o schema e as verificacoes, nao.
+
+import { Context } from "context.mh"
+import { ChangesBlock } from "changes_log.mh"
+import { Drafts, Draft } from "draft.mh"
+import { AutoReview } from "auto_review.mh"
+import { ArtifactChecks } from "artifact_checks.mh"
+import { C4Diagram } from "c4_diagram.mh"
+import { Traceability } from "historia_spec.mh"
+import { PlanoPrep } from "plano_model.mh"
+import { RadahnAssess } from "../radahn/radahn_assess.mh"
+import {
+    ArtifactSchema, SpecConventions, Schemas,
+    BriefInstruction, RequisitosInstruction, AdrInstruction, DerInstruction, DiagramasInstruction,
+    HistoriasInstruction, PlanoInstruction
+} from "artifacts_common.mh"
+
+// Contexto tecnico de uma historia ou de um plano, ja recortado pelo que o
+// item cita (ContextSlice) e com texto fixo no lugar do que falta.
+export type TechContext = {requisitos: string, atributos: string, adr: string, der: string, diagramas: string}
+
+export tool CommonDrafts {
+    brief(project_id: string): Draft -> Drafts.generate(
+        BriefInstruction(
+            schema_conventions: ArtifactSchema(),
+            wiki_content: Context.wiki(project_id),
+            feedback_content: ChangesBlock.for_artifact(project_id, "brief", "")
+        ),
+        Schemas.brief(), project_id, "brief"
+    )
+
+    requisitos(project_id: string, brief: string): Draft -> Drafts.generate(
+        RequisitosInstruction(
+            schema_conventions: ArtifactSchema(),
+            brief_content: brief,
+            wiki_content: Context.wiki(project_id),
+            feedback_content: ChangesBlock.for_artifact(project_id, "requisitos", "")
+        ),
+        Schemas.requisitos(), project_id, "requisitos"
+    )
+
+    adr(project_id: string, requisitos: string, atributos: string): Draft -> Drafts.generate(
+        AdrInstruction(
+            schema_conventions: ArtifactSchema(),
+            requisitos_content: requisitos,
+            atributos_content: atributos,
+            feedback_content: ChangesBlock.for_artifact(project_id, "adr", "")
+        ),
+        Schemas.adr(), project_id, "adr"
+    )
+
+    der(project_id: string, autorrevisao: bool, requisitos: string, atributos: string, adr: string): Draft -> Drafts.reviewed(AutoReview.generate(
+        enabled: autorrevisao,
+        prompt: DerInstruction(
+            schema_conventions: ArtifactSchema(),
+            requisitos_content: requisitos,
+            atributos_content: atributos,
+            adr_content: adr,
+            feedback_content: ChangesBlock.for_artifact(project_id, "der", "")
+        ),
+        schema_file: Schemas.der(), project_id: project_id, artifact: "der",
+        prepare: (raw) -> json.parse(raw),
+        check: (d) -> ArtifactChecks.der(d)
+    ))
+
+    // C4Diagram.annotate anexa a cada diagrama os avisos que so o lote
+    // inteiro revela (niveis ausentes, nomes divergentes, falta de
+    // implantacao).
+    diagramas(project_id: string, autorrevisao: bool, requisitos: string, atributos: string, adr: string): Draft -> Drafts.reviewed_items(AutoReview.generate(
+        enabled: autorrevisao,
+        prompt: DiagramasInstruction(
+            schema_conventions: ArtifactSchema(),
+            requisitos_content: requisitos,
+            atributos_content: atributos,
+            adr_content: adr,
+            feedback_content: ChangesBlock.for_artifact(project_id, "diagramas", "")
+        ),
+        schema_file: Schemas.diagramas(), project_id: project_id, artifact: "diagramas",
+        prepare: (raw) -> C4Diagram.annotate(json.parse(raw), C4Diagram.infra_hint(adr)),
+        check: (d) -> ArtifactChecks.diagramas(d)
+    ), "diagramas")
+
+    // `scope` separa o historico de pedidos de mudanca de cada feature.
+    historias(project_id: string, autorrevisao: bool, feature: string, tech: TechContext, scope: string): Draft -> {
+        var known = Traceability.known(project_id)
+        return Drafts.reviewed_items(AutoReview.generate(
+            enabled: autorrevisao,
+            prompt: HistoriasInstruction(
+                schema_conventions: ArtifactSchema(),
+                spec_conventions: SpecConventions(),
+                feature_content: feature,
+                requisitos_content: tech.requisitos,
+                atributos_content: tech.atributos,
+                adr_content: tech.adr,
+                der_content: tech.der,
+                diagramas_content: tech.diagramas,
+                feedback_content: ChangesBlock.for_artifact(project_id, "historias", scope)
+            ),
+            schema_file: Schemas.historias(), project_id: project_id, artifact: "historias",
+            prepare: (raw) -> Traceability.annotate(json.parse(raw), known),
+            check: (d) -> ArtifactChecks.historias(d)
+        ), "historias")
+    }
+
+    // Duas etapas: o plano e, com ele pronto, a aderencia ao Radahn
+    // (data.radahn). `titulo` identifica a historia no cabecalho do plano.
+    plano(project_id: string, autorrevisao: bool, historia: any, historia_content: string, feature: string, titulo: string, tech: TechContext, scope: string): Draft -> {
+        var known = Traceability.known(project_id)
+        var draft = Drafts.reviewed(AutoReview.generate(
+            enabled: autorrevisao,
+            prompt: PlanoInstruction(
+                schema_conventions: ArtifactSchema(),
+                historia_content: historia_content,
+                feature_content: feature,
+                requisitos_content: tech.requisitos,
+                atributos_content: tech.atributos,
+                adr_content: tech.adr,
+                der_content: tech.der,
+                diagramas_content: tech.diagramas,
+                feedback_content: ChangesBlock.for_artifact(project_id, "plano", scope)
+            ),
+            schema_file: Schemas.plano(), project_id: project_id, artifact: "plano",
+            prepare: (raw) -> PlanoPrep.annotate(json.parse(raw), historia, titulo, known),
+            check: (d) -> ArtifactChecks.plano(d)
+        ))
+        return Drafts.followed_by(draft, RadahnAssess.annotate(draft.data, historia_content, tech.der, tech.adr, autorrevisao, project_id))
+    }
+}

@@ -1,0 +1,57 @@
+// Draft e o rascunho de um artefato entre a geracao e a aprovacao: o dado
+// estruturado e o consumo da chamada que o produziu. Os workflows guardam os
+// tres campos em pending_data/tokens_in/tokens_out, nomes que o app le de
+// uma run pausada (checkpoint-recovery.js, run-tracker.js).
+
+import { Writer } from "../agents/agents.mh"
+import { SchemaFile } from "../core/workflows_root.mh"
+import { AutoReview } from "auto_review.mh"
+
+export type Draft = {data: any, tokens_in: number, tokens_out: number}
+
+export tool Drafts {
+    generate(prompt: string, schema_file: SchemaFile, project_id: string, artifact: string): Draft -> {
+        var response = Writer.generate(prompt: prompt, schema_file: schema_file, project_id: project_id, artifact: artifact)
+        return {data: json.parse(response.content), tokens_in: response.tokens_in, tokens_out: response.tokens_out}
+    }
+
+    // Resultado de AutoReview.generate com o registro da revisao no proprio
+    // documento (der, feature, historia, plano).
+    reviewed(review: any): Draft -> {
+        var data = review.data
+        data["autorrevisao"] = review.revisao
+        return {data: data, tokens_in: review.tokens_in, tokens_out: review.tokens_out}
+    }
+
+    // Mesmo registro copiado em cada item de uma colecao (diagramas,
+    // features, historias), para o preview de um item sozinho.
+    reviewed_items(review: any, field: string): Draft -> {
+        var data = review.data
+        data[field] = AutoReview.tag_items(data[field], review.revisao)
+        return {data: data, tokens_in: review.tokens_in, tokens_out: review.tokens_out}
+    }
+
+    // Uma segunda chamada sobre o mesmo rascunho (Radahn sobre o plano).
+    followed_by(draft: Draft, next: Draft): Draft ->
+        {data: next.data, tokens_in: draft.tokens_in + next.tokens_in, tokens_out: draft.tokens_out + next.tokens_out}
+}
+
+test DraftsSpec {
+    describe reviewed_attaches_the_review_record {
+        var draft = Drafts.reviewed({data: {a: 1}, tokens_in: 2, tokens_out: 3, revisao: {tentada: true}})
+        is_true(draft.data.autorrevisao.tentada)
+        are_equal(draft.tokens_in, 2)
+    }
+
+    describe reviewed_items_tags_every_item {
+        var draft = Drafts.reviewed_items({data: {diagramas: [{t: 1}, {t: 2}]}, tokens_in: 1, tokens_out: 1, revisao: {tentada: false}}, "diagramas")
+        is_false(draft.data.diagramas[1].autorrevisao.tentada)
+    }
+
+    describe followed_by_sums_both_calls {
+        var draft = Drafts.followed_by({data: {v: 1}, tokens_in: 10, tokens_out: 5}, {data: {v: 2}, tokens_in: 1, tokens_out: 2})
+        are_equal(draft.data.v, 2)
+        are_equal(draft.tokens_in, 11)
+        are_equal(draft.tokens_out, 7)
+    }
+}

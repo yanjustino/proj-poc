@@ -16,13 +16,14 @@
 // execucao de *Generate que ele dispara tem, ela propria, o mesmo teto de 2.
 
 import { Writer } from "../agents/agents.mh"
+import { SchemaFile } from "../core/workflows_root.mh"
 
 export tool AutoReview {
     // generate: `prepare(raw)` transforma a resposta crua no dado do
     // artefato (parse + anotacoes deterministicas); `check(data)` devolve os
     // avisos. Devolve o dado escolhido, o consumo somado das chamadas e o
     // registro da revisao (exibido na pagina — ver note_html).
-    generate(enabled: bool, prompt: string, schema_file: {content: string, path: string}, project_id: string, artifact: string, prepare: any, check: any): any ->
+    generate(enabled: bool, prompt: string, schema_file: SchemaFile, project_id: string, artifact: string, prepare: any, check: any): any ->
         self.execute((p) -> Writer.generate(prompt: p, schema_file: schema_file, project_id: project_id, artifact: artifact), enabled, prompt, prepare, check)
 
     // execute: o nucleo (nao "run": nome reservado do mhl para Workflow.run), com a chamada ao modelo injetada (`call(prompt)`) — e o
@@ -91,9 +92,9 @@ export tool AutoReview {
         var r = data?.autorrevisao
         if (r == null || !(r?.tentada ?? false)) return ""
         if (r?.aplicada ?? false) {
-            return "<p class=\"autorrevisao\">Revisado automaticamente: " + "${r.avisos_antes}" + " aviso(s) na geração → " + "${r.avisos_depois}" + " depois da revisão.</p>"
+            return "<p class=\"autorrevisao\">Revisado automaticamente: ${r.avisos_antes} aviso(s) na geração → ${r.avisos_depois} depois da revisão.</p>"
         }
-        return "<p class=\"autorrevisao\">Revisão automática tentada, sem melhora — mantida a versão original (" + "${r.avisos_antes}" + " aviso(s)).</p>"
+        return "<p class=\"autorrevisao\">Revisão automática tentada, sem melhora — mantida a versão original (${r.avisos_antes} aviso(s)).</p>"
     }
 }
 

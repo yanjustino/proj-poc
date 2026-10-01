@@ -4,6 +4,7 @@ import {
   waitUntilReady,
   mcpStatus,
   reconnectMCP,
+  retryStartup,
   getAgent,
   setAgent,
   showWarningDialog,
@@ -159,6 +160,14 @@ export async function mountShell(root) {
   // returns the fresh status, so renderMcpStatus below never needs the poll
   // to resolve what a click already knows.
   let reconnecting = false;
+  // navError: mensagem quando a lista não pôde ser carregada (sem conexão
+  // com o mhl, na abertura ou depois). Enquanto existir, renderNav mostra o
+  // erro com "Tentar novamente" em vez de "Nenhum work-item ainda." — que
+  // seria falso. A lista também é recarregada sozinha quando a conexão
+  // volta (onMcpStatus).
+  let navError = null;
+  let retrying = false;
+  let mainStarted = false;
 
   function renderMcpStatus(status) {
     const dot = status.ready ? 'done' : 'failed';
@@ -188,6 +197,7 @@ export async function mountShell(root) {
           const next = await reconnectMCP();
           reconnecting = false;
           renderMcpStatus(next);
+          onMcpStatus(next);
         } catch (err) {
           reconnecting = false;
           renderMcpStatus({ ready: false, error: String(err) });
@@ -195,6 +205,11 @@ export async function mountShell(root) {
         }
       });
     }
+  }
+
+  // Conexão de volta com a lista em erro: recarrega sem esperar o clique.
+  function onMcpStatus(status) {
+    if (status.ready && navError && !retrying) retryProjects();
   }
 
   async function refreshMcpStatus() {
@@ -207,6 +222,7 @@ export async function mountShell(root) {
       LogFrontendError(`refreshMcpStatus: failed: ${err && err.stack ? err.stack : err}`).catch(() => {});
     }
     renderMcpStatus(status);
+    onMcpStatus(status);
   }
   setInterval(refreshMcpStatus, MCP_STATUS_POLL_MS);
 
@@ -432,19 +448,61 @@ export async function mountShell(root) {
   async function loadProjects() {
     try {
       projects = await workItemList();
+      navError = null;
       // Logged on the happy path too (not just failures) — the only way to
       // tell "the call never ran"/"it ran and returned 0" apart from a
       // rendering-only bug once this is the packaged app, with no console.
       LogFrontendError(`loadProjects: ok, ${projects.length} project(s)`).catch(() => {});
     } catch (err) {
-      navList.innerHTML = `<p class="empty-nav">Erro ao listar work-items: ${escapeHtml(String(err))}</p>`;
+      navError = `Erro ao listar work-items: ${String(err)}`;
       LogFrontendError(`loadProjects: failed: ${err && err.stack ? err.stack : err}`).catch(() => {});
-      return;
     }
     renderNav();
   }
 
+  // Conexão, lista e área principal: a abertura do app e cada nova
+  // tentativa passam por aqui, então uma falha na abertura também se
+  // recupera (antes, a área principal nunca chegava a ser montada).
+  async function startShell() {
+    await waitUntilReady();
+    await loadProjects();
+    if (!mainStarted) {
+      mainStarted = true;
+      await renderMain();
+    }
+  }
+
+  async function retryProjects() {
+    if (retrying) return;
+    retrying = true;
+    renderNav();
+    try {
+      await retryStartup();
+      await startShell();
+    } catch (err) {
+      navError = `Erro ao iniciar: ${String(err)}`;
+      LogFrontendError(`retryProjects: failed: ${err && err.stack ? err.stack : err}`).catch(() => {});
+    } finally {
+      retrying = false;
+      renderNav();
+      refreshMcpStatus();
+    }
+  }
+
+  function renderNavError() {
+    navList.innerHTML = `
+      <div class="empty-nav nav-error">
+        <p>${escapeHtml(navError)}</p>
+        <button class="button secondary small" data-nav-retry ${retrying ? 'disabled' : ''}>${icon('refreshCw', 13)} ${retrying ? 'Tentando…' : 'Tentar novamente'}</button>
+      </div>`;
+    navList.querySelector('[data-nav-retry]').addEventListener('click', retryProjects);
+  }
+
   function renderNav() {
+    if (navError) {
+      renderNavError();
+      return;
+    }
     const state = getState();
     const active = projects.filter((p) => !p.archived);
     const filtered = filterText
@@ -614,7 +672,7 @@ export async function mountShell(root) {
   // action column. CSS shows whichever matches.
   //
   // sidebarResizer.applyWidth(null) below clears any dragged width so the
-  // collapsed rail falls back to CSS's own fixed 72px (.shell.sidebar-
+  // collapsed rail falls back to CSS's own fixed 88px (.shell.sidebar-
   // collapsed .sidebar) instead of the inline style (which would otherwise
   // always win over it, dragged-width-or-not) pinning it at whatever the
   // user last dragged. Expanding restores that same dragged width, if any.
@@ -675,16 +733,13 @@ export async function mountShell(root) {
   subscribe(() => renderNav());
 
   try {
-    await waitUntilReady();
+    await startShell();
   } catch (err) {
-    navList.innerHTML = `<p class="empty-nav">Erro ao iniciar: ${escapeHtml(String(err))}</p>`;
+    navError = `Erro ao iniciar: ${String(err)}`;
+    renderNav();
     LogFrontendError(`waitUntilReady: failed: ${err && err.stack ? err.stack : err}`).catch(() => {});
-    refreshMcpStatus();
-    return;
   }
   refreshMcpStatus();
-  await loadProjects();
-  await renderMain();
 }
 
 function escapeHtml(text) {

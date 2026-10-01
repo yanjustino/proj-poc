@@ -1,22 +1,8 @@
-// tool DirClear — esvazia um diretorio inteiro (arquivos e subpastas, em
-// qualquer profundidade) sem apagar o diretorio em si. Existe porque
-// `dir.delete` e deliberadamente NAO recursivo (mhl-runtime's own
-// DeleteDir: "callers cannot accidentally erase a directory tree with this
-// primitive") — ele so remove um diretorio ja vazio, e falha com "directory
-// not empty" contra qualquer coisa real dentro. Todo Commit step que
-// regenera uma colecao inteira (adr/, diagramas/, features/, historias/)
-// precisa zerar o conteudo anterior antes de reescrever — *Generate sempre
-// devolve o LOTE INTEIRO, nunca um delta — e o padrao antigo
-// `if (dir.exists(x)) dir.delete(x)` so funcionava por coincidencia
-// enquanto ninguem regenerava uma colecao ja populada de verdade: o
-// primeiro "Atualizar"/"Solicitar mudanca" real contra um adr/ com
-// conteudo bateu direto em "directory not empty" (bug real, nao
-// hipotetico — reportado via um erro de runtime exatamente nesse Commit).
-//
-// Iterativo (uma fila manual), nao recursao de tool method: nao ha nenhum
-// outro `self.` recursivo nesta base de codigo para confirmar que
-// mhl-runtime suporta chamada recursiva de tool method, entao isto nao vira
-// o primeiro a depender disso — uma fila plana faz o mesmo trabalho.
+// DirClear.clear esvazia um diretorio em qualquer profundidade sem apagar o
+// proprio diretorio. Existe porque dir.delete so remove diretorio vazio, e
+// toda colecao regenerada (adr/, diagramas/, features/, historias/) precisa
+// trocar o lote inteiro (ver ArtifactCommit.reset). Iterativo, com fila, em
+// vez de recursao de metodo de tool.
 export tool DirClear {
     // clear(path) deixa `path` existindo e vazio (ou simplesmente ausente,
     // se ja nao existia — no-op). NUNCA apaga `path` em si, so o que esta
