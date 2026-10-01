@@ -1,84 +1,48 @@
-// Orquestra a geracao dos artefatos de oportunidade. Contexto, geracao,
-// apresentacao e persistencia permanecem em componentes especializados.
-//
-// O workflow em si e um `partial workflow Discovery`: este arquivo e so o
-// nucleo (entrada, gate compartilhado, rotas de despacho) — os pares
-// Generate/Commit de cada familia de artefato ficam em
-// discovery.documento.mh, discovery.tecnicos.mh e discovery.backlog.mh,
-// trazidos por `import "..."` por extenso (mescla o arquivo inteiro; um
-// fragmento partial nao precisa de `export` individual). `entry step
-// Dispatch` marca o ponto de entrada real porque, com steps vindo de varios
-// arquivos, "o primeiro step declarado" deixa de fazer sentido.
-import "discovery.partial.backlog.mh"
-import "discovery.partial.documento.mh"
-import "discovery.partial.tecnicos.mh"
-import "discovery.partial.hook.mh"
+// Discovery gera os artefatos de uma Oportunidade. O que muda por artefato
+// esta em discovery_artifacts.mh; aqui fica so o fluxo, compartilhado com o
+// Delivery: Dispatch -> Generate -> Gate (pausa no Modo Buddy) -> Commit.
 
 import { Paths } from "../shared/core/paths.mh"
-import { DirClear } from "../shared/core/dir_clear.mh"
-import { ChangesLog } from "../shared/artifacts/changes_log.mh"
+import { Fixture } from "../shared/core/fixture.mh"
+import { ChangesBlock } from "../shared/artifacts/changes_log.mh"
 import { Activity } from "../shared/artifacts/activity_log.mh"
+import { Telemetry } from "../shared/telemetry/telemetry.mh"
+import { DiscoveryKinds, DiscoveryDrafts, DiscoveryCommits } from "discovery_artifacts.mh"
 
-// ItemScope: o escopo de um item alem do proprio artefato — a feature, para
-// as historias (uma colecao por feature); feature/historia, para o plano de
-// implementacao (um por historia). E a chave que ChangesLog e ActivityLog
-// usam para separar o historico de cada item.
-tool ItemScope {
-    of(artifact: string, feature_id: string, historia_id: string): string -> match artifact {
-        "historias" -> feature_id
-        "plano"     -> feature_id + "/" + historia_id
-        _           -> ""
-    }
-}
-
-partial workflow Discovery {
-    description: "Artefatos de nivel Oportunidade: brief, atributos, requisitos, adr, der, diagramas, features, dependencias, historias."
+workflow Discovery {
+    description: "Artefatos de nivel Oportunidade: brief, atributos, requisitos, adr, der, diagramas, features, dependencias, historias, plano."
 
     input project_id: string
-    input artifact: string        // brief | atributos | requisitos | adr | der | diagramas | features | dependencias | historias
-    input feature_id: string = "" // obrigatorio (valor) para artifact:"historias" e "plano"
-    input historia_id: string = "" // obrigatorio (valor) so para artifact:"plano" (ex.: "US0001")
+    input artifact: string         // DiscoveryArtifact
+    input feature_id: string = ""  // obrigatorio para historias e plano
+    input historia_id: string = "" // obrigatorio para plano (ex.: "US0001")
     input buddy: bool = false
     input approved: bool = false
-    // Caminho de recuperacao para um rascunho pausado cujo checkpoint foi
-    // criado por outra definicao do pipeline. A UI envia exatamente o
-    // pending_data ja revisado; Dispatch pula a geracao e entra no Commit da
-    // versao atual. `null` mantem o fluxo normal e nunca e preenchido pela
-    // LLM.
+    // Aprovacao de um rascunho revisado: a UI envia o pending_data de uma
+    // run pausada e Dispatch vai direto ao Commit, sem chamar a LLM. Serve
+    // tambem para um checkpoint criado por outra versao deste workflow.
     input approval_data: any = null
     input approval_tokens_in: number = 0
     input approval_tokens_out: number = 0
-    // Dois pontos de entrada: no resume junto com approved:false (Modo
-    // Buddy's "Solicitar mudancas" numa run ainda pausada) OU direto no
-    // StartRun (tab-artefatos.js's "Solicitar mudanca" num artefato JA
-    // aprovado — sem run pausada pra dar resume, so um StartRun novo).
-    // Dispatch (abaixo) consome esse segundo caso antes do primeiro
-    // *Generate; sem isso, um StartRun com feedback preenchido cairia no
-    // Gate igual a qualquer outro, que so reconhece feedback vindo de um
-    // resume — o primeiro *Generate ignoraria o comentario, e so a
-    // chamada seguinte (o loop-back do proprio Gate) o usaria, custando
-    // uma chamada de LLM inteira a mais por nada.
+    // Pedido de mudanca. Chega no resume de uma run pausada (Gate) ou num
+    // StartRun novo sobre um artefato ja aprovado (Dispatch); nos dois casos
+    // custa exatamente uma geracao.
     input feedback: string = ""
     // Autorrevisao (auto_review.mh): com avisos de conformidade na geracao,
-    // uma unica chamada extra pede a correcao antes da pausa para revisao.
+    // uma unica chamada extra pede a correcao antes da pausa.
     input autorrevisao: bool = false
 
+    // pending_data/tokens_in/tokens_out/current_artifact sao lidos pelo app
+    // numa run pausada (checkpoint-recovery.js, run-tracker.js).
     var discovery_result = null
     var tokens_in = 0
     var tokens_out = 0
     var current_artifact = ""
     var pending_data = null
-    var pending_feedback = ""
-    // Gate usa isto (nao um "feedback = ''" dentro do proprio Gate) pra
-    // saber se o `feedback` atual ja foi consumido — spike real confirmou
-    // que reatribuir uma variavel `input` NAO sobrevive a um goto pra outro
-    // step: ela e re-vinculada ao valor original do resume toda vez que o
-    // step e reexecutado, entao "limpar" `feedback` assim nunca gruda e o
-    // Gate reentraria em *Generate pra sempre. `feedback_consumed` e uma
-    // `var` normal (essas sim persistem entre steps, como `pending_data` ja
-    // prova) — vira true no exato momento em que o comentario e consumido,
-    // volta a false bem antes do proximo pause(), liberando o PROXIMO
-    // resume com um `feedback` novo a reentrar no laco de novo.
+    // Garante que um pedido de mudanca gera uma unica regeneracao. Uma `var`,
+    // e nao `feedback = ""`, porque reatribuir um input nao sobrevive ao
+    // proximo resume: o Gate veria o mesmo feedback e regeneraria sem fim.
+    // Volta a false antes de cada pausa, liberando o proximo pedido.
     var feedback_consumed = false
 
     output: {
@@ -88,227 +52,131 @@ partial workflow Discovery {
         tokens_out: tokens_out,
     }
 
-    route CommitRouter(artifact: string) {
-        "brief"      -> BriefCommit
-        "atributos"  -> AtributosCommit
-        "requisitos" -> RequisitosCommit
-        "adr"        -> AdrCommit
-        "der"        -> DerCommit
-        "diagramas"  -> DiagramasCommit
-        "features"   -> FeaturesCommit
-        "dependencias" -> DependenciasCommit
-        "historias"  -> HistoriasCommit
-        "plano"      -> PlanoCommit
-        _ -> fail("invariante violado: artefato desconhecido chegou ao Gate")
-    }
+    step_end: (ctx) -> Telemetry.step_end(ctx, self.project_id, self.artifact, self.tokens_in, self.tokens_out)
 
-    route GenerateRouter(artifact: string) {
-        "brief"      -> BriefGenerate
-        "atributos"  -> AtributosGenerate
-        "requisitos" -> RequisitosGenerate
-        "der"        -> DerGenerate
-        "adr"        -> AdrGenerate
-        "diagramas"  -> DiagramasGenerate
-        "features"   -> FeaturesGenerate
-        "dependencias" -> DependenciasGenerate
-        "historias"  -> HistoriasGenerate
-        "plano"      -> PlanoGenerate
-        _ -> fail("artefato desconhecido: '" + artifact +
-                "' (use brief | atributos | requisitos | adr | der | diagramas | features | dependencias | historias)"
-        )
-    }
-
-    entry step Dispatch {
-        project_id = Paths.ensure_valid(project_id)
+    step Dispatch {
+        Paths.ensure_valid(project_id)
+        var kind = DiscoveryKinds.artifact(artifact)
+        DiscoveryKinds.check(kind, feature_id, historia_id)
+        self.current_artifact = artifact
+        var scope = DiscoveryKinds.scope(kind, feature_id, historia_id)
         if (approved && approval_data != null) {
-            if (artifact == "historias" && feature_id.is_empty()) {
-                fail("'feature_id' e obrigatorio para aprovar artifact: \"historias\"")
-            }
-            if (artifact == "plano" && (feature_id.is_empty() || historia_id.is_empty())) {
-                fail("'feature_id' e 'historia_id' sao obrigatorios para aprovar artifact: \"plano\"")
-            }
-            pending_data = approval_data
-            tokens_in = approval_tokens_in
-            tokens_out = approval_tokens_out
-            current_artifact = artifact
-            Activity.record(project_id, "approved", artifact, ItemScope.of(artifact, feature_id, historia_id))
-            goto CommitRouter(artifact)
+            self.pending_data = approval_data
+            self.tokens_in = approval_tokens_in
+            self.tokens_out = approval_tokens_out
+            Activity.record(project_id, "approved", artifact, scope)
+            goto Commit
         }
-        // Um StartRun novo com feedback preenchido (ver input feedback's
-        // comentario acima) consome o comentario aqui, antes do primeiro
-        // *Generate — marcando feedback_consumed:true agora faz o Gate
-        // (mais abaixo) pular o proprio loop-back dele quando chegar la
-        // pela primeira vez, entao isto custa exatamente UMA chamada de
-        // LLM (ja informada pelo comentario), nao duas.
         if (buddy && !approved && !feedback.is_empty()) {
-            feedback_consumed = true
-            pending_feedback = feedback
-            // Persistido ANTES do primeiro *Generate deste artefato — a
-            // proxima chamada de ChangesBlock.for_artifact (dentro do
-            // *Generate que GenerateRouter esta prestes a abrir) ja le este
-            // pedido de volta junto com todo pedido anterior, entao ele
-            // nunca fica so na var `pending_feedback` (que zera entre
-            // execucoes diferentes — ver changes_log.mh's own doc comment
-            // pro problema real que isto resolve).
-            ChangesLog.append({
-                artifact: artifact,
-                feature_id: ItemScope.of(artifact, feature_id, historia_id),
-                feedback: feedback,
-            })
+            self.feedback_consumed = true
+            ChangesBlock.record(project_id, artifact, scope, feedback)
         }
-        Activity.record(project_id, "started", artifact, ItemScope.of(artifact, feature_id, historia_id))
-        goto GenerateRouter(artifact)
+        Activity.record(project_id, "started", artifact, scope)
+        goto Generate
     }
 
-    // Gate e compartilhado por todo artefato — pausar (Modo Buddy) nunca
-    // custa uma nova chamada de LLM no resume, porque cada *Generate ja
-    // terminou e gravou o resultado em `pending_data` (pipeline-scoped)
-    // antes de chegar aqui.
-    //
-    // Um resume com approved:false + feedback preenchido (Modo Buddy's
-    // "Solicitar mudancas") e diferente de um resume comum: em vez de
-    // pausar de novo com o MESMO pending_data, volta pro *Generate do
-    // artefato — refaz a chamada de LLM, desta vez com TODO o historico de
-    // comentarios deste artefato (este incluido, ja persistido pelo
-    // ChangesLog.append acima) anexado a instrucao via ChangesBlock/
-    // feedback_content nas *Instruction — ver changes_log.mh. Ver a nota de
-    // feedback_consumed acima pra por que o
-    // guard usa aquela var, nao `feedback` diretamente — confirmado por
-    // spike isolado (LoopProbe) que a versao anterior deste Gate (que
-    // tentava `feedback = ""`) entrava num laco infinito de verdade: um
-    // resume real bateu em produção, cada volta era uma chamada de LLM
-    // nova. Corrigido e revalidado (3 ciclos: regenerar, regenerar de novo,
-    // aprovar) antes desta versao.
+    step Generate {
+        var draft = DiscoveryDrafts.of(DiscoveryKinds.artifact(artifact), project_id, feature_id, historia_id, autorrevisao)
+        self.pending_data = draft.data
+        self.tokens_in = draft.tokens_in
+        self.tokens_out = draft.tokens_out
+        goto Gate
+    }
+
+    // Pausar nunca custa uma nova chamada de LLM: o rascunho ja esta em
+    // pending_data. No resume, approved:true grava; approved:false com
+    // feedback registra o pedido (ChangesBlock) e regenera com todo o
+    // historico de pedidos deste item; sem feedback, pausa de novo.
     step Gate {
+        var scope = DiscoveryKinds.scope(DiscoveryKinds.artifact(artifact), feature_id, historia_id)
         if (buddy && !approved) {
-            if (!feedback.is_empty() && !feedback_consumed) {
-                feedback_consumed = true
-                pending_feedback = feedback
-                ChangesLog.append({
-                    artifact: artifact,
-                    feature_id: ItemScope.of(artifact, feature_id, historia_id),
-                    feedback: feedback,
-                })
-
-                goto GenerateRouter(artifact)
+            if (!feedback.is_empty() && !self.feedback_consumed) {
+                self.feedback_consumed = true
+                ChangesBlock.record(project_id, artifact, scope, feedback)
+                goto Generate
             }
-
-            feedback_consumed = false
-            Activity.record(project_id, "draft_ready", artifact, ItemScope.of(artifact, feature_id, historia_id))
-            pause("revise o conteudo de '" + artifact + "' antes de gravar em artifacts/")
+            self.feedback_consumed = false
+            Activity.record(project_id, "draft_ready", artifact, scope)
+            pause("revise o conteudo de '${artifact}' antes de gravar em artifacts/")
         }
-
-        // Um resume com approved:true reexecuta este step e chega aqui; sem
-        // Modo Buddy nao ha revisao, entao nada a registrar.
-        if (buddy) Activity.record(project_id, "approved", artifact, ItemScope.of(artifact, feature_id, historia_id))
-        goto CommitRouter(artifact)
+        if (buddy) Activity.record(project_id, "approved", artifact, scope)
+        goto Commit
     }
 
-    // Done e o ponto de convergencia unico de todo Commit. Usa `complete()`
-    // (nao um corpo vazio) pra encerrar a run explicitamente aqui, entao
-    // nao importa em qual arquivo/posicao este step acaba ficando depois de
-    // todos os fragmentos mesclados — sem isso, um step sem `goto` no fim
-    // simplesmente cai (fallthrough) pro proximo item fisico da lista
-    // mesclada, e isso ja causou um bug real em producao (Done "vazando"
-    // pra dentro do proximo Generate, disparando uma chamada de LLM
-    // indevida) quando este workflow foi dividido em fragmentos e Done
-    // deixou de ser, por acaso, o ultimo step do arquivo unico original.
-    step Done { complete() }
+    step Commit {
+        var draft = {data: self.pending_data, tokens_in: self.tokens_in, tokens_out: self.tokens_out}
+        self.discovery_result = DiscoveryCommits.of(DiscoveryKinds.artifact(artifact), project_id, feature_id, historia_id, draft)
+        complete()
+    }
 }
 
-// DiscoveryWorkflowSpec — mesmo padrao de work_item.mh :: WorkItemWorkflowSpec
-// / wiki.mh :: WikiWorkflowSpec: `Name.run(inputs:)` (mhl 1.4.0-beta.7+,
-// MHL-Melhorias.md #13) testando o workflow inteiro, escopado aos gates de
-// dependencia da matriz §4.1 do plano — cada um falha ANTES de chamar
-// `Writer.generate` (zero custo de LLM) porque o `project_id` usado nunca
-// existiu de verdade, entao `Context.artifact(...)` sempre devolve "" e o
-// primeiro `fail()` de predecessor dispara. So exercita o PRIMEIRO gate de
-// cada artefato (o unico alcancavel sem escrever um artefato predecessor de
-// verdade primeiro — `Name.run()` nao isola `fs`/`dir`, ver FASE5-ACHADOS.md
-// e a nota equivalente em work_item.mh) — nao substitui a validacao real de
-// ponta a ponta com `claude`/`codex` já feita na Fase 3, so cobre a parte
-// determinística (a matriz de dependência em si) que antes só era
-// verificada manualmente / de relance durante uma chamada real.
-//
-// Vive aqui (nao num dos fragmentos) porque este e o arquivo que faz o
-// `import` por extenso dos tres fragmentos — so ele enxerga o workflow
-// Discovery completo, com todos os steps mesclados.
+// Cobre o que e deterministico: validacao de entrada, a cadeia de
+// predecessores (cada gate falha antes de qualquer chamada de LLM) e o
+// caminho de aprovacao, que grava sem chamar a LLM.
 test DiscoveryWorkflowSpec {
-    describe rejects_an_unknown_artifact_before_touching_anything {
+    describe rejects_an_unknown_artifact_listing_every_valid_one {
         var run = Discovery.run(inputs: {project_id: "spec-test-project", artifact: "bogus"})
         is_false(run.ok)
-        is_true(run.error.contains("artefato desconhecido"))
+        is_true(run.error.contains("artefato desconhecido: 'bogus' (use brief | atributos | requisitos | adr | der | diagramas | features | dependencias | historias | plano)"))
     }
 
-    describe atributos_requires_brief_first {
-        var run = Discovery.run(inputs: {project_id: "spec-test-project", artifact: "atributos"})
-        is_false(run.ok)
-        is_true(run.error.contains("gere 'brief' antes de 'atributos'"))
+    describe atributos_and_requisitos_require_brief_first {
+        for (var artifact in ["atributos", "requisitos"]) {
+            var run = Discovery.run(inputs: {project_id: "spec-test-project", artifact: artifact})
+            is_true(run.error.contains("gere 'brief' antes de '${artifact}'"))
+        }
     }
 
-    describe requisitos_requires_brief_first {
-        var run = Discovery.run(inputs: {project_id: "spec-test-project", artifact: "requisitos"})
-        is_false(run.ok)
-        is_true(run.error.contains("gere 'brief' antes de 'requisitos'"))
-    }
-
-    describe adr_requires_requisitos_first {
-        var run = Discovery.run(inputs: {project_id: "spec-test-project", artifact: "adr"})
-        is_false(run.ok)
-        is_true(run.error.contains("gere 'requisitos' antes de 'adr'"))
-    }
-
-    describe der_requires_requisitos_first {
-        var run = Discovery.run(inputs: {project_id: "spec-test-project", artifact: "der"})
-        is_false(run.ok)
-        is_true(run.error.contains("gere 'requisitos' antes de 'der'"))
-    }
-
-    // DER e diagramas dependem das ADRs no Discovery: com requisitos e
-    // atributos gravados mas sem nenhuma ADR, os dois falham antes de
-    // chamar a LLM.
-    describe der_and_diagramas_require_adr_first {
-        var project_id = "spec-test-der-diagramas-adr"
-        dir.create(Paths.artifacts_dir(project_id))
-        fs.write(Paths.artifact(project_id, "requisitos.html"), "<html><body>FR-001</body></html>")
-        fs.write(Paths.artifact(project_id, "atributos.html"), "<html><body>NFR-001</body></html>")
-        var der = Discovery.run(inputs: {project_id: project_id, artifact: "der"})
-        is_false(der.ok)
-        is_true(der.error.contains("gere 'adr' antes de 'der'"))
-        var diagramas = Discovery.run(inputs: {project_id: project_id, artifact: "diagramas"})
-        is_false(diagramas.ok)
-        is_true(diagramas.error.contains("gere 'adr' antes de 'diagramas'"))
-        DirClear.clear(Paths.root(project_id))
-        dir.delete(Paths.root(project_id))
-    }
-
-    describe diagramas_requires_requisitos_first {
-        var run = Discovery.run(inputs: {project_id: "spec-test-project", artifact: "diagramas"})
-        is_false(run.ok)
-        is_true(run.error.contains("gere 'requisitos' antes de 'diagramas'"))
-    }
-
-    describe features_requires_requisitos_first {
-        var run = Discovery.run(inputs: {project_id: "spec-test-project", artifact: "features"})
-        is_false(run.ok)
-        is_true(run.error.contains("gere 'requisitos' antes de 'features'"))
+    describe technical_artifacts_require_requisitos_then_atributos_then_adr {
+        var id = Fixture.project("spec-test-discovery-tecnicos")
+        for (var artifact in ["adr", "der", "diagramas", "features"]) {
+            var run = Discovery.run(inputs: {project_id: id, artifact: artifact})
+            is_true(run.error.contains("gere 'requisitos' antes de '${artifact}'"))
+        }
+        Fixture.artifact(id, "requisitos.html", "<html><body>FR-001</body></html>")
+        for (var artifact in ["adr", "der", "diagramas", "features"]) {
+            var run = Discovery.run(inputs: {project_id: id, artifact: artifact})
+            is_true(run.error.contains("gere 'atributos' antes de '${artifact}'"))
+        }
+        Fixture.artifact(id, "atributos.html", "<html><body>NFR-001</body></html>")
+        for (var artifact in ["der", "diagramas", "features"]) {
+            var run = Discovery.run(inputs: {project_id: id, artifact: artifact})
+            is_true(run.error.contains("gere 'adr' antes de '${artifact}'"))
+        }
+        Fixture.artifact(id, "adr/ADR-001-titulo.html", "<html><body>ADR-001</body></html>")
+        var features = Discovery.run(inputs: {project_id: id, artifact: "features"})
+        is_true(features.error.contains("gere 'diagramas' antes de 'features'"))
+        Fixture.drop(id)
     }
 
     describe dependencias_requires_features_first {
         var run = Discovery.run(inputs: {project_id: "spec-test-project", artifact: "dependencias"})
-        is_false(run.ok)
         is_true(run.error.contains("gere 'features' antes de 'dependencias'"))
-    }
-
-    describe plano_requires_a_feature_and_a_historia_id {
-        var run = Discovery.run(inputs: {project_id: "spec-test-project", artifact: "plano", feature_id: "FT001"})
-        is_true(!run.ok)
-        is_true(run.error.contains("'feature_id' e 'historia_id' sao obrigatorios"))
     }
 
     describe historias_requires_a_feature_id {
         var run = Discovery.run(inputs: {project_id: "spec-test-project", artifact: "historias"})
-        is_false(run.ok)
         is_true(run.error.contains("'feature_id' e obrigatorio"))
+    }
+
+    describe plano_requires_a_feature_and_a_historia_id {
+        var run = Discovery.run(inputs: {project_id: "spec-test-project", artifact: "plano", feature_id: "FT001"})
+        is_true(run.error.contains("'feature_id' e 'historia_id' sao obrigatorios"))
+    }
+
+    describe the_approval_path_validates_the_required_ids_too {
+        var run = Discovery.run(inputs: {project_id: "spec-test-project", artifact: "historias", approved: true, approval_data: {historias: []}})
+        is_true(run.error.contains("'feature_id' e obrigatorio"))
+    }
+
+    describe approving_a_document_writes_it_without_calling_the_llm {
+        var id = Fixture.project("spec-test-discovery-approve")
+        var data = {features: [], ordem_execucao: [], diagrama_mermaid: "graph TD", gaps: []}
+        var run = Discovery.run(inputs: {project_id: id, artifact: "dependencias", approved: true, approval_data: data, approval_tokens_in: 3, approval_tokens_out: 4})
+        is_true(run.ok)
+        are_equal(run.executed, ["Dispatch", "Commit"])
+        are_equal(run.vars.discovery_result.path, "artifacts/dependencias.html")
+        is_true(fs.read(Paths.artifact(id, "dependencias.html")).contains("3 → 4 tokens"))
+        Fixture.drop(id)
     }
 }

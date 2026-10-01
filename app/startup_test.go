@@ -96,3 +96,15 @@ func TestExtractIfChanged_ReplacesTheFileInsteadOfRewritingIt(t *testing.T) {
 		t.Fatalf("leftover files in %s: %v", dir, entries)
 	}
 }
+
+// Guards the build itself: app/embedded/bin/mhl-<goos>-<goarch> must be the
+// real mhl executable, not an empty placeholder — an empty one only shows up
+// at startup as "exec format error".
+func TestVendoredMHLBinary_IsARealExecutable(t *testing.T) {
+	if !vendoredMHLAvailable {
+		t.Skip("no vendored mhl for this platform")
+	}
+	if len(vendoredMHLBinary) < 1<<20 {
+		t.Fatalf("vendored mhl is %d bytes — app/embedded/bin holds a placeholder, not the mhl binary", len(vendoredMHLBinary))
+	}
+}

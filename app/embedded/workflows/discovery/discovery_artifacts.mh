@@ -1,0 +1,225 @@
+// O que muda por artefato no Discovery: quais predecessores cada um exige,
+// como e gerado e onde e gravado. O fluxo (pausa, aprovacao, pedido de
+// mudanca) fica em discovery.mh.
+
+import { Paths } from "../shared/core/paths.mh"
+import { Closed } from "../shared/core/closed_set.mh"
+import { WorkflowsRoot, SchemaFile } from "../shared/core/workflows_root.mh"
+import { Context } from "../shared/artifacts/context.mh"
+import { ContextSlice } from "../shared/artifacts/context_slice.mh"
+import { Require } from "../shared/artifacts/require.mh"
+import { ArtifactId } from "../shared/artifacts/artifact_id.mh"
+import { ArtifactChecks } from "../shared/artifacts/artifact_checks.mh"
+import { ArtifactCommit } from "../shared/artifacts/artifact_commit.mh"
+import { AutoReview } from "../shared/artifacts/auto_review.mh"
+import { ChangesBlock } from "../shared/artifacts/changes_log.mh"
+import { CommonDrafts, TechContext } from "../shared/artifacts/common_drafts.mh"
+import { Drafts, Draft } from "../shared/artifacts/draft.mh"
+import { ArtifactSchema, AtributosInstruction, Schemas } from "../shared/artifacts/artifacts_common.mh"
+
+export enum DiscoveryArtifact { brief, atributos, requisitos, adr, der, diagramas, features, dependencias, historias, plano }
+
+export tool DiscoveryKinds {
+    artifact(name: string): DiscoveryArtifact -> Closed.parse("artefato desconhecido", name, [
+        DiscoveryArtifact.brief, DiscoveryArtifact.atributos, DiscoveryArtifact.requisitos,
+        DiscoveryArtifact.adr, DiscoveryArtifact.der, DiscoveryArtifact.diagramas,
+        DiscoveryArtifact.features, DiscoveryArtifact.dependencias, DiscoveryArtifact.historias,
+        DiscoveryArtifact.plano,
+    ])
+
+    // historias sao uma colecao por feature; o plano e de uma historia.
+    check(artifact: DiscoveryArtifact, feature_id: string, historia_id: string) -> {
+        if (artifact == DiscoveryArtifact.historias && feature_id.is_empty()) fail("'feature_id' e obrigatorio para artifact: \"historias\"")
+        if (artifact == DiscoveryArtifact.plano && (feature_id.is_empty() || historia_id.is_empty())) fail("'feature_id' e 'historia_id' sao obrigatorios para artifact: \"plano\"")
+    }
+
+    // Chave que separa o historico (ChangesLog, ActivityLog) de cada item.
+    scope(artifact: DiscoveryArtifact, feature_id: string, historia_id: string): string -> match artifact {
+        DiscoveryArtifact.historias -> feature_id
+        DiscoveryArtifact.plano     -> "${feature_id}/${historia_id}"
+        _                           -> ""
+    }
+}
+
+// features (o backlog inteiro) e dependencias (entre itens desse backlog) so
+// existem no Discovery. Derivam dos artefatos ja sintetizados, nao da wiki.
+prompt FeaturesInstruction(
+    schema_conventions: prompt,
+    atributos_content: string,
+    requisitos_content: string,
+    adr_content: string,
+    der_content: string,
+    diagramas_content: string,
+    feedback_content: string
+) from "prompts/features.prompt.md"
+
+// `features_content` traz o codigo FT00N de cada feature no cabecalho, para
+// as dependencias citarem o id real (inexistente quando o backlog e gerado).
+prompt DependenciasInstruction(
+    schema_conventions: prompt,
+    features_content: string,
+    feedback_content: string
+) from "prompts/dependencias.prompt.md"
+
+prompt FeaturesSchemaContent() from "schemas/features.schema.json"
+prompt DependenciasSchemaContent() from "schemas/dependencias.schema.json"
+
+tool DiscoverySchemas {
+    features(): SchemaFile -> WorkflowsRoot.schema(FeaturesSchemaContent(), "discovery/schemas/features.schema.json")
+    dependencias(): SchemaFile -> WorkflowsRoot.schema(DependenciasSchemaContent(), "discovery/schemas/dependencias.schema.json")
+}
+
+// Predecessores: brief -> atributos | requisitos -> adr -> der | diagramas
+// -> features -> dependencias; features -> historias -> plano. O DER e o
+// unico opcional.
+export tool DiscoveryDrafts {
+    of(kind: DiscoveryArtifact, project_id: string, feature_id: string, historia_id: string, autorrevisao: bool): Draft -> match kind {
+        DiscoveryArtifact.brief        -> CommonDrafts.brief(project_id)
+        DiscoveryArtifact.atributos    -> self.atributos(project_id)
+        DiscoveryArtifact.requisitos   -> CommonDrafts.requisitos(project_id, Require.artifact(project_id, "brief", "requisitos"))
+        DiscoveryArtifact.adr          -> self.adr(project_id)
+        DiscoveryArtifact.der          -> self.der(project_id, autorrevisao)
+        DiscoveryArtifact.diagramas    -> self.diagramas(project_id, autorrevisao)
+        DiscoveryArtifact.features     -> self.features(project_id, autorrevisao)
+        DiscoveryArtifact.dependencias -> self.dependencias(project_id)
+        DiscoveryArtifact.historias    -> self.historias(project_id, feature_id, autorrevisao)
+        DiscoveryArtifact.plano        -> self.plano(project_id, feature_id, historia_id, autorrevisao)
+    }
+
+    atributos(project_id: string): Draft -> Drafts.generate(
+        AtributosInstruction(
+            schema_conventions: ArtifactSchema(),
+            brief_content: Require.artifact(project_id, "brief", "atributos"),
+            wiki_content: Context.wiki(project_id),
+            feedback_content: ChangesBlock.for_artifact(project_id, "atributos", "")
+        ),
+        Schemas.atributos(), project_id, "atributos"
+    )
+
+    // Requisitos e atributos obrigatorios, sem os campos que os dois repetem
+    // (Context.dedupe_shared_fields).
+    quality(project_id: string, before: string): any -> {
+        var requisitos = Require.artifact(project_id, "requisitos", before)
+        var atributos = Require.artifact(project_id, "atributos", before)
+        return {requisitos: Context.dedupe_shared_fields(atributos, requisitos), atributos: atributos}
+    }
+
+    adr(project_id: string): Draft -> {
+        var q = self.quality(project_id, "adr")
+        return CommonDrafts.adr(project_id, q.requisitos, q.atributos)
+    }
+
+    // O nivel do DER (fisico so com banco escolhido) e as tecnologias dos
+    // diagramas saem das ADRs, por isso elas sao obrigatorias aqui.
+    der(project_id: string, autorrevisao: bool): Draft -> {
+        var q = self.quality(project_id, "der")
+        return CommonDrafts.der(project_id, autorrevisao, q.requisitos, q.atributos, Require.adr(project_id, "der"))
+    }
+
+    diagramas(project_id: string, autorrevisao: bool): Draft -> {
+        var q = self.quality(project_id, "diagramas")
+        return CommonDrafts.diagramas(project_id, autorrevisao, q.requisitos, q.atributos, Require.adr(project_id, "diagramas"))
+    }
+
+    features(project_id: string, autorrevisao: bool): Draft -> {
+        var q = self.quality(project_id, "features")
+        var adr = Require.adr(project_id, "features")
+        var der = Require.optional(Context.artifact(project_id, "der.html"), "esta oportunidade")
+        var diagramas = Require.diagramas(project_id, "features")
+        return Drafts.reviewed_items(AutoReview.generate(
+            enabled: autorrevisao,
+            prompt: FeaturesInstruction(
+                schema_conventions: ArtifactSchema(),
+                atributos_content: q.atributos,
+                requisitos_content: q.requisitos,
+                adr_content: adr,
+                der_content: der,
+                diagramas_content: diagramas,
+                feedback_content: ChangesBlock.for_artifact(project_id, "features", "")
+            ),
+            schema_file: DiscoverySchemas.features(), project_id: project_id, artifact: "features",
+            prepare: (raw) -> json.parse(raw),
+            check: (d) -> ArtifactChecks.features(d)
+        ), "features")
+    }
+
+    // features/ e uma pasta de pastas (features/FT001-slug/feature.html),
+    // por isso artifact_dir_of_dirs.
+    dependencias(project_id: string): Draft -> Drafts.generate(
+        DependenciasInstruction(
+            schema_conventions: ArtifactSchema(),
+            features_content: Require.present(Context.artifact_dir_of_dirs(project_id, "features", "feature.html"), "features", "dependencias"),
+            feedback_content: ChangesBlock.for_artifact(project_id, "dependencias", "")
+        ),
+        DiscoverySchemas.dependencias(), project_id, "dependencias"
+    )
+
+    // Contexto recortado pelo que o item cita. Tudo ja existe quando ha
+    // features (que o exigem), exceto o DER.
+    tech(project_id: string, refs: string[]): TechContext -> {
+        requisitos: ContextSlice.requisitos(project_id, refs),
+        atributos: ContextSlice.atributos(project_id, refs),
+        adr: ContextSlice.adrs(project_id, refs),
+        der: Require.optional(Context.artifact(project_id, "der.html"), "esta oportunidade"),
+        diagramas: ContextSlice.diagramas(project_id, refs),
+    }
+
+    historias(project_id: string, feature_id: string, autorrevisao: bool): Draft -> {
+        var feature_dir = ArtifactId.find_feature_dir(project_id, feature_id)
+        var feature = Context.artifact(project_id, "features/${feature_dir}/feature.html")
+        var refs = ContextSlice.refs(ContextSlice.read(project_id, "features/${feature_dir}/feature.json"))
+        var draft = CommonDrafts.historias(project_id, autorrevisao, feature, self.tech(project_id, refs), feature_id)
+        var data = draft.data
+        data["feature_dir"] = feature_dir
+        return draft
+    }
+
+    // Gravado ao lado da historia: historias/<feature>/<USxxx>/plano.html.
+    plano(project_id: string, feature_id: string, historia_id: string, autorrevisao: bool): Draft -> {
+        var feature_dir = ArtifactId.find_feature_dir(project_id, feature_id)
+        var historias_rel = "historias/${feature_dir}"
+        var historia_rel = "${historias_rel}/${ArtifactId.find_historia_dir(project_id, historias_rel, historia_id)}"
+        var historia_json = Paths.artifact(project_id, "${historia_rel}/historia.json")
+        if (!fs.exists(historia_json)) fail("gere as historias de '${feature_id}' antes do plano de '${historia_id}'")
+        var historia = json.parse(fs.read(historia_json))
+        var draft = CommonDrafts.plano(
+            project_id, autorrevisao, historia,
+            Context.artifact(project_id, "${historia_rel}/historia.html"),
+            Context.artifact(project_id, "features/${feature_dir}/feature.html"),
+            "${historia_id} — ${historia.titulo}",
+            self.tech(project_id, ContextSlice.refs(historia)),
+            "${feature_id}/${historia_id}"
+        )
+        var data = draft.data
+        data["historia_dir"] = historia_rel
+        return draft
+    }
+}
+
+export tool DiscoveryCommits {
+    of(kind: DiscoveryArtifact, project_id: string, feature_id: string, historia_id: string, draft: Draft): any -> match kind {
+        DiscoveryArtifact.brief        -> ArtifactCommit.brief(project_id, draft)
+        DiscoveryArtifact.atributos    -> ArtifactCommit.atributos(project_id, draft)
+        DiscoveryArtifact.requisitos   -> ArtifactCommit.requisitos(project_id, draft)
+        DiscoveryArtifact.adr          -> ArtifactCommit.adr(project_id, draft)
+        DiscoveryArtifact.der          -> ArtifactCommit.der(project_id, draft)
+        DiscoveryArtifact.diagramas    -> ArtifactCommit.diagramas(project_id, draft)
+        DiscoveryArtifact.features     -> ArtifactCommit.features(project_id, draft)
+        DiscoveryArtifact.dependencias -> ArtifactCommit.dependencias(project_id, draft)
+        DiscoveryArtifact.historias    -> self.historias(project_id, feature_id, draft)
+        DiscoveryArtifact.plano        -> self.plano(project_id, feature_id, historia_id, draft)
+    }
+
+    historias(project_id: string, feature_id: string, draft: Draft): any -> {
+        var result = ArtifactCommit.historias(project_id, draft.data.feature_dir, draft)
+        result["feature_id"] = feature_id
+        return result
+    }
+
+    plano(project_id: string, feature_id: string, historia_id: string, draft: Draft): any -> {
+        var result = ArtifactCommit.plano(project_id, "${draft.data.historia_dir}/plano.html", "../../../", draft)
+        result["feature_id"] = feature_id
+        result["historia_id"] = historia_id
+        return result
+    }
+}

@@ -1,73 +1,32 @@
-// artifacts_common.mh — schema/prompt/template dos 6 artefatos conceitualmente
-// iguais em qualquer nivel (Oportunidade, Feature ou Historia): brief,
-// atributos, requisitos, adr, der, diagramas. Fase 3 (Discovery) declarava
-// isso dentro de discovery.mh; extraido pra ca na Fase 4 porque Delivery
-// reaproveita exatamente a mesma coisa (C7 — nenhuma duplicacao de
-// schema/template/tool entre os 4 workflows) em vez de duplicar os 6 pares
-// de arquivo.
-//
-// So declaracoes aqui (prompt/schema-file/template-file) — nenhum `workflow`
-// neste arquivo, de proposito: um step *Generate/*Commit continua vivendo em
-// cada workflow que o usa (MHL nao tem como compartilhar corpo de step por
-// import), mas a parte cara — texto de instrucao, contrato de schema,
-// template de renderizacao — mora em um lugar so.
+// Instrucoes, schemas e templates dos artefatos que Discovery e Delivery
+// compartilham. A geracao em si esta em common_drafts.mh; a gravacao, em
+// artifact_commit.mh.
 
-import { WorkflowsRoot } from "../core/workflows_root.mh"
+import { WorkflowsRoot, SchemaFile } from "../core/workflows_root.mh"
 
 export prompt ArtifactSchema() from "artifact_schema.prompt.md"
 
-// feedback_content on every *Instruction prompt below is filled by
-// ChangesBlock.for_artifact (workflows/shared/artifacts/changes_log.mh),
-// not a single "latest comment" string — see that file's own doc comment
-// for the two approaches that were tried here first and why both broke on
-// a real test before this one. The parameter name stayed the same (every
-// *.prompt.md below still just does `${feedback_content}`) — only what
-// computes its value, at each *Generate call site, changed.
-
+// `feedback_content` e sempre ChangesBlock.for_artifact: todos os pedidos de
+// mudanca ja feitos para o item, nao so o ultimo (ver changes_log.mh).
 export prompt BriefInstruction(schema_conventions: prompt, wiki_content: string, feedback_content: string) from "prompts/brief.prompt.md"
 export prompt AtributosInstruction(schema_conventions: prompt, brief_content: string, wiki_content: string, feedback_content: string) from "prompts/atributos.prompt.md"
 export prompt RequisitosInstruction(schema_conventions: prompt, brief_content: string, wiki_content: string, feedback_content: string) from "prompts/requisitos.prompt.md"
-// Adr/Der/Diagramas/Historias nao recebem `wiki_content`, de proposito: sao
-// artefatos derivados de requisitos/atributos/feature ja sintetizados, nao
-// do material bruto da wiki (so brief/atributos/requisitos leem a wiki
-// diretamente). Alem de ser redundante (o que a wiki tem de relevante ja foi
-// destilado pelos artefatos predecessores), Context.wiki(project_id)
-// concatena TODAS as paginas da wiki do projeto — pode facilmente passar de
-// dezenas de KB. Devin recebe o prompt via `--prompt-file`, mas Claude/Codex
-// nao tem um flag equivalente (so leem argv ou stdin, e o bloco `agent` do
-// mhl nao suporta redirecionar stdin) — um prompt desse tamanho no argv
-// estoura o limite de ~32K caracteres de linha de comando do Windows
-// (CreateProcess), derrubando a chamada com "O nome do arquivo ou a extensao
-// e muito grande" (Windows error 206) antes mesmo de chegar no backend.
+// Daqui em diante nenhuma instrucao recebe a wiki: o que ela tem de
+// relevante ja foi destilado em brief/atributos/requisitos, e a wiki inteira
+// estoura o limite de linha de comando do Windows (~32K) para backends que
+// recebem o prompt por argv.
 export prompt AdrInstruction(schema_conventions: prompt, requisitos_content: string, atributos_content: string, feedback_content: string) from "prompts/adr.prompt.md"
-// Der recebe as ADRs pelo mesmo motivo de Diagramas — e com a mesma regra
-// (dependencia no Discovery, opcional no Delivery): o nivel fisico (tipos de
-// dado) so existe depois que uma ADR escolheu o banco, e um armazenamento
-// nao relacional escolhido numa ADR muda o que o DER consegue descrever.
+// DER e diagramas exigem as ADRs: o nivel fisico do DER so existe depois que
+// uma ADR escolheu o banco, e as tecnologias dos conteineres e a
+// infraestrutura de implantacao sao decisoes registradas nelas.
 export prompt DerInstruction(schema_conventions: prompt, requisitos_content: string, atributos_content: string, adr_content: string, feedback_content: string) from "prompts/der.prompt.md"
-// Diagramas recebe tambem as ADRs: o diagrama de conteiner mostra as
-// principais escolhas de tecnologia e o de implantacao a infraestrutura, e
-// essas escolhas moram nas ADRs — sem elas a LLM inventava a tecnologia ou
-// contradizia uma decisao ja registrada. No Discovery e DEPENDENCIA (o passo
-// falha sem ADRs; artifacts.js tambem declara `adr` em deps, o que da o
-// aviso de "Desatualizado" quando uma ADR muda). No Delivery, onde ADRs sao
-// opcionais para tudo, quem chama passa um texto fixo (NoAdr).
 export prompt DiagramasInstruction(schema_conventions: prompt, requisitos_content: string, atributos_content: string, adr_content: string, feedback_content: string) from "prompts/diagramas.prompt.md"
 
-// Gera historias pra UMA feature — usado por Discovery (feature dentro do
-// backlog de uma Oportunidade) e por Delivery (a unica feature implicita de
-// um projeto standalone). `feature_content` e o feature.html de qualquer um
-// dos dois casos — a instrucao nao muda, so quem fornece o conteudo muda.
-// As historias recebem, alem da feature, todo o contexto tecnico da
-// oportunidade: sem ele a historia nao sabia qual conteiner altera, quais
-// entidades toca nem quais decisoes respeitar, e os contratos saiam como gap
-// ou inventados. SpecConventions (compartilhado com a historia unica do
-// Delivery) pede rastreabilidade e contratos estruturados — ver
-// historia_spec.mh. Quem chama passa um texto fixo para artefato ausente.
+// Historias de uma feature e plano de uma historia recebem todo o contexto
+// tecnico (TechContext em common_drafts.mh): sem ele a historia nao sabe que
+// conteiner altera, que entidades toca nem que decisoes respeitar.
+// SpecConventions pede rastreabilidade e contratos estruturados (historia_spec.mh).
 export prompt SpecConventions() from "prompts/spec_conventions.prompt.md"
-// Plano de implementacao de UMA historia (plano_model.mh) — o "como" do
-// Spec-Driven Development. Recebe a historia e todo o contexto tecnico;
-// Delivery passa textos fixos para o que nao tem (atributos) ou nao gerou.
 export prompt PlanoInstruction(schema_conventions: prompt, historia_content: string, feature_content: string, requisitos_content: string, atributos_content: string, adr_content: string, der_content: string, diagramas_content: string, feedback_content: string) from "prompts/plano.prompt.md"
 export prompt HistoriasInstruction(schema_conventions: prompt, spec_conventions: prompt, feature_content: string, requisitos_content: string, atributos_content: string, adr_content: string, der_content: string, diagramas_content: string, feedback_content: string) from "prompts/historias.prompt.md"
 
@@ -80,14 +39,16 @@ prompt DerSchemaContent() from "schemas/der.schema.json"
 prompt DiagramasSchemaContent() from "schemas/diagramas.schema.json"
 prompt PlanoSchemaContent() from "schemas/plano.schema.json"
 
-export tool HistoriasSchemaFile { get(): {content: string, path: string} -> {content: HistoriasSchemaContent(), path: WorkflowsRoot.resolve("shared/artifacts/schemas/historias.schema.json")} }
-export tool BriefSchemaFile { get(): {content: string, path: string} -> {content: BriefSchemaContent(), path: WorkflowsRoot.resolve("shared/artifacts/schemas/brief.schema.json")} }
-export tool AtributosSchemaFile { get(): {content: string, path: string} -> {content: AtributosSchemaContent(), path: WorkflowsRoot.resolve("shared/artifacts/schemas/atributos.schema.json")} }
-export tool RequisitosSchemaFile { get(): {content: string, path: string} -> {content: RequisitosSchemaContent(), path: WorkflowsRoot.resolve("shared/artifacts/schemas/requisitos.schema.json")} }
-export tool AdrSchemaFile { get(): {content: string, path: string} -> {content: AdrSchemaContent(), path: WorkflowsRoot.resolve("shared/artifacts/schemas/adr.schema.json")} }
-export tool DerSchemaFile { get(): {content: string, path: string} -> {content: DerSchemaContent(), path: WorkflowsRoot.resolve("shared/artifacts/schemas/der.schema.json")} }
-export tool PlanoSchemaFile { get(): {content: string, path: string} -> {content: PlanoSchemaContent(), path: WorkflowsRoot.resolve("shared/artifacts/schemas/plano.schema.json")} }
-export tool DiagramasSchemaFile { get(): {content: string, path: string} -> {content: DiagramasSchemaContent(), path: WorkflowsRoot.resolve("shared/artifacts/schemas/diagramas.schema.json")} }
+export tool Schemas {
+    brief(): SchemaFile -> WorkflowsRoot.schema(BriefSchemaContent(), "shared/artifacts/schemas/brief.schema.json")
+    atributos(): SchemaFile -> WorkflowsRoot.schema(AtributosSchemaContent(), "shared/artifacts/schemas/atributos.schema.json")
+    requisitos(): SchemaFile -> WorkflowsRoot.schema(RequisitosSchemaContent(), "shared/artifacts/schemas/requisitos.schema.json")
+    adr(): SchemaFile -> WorkflowsRoot.schema(AdrSchemaContent(), "shared/artifacts/schemas/adr.schema.json")
+    der(): SchemaFile -> WorkflowsRoot.schema(DerSchemaContent(), "shared/artifacts/schemas/der.schema.json")
+    diagramas(): SchemaFile -> WorkflowsRoot.schema(DiagramasSchemaContent(), "shared/artifacts/schemas/diagramas.schema.json")
+    historias(): SchemaFile -> WorkflowsRoot.schema(HistoriasSchemaContent(), "shared/artifacts/schemas/historias.schema.json")
+    plano(): SchemaFile -> WorkflowsRoot.schema(PlanoSchemaContent(), "shared/artifacts/schemas/plano.schema.json")
+}
 
 export prompt BriefBody(resumo_executivo: string, resumo_fontes: string, contexto_negocio: string, contexto_fontes: string, objetivos_tabela: string, em_escopo_lista: string, fora_escopo_lista: string, stakeholders_tabela: string, metricas_tabela: string, marcos_tabela: string, riscos_tabela: string, perguntas_lista: string) from "templates/brief_body.html"
 export prompt AtributosBody(contexto: string, contexto_fontes: string, requisitos_tabela: string, restricoes_tabela: string, compliance_tabela: string, exclusoes_lista: string, perguntas_lista: string) from "templates/atributos_body.html"
@@ -130,7 +91,7 @@ export prompt DependenciasBody(mapa_tabela: string, ordem_tabela: string, diagra
 
 test SchemaFileSpec {
     describe exposes_schema_content_and_codex_file_path {
-        var schema_file = AtributosSchemaFile.get()
+        var schema_file = Schemas.atributos()
         var parsed = json.parse(schema_file.content)
         are_equal(parsed.type, "object")
         are_equal(schema_file.path, "workflows/shared/artifacts/schemas/atributos.schema.json")

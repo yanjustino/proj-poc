@@ -9,6 +9,7 @@ import { Paths } from "../core/paths.mh"
 import { WikiContext } from "../wiki/wiki_context.mh"
 import { DirText } from "../core/dir_text.mh"
 import { ArtifactData } from "artifact_data.mh"
+import { Fixture } from "../core/fixture.mh"
 
 export tool Context {
     // wiki: conteudo da wiki prefixado pelo bloco de continuidade do
@@ -160,41 +161,29 @@ export tool Context {
     }
 }
 
-// NoAdr — texto fixo no lugar das ADRs quando ainda nao ha nenhuma, para
-// os artefatos que as recebem como contexto OPCIONAL (diagramas, der). C3:
-// decisao deterministica, mesmo padrao de NoAtributos em delivery.mh.
-export tool NoAdr {
-    placeholder(): string ->
-        "(nenhuma ADR gerada ainda — cite como `gap` toda escolha de tecnologia, inclusive de banco de dados, que não esteja nos requisitos ou atributos)"
-}
-
 test ContextSpec {
     describe wiki_prefixes_the_continuity_block_when_the_work_item_declares_one {
-        var project_id = "spec-test-context-continuity"
-        dir.create(Paths.root(project_id))
+        var project_id = Fixture.project("spec-test-context-continuity")
         fs.write(Paths.project_file(project_id), json.stringify({id: project_id, name: "x", continuidade_de: "Checkout atual — fluxo PIX"}))
 
         var out = Context.wiki(project_id)
         is_true(out.starts_with("# work-item/continuidade\n\nCheckout atual — fluxo PIX"))
 
-        fs.delete(Paths.project_file(project_id))
-        dir.delete(Paths.root(project_id))
+        Fixture.drop(project_id)
     }
 
     describe wiki_has_no_continuity_block_when_the_work_item_does_not_declare_one {
-        var project_id = "spec-test-context-continuity-empty"
-        dir.create(Paths.root(project_id))
+        var project_id = Fixture.project("spec-test-context-continuity-empty")
         fs.write(Paths.project_file(project_id), json.stringify({id: project_id, name: "x", continuidade_de: ""}))
 
         var out = Context.wiki(project_id)
         is_true(!out.contains("work-item/continuidade"))
 
-        fs.delete(Paths.project_file(project_id))
-        dir.delete(Paths.root(project_id))
+        Fixture.drop(project_id)
     }
 
     describe artifact_dir_of_dirs_concatenates_item_file_from_each_subfolder {
-        var project_id = "spec-test-context-dirofdirs"
+        var project_id = Fixture.project("spec-test-context-dirofdirs")
         var base = Paths.artifact(project_id, "features")
         dir.create(base + "/FT001-a")
         fs.write(base + "/FT001-a/feature.html", "<html><body>Conteudo A</body></html>")
@@ -208,13 +197,7 @@ test ContextSpec {
         is_true(out.contains("features/FT002-b"))
         is_true(out.contains("Conteudo B"))
 
-        fs.delete(base + "/FT001-a/feature.html")
-        dir.delete(base + "/FT001-a")
-        fs.delete(base + "/FT002-b/feature.html")
-        dir.delete(base + "/FT002-b")
-        dir.delete(base)
-        dir.delete(Paths.artifacts_dir(project_id))
-        dir.delete(Paths.root(project_id))
+        Fixture.drop(project_id)
     }
 
     describe artifact_dir_of_dirs_is_empty_for_a_missing_directory {
@@ -222,7 +205,7 @@ test ContextSpec {
     }
 
     describe artifact_dir_of_dirs_skips_a_subfolder_still_missing_its_item_file {
-        var project_id = "spec-test-context-dirofdirs-partial"
+        var project_id = Fixture.project("spec-test-context-dirofdirs-partial")
         var base = Paths.artifact(project_id, "features")
         // FT001-a existe mas ainda sem feature.html — rascunho incompleto
         // (mesma situacao que um dir.create sem o fs.write correspondente
@@ -232,10 +215,7 @@ test ContextSpec {
         var out = Context.artifact_dir_of_dirs(project_id, "features", "feature.html")
         is_true(out.is_empty())
 
-        dir.delete(base + "/FT001-a")
-        dir.delete(base)
-        dir.delete(Paths.artifacts_dir(project_id))
-        dir.delete(Paths.root(project_id))
+        Fixture.drop(project_id)
     }
 
     describe dedupe_shared_fields_zeroes_a_requisitos_field_thats_byte_identical_to_atributos {
@@ -281,7 +261,7 @@ test ContextSpec {
     }
 
     describe adr_context_projects_each_decision_to_only_the_downstream_relevant_fields {
-        var project_id = "spec-test-context-adr-slim"
+        var project_id = Fixture.project("spec-test-context-adr-slim")
         var adr_dir = Paths.artifact(project_id, "adr")
         dir.create(adr_dir)
         fs.write(adr_dir + "/ADR-001-titulo.json", json.stringify({
@@ -310,11 +290,7 @@ test ContextSpec {
         is_true(!out.contains("opcoes_pros_contras"))
         is_true(!out.contains("descartável"))
 
-        fs.delete(adr_dir + "/ADR-001-titulo.json")
-        fs.delete(adr_dir + "/ADR-001-titulo.html")
-        dir.delete(adr_dir)
-        dir.delete(Paths.artifacts_dir(project_id))
-        dir.delete(Paths.root(project_id))
+        Fixture.drop(project_id)
     }
 
     describe adr_context_is_empty_for_a_missing_directory {
@@ -322,7 +298,7 @@ test ContextSpec {
     }
 
     describe adr_context_falls_back_to_the_full_body_for_an_adr_without_json {
-        var project_id = "spec-test-context-adr-legacy"
+        var project_id = Fixture.project("spec-test-context-adr-legacy")
         var adr_dir = Paths.artifact(project_id, "adr")
         dir.create(adr_dir)
         fs.write(adr_dir + "/ADR-002-legado.html", "<html><body>ADR legado completo</body></html>")
@@ -331,9 +307,6 @@ test ContextSpec {
         is_true(out.contains("ADR legado completo"))
         is_true(out.contains("adr/ADR-002-legado"))
 
-        fs.delete(adr_dir + "/ADR-002-legado.html")
-        dir.delete(adr_dir)
-        dir.delete(Paths.artifacts_dir(project_id))
-        dir.delete(Paths.root(project_id))
+        Fixture.drop(project_id)
     }
 }

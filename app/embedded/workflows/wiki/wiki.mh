@@ -2,14 +2,22 @@
 // dados estruturados; componentes determinísticos cuidam de arquivos e índice.
 
 import { Paths } from "../shared/core/paths.mh"
+import { Closed } from "../shared/core/closed_set.mh"
 import { Writer } from "../shared/agents/agents.mh"
 import { RawExtract } from "../shared/wiki/raw_extract.mh"
 import { WikiContext } from "../shared/wiki/wiki_context.mh"
+import { WikiIndex } from "../shared/wiki/wiki_index.mh"
 import { WikiActions } from "actions.mh"
-import { IngestSchemaFile, QuerySchemaFile, LintSchemaFile } from "schema_files.mh"
+import { WikiSchemas } from "schema_files.mh"
+
+enum WikiAction { ingest, query, lint, sync_html }
+
+tool WikiActionKind {
+    parse(name: string): WikiAction -> Closed.parse("acao desconhecida", name, [WikiAction.ingest, WikiAction.query, WikiAction.lint, WikiAction.sync_html])
+}
 
 prompt WikiSchema() from "schema.prompt.md"
-prompt IngestInstruction(schema_conventions: prompt, source_name: string, source_text: string) from "prompts/ingest.prompt.md"
+prompt IngestInstruction(schema_conventions: prompt, source_name: string, source_text: string, catalog_content: string) from "prompts/ingest.prompt.md"
 prompt QueryInstruction(schema_conventions: prompt, question: string, wiki_content: string) from "prompts/query.prompt.md"
 prompt LintInstruction(schema_conventions: prompt, wiki_content: string) from "prompts/lint.prompt.md"
 
@@ -17,7 +25,7 @@ workflow Wiki {
     description: "Ingestao, consulta e saneamento da wiki de um work-item (padrao wiki-llm.md)."
 
     input project_id: string
-    input action: string             // "ingest" | "query" | "lint" | "sync_html"
+    input action: string             // WikiAction
     input raw_paths: string[] = []   // ingest: exatamente 1 elemento nesta versao (v1)
     input question: string = ""      // query
     input file_answer: bool = false  // query
@@ -38,13 +46,16 @@ workflow Wiki {
         tokens_out: tokens_out,
     }
 
+    route ActionRouter(action: WikiAction) {
+        WikiAction.ingest    -> IngestGenerate
+        WikiAction.query     -> Query
+        WikiAction.lint      -> Lint
+        WikiAction.sync_html -> SyncHtml
+    }
+
     step Dispatch {
-        project_id = Paths.ensure_valid(project_id)
-        if (action == "ingest") goto IngestGenerate
-        if (action == "query") goto Query
-        if (action == "lint") goto Lint
-        if (action == "sync_html") goto SyncHtml
-        fail("acao desconhecida: '" + action + "' (use ingest | query | lint | sync_html)")
+        Paths.ensure_valid(project_id)
+        goto ActionRouter(WikiActionKind.parse(action))
     }
 
     // Ingest e 3 steps, nao 1, especificamente pra Modo Buddy (pause/resume)
@@ -54,13 +65,8 @@ workflow Wiki {
     // `mhl_run_resume` reentra so no step onde parou — nunca refaz a
     // chamada a LLM so porque o usuario demorou pra aprovar.
     step IngestGenerate {
-        // v1: uma fonte por chamada (padrao docs/wiki-llm.md — "ingerir e
-        // revisar uma de cada vez"). Lote/menos supervisao fica pra Fase 6.
+        // Uma fonte por chamada: ingerir e revisar uma de cada vez.
         if (raw_paths.size() != 1) {
-            // `+` nao coage number pra string (achado antigo, reintroduzido
-            // aqui numa refatoracao — ver a mesma classe de bug documentada
-            // no historico do projeto) — interpolacao `${...}` e a forma
-            // segura, nao `+` com um `number` de um dos lados.
             fail("ingest processa uma fonte por vez nesta versao (v1) — recebido ${raw_paths.size()} caminho(s)")
         }
         var source_name = raw_paths[0]
@@ -68,43 +74,43 @@ workflow Wiki {
         if (!fs.exists(abs_path)) fail("fonte nao encontrada em raw/: '" + source_name + "'")
 
         var source_text = RawExtract.text(abs_path)
-        current_artifact = "ingest:" + source_name
+        self.current_artifact = "ingest:" + source_name
 
         var response = Writer.generate(
             prompt: IngestInstruction(
                 schema_conventions: WikiSchema(),
                 source_name: source_name,
-                source_text: source_text
+                source_text: source_text,
+                catalog_content: WikiIndex.catalog(project_id)
             ),
-            schema_file: IngestSchemaFile.get(),
+            schema_file: WikiSchemas.ingest(),
             project_id: project_id,
             artifact: current_artifact
         )
-        tokens_in = response.tokens_in
-        tokens_out = response.tokens_out
+        self.tokens_in = response.tokens_in
+        self.tokens_out = response.tokens_out
         var raw = response.content
-        ingest_data = json.parse(raw)
+        self.ingest_data = json.parse(raw)
         goto IngestGate
     }
 
     step IngestGate {
         if (buddy && !approved) {
             pause(
-                "revise o conteudo extraido de '" + ingest_data.source_title +
-                "' antes de gravar na wiki"
+"revise o conteudo extraido de '${self.ingest_data.source_title}' antes de gravar na wiki"
             )
         }
         goto IngestCommit
     }
 
     step IngestCommit {
-        wiki_result = WikiActions.commit_ingest(project_id, ingest_data)
+        self.wiki_result = WikiActions.commit_ingest(project_id, ingest_data)
         goto Done
     }
 
     step Query {
         if (question.is_empty()) fail("'question' e obrigatorio para action: \"query\"")
-        current_artifact = "query"
+        self.current_artifact = "query"
         var wiki_content = WikiContext.all_pages(project_id)
 
         var response = Writer.generate(
@@ -113,12 +119,12 @@ workflow Wiki {
                 question: question,
                 wiki_content: wiki_content
             ),
-            schema_file: QuerySchemaFile.get(),
+            schema_file: WikiSchemas.query(),
             project_id: project_id,
             artifact: current_artifact
         )
-        tokens_in = response.tokens_in
-        tokens_out = response.tokens_out
+        self.tokens_in = response.tokens_in
+        self.tokens_out = response.tokens_out
         var raw = response.content
         var data = json.parse(raw)
         var answer_body = data.answer_body
@@ -133,7 +139,7 @@ workflow Wiki {
             )
         }
 
-        wiki_result = {
+        self.wiki_result = {
             answer_title: data.answer_title,
             answer_body: answer_body,
             filed_as: filed_as,
@@ -142,7 +148,7 @@ workflow Wiki {
     }
 
     step Lint {
-        current_artifact = "lint"
+        self.current_artifact = "lint"
         var wiki_content = WikiContext.for_lint(project_id)
 
         var response = Writer.generate(
@@ -150,14 +156,14 @@ workflow Wiki {
                 schema_conventions: WikiSchema(),
                 wiki_content: wiki_content
             ),
-            schema_file: LintSchemaFile.get(),
+            schema_file: WikiSchemas.lint(),
             project_id: project_id,
             artifact: current_artifact
         )
-        tokens_in = response.tokens_in
-        tokens_out = response.tokens_out
+        self.tokens_in = response.tokens_in
+        self.tokens_out = response.tokens_out
         var raw = response.content
-        wiki_result = WikiActions.record_lint(project_id, json.parse(raw))
+        self.wiki_result = WikiActions.record_lint(project_id, json.parse(raw))
         goto Done
     }
 
@@ -166,23 +172,17 @@ workflow Wiki {
     // HTML exibido esta sempre atualizado antes de abrir uma pagina, mesmo
     // pra work-items cuja wiki foi ingerida antes desta acao existir.
     step SyncHtml {
-        current_artifact = "sync_html"
+        self.current_artifact = "sync_html"
         WikiActions.sync_html(project_id)
-        wiki_result = {synced: true}
+        self.wiki_result = {synced: true}
         goto Done
     }
 
-    step Done {
-        // ponto de convergencia unico — mantem `reached` enxuto (C7/Fase 1).
-    }
+    step Done { complete() }
 }
 
-// WikiWorkflowSpec — mesmo padrao de work_item.mh :: WorkItemWorkflowSpec:
-// `Name.run(inputs:)` (mhl 1.4.0-beta.7+, MHL-Melhorias.md #13) testando o
-// workflow inteiro, escopado SO aos caminhos de falha rapida que nunca
-// chegam a chamar `Writer.generate` (sem custo de LLM) nem a escrever em
-// disco (`Name.run()` nao isola `fs`/`dir` num sandbox descartavel — ver
-// FASE5-ACHADOS.md e a nota equivalente em work_item.mh).
+// Cobre so caminhos que falham antes de chamar a LLM ou gravar em disco
+// (ver WorkItemWorkflowSpec em work_item.mh).
 test WikiWorkflowSpec {
     describe rejects_an_unknown_action_before_touching_anything {
         var run = Wiki.run(inputs: {project_id: "spec-test-project", action: "bogus"})

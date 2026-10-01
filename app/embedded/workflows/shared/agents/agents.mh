@@ -23,7 +23,7 @@
 
 import { Usage, UsageParser, UsageCost, PromptLog } from "usage.mh"
 import { StructuredOutput } from "structured_output.mh"
-import { WorkflowsRoot } from "../core/workflows_root.mh"
+import { WorkflowsRoot, SchemaFile } from "../core/workflows_root.mh"
 import { Paths } from "../core/paths.mh"
 
 // Backend usado no ambiente alvo. O Devin CLI nao oferece uma flag de
@@ -254,7 +254,7 @@ export tool Writer {
         return {raw: raw, exported: exported}
     }
 
-    generate(prompt: string, schema_file: {content: string, path: string}, project_id: string, artifact: string): {
+    generate(prompt: string, schema_file: SchemaFile, project_id: string, artifact: string): {
         content: string, tokens_in: number, tokens_out: number,
         cache_creation_tokens: number, cache_read_tokens: number,
         cost_usd: number, cost_source: string
@@ -346,7 +346,7 @@ agent MockDevinExportPath {
 }
 
 tool MockWriter {
-    generate(prompt: string, schema_file: {content: string, path: string}, project_id: string, artifact: string): string -> {
+    generate(prompt: string, schema_file: SchemaFile, project_id: string, artifact: string): string -> {
         return MockCodexSchemaPath.run(prompt: prompt, schema: schema_file.path)
     }
 

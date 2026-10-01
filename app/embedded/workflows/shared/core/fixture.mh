@@ -1,0 +1,38 @@
+// Fixture monta um work-item descartavel para testes de workflow. `project`
+// apaga antes o que uma execucao anterior interrompida tenha deixado, entao
+// um teste que falha no meio nao contamina o proximo. `Name.run()` so pode
+// ser chamado direto num describe, por isso nao ha um `with(id, body)`.
+
+import { Paths } from "paths.mh"
+import { DirClear } from "dir_clear.mh"
+
+export tool Fixture {
+    project(project_id: string): string -> {
+        self.drop(project_id)
+        dir.create(Paths.artifacts_dir(project_id))
+        return project_id
+    }
+
+    artifact(project_id: string, relative: string, content: string) -> {
+        var parts = relative.split("/")
+        if (parts.size() > 1) dir.create(Paths.artifact(project_id, parts[0..^1].join("/")))
+        fs.write(Paths.artifact(project_id, relative), content)
+    }
+
+    drop(project_id: string) -> {
+        var root = Paths.root(project_id)
+        DirClear.clear(root)
+        if (dir.exists(root)) dir.delete(root)
+    }
+}
+
+test FixtureSpec {
+    describe project_starts_empty_and_drop_removes_it {
+        var id = Fixture.project("spec-test-fixture")
+        Fixture.artifact(id, "adr/ADR-001-x.html", "<html></html>")
+        Fixture.project(id)
+        is_false(fs.exists(Paths.artifact(id, "adr/ADR-001-x.html")))
+        Fixture.drop(id)
+        is_false(dir.exists(Paths.root(id)))
+    }
+}

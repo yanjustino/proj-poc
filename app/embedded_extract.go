@@ -75,6 +75,15 @@ func ensureVendoredMHL() (string, error) {
 			runtime.GOOS, runtime.GOARCH, runtime.GOOS, runtime.GOARCH, runtime.GOOS, runtime.GOARCH,
 		)
 	}
+	// Um build que embutiu um arquivo vazio (ex.: o binário apagado do
+	// repositório e trocado por um placeholder) só falharia depois, como um
+	// "exec format error" sem pista da causa.
+	if len(vendoredMHLBinary) == 0 {
+		return "", fmt.Errorf(
+			"o mhl embutido neste build está vazio — app/embedded/bin/mhl-%s-%s precisa ser o binário do mhl; restaure-o e recompile",
+			runtime.GOOS, runtime.GOARCH,
+		)
+	}
 	binDir, err := senpaiSubdir(filepath.Join("embedded", "bin"))
 	if err != nil {
 		return "", fmt.Errorf("resolve vendored bin dir: %w", err)

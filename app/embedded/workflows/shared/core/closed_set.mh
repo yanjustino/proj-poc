@@ -1,0 +1,33 @@
+// Closed.parse converte o texto de um input no valor de um enum. Os inputs
+// de workflow continuam `string` porque o runtime nao converte texto em enum
+// na entrada (mhl run, serve mcp) e nao guarda enum em checkpoint. O step
+// converte e repassa o enum a um metodo de tool com parametro tipado: so
+// nessa forma o lint exige que o `match` cubra todos os valores. A mensagem
+// de erro lista os valores a partir do proprio enum.
+
+export tool Closed {
+    parse(error: string, name: string, values: any[]): any -> {
+        var found = values.find((v) -> "${v}" == name)
+        if (found == null) fail("${error}: '${name}' (use ${self.names(values)})")
+        return found
+    }
+
+    names(values: any[]): string -> values.map((v) -> "${v}").join(" | ")
+}
+
+enum ClosedSpecColor { red, green }
+
+test ClosedSpec {
+    describe parses_a_known_name_into_the_enum_value {
+        is_true(Closed.parse("cor desconhecida", "green", [ClosedSpecColor.red, ClosedSpecColor.green]) == ClosedSpecColor.green)
+    }
+
+    describe rejects_an_unknown_name_listing_every_value {
+        try {
+            Closed.parse("cor desconhecida", "blue", [ClosedSpecColor.red, ClosedSpecColor.green])
+            is_true(false)
+        } catch (err) {
+            is_true(err.contains("cor desconhecida: 'blue' (use red | green)"))
+        }
+    }
+}
