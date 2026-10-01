@@ -15,6 +15,7 @@
 import { Paths } from "../core/paths.mh"
 import { Html } from "../core/html.mh"
 import { WikiIndex } from "wiki_index.mh"
+import { WikiAlerts } from "wiki_alerts.mh"
 
 export tool WikiHtmlExport {
     // categories é método (não uma constante de módulo — sem precedente na
@@ -30,18 +31,48 @@ export tool WikiHtmlExport {
     // sync regera wiki/html inteiro a partir do estado atual (o mesmo que
     // WikiIndex usa) — mesma escolha de WikiIndex.render: mais simples e
     // barato que tentar atualizar incrementalmente um HTML já escrito.
+    // Navegação entre páginas (relacionadas, links nos alertas) precisa do
+    // conjunto inteiro, então tudo parte de um catálogo lido uma única vez.
     sync(project_id: string) -> {
         var state = WikiIndex.load(project_id)
+        var catalog = self.build_catalog(project_id, state)
+        for (var item in catalog) {
+            fs.write(Paths.wiki(project_id, "html/" + item.dir + "/" + item.slug + ".html"), self.render_page(item, catalog))
+        }
+        fs.write(Paths.wiki(project_id, "html/index.html"), self.render_index(state, catalog))
+    }
+
+    // Uma entrada por página: corpo sem o bloco de alertas (renderizado à
+    // parte, em destaque) e `haystack` em minúsculas para achar menções.
+    build_catalog(project_id: string, state: any): any[] -> {
+        var catalog = []
         for (var category in self.categories()) {
-            var entries = state.get(category.dir, [])
-            for (var entry in entries) {
+            for (var entry in state.get(category.dir, [])) {
                 var markdown = fs.read(Paths.wiki(project_id, category.dir + "/" + entry.slug + ".md"))
-                var body_html = self.md_to_html(self.strip_leading_title(markdown, entry.title))
-                var page_html = self.render_page(entry.title, category.label, body_html)
-                fs.write(Paths.wiki(project_id, "html/" + category.dir + "/" + entry.slug + ".html"), page_html)
+                var body = self.strip_leading_title(WikiAlerts.strip(markdown), entry.title)
+                catalog += [{
+                    dir: category.dir,
+                    label: category.label,
+                    slug: entry.slug,
+                    title: entry.title,
+                    summary: entry.summary,
+                    natureza: entry?.natureza ?? "",
+                    body_md: body,
+                    alerts: self.alert_lines(markdown),
+                    haystack: WikiAlerts.squash(body).to_lower()
+                }]
             }
         }
-        fs.write(Paths.wiki(project_id, "html/index.html"), self.render_index(state))
+        return catalog
+    }
+
+    alert_lines(markdown: string): string[] -> {
+        var marker = "\n" + WikiAlerts.heading()
+        if (!markdown.contains(marker)) return []
+        return markdown.split(marker)[1].split("\n")
+            .map((line) -> line.trim())
+            .filter((line) -> line.starts_with("- "))
+            .map((line) -> line.substring(2, line.size()))
     }
 
     // --- markdown -> HTML (determinístico, subconjunto estreito) ---
@@ -80,46 +111,179 @@ export tool WikiHtmlExport {
         return Html.list(items)
     }
 
+    // --- navegação ---
+
+    // Páginas que `item` menciona pelo título e páginas que o mencionam —
+    // determinístico (título em minúsculas contido no texto), sem LLM.
+    related(item: any, catalog: any[]): any -> {
+        var mentions = []
+        var cited_by = []
+        var own = item.title.to_lower()
+        for (var other in catalog) {
+            if (other.dir != item.dir || other.slug != item.slug) {
+                var title = other.title.to_lower()
+                if (title.size() >= 4 && item.haystack.contains(title)) mentions += [other]
+                if (own.size() >= 4 && other.haystack.contains(own)) cited_by += [other]
+            }
+        }
+        return {mentions: mentions, cited_by: cited_by}
+    }
+
+    page_href(item: any, prefix: string): string -> prefix + item.dir + "/" + item.slug + ".html"
+
+    link_item(item: any, prefix: string): string -> {
+        var dot = ""
+        if (!item.alerts.is_empty()) dot = "<span class=\"wiki-dot\" title=\"Tem alertas da revisão\"></span>"
+        return "<li><a href=\"" + self.page_href(item, prefix) + "\">" + dot + "<span class=\"wiki-kind\">" +
+            html.escape(item.label) + "</span>" + html.escape(item.title) + "</a></li>"
+    }
+
+    render_related(item: any, catalog: any[]): string -> {
+        var rel = self.related(item, catalog)
+        if (rel.mentions.is_empty() && rel.cited_by.is_empty()) return ""
+        var out = "<section class=\"wiki-related\"><h2>Navegar</h2>"
+        if (!rel.mentions.is_empty()) {
+            out = out + "<h3>Esta página menciona</h3><ul class=\"wiki-links\">" +
+                rel.mentions.map((m) -> self.link_item(m, "../")).join("") + "</ul>"
+        }
+        if (!rel.cited_by.is_empty()) {
+            out = out + "<h3>Citada em</h3><ul class=\"wiki-links\">" +
+                rel.cited_by.map((m) -> self.link_item(m, "../")).join("") + "</ul>"
+        }
+        return out + "</section>"
+    }
+
+    // Referências "sources/slug" dentro de um alerta viram links para a
+    // página (o relatório do lint sempre as cita nesse formato).
+    link_word(word: string, catalog: any[], prefix: string): string -> {
+        var core = word
+        var tail = ""
+        if (core.ends_with(":") || core.ends_with(",") || core.ends_with(".")) {
+            tail = core.substring(core.size() - 1, core.size())
+            core = core.substring(0, core.size() - 1)
+        }
+        if (!core.matches("^(sources|entities|concepts|answers)/[a-z0-9-]+$")) return word
+        var found = catalog.filter((c) -> c.dir + "/" + c.slug == core)
+        if (found.is_empty()) return word
+        return "<a href=\"" + self.page_href(found[0], prefix) + "\">" + html.escape(found[0].title) + "</a>" + tail
+    }
+
+    linkify_refs(text: string, catalog: any[], prefix: string): string ->
+        html.escape(text).split(" ").map((word) -> self.link_word(word, catalog, prefix)).join(" ")
+
+    // Linhas de alerta gravadas por WikiLint: "Contradição com X: ... — trecho:
+    // “...”" / "Possivelmente superado por X: ... — trecho: “...”".
+    render_alert(line: string, catalog: any[]): string -> {
+        var kind = "other"
+        var tag = "Alerta"
+        var text = line
+        if (line.starts_with("Contradição ")) {
+            kind = "contradiction"
+            tag = "Contradição"
+            text = line.substring(tag.size() + 1, line.size())
+        } else if (line.starts_with("Possivelmente superado ")) {
+            kind = "stale"
+            tag = "Possivelmente superado"
+            text = line.substring(tag.size() + 1, line.size())
+        }
+        var parts = text.split(" — trecho: ")
+        var out = "<li class=\"wiki-alert-" + kind + "\"><span class=\"wiki-tag\">" + tag + "</span>" +
+            "<div class=\"wiki-alert-text\">" + self.linkify_refs(parts[0], catalog, "../") + "</div>"
+        if (parts.size() > 1) out = out + "<blockquote>" + html.escape(parts[1]) + "</blockquote>"
+        return out + "</li>"
+    }
+
+    render_alerts(item: any, catalog: any[]): string -> {
+        if (item.alerts.is_empty()) return ""
+        var n = item.alerts.size()
+        var noun = "alertas"
+        if (n == 1) noun = "alerta"
+        return "<aside class=\"wiki-alerts\" role=\"note\"><h2><span class=\"wiki-alert-icon\">!</span>${n} ${noun} da revisão</h2>" +
+            "<p>A verificação da wiki apontou inconsistências neste conteúdo — confira antes de usar como fato.</p>" +
+            "<ul>" + item.alerts.map((line) -> self.render_alert(line, catalog)).join("") + "</ul></aside>"
+    }
+
+    // Em iframe (aba Wiki do app) um link relativo não resolve: o srcdoc não
+    // tem URL. Avisa a janela pai, que abre a página; fora do app (arquivo
+    // aberto no navegador, zip exportado) os links seguem funcionando normal.
+    nav_script(current: string): string -> """
+        <script>
+        (function () {
+          var CURRENT = ${json.stringify(current)};
+          document.addEventListener('click', function (event) {
+            var a = event.target.closest ? event.target.closest('a[href]') : null;
+            if (!a || window.parent === window) return;
+            var href = a.getAttribute('href');
+            if (/^(https?:|mailto:|#)/.test(href)) return;
+            event.preventDefault();
+            var url = new URL(href, 'http://wiki.local/' + CURRENT);
+            window.parent.postMessage({ senpaiWiki: url.pathname.slice(1) }, '*');
+          });
+        })();
+        </script>
+        """
+
     // --- shells HTML (auto-contidos: CSS inline, sem asset externo) ---
 
-    render_page(title: string, category_label: string, body_html: string): string -> {
-        var escaped_title = html.escape(title)
-        var escaped_category = html.escape(category_label)
+    render_page(item: any, catalog: any[]): string -> {
+        var escaped_title = html.escape(item.title)
+        var badges = ""
+        if (!item.natureza.is_empty()) badges = badges + self.natureza_html(item)
+        if (!item.alerts.is_empty()) badges = badges + " <span class=\"wiki-natureza wiki-badge-alert\">${self.alert_count_label(item.alerts.size())}</span>"
+        var body_html = self.md_to_html(item.body_md)
         return """
         <!doctype html>
         <html lang="pt-BR">
         <head>
         <meta charset="utf-8" />
+        <meta name="viewport" content="width=device-width, initial-scale=1" />
         <title>${escaped_title} — Wiki</title>
         <style>${self.page_css()}</style>
         </head>
         <body>
         <div class="wiki-page">
-        <header class="wiki-page-head"><span class="wiki-category">${escaped_category}</span><h1>${escaped_title}</h1></header>
-        <main>${body_html}</main>
+        <nav class="wiki-crumbs"><a href="../index.html">Wiki</a><span>›</span><span>${html.escape(item.label)}</span></nav>
+        <header class="wiki-page-head"><span class="wiki-category">${html.escape(item.label)}</span>${badges}<h1>${escaped_title}</h1></header>
+        ${self.render_alerts(item, catalog)}
+        <main class="wiki-body">${body_html}</main>
+        ${self.render_related(item, catalog)}
         </div>
+        ${self.nav_script(item.dir + "/" + item.slug + ".html")}
         </body>
         </html>
         """
     }
 
-    render_index(state: any): string -> {
+    render_index(state: any, catalog: any[]): string -> {
         var sections = self.categories()
             .filter((category) -> !state.get(category.dir, []).is_empty())
-            .map((category) -> self.render_index_section(category, state.get(category.dir, [])))
+            .map((category) -> self.render_index_section(category, catalog.filter((item) -> item.dir == category.dir)))
             .join("\n")
+        var flagged = catalog.filter((item) -> !item.alerts.is_empty())
+        var banner = ""
+        if (!flagged.is_empty()) {
+            banner = "<aside class=\"wiki-alerts\" role=\"note\"><h2><span class=\"wiki-alert-icon\">!</span>${flagged.size()} página(s) com alertas da revisão</h2><ul class=\"wiki-links\">" +
+                flagged.map((item) -> self.link_item(item, "")).join("") + "</ul></aside>"
+        }
+        var stats = self.categories()
+            .filter((category) -> !state.get(category.dir, []).is_empty())
+            .map((category) -> "<a class=\"wiki-stat\" href=\"#" + category.dir + "\"><strong>${state.get(category.dir, []).size()}</strong><span>" + html.escape(category.label) + "</span></a>")
+            .join("")
         var search_json = json.stringify(self.build_search_entries(state)).replace("</script>", "<\\/script>")
         return """
         <!doctype html>
         <html lang="pt-BR">
         <head>
         <meta charset="utf-8" />
+        <meta name="viewport" content="width=device-width, initial-scale=1" />
         <title>Índice da wiki</title>
         <style>${self.page_css()}</style>
         </head>
         <body>
         <div class="wiki-page">
         <header class="wiki-page-head"><h1>Wiki</h1><p>Navegação e busca local — nenhum servidor necessário.</p></header>
+        <div class="wiki-stats">${stats}</div>
+        ${banner}
         <div class="wiki-search"><input type="text" id="wiki-search-input" placeholder="Buscar na wiki..." autocomplete="off" /></div>
         <ul id="wiki-search-results" class="wiki-index-list" hidden></ul>
         <main id="wiki-static-nav">${sections}</main>
@@ -132,6 +296,12 @@ export tool WikiHtmlExport {
           var staticNav = document.getElementById('wiki-static-nav');
           function renderResults(items) {
             results.innerHTML = '';
+            if (!items.length) {
+              var empty = document.createElement('li');
+              empty.className = 'wiki-empty';
+              empty.textContent = 'Nada encontrado.';
+              results.appendChild(empty);
+            }
             items.forEach(function (item) {
               var li = document.createElement('li');
               var a = document.createElement('a');
@@ -161,6 +331,7 @@ export tool WikiHtmlExport {
           });
         })();
         </script>
+        ${self.nav_script("index.html")}
         </body>
         </html>
         """
@@ -169,9 +340,21 @@ export tool WikiHtmlExport {
     render_index_section(category: {dir: string, label: string}, entries: any[]): string -> {
         var items = entries
             .map((entry) -> "<li><a href=\"" + category.dir + "/" + entry.slug + ".html\"><strong>" +
-                html.escape(entry.title) + self.natureza_html(entry) + "</strong><small>" + html.escape(entry.summary) + "</small></a></li>")
+                html.escape(entry.title) + self.natureza_html(entry) + self.alert_badge(entry) + "</strong><small>" + html.escape(entry.summary) + "</small></a></li>")
             .join("")
-        return "<section class=\"wiki-index-section\"><h2>" + html.escape(category.label) + "</h2><ul class=\"wiki-index-list\">" + items + "</ul></section>"
+        return "<section class=\"wiki-index-section\" id=\"" + category.dir + "\"><h2>" + html.escape(category.label) +
+            " <span class=\"wiki-count\">${entries.size()}</span></h2><ul class=\"wiki-index-list\">" + items + "</ul></section>"
+    }
+
+    alert_count_label(n: number): string -> {
+        if (n == 1) return "1 alerta"
+        return "${n} alertas"
+    }
+
+    alert_badge(entry: any): string -> {
+        var n = (entry?.alerts ?? []).size()
+        if (n == 0) return ""
+        return " <span class=\"wiki-natureza wiki-badge-alert\">" + self.alert_count_label(n) + "</span>"
     }
 
     // natureza (so em "sources") no indice estatico — o mesmo rotulo que
@@ -198,23 +381,64 @@ export tool WikiHtmlExport {
         return entries
     }
 
-    page_css(): string ->
-        "body{margin:0;background:#f6f4ee;color:#1d1d1a;font:15px/1.6 -apple-system,BlinkMacSystemFont,'Segoe UI',sans-serif}" +
-        ".wiki-page{max-width:760px;margin:0 auto;padding:32px 24px 64px}" +
-        ".wiki-page-head{margin-bottom:24px}" +
-        ".wiki-category{display:inline-block;font-size:11px;letter-spacing:.06em;text-transform:uppercase;color:#82806f;margin-bottom:6px}" +
-        "h1{margin:0;font-size:26px}h2{font-size:17px;margin:22px 0 8px}" +
-        "p{margin:0 0 12px}ul{margin:0 0 12px;padding-left:22px}li{margin-bottom:4px}" +
-        ".wiki-search{margin:18px 0}" +
-        "#wiki-search-input{width:100%;box-sizing:border-box;padding:10px 12px;border:1px solid #d8d5ca;border-radius:8px;font-size:14px}" +
-        ".wiki-index-section{margin-bottom:22px}" +
-        ".wiki-index-list{list-style:none;padding:0;margin:0}" +
-        ".wiki-index-list li{margin-bottom:2px}" +
-        ".wiki-index-list a{display:block;padding:9px 10px;border-radius:8px;text-decoration:none;color:inherit}" +
-        ".wiki-index-list a:hover{background:#ece9df}" +
-        ".wiki-index-list strong{display:block;font-size:14px}" +
-        ".wiki-index-list small{display:block;color:#82806f;font-size:12px;margin-top:2px}" +
-        ".wiki-natureza{display:inline-block;font-size:10px;font-weight:400;text-transform:uppercase;letter-spacing:.04em;padding:1px 6px;border-radius:999px;margin-left:6px;background:#ece9df;color:#57544a}"
+    page_css(): string -> """
+        :root{--bg:#fff;--surface:#fff;--ink:#1d1d1a;--muted:#6f6d60;--line:#e1ded2;--accent:#b4372c;--accent-soft:#f6e3e0;--link:#1f5fa8;--warn:#9a5b00;--warn-bg:#fff4dc;--warn-line:#f0cf8a;--bad:#a3261b;--bad-bg:#fdecea;--bad-line:#f1b9b3}
+        :root{color-scheme:light}
+        *{box-sizing:border-box}
+        body{margin:0;background:var(--bg);color:var(--ink);font:15px/1.65 -apple-system,BlinkMacSystemFont,'Segoe UI',sans-serif}
+        a{color:var(--link);text-decoration:none}a:hover{text-decoration:underline}
+        .wiki-page{max-width:800px;margin:0 auto;padding:24px 24px 72px}
+        .wiki-crumbs{display:flex;gap:8px;align-items:center;font-size:12px;color:var(--muted);margin-bottom:18px}
+        .wiki-crumbs a{color:var(--muted)}
+        .wiki-page-head{margin-bottom:20px}
+        .wiki-page-head p{color:var(--muted);margin:4px 0 0}
+        .wiki-category{display:inline-block;font-size:11px;letter-spacing:.07em;text-transform:uppercase;color:var(--accent);font-weight:600;margin-bottom:6px}
+        h1{margin:0;font-size:30px;line-height:1.2;letter-spacing:-.01em}
+        h2{font-size:18px;margin:28px 0 10px;padding-bottom:6px;border-bottom:1px solid var(--line)}
+        h3{font-size:12px;text-transform:uppercase;letter-spacing:.06em;color:var(--muted);margin:16px 0 6px}
+        p{margin:0 0 12px}ul{margin:0 0 12px;padding-left:22px}li{margin-bottom:5px}
+        .wiki-body{background:var(--surface);border:1px solid var(--line);border-radius:12px;padding:6px 24px 14px}
+        .wiki-body h1{display:none}
+        .wiki-body h2:first-child{margin-top:18px}
+        .wiki-alerts{margin:0 0 20px;padding:16px 18px;border:1px solid var(--warn-line);border-left:5px solid var(--warn);background:var(--warn-bg);border-radius:10px}
+        .wiki-alerts h2{display:flex;align-items:center;gap:10px;margin:0 0 6px;padding:0;border:0;font-size:16px;color:var(--warn)}
+        .wiki-alerts>p{margin:0 0 10px;font-size:13px;color:var(--muted)}
+        .wiki-alert-icon{display:inline-grid;place-items:center;width:22px;height:22px;border-radius:50%;background:var(--warn);color:var(--bg);font-size:14px;font-weight:700}
+        .wiki-alerts>ul:not(.wiki-links){list-style:none;padding:0;margin:0}
+        .wiki-alerts>ul:not(.wiki-links)>li{margin:0 0 8px;padding:10px 12px;background:var(--surface);border:1px solid var(--line);border-radius:8px}
+        .wiki-alerts>ul:not(.wiki-links)>li:last-child{margin-bottom:0}
+        .wiki-alert-contradiction{border-left:4px solid var(--bad)!important}
+        .wiki-alert-stale{border-left:4px solid var(--warn)!important}
+        .wiki-tag{display:inline-block;font-size:10px;font-weight:700;letter-spacing:.05em;text-transform:uppercase;padding:2px 8px;border-radius:999px;margin-bottom:4px}
+        .wiki-alert-contradiction .wiki-tag{background:var(--bad-bg);color:var(--bad);border:1px solid var(--bad-line)}
+        .wiki-alert-stale .wiki-tag{background:var(--warn-bg);color:var(--warn);border:1px solid var(--warn-line)}
+        .wiki-alerts blockquote{margin:6px 0 0;padding:4px 10px;border-left:3px solid var(--line);color:var(--muted);font-size:13px;font-style:italic}
+        .wiki-related{margin-top:30px}
+        .wiki-links{list-style:none;padding:0;margin:0;display:flex;flex-wrap:wrap;gap:8px}
+        .wiki-links li{margin:0}
+        .wiki-links a{display:inline-flex;align-items:center;gap:8px;padding:6px 12px;border:1px solid var(--line);border-radius:999px;background:var(--surface);color:var(--ink);font-size:13px}
+        .wiki-links a:hover{border-color:var(--link);text-decoration:none}
+        .wiki-kind{font-size:10px;text-transform:uppercase;letter-spacing:.05em;color:var(--muted)}
+        .wiki-dot{width:8px;height:8px;border-radius:50%;background:var(--warn);display:inline-block}
+        .wiki-stats{display:flex;flex-wrap:wrap;gap:10px;margin:0 0 18px}
+        .wiki-stat{display:flex;flex-direction:column;min-width:96px;padding:10px 14px;border:1px solid var(--line);border-radius:10px;background:var(--surface);color:var(--ink)}
+        .wiki-stat:hover{text-decoration:none;border-color:var(--link)}
+        .wiki-stat strong{font-size:22px;line-height:1.1}.wiki-stat span{font-size:12px;color:var(--muted)}
+        .wiki-search{margin:18px 0}
+        #wiki-search-input{width:100%;padding:11px 14px;border:1px solid var(--line);border-radius:10px;font-size:14px;background:var(--surface);color:var(--ink)}
+        #wiki-search-input:focus{outline:2px solid var(--link);outline-offset:1px}
+        .wiki-index-section{margin-bottom:26px}
+        .wiki-count{font-size:12px;font-weight:400;color:var(--muted);margin-left:6px}
+        .wiki-index-list{list-style:none;padding:0;margin:0;display:grid;gap:8px}
+        .wiki-index-list li{margin:0}
+        .wiki-index-list a{display:block;padding:11px 14px;border:1px solid var(--line);border-radius:10px;background:var(--surface);color:inherit}
+        .wiki-index-list a:hover{border-color:var(--link);text-decoration:none}
+        .wiki-index-list strong{display:block;font-size:14px}
+        .wiki-index-list small{display:block;color:var(--muted);font-size:12px;margin-top:2px}
+        .wiki-empty{color:var(--muted);padding:10px 2px}
+        .wiki-natureza{display:inline-block;font-size:10px;font-weight:600;text-transform:uppercase;letter-spacing:.04em;padding:1px 8px;border-radius:999px;margin-left:6px;background:var(--line);color:var(--muted);vertical-align:middle}
+        .wiki-badge-alert{background:var(--warn-bg);color:var(--warn);border:1px solid var(--warn-line)}
+        """
 }
 
 test WikiHtmlExportSpec {
@@ -248,7 +472,7 @@ test WikiHtmlExportSpec {
             {dir: "sources", label: "Fontes"},
             [{slug: "ata", title: "Ata", summary: "resumo da ata"}]
         )
-        is_true(section.contains("<h2>Fontes</h2>"))
+        is_true(section.contains("<h2>Fontes <span class=\"wiki-count\">1</span></h2>"))
         is_true(section.contains("href=\"sources/ata.html\""))
         is_true(section.contains("Ata"))
     }
@@ -275,5 +499,53 @@ test WikiHtmlExportSpec {
         are_equal(entries.size(), 2)
         are_equal(entries[0].category, "Fontes")
         are_equal(entries[1].category, "Entidades")
+    }
+
+    describe render_index_section_flags_entries_that_have_alerts {
+        var section = WikiHtmlExport.render_index_section(
+            {dir: "entities", label: "Entidades"},
+            [{slug: "a", title: "A", summary: "s", alerts: ["x", "y"]}]
+        )
+        is_true(section.contains("2 alertas"))
+        are_equal(WikiHtmlExport.alert_count_label(1), "1 alerta")
+    }
+
+    describe alert_lines_reads_the_bullets_of_the_trailing_alert_block {
+        are_equal(
+            WikiHtmlExport.alert_lines("# A\n\n- fato\n\n## Alertas da revisão\n\n- um\n- dois\n"),
+            ["um", "dois"]
+        )
+        are_equal(WikiHtmlExport.alert_lines("# A\n\n- fato\n"), [])
+    }
+
+    describe link_word_links_known_page_refs_and_keeps_trailing_punctuation {
+        var catalog = [{dir: "sources", slug: "ata", title: "Ata <1>"}]
+        are_equal(
+            WikiHtmlExport.link_word("sources/ata:", catalog, "../"),
+            "<a href=\"../sources/ata.html\">Ata &lt;1&gt;</a>:"
+        )
+        are_equal(WikiHtmlExport.link_word("sources/outra", catalog, "../"), "sources/outra")
+        are_equal(WikiHtmlExport.link_word("texto", catalog, "../"), "texto")
+    }
+
+    describe render_alert_styles_each_kind_and_splits_the_quote {
+        var catalog = [{dir: "sources", slug: "b", title: "B"}]
+        var out = WikiHtmlExport.render_alert("Contradição com sources/b: mobile vs webapp — trecho: “quero mobile”", catalog)
+        is_true(out.contains("wiki-alert-contradiction"))
+        is_true(out.contains("<a href=\"../sources/b.html\">B</a>"))
+        is_true(out.contains("<blockquote>"))
+        var stale = WikiHtmlExport.render_alert("Possivelmente superado por sources/b: virou webapp", catalog)
+        is_true(stale.contains("wiki-alert-stale"))
+        is_false(stale.contains("<blockquote>"))
+    }
+
+    describe related_finds_mentions_in_both_directions {
+        var a = {dir: "entities", slug: "plataforma", title: "Plataforma de Motoristas", haystack: "usa o aplicativo mobile", alerts: []}
+        var b = {dir: "concepts", slug: "aplicativo-mobile", title: "Aplicativo mobile", haystack: "da plataforma de motoristas", alerts: []}
+        var c = {dir: "concepts", slug: "x", title: "Outro", haystack: "nada", alerts: []}
+        var rel = WikiHtmlExport.related(a, [a, b, c])
+        are_equal(rel.mentions.size(), 1)
+        are_equal(rel.mentions[0].slug, "aplicativo-mobile")
+        are_equal(rel.cited_by.size(), 1)
     }
 }

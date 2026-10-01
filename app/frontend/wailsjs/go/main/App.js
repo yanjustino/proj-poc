@@ -6,6 +6,10 @@ export function AddRawFile(arg1, arg2) {
   return window['go']['main']['App']['AddRawFile'](arg1, arg2);
 }
 
+export function AddRawText(arg1, arg2, arg3) {
+  return window['go']['main']['App']['AddRawText'](arg1, arg2, arg3);
+}
+
 export function AppVersion() {
   return window['go']['main']['App']['AppVersion']();
 }

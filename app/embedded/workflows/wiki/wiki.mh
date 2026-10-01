@@ -143,7 +143,7 @@ workflow Wiki {
 
     step Lint {
         current_artifact = "lint"
-        var wiki_content = WikiContext.all_pages(project_id)
+        var wiki_content = WikiContext.for_lint(project_id)
 
         var response = Writer.generate(
             prompt: LintInstruction(
@@ -157,9 +157,7 @@ workflow Wiki {
         tokens_in = response.tokens_in
         tokens_out = response.tokens_out
         var raw = response.content
-        wiki_result = json.parse(raw)
-
-        WikiActions.record_lint(project_id)
+        wiki_result = WikiActions.record_lint(project_id, json.parse(raw))
         goto Done
     }
 

@@ -4,6 +4,7 @@
 import { Slug } from "../shared/core/slug.mh"
 import { WikiIndex } from "../shared/wiki/wiki_index.mh"
 import { WikiPages, WikiLog } from "../shared/wiki/wiki_pages.mh"
+import { WikiLint } from "../shared/wiki/wiki_lint.mh"
 import { WikiHtmlExport } from "../shared/wiki/wiki_html_export.mh"
 
 export tool WikiActions {
@@ -65,9 +66,18 @@ export tool WikiActions {
         return slug
     }
 
-    // Sem WikiHtmlExport.sync aqui: lint so le e reporta, nunca chama
-    // WikiIndex.upsert_* — nao ha estado novo pra espelhar em wiki/html/.
-    record_lint(project_id: string) -> self.log(project_id, "lint", "relatorio gerado")
+    // Verifica o relatorio da LLM, grava os alertas nas paginas afetadas e
+    // wiki/lint.md, e regera o HTML (os alertas ficam visiveis la tambem).
+    record_lint(project_id: string, report: any): any -> {
+        var applied = WikiLint.apply(project_id, report)
+        self.log(
+            project_id,
+            "lint",
+            "${applied.contradictions.size()} contradicao(oes), ${applied.stale_claims.size()} alegacao(oes) superada(s), ${applied.discarded} descartado(s)"
+        )
+        WikiHtmlExport.sync(project_id)
+        return applied
+    }
 
     // sync_html regera wiki/html/ sob demanda, sem depender de um novo
     // ingest/query/file_answer — a aba Wiki chama isso ao abrir, pra cobrir

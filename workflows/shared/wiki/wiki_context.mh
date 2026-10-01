@@ -11,6 +11,7 @@
 
 import { Paths } from "../core/paths.mh"
 import { DirText } from "../core/dir_text.mh"
+import { WikiAlerts } from "wiki_alerts.mh"
 
 export tool WikiContext {
     all_pages(project_id: string): string -> {
@@ -22,6 +23,11 @@ export tool WikiContext {
         content = content + DirText.concat_all(wiki_base + "/answers", wiki_base)
         return content
     }
+
+    // Mesmo conteúdo, sem os blocos "Alertas da revisão" — o lint não pode
+    // reler (e re-reportar) os próprios achados da verificação anterior.
+    for_lint(project_id: string): string ->
+        self.all_pages(project_id).split("\n\n---\n\n# ").map((section) -> WikiAlerts.strip(section)).join("\n\n---\n\n# ")
 
     read_file_if_exists(path: string): string -> {
         if (!fs.exists(path)) return "(vazio)"

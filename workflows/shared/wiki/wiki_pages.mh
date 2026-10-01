@@ -13,6 +13,7 @@
 import { Paths } from "../core/paths.mh"
 import { Slug } from "../core/slug.mh"
 import { Markdown } from "../core/markdown.mh"
+import { WikiAlerts } from "wiki_alerts.mh"
 
 export tool WikiPages {
     // natureza (ingest.schema.json) entra como uma linha logo apos o titulo,
@@ -44,6 +45,8 @@ export tool WikiPages {
         var slug = Slug.from_title(title)
         var path = Paths.wiki(project_id, dir + "/" + slug + ".md")
         if (!fs.exists(path)) fs.write(path, "# " + title + "\n\n")
+        // Fato novo pode resolver um alerta da revisão — ver WikiAlerts.
+        fs.write(path, WikiAlerts.strip(fs.read(path)))
         var block = "## Fatos (" + time.format(time.now(), "yyyy-MM-dd") + ")\n\n" + Markdown.list(facts) + "\n\n"
         fs.append(path, block)
     }

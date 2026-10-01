@@ -1489,6 +1489,56 @@ func (a *App) AddRawFile(projectID string, sourcePath string) (string, error) {
 	return filepath.Base(dest), nil
 }
 
+// AddRawText registers a manually typed/pasted source: it writes content as
+// projects/<projectID>/raw/<title>.md (de-duplicated like AddRawFile) and
+// returns the resulting basename, ready for Wiki's `raw_paths`. Whether it
+// is also ingested is the caller's choice — this only registers it. Always
+// .md so RawExtract's plain-text branch reads it with no extra parser.
+func (a *App) AddRawText(projectID string, title string, content string) (string, error) {
+	if strings.TrimSpace(content) == "" {
+		return "", fmt.Errorf("conteudo da fonte e obrigatorio")
+	}
+	stem := sanitizeSourceTitle(title)
+	if stem == "" {
+		return "", fmt.Errorf("titulo da fonte e obrigatorio")
+	}
+	rawDir, err := a.projectRootDir(projectID, "raw", []string{"raw"})
+	if err != nil {
+		return "", err
+	}
+	if err := os.MkdirAll(rawDir, 0o755); err != nil {
+		return "", fmt.Errorf("create raw dir: %w", err)
+	}
+	dest := uniqueDestination(rawDir, stem+".md")
+	out, err := os.OpenFile(dest, os.O_WRONLY|os.O_CREATE|os.O_EXCL, 0o644)
+	if err != nil {
+		return "", fmt.Errorf("create destination file: %w", err)
+	}
+	defer out.Close()
+	if _, err := out.WriteString(content); err != nil {
+		return "", fmt.Errorf("write raw text: %w", err)
+	}
+	return filepath.Base(dest), nil
+}
+
+// sanitizeSourceTitle turns a free-form title into a safe filename stem:
+// path separators, control and reserved characters become spaces, runs of
+// whitespace collapse, and leading dots are dropped (raw/ treats dotfiles
+// as bookkeeping and hides them). Empty result means an unusable title.
+func sanitizeSourceTitle(title string) string {
+	mapped := strings.Map(func(r rune) rune {
+		if r < 0x20 || r == 0x7f || strings.ContainsRune(`/\:*?"<>|`, r) {
+			return ' '
+		}
+		return r
+	}, title)
+	stem := strings.TrimLeft(strings.Join(strings.Fields(mapped), " "), ".")
+	if len([]rune(stem)) > 100 {
+		stem = strings.TrimSpace(string([]rune(stem)[:100]))
+	}
+	return stem
+}
+
 // uniqueDestination returns dir/name, or dir/name (2), (3), ... the first of
 // those that doesn't already exist — never overwrites a previously uploaded
 // source with the same filename.

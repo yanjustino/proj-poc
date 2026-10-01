@@ -112,6 +112,7 @@ export tool WorkItemActions {
             artifact: line.value.artifact,
             feature_id: line.value?.feature_id ?? "",
             feedback: line.value.feedback,
+            origem: line.value?.origem ?? "pedido",
             at: line.ts,
         })
         return entries.sort_by((entry) -> entry.at)
@@ -569,6 +570,15 @@ test WorkItemActionsSpec {
         are_equal(result[0].feature_id, "FT001")
         are_equal(result[1].artifact, "adr")
         are_equal(result[1].feature_id, "")
+    }
+
+    describe format_changes_log_marks_manual_edits_and_defaults_to_pedido {
+        var result = WorkItemActions.format_changes_log([
+            {value: {artifact: "brief", feedback: "Edição manual", origem: "edicao_manual"}, ts: "2026-01-01T11:00:00Z"},
+            {value: {artifact: "adr", feedback: "mude EKS para ECS"}, ts: "2026-01-01T12:00:00Z"}
+        ])
+        are_equal(result[0].origem, "edicao_manual")
+        are_equal(result[1].origem, "pedido")
     }
 
     describe format_changes_log_of_empty_lines_is_empty {

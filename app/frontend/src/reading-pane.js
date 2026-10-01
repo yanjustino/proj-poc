@@ -243,7 +243,7 @@ export function buildDocFrame(rawHtml, { mermaid, inlineMermaid, autoHeight, all
 // "ver fonte" toggle. `mermaid` inlines the bundled mermaid.min.js in place
 // of the artifact's asset-relative <script> (see mermaid-inline.js) so a
 // diagram renders inside the app without depending on any file on disk.
-export function showHtmlDoc(title, rawHtml, { mermaid, inlineMermaid, allowScripts } = {}) {
+export function showHtmlDoc(title, rawHtml, { mermaid, inlineMermaid, allowScripts, onEdit } = {}) {
   setHeader(title, 'HTML');
   // A standalone file opened by an external browser process can't resolve
   // the Blob URL buildDocFrame's own inlineMermaid produces below (scoped to
@@ -266,7 +266,9 @@ export function showHtmlDoc(title, rawHtml, { mermaid, inlineMermaid, allowScrip
     return showingSource ? `${icon('eye', 14)} Ver preview` : `${icon('code', 14)} Ver fonte`;
   }
 
-  els.tools.innerHTML = `<button class="button tertiary small" data-rp-toggle-source>${toggleLabel()}</button>`;
+  // onEdit: artefatos editaveis ganham o lapis ao lado de "ver fonte".
+  els.tools.innerHTML = `${onEdit ? `<button class="button tertiary small" data-rp-edit title="Editar este artefato">${icon('edit', 14)} Editar</button>` : ''}<button class="button tertiary small" data-rp-toggle-source>${toggleLabel()}</button>`;
+  if (onEdit) els.tools.querySelector('[data-rp-edit]').addEventListener('click', onEdit);
   els.tools.querySelector('[data-rp-toggle-source]').addEventListener('click', (event) => {
     showingSource = !showingSource;
     event.currentTarget.innerHTML = toggleLabel();

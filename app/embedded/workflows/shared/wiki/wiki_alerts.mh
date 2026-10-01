@@ -1,0 +1,48 @@
+// tool WikiAlerts — o bloco "Alertas da revisão" que o lint grava no FIM de
+// uma página da wiki (contradições e alegações superadas apontadas pela
+// verificação). Fica sempre por último, então "tudo antes do cabeçalho" é a
+// página sem alertas — sem parser de markdown. O lint nunca vê o próprio
+// bloco (WikiContext.for_lint), e um novo ingest que toca a página o remove
+// antes de anexar fatos (WikiPages.upsert_fact_page): o fato novo pode ter
+// resolvido o alerta, e a próxima verificação o recria se ainda valer.
+
+export tool WikiAlerts {
+    heading(): string -> "## Alertas da revisão"
+
+    strip(page: string): string -> {
+        var marker = "\n" + self.heading()
+        if (!page.contains(marker)) return page
+        return page.split(marker)[0].trim() + "\n\n"
+    }
+
+    block(lines: string[]): string ->
+        self.heading() + "\n\n" + lines.map((line) -> "- " + line).join("\n") + "\n"
+
+    // Colapsa qualquer espaçamento — a LLM cita trechos reformatando quebras
+    // de linha, e a verificação de citação não pode falhar por isso.
+    squash(text: string): string ->
+        text.replace("\n", " ").replace("\t", " ").split(" ").filter((part) -> !part.is_empty()).join(" ")
+}
+
+test WikiAlertsSpec {
+    describe strip_removes_the_trailing_alert_block {
+        var page = "# Plataforma\n\n## Fatos (2026-01-01)\n\n- deve ser mobile\n\n## Alertas da revisão\n\n- Possivelmente superado\n"
+        are_equal(WikiAlerts.strip(page), "# Plataforma\n\n## Fatos (2026-01-01)\n\n- deve ser mobile\n\n")
+    }
+
+    describe strip_also_handles_a_page_that_ends_with_a_single_newline {
+        are_equal(WikiAlerts.strip("# A\n\ntexto\n## Alertas da revisão\n\n- x\n"), "# A\n\ntexto\n\n")
+    }
+
+    describe strip_leaves_a_page_without_alerts_untouched {
+        are_equal(WikiAlerts.strip("# A\n\n- x\n\n"), "# A\n\n- x\n\n")
+    }
+
+    describe block_renders_one_bullet_per_line {
+        are_equal(WikiAlerts.block(["a", "b"]), "## Alertas da revisão\n\n- a\n- b\n")
+    }
+
+    describe squash_collapses_whitespace {
+        are_equal(WikiAlerts.squash("a  b\n c\t d"), "a b c d")
+    }
+}

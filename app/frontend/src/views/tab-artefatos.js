@@ -1,5 +1,6 @@
 import {
   artifactPreview,
+  workItemChangesLog,
   exportProject,
   exportProjectFile,
   exportHandoff,
@@ -20,6 +21,7 @@ import { beginCustom, buildDocFrame, showHtmlDoc, showEmpty, showAction, showLoa
 import { setActiveRun, getActiveRun, clearActiveRun } from '../active-runs.js';
 import { dotClass } from '../status.js';
 import { icon } from '../icons.js';
+import { isEditable, isEditorOpen, mountArtifactEditor } from '../artifact-editor.js';
 import { approvalRecoveryArgs, waitForRecoveryTerminal } from '../checkpoint-recovery.js';
 import { enqueueLlmRun, llmJob, cancelQueuedLlmJob, subscribeLlmJobs } from '../llm-queue.js';
 import { getAutoReview } from '../preferences.js';
@@ -307,6 +309,10 @@ export async function renderArtefatosTab(container, project, { onChanged }) {
   // the exact same function computeStaleness() uses, instead of a second
   // implementation that could quietly disagree with it.
   let lastByName = {};
+  // artefato -> quantas edicoes manuais (ArtifactSave) ja constam em
+  // changes.jsonl. Regenerar um artefato editado reaplica essas edicoes como
+  // instrucoes, entao a tela avisa antes.
+  let manualEdits = new Map();
   // featureClassifications: folder name (Discovery, e.g. "FT001-checkout")
   // or the fixed key 'feature' (Delivery's single "final" doc, mode ===
   // 'feature') -> {tipoItem, subtipoEnabler} — populated by
@@ -776,6 +782,15 @@ export async function renderArtefatosTab(container, project, { onChanged }) {
       }
     }
     staleness = computeStaleness(sequence, doneNames, byName);
+    try {
+      const log = await workItemChangesLog(project.id);
+      manualEdits = new Map();
+      for (const entry of log) {
+        if (entry.origem === 'edicao_manual') manualEdits.set(entry.artifact, (manualEdits.get(entry.artifact) ?? 0) + 1);
+      }
+    } catch {
+      // Sem o historico a tela so deixa de avisar; nada mais depende disto.
+    }
     // Fire-and-forget, deliberately not awaited by refreshDoneState() itself
     // — see loadFeatureClassifications' own comment for why this needs its
     // own reads instead of piggybacking on the tree above.
@@ -1350,6 +1365,19 @@ export async function renderArtefatosTab(container, project, { onChanged }) {
         const row = rowsToRender().find((r) => r.key === button.dataset.update);
         const target = row && updateTargetFor(row);
         if (!target) return;
+        // Atualizar regenera com um clique; se o alvo tem edicoes manuais, a
+        // primeira vez so pede confirmacao (sem dialogo: o proprio botao muda).
+        if (manualEdits.has(target.entry.artifact) && button.dataset.confirming !== 'true') {
+          button.dataset.confirming = 'true';
+          button.title = manualEditNoteFor(target.entry.artifact);
+          button.innerHTML = `${icon('alertCircle', 12)} Confirmar: reaplica edições manuais`;
+          setTimeout(() => {
+            if (!button.isConnected) return;
+            delete button.dataset.confirming;
+            button.innerHTML = `${icon('refreshCw', 12)} Atualizar`;
+          }, 5000);
+          return;
+        }
         selectedKey = target.key;
         generate(target);
       });
@@ -1384,12 +1412,39 @@ export async function renderArtefatosTab(container, project, { onChanged }) {
     return rowsToRender().find((r) => r.key === selectedKey) || null;
   }
 
+  // openEditor troca o painel de leitura pelo editor guiado. Ao fechar (salvo
+  // ou cancelado) o painel volta a ser desenhado pelo fluxo normal; salvar
+  // antes recarrega o estado em disco, e e isso que marca os dependentes como
+  // "Desatualizado".
+  function editorKey(row) {
+    return `${project.id}:${row.entry.artifact}`;
+  }
+  function openEditor(row, artifact, original) {
+    const body = beginCustom(row.label);
+    mountArtifactEditor(body, {
+      projectId: project.id,
+      artifact,
+      draftKey: editorKey(row),
+      original,
+      onSaved: async () => {
+        await refreshDoneState();
+        if (active) renderList();
+      },
+      onClose: () => {
+        if (active) renderDetail();
+      },
+    });
+  }
+
   async function renderDetail() {
     const row = currentRow();
     if (!row) {
       showEmpty('Nenhum artefato disponível.');
       return;
     }
+    // Atualizacoes de runs redesenham o painel varias vezes por segundo; nao
+    // podem apagar um editor aberto no meio de uma edicao.
+    if (isEditorOpen(editorKey(row))) return;
 
     const tracker = trackers.get(row.key);
     if (tracker && tracker.status && !['completed', 'failed', 'canceled'].includes(tracker.status.state)) {
@@ -1686,6 +1741,12 @@ export async function renderArtefatosTab(container, project, { onChanged }) {
   // silently reattach old, mismatched histórias under a new feature that
   // lands on the same id — a correctness concern, not just staleness), not
   // part of the generic blanket-note problem this function otherwise fixes.
+  function manualEditNoteFor(artifact) {
+    const count = manualEdits.get(artifact) ?? 0;
+    if (count === 0) return '';
+    return `${labelFor(artifact)} tem ${count === 1 ? 'uma edição manual' : `${count} edições manuais`}. Ao regenerar, elas são enviadas à LLM como instruções e devem ser mantidas, mas o restante do texto é gerado de novo.`;
+  }
+
   function downstreamWarningFor(artifact) {
     const downstream = downstreamOf(artifact);
     const labels = downstream.filter((name) => doneNames.has(name) && staleness.get(name)?.stale).map(labelFor);
@@ -1830,7 +1891,20 @@ export async function renderArtefatosTab(container, project, { onChanged }) {
       beginCustom(row.label).innerHTML = `<p class="doc-empty">Erro ao abrir artefato: ${escapeHtml(String(err))}</p>`;
       return;
     }
-    showHtmlDoc(row.label, html, { mermaid: hasMermaidDiagram(html), inlineMermaid });
+    // Edicao guiada: so artefatos de documento unico, e so quando o JSON
+    // semantico existe ao lado do HTML (artefatos antigos, gerados antes do
+    // ArtifactData, ficam sem o botao em vez de abrir um formulario vazio).
+    const editableArtifact = row.entry.artifact;
+    let onEdit;
+    if (isEditable(editableArtifact) && !row.groupKey && !row.historiasRow && relativePath === `${editableArtifact}.html`) {
+      try {
+        const original = JSON.parse(await readProjectFile(project.id, 'artifacts', `${editableArtifact}.json`));
+        onEdit = () => openEditor(row, editableArtifact, original);
+      } catch {
+        onEdit = undefined;
+      }
+    }
+    showHtmlDoc(row.label, html, { mermaid: hasMermaidDiagram(html), inlineMermaid, onEdit });
     let footer = null;
     if (row.historiasRow) {
       // One história out of a feature's batch — same batch-scope caveat as
@@ -1841,7 +1915,7 @@ export async function renderArtefatosTab(container, project, { onChanged }) {
         note: `Isto regenera todas as histórias de ${row.historiasRow.featureId}, não só esta.`,
       });
     } else if (canRequestChanges(row)) {
-      footer = buildRequestChangesComposer(row, { note: downstreamWarningFor(row.key) });
+      footer = buildRequestChangesComposer(row, { note: [manualEditNoteFor(row.key), downstreamWarningFor(row.key)].filter(Boolean).join(' ') });
     } else if (row.groupKey) {
       // One item out of a collection (an ADR, a diagram, a feature, a
       // história) — the composer still shows here (real gap this closes:

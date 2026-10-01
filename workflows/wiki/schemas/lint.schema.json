@@ -5,23 +5,60 @@
   "properties": {
     "contradictions": {
       "type": "array",
-      "items": { "type": "string" },
-      "description": "Pares de páginas que se contradizem, com a contradição explicada."
+      "description": "Contradições entre páginas. Cada uma exige evidência de pelo menos duas páginas diferentes.",
+      "items": {
+        "type": "object",
+        "additionalProperties": false,
+        "required": ["description", "evidence"],
+        "properties": {
+          "description": { "type": "string", "description": "A contradição explicada em uma frase." },
+          "evidence": {
+            "type": "array",
+            "items": {
+              "type": "object",
+              "additionalProperties": false,
+              "required": ["page", "quote"],
+              "properties": {
+                "page": { "type": "string", "description": "Referência da página como no cabeçalho dela, ex.: sources/aplicativo-mobile-para-motoristas ou entities/plataforma-de-motoristas." },
+                "quote": { "type": "string", "description": "Trecho COPIADO LITERALMENTE da página, sem parafrasear." }
+              }
+            }
+          }
+        }
+      }
     },
     "stale_claims": {
       "type": "array",
-      "items": { "type": "string" },
-      "description": "Alegações que uma fonte mais nova provavelmente já superou."
+      "description": "Alegações que uma fonte mais nova provavelmente já superou.",
+      "items": {
+        "type": "object",
+        "additionalProperties": false,
+        "required": ["page", "quote", "superseded_by", "description"],
+        "properties": {
+          "page": { "type": "string", "description": "Página que contém a alegação possivelmente obsoleta." },
+          "quote": { "type": "string", "description": "Trecho COPIADO LITERALMENTE dessa página com a alegação." },
+          "superseded_by": { "type": "string", "description": "Página (normalmente uma fonte) que traz o fato mais novo." },
+          "description": { "type": "string", "description": "Por que a alegação provavelmente foi superada." }
+        }
+      }
     },
     "orphan_pages": {
       "type": "array",
       "items": { "type": "string" },
-      "description": "Páginas que parecem isoladas do resto da wiki (sem relação clara com outras páginas)."
+      "description": "Referências de páginas isoladas do resto da wiki (sem relação clara com outras páginas)."
     },
     "missing_concepts": {
       "type": "array",
-      "items": { "type": "string" },
-      "description": "Conceitos citados repetidamente no texto das páginas mas que ainda não têm página própria."
+      "description": "Conceitos citados repetidamente no texto das páginas mas que ainda não têm página própria.",
+      "items": {
+        "type": "object",
+        "additionalProperties": false,
+        "required": ["title", "description"],
+        "properties": {
+          "title": { "type": "string", "description": "Nome canônico curto do conceito." },
+          "description": { "type": "string", "description": "Onde aparece e por que merece página própria." }
+        }
+      }
     },
     "notes": {
       "type": "string",

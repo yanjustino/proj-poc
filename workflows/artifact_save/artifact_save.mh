@@ -1,0 +1,150 @@
+// Grava a edicao manual de um artefato de documento unico (brief, atributos,
+// requisitos). O editor do app devolve o JSON semantico ja alterado; aqui o
+// HTML e re-renderizado pelos mesmos templates dos *Commit de Discovery/
+// Delivery, entao JSON e HTML nunca divergem. Ordem de escrita identica a
+// ArtifactData: JSON primeiro, HTML por ultimo (o HTML e o marcador de
+// disponibilidade que Context usa).
+//
+// O editor so altera valores de texto e adiciona/remove itens de listas; a
+// estrutura (chaves de topo) precisa ser exatamente a do arquivo atual, o que
+// impede um cliente de gravar um JSON que os templates nao saberiam renderizar.
+
+import { Paths } from "../shared/core/paths.mh"
+import { ArtifactData } from "../shared/artifacts/artifact_data.mh"
+import { ArtifactBody } from "../shared/artifacts/artifact_body.mh"
+import { PageShell } from "../shared/artifacts/page_shell.mh"
+import { ChangesLog } from "../shared/artifacts/changes_log.mh"
+
+tool ArtifactEdit {
+    title_for(artifact: string): string -> match artifact {
+        "brief"      -> "Brief"
+        "atributos"  -> "Atributos de Qualidade"
+        "requisitos" -> "Requisitos"
+        _            -> fail("artefato nao editavel: '" + artifact + "' (use brief | atributos | requisitos)")
+    }
+
+    // Mesmas chaves de topo, sem faltar nem sobrar nenhuma.
+    check_shape(current: any, edited: any): bool -> {
+        var current_keys = current.keys()
+        var edited_keys = edited.keys()
+        if (current_keys.size() != edited_keys.size()) return false
+        for (var key in current_keys) {
+            if (!edited_keys.contains(key)) return false
+        }
+        return true
+    }
+
+    // Diretiva gravada em changes.jsonl. Toda geracao refaz o artefato do zero
+    // a partir dos predecessores e so enxerga estas diretivas (ChangesBlock),
+    // nunca o conteudo anterior; por isso o texto editado viaja inteiro aqui.
+    // Assim uma regeneracao posterior reaplica a edicao em vez de descarta-la.
+    directive(sections: {titulo: string, conteudo: string}[]): string -> {
+        var body = ""
+        for (var section in sections) {
+            body = body + "\n### " + section.titulo + "\n" + section.conteudo
+        }
+        return "Edição manual feita pelo usuário. Mantenha o conteúdo abaixo exatamente como está; ele prevalece sobre o que seria gerado para estas seções:" + body
+    }
+
+    render(artifact: string, data: any): string -> match artifact {
+        "brief"      -> ArtifactBody.brief(data)
+        "atributos"  -> ArtifactBody.atributos(data)
+        "requisitos" -> ArtifactBody.requisitos(data)
+        _            -> fail("artefato nao editavel: '" + artifact + "'")
+    }
+}
+
+workflow ArtifactSave {
+    description: "Grava a edicao manual de um artefato de documento unico (brief | atributos | requisitos): JSON e HTML re-renderizado."
+
+    input project_id: string
+    input artifact: string // brief | atributos | requisitos
+    input data: any
+    input sections: any = [] // [{titulo, conteudo}] das secoes alteradas, montado pelo editor
+
+    var saved_path = ""
+
+    output: {
+        path: saved_path,
+    }
+
+    step Save {
+        var title = ArtifactEdit.title_for(artifact)
+        var html_relative = artifact + ".html"
+        var html_path = Paths.artifact(project_id, html_relative)
+        var json_path = Paths.artifact(project_id, ArtifactData.json_relative(html_relative))
+
+        if (!fs.exists(html_path) || !fs.exists(json_path)) {
+            fail("'" + artifact + "' ainda nao foi gerado neste work-item")
+        }
+        if (!ArtifactEdit.check_shape(json.parse(fs.read(json_path)), data)) {
+            fail("estrutura do '" + artifact + "' diferente da original — edicao recusada")
+        }
+
+        var rendered = PageShell(
+            title: title,
+            body: ArtifactEdit.render(artifact, data),
+            meta: "editado em " + time.format(time.now(), "yyyy-MM-dd HH:mm") + " · artifacts/" + html_relative
+        )
+        ArtifactData.write(project_id, html_relative, data)
+        fs.write(html_path, rendered)
+        saved_path = html_relative
+        if (!sections.is_empty()) {
+            ChangesLog.append({
+                artifact: artifact,
+                feature_id: "",
+                origem: "edicao_manual",
+                secoes: sections.map((section) -> section.titulo),
+                feedback: ArtifactEdit.directive(sections)
+            })
+        }
+        goto Done
+    }
+
+    step Done {
+    }
+}
+
+test ArtifactEditSpec {
+    describe accepts_the_same_top_level_keys_in_any_order {
+        is_true(ArtifactEdit.check_shape({a: 1, b: 2}, {b: "x", a: []}))
+    }
+
+    describe rejects_missing_or_extra_keys {
+        is_false(ArtifactEdit.check_shape({a: 1, b: 2}, {a: 1}))
+        is_false(ArtifactEdit.check_shape({a: 1}, {a: 1, c: 3}))
+        is_false(ArtifactEdit.check_shape({a: 1, b: 2}, {a: 1, c: 3}))
+    }
+}
+
+test ArtifactEditDirectiveSpec {
+    describe directive_carries_each_edited_section_verbatim {
+        var out = ArtifactEdit.directive([
+            {titulo: "Resumo executivo", conteudo: "Texto novo"},
+            {titulo: "Objetivos", conteudo: "- objetivo: A"}
+        ])
+        is_true(out.starts_with("Edição manual feita pelo usuário"))
+        is_true(out.contains("### Resumo executivo\nTexto novo"))
+        is_true(out.contains("### Objetivos\n- objetivo: A"))
+    }
+}
+
+test ArtifactSaveSpec {
+    describe rejects_a_non_editable_artifact_before_touching_disk {
+        var run = ArtifactSave.run(inputs: {project_id: "spec-nao-existe", artifact: "adr", data: {}})
+        is_false(run.ok)
+        is_true(run.error.contains("artefato nao editavel"))
+    }
+
+    describe fails_when_the_artifact_was_never_generated {
+        var run = ArtifactSave.run(inputs: {project_id: "spec-nao-existe", artifact: "brief", data: {}})
+        is_false(run.ok)
+        is_true(run.error.contains("ainda nao foi gerado"))
+    }
+
+    describe rejects_a_path_traversal_project_id {
+        var run = ArtifactSave.run(inputs: {project_id: "../x", artifact: "brief", data: {}})
+        is_false(run.ok)
+        is_true(run.error.contains("project_id invalido"))
+    }
+}

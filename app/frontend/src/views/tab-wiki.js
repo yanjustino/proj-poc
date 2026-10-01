@@ -122,6 +122,24 @@ export async function renderWikiTab(container, project) {
     return relative === 'index.md' ? 'html/index.html' : 'html/' + relative.replace(/\.md$/, '.html');
   }
 
+  // Links dentro da página (relacionadas, alertas, índice) não resolvem no
+  // iframe srcdoc; o script embutido em cada página avisa a janela pai com o
+  // caminho relativo a wiki/html (ex. "entities/plataforma.html"). Só aceita
+  // o formato exato esperado — nada além de <pasta>/<slug>.html ou o índice.
+  function onWikiMessage(event) {
+    const target = event.data && event.data.senpaiWiki;
+    if (typeof target !== 'string' || !active) return;
+    if (target === 'index.html') {
+      openPage('wiki', 'index.md', 'Índice');
+      return;
+    }
+    const match = /^(sources|entities|concepts|answers)\/([a-z0-9-]+)\.html$/.exec(target);
+    if (!match) return;
+    // Same label the list rows use (file name without .md).
+    openPage('wiki', `${match[1]}/${match[2]}.md`, match[2]);
+  }
+  window.addEventListener('message', onWikiMessage);
+
   async function openPage(root, relative, label) {
     openPath = relative;
     markActiveRow();
@@ -346,7 +364,7 @@ export async function renderWikiTab(container, project) {
         tracker.update(status);
         if (status.state === 'completed') {
           const result = (status.vars || {}).result;
-          lintResultEl.innerHTML = `<pre>${escapeHtml(JSON.stringify(result, null, 2))}</pre>`;
+          lintResultEl.innerHTML = renderLintReport(result);
         }
       });
     } catch (err) {
@@ -358,7 +376,33 @@ export async function renderWikiTab(container, project) {
 
   return () => {
     active = false;
+    window.removeEventListener('message', onWikiMessage);
   };
+}
+
+// renderLintReport shows the verified report Wiki's lint action returns (see
+// workflows/shared/wiki/wiki_lint.mh). The same findings were already written
+// into the affected pages as "Alertas da revisão" and into wiki/lint.md, so
+// this is only the summary of what that run found.
+function renderLintReport(result) {
+  if (!result) return '';
+  const section = (title, items) => `
+    <h4>${title} (${items.length})</h4>
+    ${items.length ? `<ul>${items.map((item) => `<li>${item}</li>`).join('')}</ul>` : '<p class="modal-hint">Nenhuma.</p>'}`;
+  const pages = (list) => list.map((p) => `<code>${escapeHtml(p)}</code>`).join(', ');
+  const total = result.contradictions.length + result.stale_claims.length;
+  return `
+    <div class="lint-report">
+      <p>${total
+        ? `${result.pages_annotated} página(s) receberam um bloco <strong>Alertas da revisão</strong>. O relatório completo ficou em <code>wiki/lint.md</code>.`
+        : 'Nenhuma inconsistência verificada.'}</p>
+      ${section('Contradições', result.contradictions.map((c) => `${escapeHtml(c.description)} — ${pages(c.evidence.map((e) => e.page))}`))}
+      ${section('Alegações possivelmente superadas', result.stale_claims.map((c) => `${pages([c.page])} → superada por ${pages([c.superseded_by])}: ${escapeHtml(c.description)}`))}
+      ${section('Conceitos sem página', result.missing_concepts.map((c) => `<strong>${escapeHtml(c.title)}</strong>: ${escapeHtml(c.description)}`))}
+      ${section('Páginas isoladas', result.orphan_pages.map((p) => pages([p])))}
+      ${result.notes ? `<p>${escapeHtml(result.notes)}</p>` : ''}
+      ${result.discarded ? `<p class="modal-hint">${result.discarded} achado(s) descartado(s) por não citarem um trecho verificável.</p>` : ''}
+    </div>`;
 }
 
 function escapeHtml(text) {

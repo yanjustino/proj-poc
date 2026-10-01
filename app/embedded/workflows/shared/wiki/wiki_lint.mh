@@ -1,0 +1,198 @@
+// tool WikiLint — transforma o relatório da LLM (wiki/schemas/lint.schema.json)
+// em estado verificado e persistido, deterministicamente (C3):
+//
+//   1. descarta o que não é verificável — toda contradição/alegação superada
+//      precisa citar um trecho que existe literalmente na página apontada
+//      (a LLM aponta, o código confere; padrão de "evidence-verified
+//      findings" do LLM Wiki de Karpathy);
+//   2. grava o bloco "Alertas da revisão" nas páginas afetadas, para que
+//      qualquer leitor da wiki (e todo artefato gerado a partir dela, via
+//      WikiContext) enxergue a pendência junto do fato em disputa;
+//   3. grava wiki/lint.md com o relatório legível da última verificação.
+//
+// Só mexe em wiki/**; nunca em raw/ nem em outro work-item (C1/C2).
+
+import { Paths } from "../core/paths.mh"
+import { WikiAlerts } from "wiki_alerts.mh"
+
+export tool WikiLint {
+    categories(): string[] -> ["sources", "entities", "concepts", "answers"]
+
+    normalize_ref(ref: string): string -> {
+        var r = ref.trim()
+        if (r.starts_with("wiki/")) r = r.substring(5, r.size())
+        if (r.ends_with(".md")) r = r.substring(0, r.size() - 3)
+        return r
+    }
+
+    valid_ref(project_id: string, ref: string): bool -> {
+        var r = self.normalize_ref(ref)
+        if (!r.matches("^(sources|entities|concepts|answers)/[a-z0-9-]+$")) return false
+        return fs.exists(Paths.wiki(project_id, r + ".md"))
+    }
+
+    quote_in_page(project_id: string, ref: string, quote: string): bool -> {
+        if (quote.trim().is_empty()) return false
+        if (!self.valid_ref(project_id, ref)) return false
+        var text = WikiAlerts.strip(fs.read(Paths.wiki(project_id, self.normalize_ref(ref) + ".md")))
+        return WikiAlerts.squash(text).contains(WikiAlerts.squash(quote))
+    }
+
+    // Devolve o relatório só com o que passou na verificação, as linhas de
+    // alerta por página e quantos achados foram descartados.
+    verify(project_id: string, report: any): any -> {
+        var contradictions = []
+        var stale_claims = []
+        var alerts = []
+        var discarded = 0
+
+        for (var c in report.contradictions) {
+            var good = []
+            var pages = []
+            for (var e in c.evidence) {
+                var page = self.normalize_ref(e.page)
+                if (self.quote_in_page(project_id, page, e.quote) && !pages.any((p) -> p == page)) {
+                    good += [{page: page, quote: e.quote}]
+                    pages += [page]
+                }
+            }
+            if (pages.size() < 2) {
+                discarded += 1
+            } else {
+                contradictions += [{description: c.description, evidence: good}]
+                for (var g in good) {
+                    var others = pages.filter((p) -> p != g.page).join(", ")
+                    alerts += [{
+                        page: g.page,
+                        line: "Contradição com " + others + ": " + c.description + " — trecho: “" + g.quote + "”"
+                    }]
+                }
+            }
+        }
+
+        for (var s in report.stale_claims) {
+            var page = self.normalize_ref(s.page)
+            var newer = self.normalize_ref(s.superseded_by)
+            if (self.quote_in_page(project_id, page, s.quote) && self.valid_ref(project_id, newer)) {
+                stale_claims += [{page: page, quote: s.quote, superseded_by: newer, description: s.description}]
+                alerts += [{
+                    page: page,
+                    line: "Possivelmente superado por " + newer + ": " + s.description + " — trecho: “" + s.quote + "”"
+                }]
+            } else {
+                discarded += 1
+            }
+        }
+
+        var orphan_pages = []
+        for (var o in report.orphan_pages) {
+            if (self.valid_ref(project_id, o)) orphan_pages += [self.normalize_ref(o)]
+        }
+
+        return {
+            report: {
+                contradictions: contradictions,
+                stale_claims: stale_claims,
+                missing_concepts: report.missing_concepts,
+                orphan_pages: orphan_pages,
+                notes: report.notes
+            },
+            alerts: alerts,
+            discarded: discarded
+        }
+    }
+
+    // Remove os alertas antigos de toda a wiki e grava os novos — idempotente:
+    // rodar o lint duas vezes nunca acumula blocos.
+    write_alerts(project_id: string, alerts: any[]): number -> {
+        for (var category in self.categories()) {
+            var dir_path = Paths.wiki_dir(project_id) + "/" + category
+            if (dir.exists(dir_path)) {
+                for (var file_path in dir.list(dir_path)) {
+                    var content = fs.read(file_path)
+                    if (content.contains("\n" + WikiAlerts.heading())) fs.write(file_path, WikiAlerts.strip(content))
+                }
+            }
+        }
+
+        var pages = []
+        for (var a in alerts) {
+            if (!pages.any((p) -> p == a.page)) pages += [a.page]
+        }
+        for (var page in pages) {
+            var path = Paths.wiki(project_id, page + ".md")
+            var lines = alerts.filter((a) -> a.page == page).map((a) -> a.line)
+            fs.write(path, WikiAlerts.strip(fs.read(path)).trim() + "\n\n" + WikiAlerts.block(lines))
+        }
+        return pages.size()
+    }
+
+    render_report(report: any, discarded: number): string -> {
+        var out = "# Verificação da wiki\n\nGerado em " + time.format(time.now(), "yyyy-MM-dd") + ".\n\n"
+        out = out + "## Contradições\n\n"
+        if (report.contradictions.is_empty()) out = out + "Nenhuma.\n\n"
+        for (var c in report.contradictions) {
+            out = out + "- " + c.description + " (" + c.evidence.map((e) -> e.page).join(", ") + ")\n"
+        }
+        out = out + "\n## Alegações possivelmente superadas\n\n"
+        if (report.stale_claims.is_empty()) out = out + "Nenhuma.\n\n"
+        for (var s in report.stale_claims) {
+            out = out + "- " + s.page + " → superada por " + s.superseded_by + ": " + s.description + "\n"
+        }
+        out = out + "\n## Conceitos sem página\n\n"
+        if (report.missing_concepts.is_empty()) out = out + "Nenhum.\n\n"
+        for (var m in report.missing_concepts) {
+            out = out + "- " + m.title + ": " + m.description + "\n"
+        }
+        out = out + "\n## Páginas isoladas\n\n"
+        if (report.orphan_pages.is_empty()) out = out + "Nenhuma.\n\n"
+        for (var o in report.orphan_pages) {
+            out = out + "- " + o + "\n"
+        }
+        if (!report.notes.is_empty()) out = out + "\n## Observações\n\n" + report.notes + "\n"
+        if (discarded > 0) out = out + "\nAchados descartados por não citarem um trecho verificável: ${discarded}.\n"
+        return out
+    }
+
+    apply(project_id: string, raw_report: any): any -> {
+        var verified = self.verify(project_id, raw_report)
+        var annotated = self.write_alerts(project_id, verified.alerts)
+        fs.write(Paths.wiki(project_id, "lint.md"), self.render_report(verified.report, verified.discarded))
+        return {
+            contradictions: verified.report.contradictions,
+            stale_claims: verified.report.stale_claims,
+            missing_concepts: verified.report.missing_concepts,
+            orphan_pages: verified.report.orphan_pages,
+            notes: verified.report.notes,
+            discarded: verified.discarded,
+            pages_annotated: annotated
+        }
+    }
+}
+
+test WikiLintSpec {
+    describe normalize_ref_accepts_the_shapes_a_llm_tends_to_emit {
+        are_equal(WikiLint.normalize_ref("entities/a"), "entities/a")
+        are_equal(WikiLint.normalize_ref("entities/a.md"), "entities/a")
+        are_equal(WikiLint.normalize_ref("wiki/entities/a.md"), "entities/a")
+    }
+
+    describe valid_ref_rejects_traversal_and_unknown_folders {
+        is_false(WikiLint.valid_ref("spec-test-project", "../../etc/passwd"))
+        is_false(WikiLint.valid_ref("spec-test-project", "raw/a"))
+        is_false(WikiLint.valid_ref("spec-test-project", "entities/nao-existe"))
+    }
+
+    describe render_report_lists_each_section {
+        var text = WikiLint.render_report({
+            contradictions: [{description: "d", evidence: [{page: "sources/a", quote: "q"}, {page: "sources/b", quote: "r"}]}],
+            stale_claims: [],
+            missing_concepts: [{title: "Certificado digital", description: "citado"}],
+            orphan_pages: [],
+            notes: ""
+        }, 1)
+        is_true(text.contains("- d (sources/a, sources/b)"))
+        is_true(text.contains("- Certificado digital: citado"))
+        is_true(text.contains("descartados"))
+    }
+}

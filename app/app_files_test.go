@@ -94,6 +94,49 @@ func TestAddRawFile_RejectsInvalidProjectID(t *testing.T) {
 	}
 }
 
+func TestAddRawText_WritesMarkdownAndDedups(t *testing.T) {
+	app, _ := newTestApp(t)
+	projectID := createTestProject(t, app, "AddRawText happy path", "historia")
+
+	name, err := app.AddRawText(projectID, "Ata: reuniao/01", "# Ata\n\ntexto\n")
+	if err != nil {
+		t.Fatalf("AddRawText: %v", err)
+	}
+	if name != "Ata reuniao 01.md" {
+		t.Fatalf("unexpected basename %q", name)
+	}
+	got, err := os.ReadFile(filepath.Join(app.DataDir(), "projects", projectID, "raw", name))
+	if err != nil || string(got) != "# Ata\n\ntexto\n" {
+		t.Fatalf("content mismatch: %q (%v)", got, err)
+	}
+
+	name2, err := app.AddRawText(projectID, "Ata: reuniao/01", "outro")
+	if err != nil {
+		t.Fatalf("AddRawText (dedup): %v", err)
+	}
+	if name2 == name {
+		t.Fatalf("expected a de-duplicated name, got %q", name2)
+	}
+}
+
+func TestAddRawText_RejectsInvalidInput(t *testing.T) {
+	app, _ := newTestApp(t)
+	projectID := createTestProject(t, app, "AddRawText invalid", "historia")
+
+	if _, err := app.AddRawText(projectID, "   ", "texto"); err == nil {
+		t.Fatal("expected error for empty title")
+	}
+	if _, err := app.AddRawText(projectID, "...", "texto"); err == nil {
+		t.Fatal("expected error for dots-only title")
+	}
+	if _, err := app.AddRawText(projectID, "titulo", "  \n"); err == nil {
+		t.Fatal("expected error for empty content")
+	}
+	if _, err := app.AddRawText("../escape", "titulo", "texto"); err == nil {
+		t.Fatal("expected error for invalid project id")
+	}
+}
+
 func TestListAndReadProjectDir_HappyPath(t *testing.T) {
 	app, _ := newTestApp(t)
 	projectID := createTestProject(t, app, "Fase6 list/read happy path", "historia")

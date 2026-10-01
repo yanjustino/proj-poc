@@ -171,6 +171,10 @@ export async function addRawFile(projectId, sourcePath) {
   return App.AddRawFile(projectId, sourcePath);
 }
 
+export async function addRawText(projectId, title, content) {
+  return App.AddRawText(projectId, title, content);
+}
+
 export async function listIngestedRaw(projectId) {
   return parseJSON(await App.ListIngestedRaw(projectId), 'ListIngestedRaw');
 }
@@ -394,6 +398,18 @@ export async function workItemChangesLog(projectId) {
 // Serialized like every callWorkflowOnce call — see that function.
 export function artifactPreview(artifact, data) {
   return callWorkflowOnce('ArtifactPreview', { artifact, data }).then((r) => r.preview_html);
+}
+
+// saveArtifact grava a edicao manual de um artefato de documento unico
+// (brief | atributos | requisitos): o workflow ArtifactSave valida a
+// estrutura, regrava o JSON e re-renderiza o HTML pelos mesmos templates da
+// geracao. Sincrono como ArtifactPreview (nenhuma chamada de LLM).
+//
+// `sections` ([{titulo, conteudo}]) descreve o que mudou; o workflow o grava
+// em changes.jsonl como diretiva, para que uma regeneracao posterior reaplique
+// a edicao em vez de descarta-la.
+export function saveArtifact(projectId, artifact, data, sections = []) {
+  return callWorkflowOnce('ArtifactSave', { project_id: projectId, artifact, data, sections }).then((r) => r.path);
 }
 
 // deleteProject removes projects/<projectId> from disk entirely — there is
