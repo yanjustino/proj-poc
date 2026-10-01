@@ -3,7 +3,7 @@
 // prompts/ sao as sources do proprio Radahn — copiadas como estao; aqui so
 // se declara como entram no prompt.
 
-import { WorkflowsRoot } from "../core/workflows_root.mh"
+import { WorkflowsRoot, SchemaFile } from "../core/workflows_root.mh"
 
 prompt RadahnModelo() from "prompts/00-modelo-mental.md"
 prompt RadahnSchema() from "prompts/01-schema.md"
@@ -21,4 +21,4 @@ export tool RadahnPrompt {
 
 prompt RadahnSchemaContent() from "schemas/radahn.schema.json"
 
-export tool RadahnSchemaFile { get(): {content: string, path: string} -> {content: RadahnSchemaContent(), path: WorkflowsRoot.resolve("shared/radahn/schemas/radahn.schema.json")} }
+export tool RadahnSchemaFile { get(): SchemaFile -> WorkflowsRoot.schema(RadahnSchemaContent(), "shared/radahn/schemas/radahn.schema.json") }

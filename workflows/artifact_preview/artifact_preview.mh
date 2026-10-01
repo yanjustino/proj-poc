@@ -1,27 +1,54 @@
-// Renderiza o HTML de pre-visualizacao de um artefato PAUSADO (Modo Buddy),
-// com os mesmos templates ArtifactBody/PageShell que os *Commit steps de
-// Discovery/Delivery usam pro artefato final — mas sem nenhum efeito
-// colateral: nunca grava em disco, nunca chama ArtifactId.next_*_id (o
-// contador de sequencia so pode ser consumido no Commit de verdade, depois
-// de aprovado — chamar duas vezes, ou chamar pra um rascunho que acaba
-// rejeitado, deixaria buracos na numeracao real). Um artefato de colecao
-// (adr/diagramas/features/historias) junta o corpo de cada item pendente
-// numa unica pagina de preview, sem id/pasta real atribuidos ainda.
+// Renderiza o rascunho de um artefato pausado (Modo Buddy) com os mesmos
+// templates do Commit, sem efeito colateral: nao grava em disco e nao consome
+// ids (ArtifactId.next_*), que so podem ser cunhados na aprovacao. `data` e o
+// vars.pending_data da run pausada.
 //
-// Sincrono de proposito (sem chamada de LLM): 'data' e o vars.pending_data
-// que um run pausado ja devolve pronto (confirmado por spike contra
-// `mhl serve mcp --http` — mhl_run_status expoe todas as vars do workflow
-// assim que pausa, nao so o `output:` declarado). O frontend chama isso uma
-// vez, sob demanda, so quando o usuario esta olhando pra um artefato
-// pausado (reading-pane.js/tab-artefatos.js).
+// decisao/diagrama renderizam UM item de adr/diagramas: o app revisa um lote
+// pausado item a item. adr/diagramas/features/historias juntam o lote numa
+// pagina so, como fallback quando `data` nao tem o formato esperado.
 
+import { Closed } from "../shared/core/closed_set.mh"
 import { ArtifactBody } from "../shared/artifacts/artifact_body.mh"
 import { PageShell } from "../shared/artifacts/page_shell.mh"
+
+enum PreviewArtifact { brief, atributos, requisitos, der, feature, historia, decisao, diagrama, adr, diagramas, features, dependencias, historias, plano }
+
+tool PreviewPages {
+    kind(name: string): PreviewArtifact -> Closed.parse("artefato desconhecido para preview", name, [
+        PreviewArtifact.brief, PreviewArtifact.atributos, PreviewArtifact.requisitos, PreviewArtifact.der,
+        PreviewArtifact.feature, PreviewArtifact.historia, PreviewArtifact.decisao, PreviewArtifact.diagrama,
+        PreviewArtifact.adr, PreviewArtifact.diagramas, PreviewArtifact.features, PreviewArtifact.dependencias,
+        PreviewArtifact.historias, PreviewArtifact.plano,
+    ])
+
+    // O caminho dos assets do plano nao importa: o app injeta o mermaid.
+    of(kind: PreviewArtifact, data: any): string -> match kind {
+        PreviewArtifact.brief        -> self.page("Brief", ArtifactBody.brief(data))
+        PreviewArtifact.atributos    -> self.page("Atributos de qualidade", ArtifactBody.atributos(data))
+        PreviewArtifact.requisitos   -> self.page("Requisitos", ArtifactBody.requisitos(data))
+        PreviewArtifact.der          -> self.page("DER", ArtifactBody.der(data))
+        PreviewArtifact.feature      -> self.page("Detalhamento do item de backlog", ArtifactBody.feature(data))
+        PreviewArtifact.historia     -> self.page("Detalhamento da história", ArtifactBody.historia(data))
+        PreviewArtifact.decisao      -> self.page(html.escape(data.titulo), ArtifactBody.adr(data))
+        PreviewArtifact.diagrama     -> self.page(html.escape(data.titulo), ArtifactBody.diagrama(data))
+        PreviewArtifact.dependencias -> self.page("Mapa de Dependências", ArtifactBody.dependencias(data))
+        PreviewArtifact.plano        -> self.page("Plano de implementação — ${html.escape(data?.historia_titulo ?? "")}", ArtifactBody.plano(data, "../"))
+        PreviewArtifact.adr          -> self.batch("ADRs", data.decisions, (d) -> ArtifactBody.adr(d))
+        PreviewArtifact.diagramas    -> self.batch("Diagramas C4", data.diagramas, (d) -> ArtifactBody.diagrama(d))
+        PreviewArtifact.features     -> self.batch("Backlog da solução", data.features, (f) -> ArtifactBody.feature(f))
+        PreviewArtifact.historias    -> self.batch("Histórias", data.historias, (h) -> ArtifactBody.historia(h))
+    }
+
+    page(title: string, body: string): string -> PageShell(title: title, body: body, meta: "Rascunho — ainda não gravado")
+
+    batch(title: string, items: any[], render: any): string ->
+        self.page(title, items.map((item) -> "<h2>${html.escape(item.titulo)}</h2>${render(item)}").join(""))
+}
 
 workflow ArtifactPreview {
     description: "Renderiza o rascunho de um artefato pausado (Modo Buddy) para pre-visualizacao, sem gravar nada em disco."
 
-    input artifact: string // brief | atributos | requisitos | der | feature | historia | decisao | diagrama | adr | diagramas | features | dependencias | historias | plano
+    input artifact: string // PreviewArtifact
     input data: any
 
     var preview_html = ""
@@ -30,131 +57,8 @@ workflow ArtifactPreview {
         preview_html: preview_html,
     }
 
-    step Dispatch {
-        goto match artifact {
-            "brief"      -> Brief
-            "atributos"  -> Atributos
-            "requisitos" -> Requisitos
-            "der"        -> Der
-            "feature"    -> Feature
-            "historia"   -> Historia
-            "decisao"    -> Decisao
-            "diagrama"   -> Diagrama
-            "adr"        -> Adr
-            "diagramas"  -> Diagramas
-            "features"   -> Features
-            "dependencias" -> Dependencias
-            "historias"  -> Historias
-            "plano"      -> Plano
-            _            -> fail(
-                "artefato desconhecido para preview: '" + artifact +
-                "' (use brief | atributos | requisitos | der | feature | historia | decisao | diagrama | adr | diagramas | features | dependencias | historias | plano)"
-            )
-        }
-    }
-
-    step Brief {
-        preview_html = PageShell(title: "Brief", body: ArtifactBody.brief(data), meta: "Rascunho — ainda não gravado")
-        goto Done
-    }
-
-    step Atributos {
-        preview_html = PageShell(title: "Atributos de qualidade", body: ArtifactBody.atributos(data), meta: "Rascunho — ainda não gravado")
-        goto Done
-    }
-
-    step Requisitos {
-        preview_html = PageShell(title: "Requisitos", body: ArtifactBody.requisitos(data), meta: "Rascunho — ainda não gravado")
-        goto Done
-    }
-
-    step Der {
-        preview_html = PageShell(title: "DER", body: ArtifactBody.der(data), meta: "Rascunho — ainda não gravado")
-        goto Done
-    }
-
-    step Feature {
-        preview_html = PageShell(title: "Detalhamento do item de backlog", body: ArtifactBody.feature(data), meta: "Rascunho — ainda não gravado")
-        goto Done
-    }
-
-    step Dependencias {
-        preview_html = PageShell(title: "Mapa de Dependências", body: ArtifactBody.dependencias(data), meta: "Rascunho — ainda não gravado")
-        goto Done
-    }
-
-    // Plano de implementacao de uma historia (plano_model.mh). O caminho dos
-    // assets nao importa aqui: o app injeta o mermaid no preview.
-    step Plano {
-        preview_html = PageShell(title: "Plano de implementação — " + html.escape(data?.historia_titulo ?? ""), body: ArtifactBody.plano(data, "../"), meta: "Rascunho — ainda não gravado")
-        goto Done
-    }
-
-    step Historia {
-        preview_html = PageShell(title: "Detalhamento da história", body: ArtifactBody.historia(data), meta: "Rascunho — ainda não gravado")
-        goto Done
-    }
-
-    // Decisao/Diagrama render ONE item of a collection artifact (adr/
-    // diagramas) as its own standalone page — same ArtifactBody as the item's
-    // eventual real file, just without an id/folder assigned yet. The
-    // frontend (tab-artefatos.js's appendPausedPreview) calls these once per
-    // pending item instead of the whole-collection Adr/Diagramas steps below,
-    // so a paused batch reviews as N separate documents, not one page with
-    // every item run together — see the same split already used for
-    // Feature/Historia above (Delivery's own single-item artifacts).
-    step Decisao {
-        preview_html = PageShell(title: html.escape(data.titulo), body: ArtifactBody.adr(data), meta: "Rascunho — ainda não gravado")
-        goto Done
-    }
-
-    step Diagrama {
-        preview_html = PageShell(title: html.escape(data.titulo), body: ArtifactBody.diagrama(data), meta: "Rascunho — ainda não gravado")
-        goto Done
-    }
-
-    // Adr/Diagramas/Features/Historias below join every pending item into one
-    // page — kept as tab-artefatos.js's fallback for when `data` doesn't have
-    // the expected array (so preview still shows *something*), but the normal
-    // path is the per-item steps above (Decisao/Diagrama) and Feature/Historia.
-    step Adr {
-        var body = ""
-        for (var decision in data.decisions) {
-            body = body + "<h2>" + html.escape(decision.titulo) + "</h2>" + ArtifactBody.adr(decision)
-        }
-        preview_html = PageShell(title: "ADRs", body: body, meta: "Rascunho — ainda não gravado")
-        goto Done
-    }
-
-    step Diagramas {
-        var body = ""
-        for (var diagrama in data.diagramas) {
-            body = body + "<h2>" + html.escape(diagrama.titulo) + "</h2>" + ArtifactBody.diagrama(diagrama)
-        }
-        preview_html = PageShell(title: "Diagramas C4", body: body, meta: "Rascunho — ainda não gravado")
-        goto Done
-    }
-
-    step Features {
-        var body = ""
-        for (var feature in data.features) {
-            body = body + "<h2>" + html.escape(feature.titulo) + "</h2>" + ArtifactBody.feature(feature)
-        }
-        preview_html = PageShell(title: "Backlog da solução", body: body, meta: "Rascunho — ainda não gravado")
-        goto Done
-    }
-
-    step Historias {
-        var body = ""
-        for (var historia in data.historias) {
-            body = body + "<h2>" + html.escape(historia.titulo) + "</h2>" + ArtifactBody.historia(historia)
-        }
-        preview_html = PageShell(title: "Histórias", body: body, meta: "Rascunho — ainda não gravado")
-        goto Done
-    }
-
-    step Done {
-        // ponto de convergencia unico — mesmo padrao de Discovery/Delivery/WorkItem.
+    step Render {
+        self.preview_html = PreviewPages.of(PreviewPages.kind(artifact), data)
     }
 }
 

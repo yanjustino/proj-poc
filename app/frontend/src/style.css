@@ -75,10 +75,11 @@ button { cursor: pointer; }
    than overflowing them. */
 .shell { height: 100vh; display: flex; background: var(--bg-0); overflow: hidden; }
 .shell .sidebar { flex: 0 0 clamp(210px, 20vw, 280px); }
-.shell.sidebar-collapsed .sidebar { flex: 0 0 72px; }
-/* Menu lateral recolhido: um trilho estreito (largura suficiente para os
-   botões de janela do macOS sobre .drag-strip) com a marca, as ações
-   empilhadas e cada work-item só pelo ícone — o nome fica no tooltip. */
+.shell.sidebar-collapsed .sidebar { flex: 0 0 88px; }
+/* Menu lateral recolhido: um trilho estreito com a marca, as ações
+   empilhadas e cada work-item só pelo ícone — o nome fica no tooltip.
+   88px porque os botões de janela do macOS (TitleBarHiddenInset, main.go)
+   vão até ~80px da borda; mais estreito, o botão verde cai sobre o .main. */
 .drag-strip { display: flex; align-items: center; justify-content: flex-end; }
 .drag-strip .icon-btn { --wails-draggable: no-drag; }
 .sidebar .icon-btn.sidebar-toggle-collapsed { display: none; }
@@ -167,6 +168,8 @@ body.pane-resizing iframe { pointer-events: none; }
 .work-copy strong { display: block; font-size: 13px; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; color: var(--ink); font-weight: 500; }
 .work-copy span { font-size: 10px; color: var(--muted); font-family: var(--mono); }
 .empty-nav { font-size: 11px; color: var(--muted); padding: 8px 7px; }
+.nav-error p { margin: 0 0 8px; overflow-wrap: anywhere; }
+.nav-error .button { display: inline-flex; align-items: center; gap: 6px; }
 .nav-list { flex: 1 1 auto; overflow: auto; min-height: 0; }
 
 .sidebar-status { flex: none; margin-top: 10px; padding-top: 10px; padding-left: 7px; border-top: 1px solid var(--line); display: flex; align-items: center; gap: 8px; font-size: 11px; color: var(--muted); font-family: var(--mono); }
@@ -1054,3 +1057,74 @@ select.ae-field { height: var(--control-md); padding-block: 0; }
 /* Wiki lint report */
 .lint-report h4 { margin: 14px 0 6px; font-size: 13px; }
 .lint-report ul { margin: 0; padding-left: 18px; font-size: 13px; line-height: 1.5; }
+
+/* Busca local da wiki (tab-wiki.js): campo acima dos grupos e resultados
+   em lista densa, com o grupo, o título, o sinônimo que casou e um trecho. */
+.wiki-search-box { display: flex; align-items: center; gap: 8px; height: var(--control-md); padding: 0 10px; margin: 0 0 12px; border: 1px solid var(--line); border-radius: var(--radius-md); background: var(--surface-2); color: var(--muted); cursor: text; }
+.wiki-search-box:focus-within { border-color: var(--vermilion); }
+.wiki-search-box input { flex: 1; min-width: 0; border: 0; outline: 0; background: transparent; color: var(--ink); font-size: 13px; }
+.wiki-search-box input::placeholder { color: var(--muted); }
+.wiki-search-box kbd { flex: none; padding: 1px 6px; border: 1px solid var(--line); border-radius: 5px; font: 10px var(--mono); color: var(--muted); }
+.wiki-group-filters .collection-filter span { margin-left: 4px; opacity: .7; font-family: var(--mono); }
+.wiki-search-results { display: flex; flex-direction: column; gap: 6px; }
+.wiki-search-result { display: flex; flex-direction: column; align-items: flex-start; gap: 3px; width: 100%; padding: 10px 12px; border: 1px solid var(--line); border-radius: var(--radius-md); background: var(--surface); color: var(--ink); text-align: left; cursor: pointer; }
+.wiki-search-result:hover, .wiki-search-result.selected { border-color: var(--vermilion); }
+.wiki-search-kind { display: inline-flex; align-items: center; gap: 5px; color: var(--muted); font: 500 10px var(--mono); text-transform: uppercase; letter-spacing: .06em; }
+.wiki-search-result strong { font-size: 14px; }
+.wiki-search-alias { color: var(--muted); font-size: 11px; }
+.wiki-search-snippet { color: var(--muted); font-size: 12px; line-height: 1.45; display: -webkit-box; -webkit-line-clamp: 2; -webkit-box-orient: vertical; overflow: hidden; }
+.wiki-search-result mark { background: rgba(229,57,47,.22); color: inherit; border-radius: 2px; padding: 0 1px; }
+
+/* Layout responsivo da coluna central. O que importa é a largura do .main,
+   não a da tela: os painéis são redimensionáveis, e a sidebar mais o painel
+   de leitura deixam o .main perto do piso de 320px numa janela de ~1400px.
+   Por isso @container, e não @media. Fica no fim do arquivo para vencer as
+   redefinições do tema acima. */
+.main { container-type: inline-size; }
+
+/* Sempre 4 cards: 1, 2 ou 4 colunas, nunca 3 + 1 sozinho. Abaixo de ~220px
+   por card o conteúdo deixa de caber. Os limites medem a largura útil do
+   .main, sem o padding. */
+.summary { grid-template-columns: repeat(2, minmax(0, 1fr)); }
+@container (min-width: 920px) { .summary { grid-template-columns: repeat(4, minmax(0, 1fr)); } }
+@container (max-width: 470px) { .summary { grid-template-columns: minmax(0, 1fr); } }
+.summary-card,
+.summary-card > div,
+.summary-progress-head > div,
+.summary-tokens-row span { min-width: 0; }
+.summary-progress-head b { overflow-wrap: break-word; }
+/* O rótulo encolhe antes da barra: com coluna fixa de 148px a barra sumia
+   e o contador vazava para fora do card. */
+.summary-progress-row { grid-template-columns: minmax(0, 148px) minmax(40px, 1fr) auto; }
+
+.tabs { overflow-x: auto; scrollbar-width: none; }
+.tabs::-webkit-scrollbar { display: none; }
+.tab-btn { flex: none; white-space: nowrap; }
+
+.artifact-filter { flex: none; white-space: nowrap; }
+.artifact-map-head, .collection-map-head { flex-wrap: wrap; }
+
+@container (max-width: 560px) {
+  .hero h1 { font-size: 24px; }
+  .summary { gap: 10px; }
+  .tab-btn { padding: 10px 12px; }
+  .artifact-map-head, .collection-map-head { flex-direction: column; align-items: stretch; gap: 10px; }
+  .artifact-map-controls { justify-content: flex-start; }
+  /* Os filtros quebram em linhas em vez de rolar: rolagem sem barra esconde
+     opções. nowrap na linha: numa coluna com wrap, ela assumiria a largura
+     do conteúdo. */
+  .artifact-filters-row { flex-direction: column; flex-wrap: nowrap; align-items: stretch; }
+  .artifact-category-filters, .artifact-filters { flex-wrap: wrap; overflow: visible; }
+}
+
+@container (max-width: 440px) {
+  .tab-btn { padding: 10px 9px; font-size: 13px; }
+}
+
+/* Regiões de arrasto da janela (TitleBarHiddenInset, main.go): além do topo
+   da sidebar, o cabeçalho da coluna central e o do painel de leitura movem a
+   janela, como numa barra de título. --wails-draggable é herdado, por isso
+   todo elemento interativo desliga o arrasto explicitamente. */
+.hero { --wails-draggable: drag; margin-top: -22px; padding-top: 22px; }
+.doc-head { --wails-draggable: drag; }
+button, a, input, select, textarea, label, summary, [role="button"], [contenteditable] { --wails-draggable: no-drag; }

@@ -6,33 +6,81 @@
 // Chamadas entre metodos-irmaos usam `self.` (MHL-Melhorias.md #6).
 
 import { Paths } from "../core/paths.mh"
+import { Slug } from "../core/slug.mh"
+import { Fixture } from "../core/fixture.mh"
 
 export tool WikiIndex {
-    // Unico dos 4 upsert_* com `natureza` (ingest.schema.json) — so uma
-    // fonte e classificada; entidades/conceitos/respostas nunca carregam o
-    // campo, entao `upsert`/`render_section` leem com `?? ""` em vez de
-    // exigi-lo no tipo compartilhado.
+    // So a fonte carrega `natureza` (ingest.schema.json); por isso
+    // render_section le o campo com `?? ""`. Entidades e conceitos entram por
+    // WikiActions.upsert_fact.
     upsert_source(project_id: string, entry: {slug: string, title: string, summary: string, natureza: string}) ->
         self.upsert(project_id, "sources", entry)
-
-    upsert_entity(project_id: string, entry: {slug: string, title: string, summary: string}) ->
-        self.upsert(project_id, "entities", entry)
-
-    upsert_concept(project_id: string, entry: {slug: string, title: string, summary: string}) ->
-        self.upsert(project_id, "concepts", entry)
 
     upsert_answer(project_id: string, entry: {slug: string, title: string, summary: string}) ->
         self.upsert(project_id, "answers", entry)
 
+    // Uma pagina que ja existe mantem o resumo original (o primeiro fato que
+    // a definiu) e acumula os aliases de cada ingestao.
     upsert(project_id: string, category: string, entry: any) -> {
         var state = self.load(project_id)
         var list = state.get(category, [])
-        list = list.filter((existing) -> existing.slug != entry.slug)
+        var existing = list.find((e) -> e.slug == entry.slug)
+        if (existing != null) {
+            entry["summary"] = existing.summary
+            entry["aliases"] = self.merge_aliases(entry.title, existing?.aliases ?? [], entry?.aliases ?? [])
+        } else {
+            entry["aliases"] = self.merge_aliases(entry.title, [], entry?.aliases ?? [])
+        }
+        list = list.filter((e) -> e.slug != entry.slug)
         list += [entry]
         list = list.sort_by((existing) -> existing.title)
         state[category] = list
         self.save(project_id, state)
         self.render(project_id, state)
+    }
+
+    // Sem repeticao e sem o proprio titulo, comparando pelo slug (ignora
+    // caixa, acento e pontuacao).
+    merge_aliases(title: string, current: string[], incoming: string[]): string[] -> {
+        var seen = [Slug.from_title(title)]
+        var out = []
+        for (var alias in current + incoming) {
+            var key = Slug.from_title(alias)
+            if (!alias.trim().is_empty() && !seen.contains(key)) {
+                seen += [key]
+                out += [alias.trim()]
+            }
+        }
+        return out
+    }
+
+    // Titulo canonico de uma entidade/conceito: o da pagina existente cujo
+    // titulo ou alias tem o mesmo slug; senao, o proprio titulo recebido.
+    // E a rede de seguranca deterministica para a LLM que nao reaproveitou
+    // o titulo do catalogo.
+    canonical_title(project_id: string, category: string, title: string): string -> {
+        var key = Slug.from_title(title)
+        var match = self.load(project_id).get(category, []).find((e) ->
+            e.slug == key || (e?.aliases ?? []).any((a) -> Slug.from_title(a) == key)
+        )
+        return match?.title ?? title
+    }
+
+    // Catalogo de entidades e conceitos para o prompt de ingestao: a LLM
+    // reaproveita estes titulos em vez de criar uma pagina por variacao.
+    catalog(project_id: string): string -> {
+        var state = self.load(project_id)
+        var out = self.catalog_section("Entidades", state.get("entities", [])) + self.catalog_section("Conceitos", state.get("concepts", []))
+        return if (out.is_empty()) "(nenhuma página ainda — todas as entidades e conceitos desta fonte são novos)" else out
+    }
+
+    catalog_section(label: string, entries: any[]): string -> {
+        if (entries.is_empty()) return ""
+        var lines = entries.map((e) -> {
+            var aliases = e?.aliases ?? []
+            return "- ${e.title}" + (if (aliases.is_empty()) "" else " (também: ${aliases.join(", ")})")
+        })
+        return "### ${label}\n\n${lines.join("\n")}\n\n"
     }
 
     load(project_id: string): any -> {
@@ -95,5 +143,40 @@ test WikiIndexSpec {
             {slug: "b", title: "Benchmark", summary: "resumo b"},
         ])
         are_equal(section, "## Fontes\n\n- [Ata](sources/a.md) `[sistema atual]` — resumo a\n- [Benchmark](sources/b.md) — resumo b\n\n")
+    }
+
+    describe merge_aliases_drops_repeats_and_the_title_ignoring_case_and_accents {
+        are_equal(WikiIndex.merge_aliases("Compliance regulatório", ["LGPD"], ["lgpd", "Compliance Regulatorio", "Conformidade", " "]), ["LGPD", "Conformidade"])
+    }
+
+    describe catalog_lists_titles_with_their_aliases {
+        var id = Fixture.project("spec-test-wiki-catalog")
+        are_equal(WikiIndex.catalog(id), "(nenhuma página ainda — todas as entidades e conceitos desta fonte são novos)")
+        dir.create(Paths.wiki_dir(id))
+        WikiIndex.upsert(id, "concepts", {slug: "compliance-regulatorio", title: "Compliance regulatório", summary: "x", aliases: ["Conformidade"]})
+        are_equal(WikiIndex.catalog(id), "### Conceitos\n\n- Compliance regulatório (também: Conformidade)\n\n")
+        Fixture.drop(id)
+    }
+
+    describe canonical_title_matches_an_existing_title_or_alias {
+        var id = Fixture.project("spec-test-wiki-canonical")
+        dir.create(Paths.wiki_dir(id))
+        WikiIndex.upsert(id, "concepts", {slug: "compliance-regulatorio", title: "Compliance regulatório", summary: "x", aliases: ["Conformidade regulatória"]})
+        are_equal(WikiIndex.canonical_title(id, "concepts", "COMPLIANCE REGULATORIO"), "Compliance regulatório")
+        are_equal(WikiIndex.canonical_title(id, "concepts", "conformidade regulatoria"), "Compliance regulatório")
+        are_equal(WikiIndex.canonical_title(id, "concepts", "Observabilidade"), "Observabilidade")
+        are_equal(WikiIndex.canonical_title(id, "entities", "Conformidade regulatória"), "Conformidade regulatória")
+        Fixture.drop(id)
+    }
+
+    describe upsert_keeps_the_first_summary_and_accumulates_aliases {
+        var id = Fixture.project("spec-test-wiki-upsert")
+        dir.create(Paths.wiki_dir(id))
+        WikiIndex.upsert(id, "concepts", {slug: "kyc", title: "KYC", summary: "primeiro", aliases: ["Conheça seu cliente"]})
+        WikiIndex.upsert(id, "concepts", {slug: "kyc", title: "KYC", summary: "segundo", aliases: ["Know your customer"]})
+        var entry = WikiIndex.load(id).concepts[0]
+        are_equal(entry.summary, "primeiro")
+        are_equal(entry.aliases, ["Conheça seu cliente", "Know your customer"])
+        Fixture.drop(id)
     }
 }

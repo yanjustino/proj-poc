@@ -1,16 +1,7 @@
-// tool Paths — unico ponto que monta caminhos sob "projects/<project_id>/..."
-// Reforca a constraint C1 (isolamento de work-item, ver PLANO-MACRO-MHL-SENPAI.md §2.1):
-// nenhum outro step/tool deve concatenar "projects/" + project_id a mao. Um spike de
-// Fase 0 confirmou que interpolacao de string (inclusive dentro de `memory { path: }`)
-// NAO sanitiza sozinha — "../../etc/passwd" como project_id escapa de verdade do
-// diretorio pretendido — por isso toda funcao aqui valida antes de montar o caminho.
-//
-// is_valid_id usa string.matches (regex, disponivel desde mhl 1.4.0-beta.6) — o padrao
-// ancorado ja rejeita "/", "\", ".." e qualquer caractere fora do conjunto permitido
-// sem checagens redundantes; antes disso exigia iterar split("") caractere a caractere
-// (ver FASE0-ACHADOS.md §10 / MHL-Melhorias.md #14). Chamadas entre metodos-irmaos
-// usam `self.` (MHL-Melhorias.md #6) em vez de repetir "Paths." — mais resistente a
-// rename.
+// Paths e o unico ponto que monta caminhos sob projects/<project_id>/ (C1:
+// isolamento de work-item). Interpolacao de string nao sanitiza nada — um
+// project_id "../../etc/passwd" escaparia do diretorio —, por isso todo
+// caminho passa por is_valid_id, cujo padrao ancorado rejeita "/", "\" e "..".
 
 export tool Paths {
     is_valid_id(project_id: string): bool -> {

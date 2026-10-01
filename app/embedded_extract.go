@@ -2,12 +2,14 @@ package main
 
 import (
 	"crypto/sha256"
+	"errors"
 	"fmt"
 	"io/fs"
 	"log"
 	"os"
 	"path/filepath"
 	"runtime"
+	"strings"
 )
 
 // workflowsMarker is a file that only exists inside a real workflows/ tree —
@@ -19,16 +21,40 @@ const workflowsMarker = "work_item/work_item.mh"
 // extractIfChanged writes content to dest only if dest doesn't exist yet or
 // its content differs (compared by sha256, cheap relative to the I/O it
 // avoids) — repeated app starts don't rewrite unchanged vendored files.
+//
+// Writes a temp file and renames it over dest, never rewriting dest in
+// place: on macOS, overwriting an executable in place while a process
+// started from it is still alive (an mhl left over from a previous app run)
+// makes the kernel SIGKILL the next exec of the new content ("Code
+// Signature Invalid" in DiagnosticReports) — the mhl child dies at once and
+// startup fails. A rename gives the new binary its own inode, so the
+// leftover process keeps the old one and both run.
 func extractIfChanged(dest string, content []byte, perm os.FileMode) error {
 	if existing, err := os.ReadFile(dest); err == nil {
 		if sha256.Sum256(existing) == sha256.Sum256(content) {
 			return nil
 		}
 	}
-	if err := os.MkdirAll(filepath.Dir(dest), 0o755); err != nil {
+	dir := filepath.Dir(dest)
+	if err := os.MkdirAll(dir, 0o755); err != nil {
 		return err
 	}
-	return os.WriteFile(dest, content, perm)
+	tmp, err := os.CreateTemp(dir, "."+filepath.Base(dest)+".tmp-*")
+	if err != nil {
+		return err
+	}
+	tmpPath := tmp.Name()
+	_, writeErr := tmp.Write(content)
+	closeErr := tmp.Close()
+	if err := errors.Join(writeErr, closeErr, os.Chmod(tmpPath, perm)); err != nil {
+		os.Remove(tmpPath)
+		return err
+	}
+	if err := os.Rename(tmpPath, dest); err != nil {
+		os.Remove(tmpPath)
+		return err
+	}
+	return nil
 }
 
 // ensureVendoredMHL extracts this build's embedded mhl binary to
@@ -91,6 +117,10 @@ func ensureVendoredPdftotext() (string, error) {
 // shadows any system copy for every workflow run.
 func prependToPath(dir string) {
 	current := os.Getenv("PATH")
+	// RetryStartup chama de novo: nao duplicar a entrada.
+	if current == dir || strings.HasPrefix(current, dir+string(os.PathListSeparator)) {
+		return
+	}
 	if current == "" {
 		os.Setenv("PATH", dir)
 		return

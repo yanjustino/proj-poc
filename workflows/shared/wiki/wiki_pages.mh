@@ -35,12 +35,6 @@ export tool WikiPages {
         _               -> ""
     }
 
-    upsert_entity(project_id: string, title: string, facts: string[]) ->
-        self.upsert_fact_page(project_id, "entities", title, facts)
-
-    upsert_concept(project_id: string, title: string, facts: string[]) ->
-        self.upsert_fact_page(project_id, "concepts", title, facts)
-
     upsert_fact_page(project_id: string, dir: string, title: string, facts: string[]) -> {
         var slug = Slug.from_title(title)
         var path = Paths.wiki(project_id, dir + "/" + slug + ".md")

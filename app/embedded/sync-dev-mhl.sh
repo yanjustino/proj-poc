@@ -35,7 +35,11 @@ if cmp -s "$path_mhl" "$dest"; then
 fi
 
 old_version="$("$dest" version 2>/dev/null || echo "unknown")"
-cp "$path_mhl" "$dest"
-chmod 755 "$dest"
+# Cópia temporária + mv, nunca cp por cima: no macOS, sobrescrever no lugar
+# um executável que acabou de rodar faz o kernel matar a próxima execução
+# (SIGKILL, "Code Signature Invalid"). O mv dá um inode novo ao binário.
+cp "$path_mhl" "$dest.tmp"
+chmod 755 "$dest.tmp"
+mv -f "$dest.tmp" "$dest"
 new_version="$("$dest" version)"
 echo "sync-dev-mhl: updated $dest: $old_version -> $new_version (sha256 $(shasum -a 256 "$dest" | cut -d' ' -f1))"

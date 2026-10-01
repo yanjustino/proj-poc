@@ -40,7 +40,30 @@ export tool WikiHtmlExport {
             fs.write(Paths.wiki(project_id, "html/" + item.dir + "/" + item.slug + ".html"), self.render_page(item, catalog))
         }
         fs.write(Paths.wiki(project_id, "html/index.html"), self.render_index(state, catalog))
+        fs.write(Paths.wiki(project_id, "html/search.json"), json.stringify(self.search_index(catalog)))
     }
+
+    // Indice da busca da aba Wiki do app (tab-wiki.js): titulo, aliases,
+    // resumo e o texto da pagina, que o app normaliza (caixa e acento) e
+    // pontua no navegador, sem chamar a LLM.
+    search_index(catalog: any[]): any[] -> catalog.map((item) -> {
+        group: item.dir,
+        label: item.label,
+        slug: item.slug,
+        title: item.title,
+        aliases: item.aliases,
+        summary: item.summary,
+        natureza: item.natureza,
+        text: self.plain_text(item.body_md),
+    })
+
+    // Texto corrido para busca e trechos: sem cabecalhos ("## Fatos (data)")
+    // nem marcadores de lista, uma linha por item separada por " · ".
+    plain_text(markdown: string): string -> markdown.split("\n")
+        .map((line) -> line.trim())
+        .filter((line) -> !line.is_empty() && !line.starts_with("#"))
+        .map((line) -> if (line.starts_with("- ")) line.substring(2, line.size()) else line)
+        .join(" · ")
 
     // Uma entrada por página: corpo sem o bloco de alertas (renderizado à
     // parte, em destaque) e `haystack` em minúsculas para achar menções.
@@ -57,6 +80,7 @@ export tool WikiHtmlExport {
                     title: entry.title,
                     summary: entry.summary,
                     natureza: entry?.natureza ?? "",
+                    aliases: entry?.aliases ?? [],
                     body_md: body,
                     alerts: self.alert_lines(markdown),
                     haystack: WikiAlerts.squash(body).to_lower()
@@ -294,6 +318,9 @@ export tool WikiHtmlExport {
           var input = document.getElementById('wiki-search-input');
           var results = document.getElementById('wiki-search-results');
           var staticNav = document.getElementById('wiki-static-nav');
+          function fold(text) {
+            return text.normalize('NFD').replace(/[\u0300-\u036f]/g, '').toLowerCase();
+          }
           function renderResults(items) {
             results.innerHTML = '';
             if (!items.length) {
@@ -317,7 +344,7 @@ export tool WikiHtmlExport {
             });
           }
           input.addEventListener('input', function () {
-            var q = input.value.trim().toLowerCase();
+            var q = fold(input.value.trim());
             if (!q) {
               results.hidden = true;
               staticNav.hidden = false;
@@ -326,7 +353,7 @@ export tool WikiHtmlExport {
             staticNav.hidden = true;
             results.hidden = false;
             renderResults(WIKI_INDEX.filter(function (item) {
-              return (item.title + ' ' + item.summary + ' ' + item.category).toLowerCase().indexOf(q) !== -1;
+              return fold(item.title + ' ' + item.aliases + ' ' + item.summary + ' ' + item.category).indexOf(q) !== -1;
             }));
           });
         })();
@@ -373,6 +400,7 @@ export tool WikiHtmlExport {
                 entries += [{
                     category: category.label,
                     title: entry.title,
+                    aliases: (entry?.aliases ?? []).join(" "),
                     summary: entry.summary,
                     path: category.dir + "/" + entry.slug + ".html",
                 }]
@@ -547,5 +575,9 @@ test WikiHtmlExportSpec {
         are_equal(rel.mentions.size(), 1)
         are_equal(rel.mentions[0].slug, "aplicativo-mobile")
         are_equal(rel.cited_by.size(), 1)
+    }
+
+    describe plain_text_drops_headings_and_list_markers {
+        are_equal(WikiHtmlExport.plain_text("## Fatos (2026-09-30)\n\n- Exige trilha\n- Relatório mensal\n\nParágrafo final"), "Exige trilha · Relatório mensal · Parágrafo final")
     }
 }

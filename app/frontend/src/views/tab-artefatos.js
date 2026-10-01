@@ -46,6 +46,16 @@ function labelFor(name) {
   return LABELS[name] || name;
 }
 
+// Texto do aviso "Desatualizado": artefatos regenerados e/ou a wiki com
+// conteúdo novo depois deste artefato.
+function staleMessage(staleDeps) {
+  const artifacts = staleDeps.filter((d) => d !== 'wiki');
+  const parts = [];
+  if (artifacts.length) parts.push(`${artifacts.map(labelFor).join(', ')} ${artifacts.length > 1 ? 'foram regenerados' : 'foi regenerado'}`);
+  if (staleDeps.includes('wiki')) parts.push('a wiki recebeu conteúdo novo');
+  return `Desatualizado: ${parts.join(' e ')} depois deste artefato.`;
+}
+
 const ARTIFACT_DESCRIPTIONS = {
   brief: 'Visão executiva, contexto e objetivos que orientam o trabalho.',
   atributos: 'Critérios não funcionais que moldam a qualidade da solução.',
@@ -715,6 +725,18 @@ export async function renderArtefatosTab(container, project, { onChanged }) {
     return out;
   }
 
+  // Data do wiki/index.md — ver computeStaleness (artifacts.js). null se a
+  // wiki ainda não existe ou não pôde ser lida: nada fica desatualizado.
+  async function wikiMtime() {
+    try {
+      const index = (await listProjectDir(project.id, 'wiki', '')).find((n) => n.name === 'index.md');
+      const t = index?.modifiedAt ? Date.parse(index.modifiedAt) : NaN;
+      return Number.isNaN(t) ? null : t;
+    } catch {
+      return null;
+    }
+  }
+
   async function refreshDoneState() {
     let nodes;
     try {
@@ -781,7 +803,7 @@ export async function renderArtefatosTab(container, project, { onChanged }) {
         historiasByFeatureId.set(featureIdOf(child.name), { dir: child.name, folders: storyFolders });
       }
     }
-    staleness = computeStaleness(sequence, doneNames, byName);
+    staleness = computeStaleness(sequence, doneNames, byName, await wikiMtime());
     try {
       const log = await workItemChangesLog(project.id);
       manualEdits = new Map();
@@ -1055,9 +1077,7 @@ export async function renderArtefatosTab(container, project, { onChanged }) {
           ? 'feature'
           : 'discovery';
     const stale = staleStatusFor(row);
-    const staleTitle = stale?.stale
-      ? `Desatualizado: ${stale.staleDeps.map(labelFor).join(', ')} ${stale.staleDeps.length > 1 ? 'foram regenerados' : 'foi regenerado'} depois deste artefato.`
-      : '';
+    const staleTitle = stale?.stale ? staleMessage(stale.staleDeps) : '';
     // updateTarget: the row "Atualizar" fires generate() on, only once this
     // row is both stale AND actually regenerable (updateTargetFor — null
     // for the synthetic per-feature "Histórias — X" row, which never gets a
@@ -1850,20 +1870,25 @@ export async function renderArtefatosTab(container, project, { onChanged }) {
     const composer = document.createElement('div');
     composer.className = 'run-composer';
     composer.innerHTML = `
-      <textarea class="run-feedback-input" placeholder="Pedir uma mudança neste artefato já aprovado — a próxima geração considera isto."></textarea>
+      <textarea class="run-feedback-input" placeholder="Pedir uma mudança neste artefato já aprovado (opcional) — vazio, só regera a partir do contexto atual (wiki e artefatos anteriores)."></textarea>
       <div class="run-composer-actions" style="justify-content: flex-end;">
-        <button class="button secondary small" data-submit>Solicitar mudança</button>
+        <button class="button secondary small" data-submit>Regerar</button>
       </div>
     `;
     const textarea = composer.querySelector('textarea');
     const button = composer.querySelector('[data-submit]');
+    // Texto opcional: sem ele, é uma regeneração simples (como "Atualizar"),
+    // sem registrar diretiva no histórico de mudanças.
+    textarea.addEventListener('input', () => {
+      button.textContent = textarea.value.trim() ? 'Solicitar mudança' : 'Regerar';
+    });
     button.addEventListener('click', () => {
       const text = textarea.value.trim();
-      if (!text) return;
       button.disabled = true;
       textarea.disabled = true;
       selectedKey = targetRow.key; // jump the view to the regeneration that's about to start
-      generate(targetRow, text);
+      if (text) generate(targetRow, text);
+      else generate(targetRow);
     });
     wrap.appendChild(composer);
 

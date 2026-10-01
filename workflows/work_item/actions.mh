@@ -2,6 +2,7 @@
 // política, persistência e leitura; o workflow mantém apenas a orquestração.
 
 import { Paths } from "../shared/core/paths.mh"
+import { Fixture } from "../shared/core/fixture.mh"
 
 export tool WorkItemActions {
     // continuidade_de: texto livre e opcional descrevendo qual sistema já
@@ -349,22 +350,14 @@ test WorkItemActionsSpec {
         are_equal(record.continuidade_de, "Checkout atual — fluxo de pagamento PIX")
         are_equal(json.parse(fs.read(Paths.project_file(record.id))).continuidade_de, "Checkout atual — fluxo de pagamento PIX")
 
-        fs.delete(Paths.project_file(record.id))
-        dir.delete(Paths.raw_dir(record.id))
-        dir.delete(Paths.wiki_dir(record.id))
-        dir.delete(Paths.artifacts_dir(record.id))
-        dir.delete(Paths.root(record.id))
+        Fixture.drop(record.id)
     }
 
     describe create_defaults_continuity_to_empty_when_not_given {
         var record = WorkItemActions.create("Oportunidade nova", "oportunidade")
         are_equal(record.continuidade_de, "")
 
-        fs.delete(Paths.project_file(record.id))
-        dir.delete(Paths.raw_dir(record.id))
-        dir.delete(Paths.wiki_dir(record.id))
-        dir.delete(Paths.artifacts_dir(record.id))
-        dir.delete(Paths.root(record.id))
+        Fixture.drop(record.id)
     }
 
     describe productivity_sums_llm_time_and_measures_review_cycles {
