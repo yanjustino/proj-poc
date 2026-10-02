@@ -167,18 +167,21 @@ export tool DiscoveryDrafts {
     historias(project_id: string, feature_id: string, autorrevisao: bool): Draft -> {
         var feature_dir = ArtifactId.find_feature_dir(project_id, feature_id)
         var feature = Context.artifact(project_id, "features/${feature_dir}/feature.html")
-        var refs = ContextSlice.refs(ContextSlice.read(project_id, "features/${feature_dir}/feature.json"))
-        var draft = CommonDrafts.historias(project_id, autorrevisao, feature, self.tech(project_id, refs), feature_id)
-        var data = draft.data
-        data["feature_dir"] = feature_dir
-        return draft
+        var feature_data = ContextSlice.read(project_id, "features/${feature_dir}/feature.json")
+        var draft = CommonDrafts.historias(project_id, autorrevisao, feature, self.tech(project_id, ContextSlice.refs(feature_data)), feature_data?.historias_propostas ?? [], feature_id)
+        return Drafts.with(draft, {feature_dir: feature_dir})
+    }
+
+    // Pasta da historia (historias/<feature>/<USxxx>), onde o plano e gravado.
+    historia_rel(project_id: string, feature_id: string, historia_id: string): string -> {
+        var historias_rel = "historias/${ArtifactId.find_feature_dir(project_id, feature_id)}"
+        return "${historias_rel}/${ArtifactId.find_historia_dir(project_id, historias_rel, historia_id)}"
     }
 
     // Gravado ao lado da historia: historias/<feature>/<USxxx>/plano.html.
     plano(project_id: string, feature_id: string, historia_id: string, autorrevisao: bool): Draft -> {
         var feature_dir = ArtifactId.find_feature_dir(project_id, feature_id)
-        var historias_rel = "historias/${feature_dir}"
-        var historia_rel = "${historias_rel}/${ArtifactId.find_historia_dir(project_id, historias_rel, historia_id)}"
+        var historia_rel = self.historia_rel(project_id, feature_id, historia_id)
         var historia_json = Paths.artifact(project_id, "${historia_rel}/historia.json")
         if (!fs.exists(historia_json)) fail("gere as historias de '${feature_id}' antes do plano de '${historia_id}'")
         var historia = json.parse(fs.read(historia_json))
@@ -190,9 +193,7 @@ export tool DiscoveryDrafts {
             self.tech(project_id, ContextSlice.refs(historia)),
             "${feature_id}/${historia_id}"
         )
-        var data = draft.data
-        data["historia_dir"] = historia_rel
-        return draft
+        return Drafts.with(draft, {historia_dir: historia_rel})
     }
 }
 
@@ -210,14 +211,23 @@ export tool DiscoveryCommits {
         DiscoveryArtifact.plano        -> self.plano(project_id, feature_id, historia_id, draft)
     }
 
+    // Os caminhos vem do rascunho quando ele os traz; senao sao recalculados
+    // a partir dos ids — um rascunho gerado sem eles ainda pode ser aprovado.
+    feature_dir(project_id: string, feature_id: string, draft: Draft): string -> {
+        var saved = draft.data?.feature_dir
+        return if (saved == null) ArtifactId.find_feature_dir(project_id, feature_id) else saved
+    }
+
     historias(project_id: string, feature_id: string, draft: Draft): any -> {
-        var result = ArtifactCommit.historias(project_id, draft.data.feature_dir, draft)
+        var result = ArtifactCommit.historias(project_id, self.feature_dir(project_id, feature_id, draft), draft)
         result["feature_id"] = feature_id
         return result
     }
 
     plano(project_id: string, feature_id: string, historia_id: string, draft: Draft): any -> {
-        var result = ArtifactCommit.plano(project_id, "${draft.data.historia_dir}/plano.html", "../../../", draft)
+        var saved = draft.data?.historia_dir
+        var historia_rel = if (saved == null) DiscoveryDrafts.historia_rel(project_id, feature_id, historia_id) else saved
+        var result = ArtifactCommit.plano(project_id, "${historia_rel}/plano.html", "../../../", draft)
         result["feature_id"] = feature_id
         result["historia_id"] = historia_id
         return result

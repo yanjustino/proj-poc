@@ -28,7 +28,7 @@ export prompt DiagramasInstruction(schema_conventions: prompt, requisitos_conten
 // SpecConventions pede rastreabilidade e contratos estruturados (historia_spec.mh).
 export prompt SpecConventions() from "prompts/spec_conventions.prompt.md"
 export prompt PlanoInstruction(schema_conventions: prompt, historia_content: string, feature_content: string, requisitos_content: string, atributos_content: string, adr_content: string, der_content: string, diagramas_content: string, feedback_content: string) from "prompts/plano.prompt.md"
-export prompt HistoriasInstruction(schema_conventions: prompt, spec_conventions: prompt, feature_content: string, requisitos_content: string, atributos_content: string, adr_content: string, der_content: string, diagramas_content: string, feedback_content: string) from "prompts/historias.prompt.md"
+export prompt HistoriasInstruction(schema_conventions: prompt, spec_conventions: prompt, feature_content: string, requisitos_content: string, atributos_content: string, adr_content: string, der_content: string, diagramas_content: string, lote_content: string, feedback_content: string) from "prompts/historias.prompt.md"
 
 prompt HistoriasSchemaContent() from "schemas/historias.schema.json"
 prompt BriefSchemaContent() from "schemas/brief.schema.json"

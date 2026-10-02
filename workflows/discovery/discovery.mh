@@ -179,4 +179,14 @@ test DiscoveryWorkflowSpec {
         is_true(fs.read(Paths.artifact(id, "dependencias.html")).contains("3 → 4 tokens"))
         Fixture.drop(id)
     }
+
+    // Rascunho de historias sem feature_dir (gerado por uma versao que o
+    // perdia): o Commit recalcula a pasta pelo feature_id.
+    describe commit_resolves_the_feature_folder_when_the_draft_lacks_it {
+        var id = Fixture.project("spec-test-discovery-feature-dir")
+        Fixture.artifact(id, "features/FT001-checkout/feature.html", "<html><body>FT001</body></html>")
+        are_equal(DiscoveryCommits.feature_dir(id, "FT001", {data: {historias: []}, tokens_in: 0, tokens_out: 0}), "FT001-checkout")
+        are_equal(DiscoveryCommits.feature_dir(id, "FT001", {data: {historias: [], feature_dir: "FT001-outro"}, tokens_in: 0, tokens_out: 0}), "FT001-outro")
+        Fixture.drop(id)
+    }
 }

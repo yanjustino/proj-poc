@@ -253,6 +253,7 @@ func Start(ctx context.Context, mhlPath, workflowsDir, stateDir, dataDir, codexC
 		env = append(env, "SENPAI_CLAUDE_MODEL="+claudeModel)
 	}
 	cmd.Env = enrichedEnv(ctx, env)
+	logAgentBinaries(cmd.Env)
 	// stderr is kept in memory for Start's own "did not become ready" error
 	// AND mirrored line by line into the app log for the whole session —
 	// previously it only ever surfaced if startup failed, so when mhl hit an

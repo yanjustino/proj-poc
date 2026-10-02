@@ -38,4 +38,6 @@ ${der_content}
 
 ${diagramas_content}
 
+${lote_content}
+
 ${feedback_content}

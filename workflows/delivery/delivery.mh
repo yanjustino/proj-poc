@@ -94,7 +94,7 @@ workflow Delivery {
 
     step Commit {
         var draft = {data: self.pending_data, tokens_in: self.tokens_in, tokens_out: self.tokens_out}
-        self.delivery_result = DeliveryCommits.of(DeliveryKinds.artifact(artifact), project_id, historia_id, draft)
+        self.delivery_result = DeliveryCommits.of(DeliveryKinds.artifact(artifact), project_id, mode, historia_id, draft)
         complete()
     }
 }

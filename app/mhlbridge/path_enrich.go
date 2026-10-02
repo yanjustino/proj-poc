@@ -5,6 +5,7 @@ import (
 	"log"
 	"os"
 	"os/exec"
+	"path/filepath"
 	"runtime"
 	"strings"
 	"time"
@@ -96,4 +97,43 @@ func loginShellPath(ctx context.Context) (string, bool) {
 	}
 	path := strings.TrimSpace(string(out))
 	return path, path != ""
+}
+
+// logAgentBinaries registra no app.log qual executável de cada CLI de agente
+// o mhl vai encontrar com este PATH. O app aberto pelo Finder não herda o
+// PATH do terminal: com duas instalações (ex.: uma antiga em /usr/local/bin
+// e a atual em ~/.local/bin), "no terminal funciona, no app não" vira uma
+// diferença de versão invisível sem esta linha.
+func logAgentBinaries(env []string) {
+	pathValue := ""
+	for _, kv := range env {
+		if strings.HasPrefix(kv, "PATH=") {
+			pathValue = strings.TrimPrefix(kv, "PATH=")
+		}
+	}
+	for _, name := range []string{"devin", "codex", "claude"} {
+		if found := lookPathIn(name, pathValue); found != "" {
+			log.Printf("mhlbridge: %s resolvido em %s", name, found)
+		} else {
+			log.Printf("mhlbridge: %s não encontrado no PATH do mhl", name)
+		}
+	}
+}
+
+// lookPathIn é exec.LookPath sobre um PATH arbitrário (o do processo filho,
+// não o deste processo).
+func lookPathIn(name, pathValue string) string {
+	if runtime.GOOS == "windows" {
+		name += ".exe"
+	}
+	for _, dir := range filepath.SplitList(pathValue) {
+		if dir == "" {
+			continue
+		}
+		candidate := filepath.Join(dir, name)
+		if info, err := os.Stat(candidate); err == nil && !info.IsDir() && (runtime.GOOS == "windows" || info.Mode()&0o111 != 0) {
+			return candidate
+		}
+	}
+	return ""
 }
