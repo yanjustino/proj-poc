@@ -41,7 +41,7 @@ export tool WikiIndex {
 
     // Sem repeticao e sem o proprio titulo, comparando pelo slug (ignora
     // caixa, acento e pontuacao).
-    merge_aliases(title: string, current: string[], incoming: string[]): string[] -> {
+    internal merge_aliases(title: string, current: string[], incoming: string[]): string[] -> {
         var seen = [Slug.from_title(title)]
         var out = []
         for (var alias in current + incoming) {
@@ -74,7 +74,7 @@ export tool WikiIndex {
         return if (out.is_empty()) "(nenhuma página ainda — todas as entidades e conceitos desta fonte são novos)" else out
     }
 
-    catalog_section(label: string, entries: any[]): string -> {
+    internal catalog_section(label: string, entries: any[]): string -> {
         if (entries.is_empty()) return ""
         var lines = entries.map((e) -> {
             var aliases = e?.aliases ?? []
@@ -89,10 +89,10 @@ export tool WikiIndex {
         return json.parse(fs.read(path))
     }
 
-    save(project_id: string, state: any) ->
+    internal save(project_id: string, state: any) ->
         fs.write(Paths.index_state_file(project_id), json.stringify(state))
 
-    render(project_id: string, state: any) -> {
+    internal render(project_id: string, state: any) -> {
         var body = "# Índice da Wiki\n\n"
         body = body + self.render_section("Fontes", "sources", state.get("sources", []))
         body = body + self.render_section("Entidades", "entities", state.get("entities", []))
@@ -101,7 +101,7 @@ export tool WikiIndex {
         fs.write(Paths.wiki(project_id, "index.md"), body)
     }
 
-    render_section(title: string, dir: string, entries: any[]): string -> {
+    internal render_section(title: string, dir: string, entries: any[]): string -> {
         if (entries.is_empty()) return ""
         var lines = "## " + title + "\n\n"
         for (var entry in entries) {
@@ -110,7 +110,7 @@ export tool WikiIndex {
         return lines + "\n"
     }
 
-    natureza_badge(entry: any): string -> {
+    internal natureza_badge(entry: any): string -> {
         var n = entry?.natureza ?? ""
         if (n.is_empty()) return ""
         return " `[" + self.natureza_label(n) + "]`"

@@ -32,7 +32,7 @@ export tool WikiActions {
         WikiHtmlExport.sync(project_id)
         return {
             source_title: data.source_title,
-            source_slug: source_slug,
+            source_slug,
             entities_touched: data.entities.size(),
             concepts_touched: data.concepts.size()
         }
@@ -40,19 +40,19 @@ export tool WikiActions {
 
     // Uma entidade/conceito cujo titulo (ou alias) ja tem pagina entra nela;
     // o titulo usado pela fonte vira alias, para a busca e o proximo catalogo.
-    upsert_fact(project_id: string, category: string, item: any) -> {
+    internal upsert_fact(project_id: string, category: string, item: any) -> {
         var title = WikiIndex.canonical_title(project_id, category, item.title)
         var aliases = (item?.aliases ?? []) + (if (title == item.title) [] else [item.title])
         WikiPages.upsert_fact_page(project_id, category, title, item.facts)
-        WikiIndex.upsert(project_id, category, {slug: Slug.from_title(title), title: title, summary: item.facts[0], aliases: aliases})
+        WikiIndex.upsert(project_id, category, {slug: Slug.from_title(title), title, summary: item.facts[0], aliases})
     }
 
     file_answer(project_id: string, title: string, body: string, question: string): string -> {
         var slug = Slug.from_title(title)
         WikiPages.write_answer(project_id, slug, title, body)
         WikiIndex.upsert_answer(project_id, {
-            slug: slug,
-            title: title,
+            slug,
+            title,
             summary: question
         })
         self.log(project_id, "query", title)
@@ -86,7 +86,7 @@ export tool WikiActions {
     // em workflows/shared/agents/agents.mh, ver FASE5-ACHADOS.md). Sem isso,
     // `WikiLog.append` (que interpola `${project_id}` no seu `path:`) falha
     // com "undefined variable" — reproduzido de verdade em todo `ingest`.
-    log(project_id: string, action: string, description: string) ->
+    internal log(project_id: string, action: string, description: string) ->
         WikiLog.append(
             "## [" + time.format(time.now(), "yyyy-MM-dd") + "] " +
             action + " | " + description

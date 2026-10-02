@@ -3,24 +3,15 @@
 
 import { WorkItemActions } from "actions.mh"
 import { Paths } from "../shared/core/paths.mh"
-import { Closed } from "../shared/core/closed_set.mh"
 import { Readiness } from "../shared/artifacts/readiness.mh"
 import { Handoff } from "../shared/artifacts/handoff.mh"
 
 enum WorkItemAction { create, list, get, archive, usage, prompt_log, changes, productivity, readiness, handoff }
 
-tool WorkItemActionKind {
-    parse(name: string): WorkItemAction -> Closed.parse("acao desconhecida", name, [
-        WorkItemAction.create, WorkItemAction.list, WorkItemAction.get, WorkItemAction.archive,
-        WorkItemAction.usage, WorkItemAction.prompt_log, WorkItemAction.changes,
-        WorkItemAction.productivity, WorkItemAction.readiness, WorkItemAction.handoff,
-    ])
-}
-
 workflow WorkItem {
     description: "Ciclo de vida de um work-item do Senpai: create, list, get, archive, usage, prompt_log, changes, productivity, readiness, handoff."
 
-    input action: string             // WorkItemAction
+    input action: WorkItemAction
     input name: string = ""          // obrigatorio (valor) so para action:"create"
     input item_type: string = ""     // "oportunidade" | "feature" | "historia"; so para action:"create"
     input continuidade_de: string = "" // opcional, so para action:"create" — sistema existente que este item evolui
@@ -37,15 +28,15 @@ workflow WorkItem {
     var error_message = ""
 
     output: {
-        action: action,
-        project: project,
-        projects: projects,
-        usage: usage,
-        prompt_log: prompt_log,
-        changes: changes,
-        productivity: productivity,
-        readiness: readiness,
-        handoff: handoff,
+        action,
+        project,
+        projects,
+        usage,
+        prompt_log,
+        changes,
+        productivity,
+        readiness,
+        handoff,
         error: error_message,
     }
 
@@ -63,7 +54,7 @@ workflow WorkItem {
     }
 
     step Dispatch {
-        goto ActionRouter(WorkItemActionKind.parse(action))
+        goto ActionRouter(action)
     }
 
     step Create {
@@ -135,12 +126,10 @@ test WorkItemWorkflowSpec {
         }
     }
 
-    describe rejects_an_unknown_action_before_touching_disk {
-        var run = WorkItem.run(inputs: {action: "bogus"})
-        is_false(run.ok)
-        are_equal(run.state, "failed")
-        is_true(run.error.contains("acao desconhecida: 'bogus' (use create | list | get | archive | usage | prompt_log | changes | productivity | readiness | handoff)"))
-        are_equal(run.executed, ["Dispatch"])
+    describe rejects_an_unknown_action_before_running {
+        var raised = ""
+        try { WorkItem.run(inputs: {action: "bogus"}) } catch (e) { raised = "${e}" }
+        is_true(raised.contains("\"bogus\" is not a variant of enum WorkItemAction (use create | list | get | archive | usage | prompt_log | changes | productivity | readiness | handoff)"))
     }
 
     describe create_rejects_an_empty_name_before_touching_disk {

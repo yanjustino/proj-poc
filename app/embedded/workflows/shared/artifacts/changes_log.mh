@@ -45,7 +45,7 @@ export tool ChangesBlock {
     // Unico ponto de escrita: grava o pedido antes da regeneracao, entao o
     // for_artifact da proxima geracao ja o le junto com os anteriores.
     record(project_id: string, artifact: string, feature_id: string, feedback: string) ->
-        ChangesLog.append({artifact: artifact, feature_id: feature_id, feedback: feedback})
+        ChangesLog.append({artifact, feature_id, feedback})
 
     // for_artifact devolve o bloco de instrução pronto pra entrar no prompt
     // via `feedback_content` (o mesmo parâmetro que antes só carregava o

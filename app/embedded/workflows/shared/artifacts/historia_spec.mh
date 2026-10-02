@@ -18,7 +18,6 @@
 
 import { Cite } from "cite.mh"
 import { Paths } from "../core/paths.mh"
-import { DirClear } from "../core/dir_clear.mh"
 import { DependencyRules } from "backlog_rules.mh"
 
 export tool Traceability {
@@ -29,8 +28,8 @@ export tool Traceability {
         var requisitos = self.ids_of(self.read_json(project_id, "requisitos.json"), ["funcionais", "integracoes", "dados", "negocio", "regras_negocio"])
         var atributos = self.ids_of(self.read_json(project_id, "atributos.json"), ["requisitos_nao_funcionais", "restricoes_arquiteturais", "compliance"])
         return {
-            requisitos: requisitos,
-            atributos: atributos,
+            requisitos,
+            atributos,
             adrs: self.adr_ids(project_id),
             entidades: self.der_entities(self.read_json(project_id, "der.json")),
             conteineres: self.containers(project_id),
@@ -40,7 +39,7 @@ export tool Traceability {
 
     // Features do backlog (Discovery): codigo ("FT006") e titulo — destinos
     // validos de uma dependencia de historia. Delivery nao tem pasta features/.
-    features(project_id: string): string[] -> {
+    internal features(project_id: string): string[] -> {
         var base = Paths.artifact(project_id, "features")
         if (!dir.exists(base)) return []
         var out = []
@@ -55,7 +54,7 @@ export tool Traceability {
         return out
     }
 
-    read_json(project_id: string, relative: string): any -> {
+    internal read_json(project_id: string, relative: string): any -> {
         var path = Paths.artifact(project_id, relative)
         if (!fs.exists(path)) return null
         try {
@@ -65,7 +64,7 @@ export tool Traceability {
         }
     }
 
-    ids_of(data: any, keys: string[]): string[] -> {
+    internal ids_of(data: any, keys: string[]): string[] -> {
         if (data == null) return []
         var out = []
         for (var key in keys) {
@@ -78,7 +77,7 @@ export tool Traceability {
     }
 
     // "ADR-001" de cada arquivo "ADR-001-slug.json" em adr/.
-    adr_ids(project_id: string): string[] -> {
+    internal adr_ids(project_id: string): string[] -> {
         var base = Paths.artifact(project_id, "adr")
         if (!dir.exists(base)) return []
         var out = []
@@ -95,7 +94,7 @@ export tool Traceability {
     // DER estruturado (DerModel: entidades[].id e .nome) ou legado
     // (entidades[].entidade). Id e nome valem como referencia: o modelo cita
     // pelo id que ve no JSON ("trilha-auditoria") tanto quanto pelo nome.
-    der_entities(der: any): string[] -> {
+    internal der_entities(der: any): string[] -> {
         if (der == null) return []
         var out = []
         for (var e in (der?.entidades ?? [])) {
@@ -111,7 +110,7 @@ export tool Traceability {
     // conteineres e bancos, e tambem pessoas e sistemas externos: uma
     // historia que cita o sistema externo com que integra ("bureau-credito")
     // esta referenciando algo que existe, nao inventando.
-    containers(project_id: string): string[] -> {
+    internal containers(project_id: string): string[] -> {
         var base = Paths.artifact(project_id, "diagramas")
         if (!dir.exists(base)) return []
         var out = []
@@ -133,10 +132,10 @@ export tool Traceability {
         return out
     }
 
-    normalized(text: string): string -> text.to_lower().trim()
+    internal normalized(text: string): string -> text.to_lower().trim()
 
     // Aceita "FR-001" ou a forma de citacao "requisitos/FR-001".
-    strip_prefix(ref: string): string -> {
+    internal strip_prefix(ref: string): string -> {
         var parts = ref.split("/")
         return parts[parts.size() - 1].trim()
     }
@@ -161,7 +160,7 @@ export tool Traceability {
     // check: avisos de rastreabilidade de UMA historia contra `known`. Uma
     // historia funcional sem nenhum requisito citado tambem e sinalizada — e o
     // vinculo que diz POR QUE ela existe.
-    check(rastreabilidade: any, known: any, story_type: string): string[] -> {
+    internal check(rastreabilidade: any, known: any, story_type: string): string[] -> {
         if (rastreabilidade == null) return []
         var out = []
         var requisitos = rastreabilidade?.requisitos ?? []
@@ -229,7 +228,7 @@ export tool Contracts {
 
     // --- Esquemas ------------------------------------------------------------
 
-    field_schema(campo: any): any -> match campo?.tipo ?? "string" {
+    internal field_schema(campo: any): any -> match campo?.tipo ?? "string" {
         "date"     -> {type: "string", format: "date", description: campo?.descricao ?? ""}
         "datetime" -> {type: "string", format: "date-time", description: campo?.descricao ?? ""}
         "uuid"     -> {type: "string", format: "uuid", description: campo?.descricao ?? ""}
@@ -238,17 +237,17 @@ export tool Contracts {
         _          -> {type: campo?.tipo ?? "string", description: campo?.descricao ?? ""}
     }
 
-    object_schema(campos: any[]): any -> {
+    internal object_schema(campos: any[]): any -> {
         var properties = {}
         var required = []
         for (var c in campos) {
             properties[c.nome] = self.field_schema(c)
             if (c?.obrigatorio ?? false) required += [c.nome]
         }
-        return {type: "object", required: required, properties: properties}
+        return {type: "object", required, properties}
     }
 
-    operation_id(endpoint: any): string -> {
+    internal operation_id(endpoint: any): string -> {
         var id = endpoint?.id ?? ""
         if (!id.is_empty()) return id
         return (endpoint.metodo + " " + endpoint.caminho).to_lower().replace("/", "_").replace("{", "").replace("}", "").replace(" ", "")
@@ -279,8 +278,8 @@ export tool Contracts {
             var operation = {
                 operationId: self.operation_id(e),
                 summary: e?.resumo ?? "",
-                parameters: parameters,
-                responses: responses,
+                parameters,
+                responses,
             }
             if ((e?.autenticacao ?? "") != "" && e.autenticacao != "nenhuma") operation["security"] = [{bearerAuth: []}]
             var corpo = e?.corpo ?? []
@@ -291,7 +290,7 @@ export tool Contracts {
         return {
             openapi: "3.1.0",
             info: {title: historia.titulo, version: "0.1.0"},
-            paths: paths,
+            paths,
             components: {securitySchemes: {bearerAuth: {type: "http", scheme: "bearer"}}},
         }
     }
@@ -306,19 +305,19 @@ export tool Contracts {
             channels[ev.canal]["messages"][ev.nome] = {name: ev.nome, summary: ev?.resumo ?? "", payload: self.object_schema(ev?.campos ?? [])}
             var action = if (ev?.direcao == "consome") "receive" else "send"
             operations[action + "_" + ev.nome] = {
-                action: action,
+                action,
                 channel: {"$ref": "#/channels/" + ev.canal},
                 messages: [{"$ref": "#/channels/" + ev.canal + "/messages/" + ev.nome}],
             }
         }
-        return {asyncapi: "3.0.0", info: {title: historia.titulo, version: "0.1.0"}, channels: channels, operations: operations}
+        return {asyncapi: "3.0.0", info: {title: historia.titulo, version: "0.1.0"}, channels, operations}
     }
 
     // pretty: JSON indentado — json.stringify do mhl so gera a forma compacta,
     // e estes arquivos vao para o repositorio para serem lidos.
     pretty(value: any): string -> self.pretty_at(value, "")
 
-    pretty_at(value: any, indent: string): string -> {
+    internal pretty_at(value: any, indent: string): string -> {
         var t = type_of(value)
         var inner = indent + "  "
         if (t == "object") {
@@ -335,7 +334,7 @@ export tool Contracts {
 
     // --- Conformidade -----------------------------------------------------------
 
-    path_params(caminho: string): string[] -> {
+    internal path_params(caminho: string): string[] -> {
         var out = []
         for (var part in caminho.split("/")) {
             if (part.starts_with("{") && part.ends_with("}")) out += [part.substring(1, part.size() - 1)]
@@ -400,7 +399,7 @@ export tool Contracts {
 
     // --- Renderizacao -----------------------------------------------------------
 
-    fields_html(campos: any[]): string -> {
+    internal fields_html(campos: any[]): string -> {
         if (campos.is_empty()) return "<p>—</p>"
         return "<table><thead><tr><th>Campo</th><th>Tipo</th><th>Obrigatório</th><th>Descrição</th></tr></thead><tbody>" +
             campos.map((c) -> "<tr><td><code>" + html.escape(c.nome) + "</code>" + (if ((c?.local ?? "") == "") "" else " <small>(" + html.escape(c.local) + ")</small>") +
@@ -453,7 +452,7 @@ export tool Contracts {
 export tool Scenarios {
     is_structured(historia: any): bool -> historia?.cenarios != null
 
-    steps(keyword: string, items: string[]): string -> {
+    internal steps(keyword: string, items: string[]): string -> {
         var out = ""
         var first = true
         for (var item in items) {
@@ -463,7 +462,7 @@ export tool Scenarios {
         return out
     }
 
-    tags(criterios: string[]): string ->
+    internal tags(criterios: string[]): string ->
         criterios.map((c) -> "@" + c.to_upper().trim()).join(" ")
 
     gherkin(historia: any): string -> {
@@ -560,7 +559,7 @@ export tool SpecFiles {
 // Fixtures dos testes abaixo (mhl nao aceita `var` solto no corpo de um
 // `test`, so dentro de cada `describe`).
 tool SpecFixtures {
-    historia(): any -> {
+    internal historia(): any -> {
         titulo: "Consultar ordem",
         story_type: "historia_usuario",
         subclassification: "backend",
@@ -585,7 +584,7 @@ tool SpecFixtures {
         contratos_fontes: ["requisitos/FR-005"],
     }
 
-    known(): any -> {
+    internal known(): any -> {
         requisitos: ["FR-001", "FR-005"],
         atributos: ["NFR-001"],
         adrs: ["ADR-001", "ADR-002"],
@@ -724,7 +723,7 @@ test HistoriaSpecSpec {
         is_true(fs.read(Paths.artifact(project_id, "historias/US0001-x/openapi.json")).contains("\"openapi\": \"3.1.0\""))
         is_true(fs.read(Paths.artifact(project_id, "historias/US0001-x/asyncapi.json")).contains("\"asyncapi\": \"3.0.0\""))
 
-        DirClear.clear(root)
+        dir.clear(root)
         dir.delete(root)
     }
 

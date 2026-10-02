@@ -13,7 +13,7 @@ import { Cite } from "cite.mh"
 export tool StoryRules {
     blank(value: any): bool -> (value ?? "").trim().is_empty()
 
-    expected_nature(story_type: string): string -> match story_type {
+    internal expected_nature(story_type: string): string -> match story_type {
         "historia_usuario"      -> "funcional"
         "historia_habilitadora" -> "tecnica"
         "spike"                 -> "pesquisa"
@@ -53,7 +53,7 @@ export tool StoryRules {
     // de saida e a decisao que desbloqueia (spike estruturado; um spike
     // antigo, sem o objeto `spike`, usa resultado_tecnico/habilita/
     // evidenciado_por como pergunta/decisao/evidencia).
-    check_spike(h: any): string[] -> {
+    internal check_spike(h: any): string[] -> {
         var spike = h?.spike
         if (spike == null) {
             if (self.blank(h?.resultado_tecnico) || self.blank(h?.habilita) || self.blank(h?.evidenciado_por)) return ["Spike precisa da pergunta, da decisão habilitada e da evidência esperada."]
@@ -91,7 +91,7 @@ export tool FeatureRules {
 
     // Hipotese de beneficio verificavel: metrica e meta sempre; baseline ou
     // a lacuna registrada. Feature anterior a medicao_beneficio nao e checada.
-    check_measurement(f: any): string[] -> {
+    internal check_measurement(f: any): string[] -> {
         var m = f?.medicao_beneficio
         if (m == null) return []
         var out = []
@@ -108,7 +108,7 @@ export tool FeatureRules {
 export tool DependencyRules {
     // Um destino sem espaco e com digito ("FT003", "FR-012", "US0002") e um
     // identificador; com espaco, e o titulo de outra historia do lote.
-    is_identifier(destino: string): bool -> {
+    internal is_identifier(destino: string): bool -> {
         var d = destino.trim()
         if (d.is_empty() || d.contains(" ")) return false
         return "0123456789".split("").any((c) -> d.contains(c))
@@ -150,12 +150,12 @@ export tool DependencyRules {
         return out
     }
 
-    endpoint_keys(h: any): string[] ->
+    internal endpoint_keys(h: any): string[] ->
         (h?.contratos?.endpoints ?? []).map((e) -> e.metodo + " " + self.normalize_path(e.caminho))
 
     // Prefixos de roteamento que o gateway costuma acrescentar ("/api",
     // "/v1") nao fazem dois endpoints diferentes.
-    normalize_path(caminho: string): string -> {
+    internal normalize_path(caminho: string): string -> {
         var parts = caminho.split("/").filter((p) -> !p.is_empty())
         var out = []
         var skipping = true
@@ -175,7 +175,7 @@ export tool DependencyRules {
     // artefatos por endpoint REST) precisa expor o mesmo contrato: o gateway
     // depende do backend (dependencias_impedimentos) e os dois descrevem os
     // mesmos metodo+caminho. Avisos vao para a historia de gateway.
-    gateway_backend_pairs(historias: any[]): any[] -> {
+    internal gateway_backend_pairs(historias: any[]): any[] -> {
         var out = []
         for (var h in historias) {
             var avisos = []

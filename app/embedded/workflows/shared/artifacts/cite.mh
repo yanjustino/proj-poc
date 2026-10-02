@@ -18,7 +18,7 @@ export tool Cite {
     // Uma sequencia de <h2><p> com fontes por categoria — usado quando o
     // schema devolve uma lista de {titulo, corpo, fontes} (ex. atributos de
     // qualidade, uma secao por categoria).
-    sections(items: {titulo: string, corpo: string, fontes: string[]}[]): string ->
+    internal sections(items: {titulo: string, corpo: string, fontes: string[]}[]): string ->
         items.map((item) -> "<h2>" + html.escape(item.titulo) + "</h2><p>" + html.escape(item.corpo) + " " + self.badges(item.fontes) + "</p>").join("")
 
     // Nota de fontes depois de um paragrafo/registro de prosa que sintetiza

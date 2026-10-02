@@ -683,7 +683,8 @@
   "type": "object",
   "additionalProperties": false,
   "required": [
-    "historias"
+    "historias",
+    "mais_historias"
   ],
   "properties": {
     "historias": {
@@ -691,7 +692,12 @@
       "minItems": 1,
       "items": {
         "$ref": "#/$defs/story"
-      }
+      },
+      "maxItems": 4
+    },
+    "mais_historias": {
+      "type": "boolean",
+      "description": "true se a quebra completa do item ainda precisa de histórias além das já geradas e das desta resposta; false quando estas a completam."
     }
   }
 }

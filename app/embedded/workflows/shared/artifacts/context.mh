@@ -22,7 +22,7 @@ export tool Context {
     // continuidade tambem aparece, sao pulados (opcionais em Delivery).
     wiki(project_id: string): string -> self.continuity_block(project_id) + WikiContext.all_pages(project_id)
 
-    continuity_block(project_id: string): string -> {
+    internal continuity_block(project_id: string): string -> {
         var path = Paths.project_file(project_id)
         if (!fs.exists(path)) return ""
         var texto = json.parse(fs.read(path)).get("continuidade_de", "")

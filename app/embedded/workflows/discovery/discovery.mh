@@ -1,128 +1,36 @@
-// Discovery gera os artefatos de uma Oportunidade. O que muda por artefato
-// esta em discovery_artifacts.mh; aqui fica so o fluxo, compartilhado com o
-// Delivery: Dispatch -> Generate -> Gate (pausa no Modo Buddy) -> Commit.
+// Discovery gera os artefatos de uma Oportunidade: o fluxo comum
+// (artifact_flow.mh) no nivel discovery. O que muda por artefato esta em
+// discovery_artifacts.mh.
 
 import { Paths } from "../shared/core/paths.mh"
 import { Fixture } from "../shared/core/fixture.mh"
-import { ChangesBlock } from "../shared/artifacts/changes_log.mh"
-import { Activity } from "../shared/artifacts/activity_log.mh"
-import { Telemetry } from "../shared/telemetry/telemetry.mh"
-import { DiscoveryKinds, DiscoveryDrafts, DiscoveryCommits } from "discovery_artifacts.mh"
+import { ArtifactFlow, Level } from "../artifact_flow/artifact_flow.mh"
+import { DiscoveryCommits } from "discovery_artifacts.mh"
 
-workflow Discovery {
+// `mode` e do Delivery; fixado aqui so para sair do contrato do Discovery.
+workflow Discovery = ArtifactFlow with { level: Level.discovery, mode: "feature" } {
     description: "Artefatos de nivel Oportunidade: brief, atributos, requisitos, adr, der, diagramas, features, dependencias, historias, plano."
-
-    input project_id: string
-    input artifact: string         // DiscoveryArtifact
-    input feature_id: string = ""  // obrigatorio para historias e plano
-    input historia_id: string = "" // obrigatorio para plano (ex.: "US0001")
-    input buddy: bool = false
-    input approved: bool = false
-    // Aprovacao de um rascunho revisado: a UI envia o pending_data de uma
-    // run pausada e Dispatch vai direto ao Commit, sem chamar a LLM. Serve
-    // tambem para um checkpoint criado por outra versao deste workflow.
-    input approval_data: any = null
-    input approval_tokens_in: number = 0
-    input approval_tokens_out: number = 0
-    // Pedido de mudanca. Chega no resume de uma run pausada (Gate) ou num
-    // StartRun novo sobre um artefato ja aprovado (Dispatch); nos dois casos
-    // custa exatamente uma geracao.
-    input feedback: string = ""
-    // Autorrevisao (auto_review.mh): com avisos de conformidade na geracao,
-    // uma unica chamada extra pede a correcao antes da pausa.
-    input autorrevisao: bool = false
-
-    // pending_data/tokens_in/tokens_out/current_artifact sao lidos pelo app
-    // numa run pausada (checkpoint-recovery.js, run-tracker.js).
-    var discovery_result = null
-    var tokens_in = 0
-    var tokens_out = 0
-    var current_artifact = ""
-    var pending_data = null
-    // Garante que um pedido de mudanca gera uma unica regeneracao. Uma `var`,
-    // e nao `feedback = ""`, porque reatribuir um input nao sobrevive ao
-    // proximo resume: o Gate veria o mesmo feedback e regeneraria sem fim.
-    // Volta a false antes de cada pausa, liberando o proximo pedido.
-    var feedback_consumed = false
-
-    output: {
-        artifact: artifact,
-        result: discovery_result,
-        tokens_in: tokens_in,
-        tokens_out: tokens_out,
-    }
-
-    step_end: (ctx) -> Telemetry.step_end(ctx, self.project_id, self.artifact, self.tokens_in, self.tokens_out)
-
-    step Dispatch {
-        Paths.ensure_valid(project_id)
-        var kind = DiscoveryKinds.artifact(artifact)
-        DiscoveryKinds.check(kind, feature_id, historia_id)
-        self.current_artifact = artifact
-        var scope = DiscoveryKinds.scope(kind, feature_id, historia_id)
-        if (approved && approval_data != null) {
-            self.pending_data = approval_data
-            self.tokens_in = approval_tokens_in
-            self.tokens_out = approval_tokens_out
-            Activity.record(project_id, "approved", artifact, scope)
-            goto Commit
-        }
-        if (buddy && !approved && !feedback.is_empty()) {
-            self.feedback_consumed = true
-            ChangesBlock.record(project_id, artifact, scope, feedback)
-        }
-        Activity.record(project_id, "started", artifact, scope)
-        goto Generate
-    }
-
-    step Generate {
-        var draft = DiscoveryDrafts.of(DiscoveryKinds.artifact(artifact), project_id, feature_id, historia_id, autorrevisao)
-        self.pending_data = draft.data
-        self.tokens_in = draft.tokens_in
-        self.tokens_out = draft.tokens_out
-        goto Gate
-    }
-
-    // Pausar nunca custa uma nova chamada de LLM: o rascunho ja esta em
-    // pending_data. No resume, approved:true grava; approved:false com
-    // feedback registra o pedido (ChangesBlock) e regenera com todo o
-    // historico de pedidos deste item; sem feedback, pausa de novo.
-    step Gate {
-        var scope = DiscoveryKinds.scope(DiscoveryKinds.artifact(artifact), feature_id, historia_id)
-        if (buddy && !approved) {
-            if (!feedback.is_empty() && !self.feedback_consumed) {
-                self.feedback_consumed = true
-                ChangesBlock.record(project_id, artifact, scope, feedback)
-                goto Generate
-            }
-            self.feedback_consumed = false
-            Activity.record(project_id, "draft_ready", artifact, scope)
-            pause("revise o conteudo de '${artifact}' antes de gravar em artifacts/")
-        }
-        if (buddy) Activity.record(project_id, "approved", artifact, scope)
-        goto Commit
-    }
-
-    step Commit {
-        var draft = {data: self.pending_data, tokens_in: self.tokens_in, tokens_out: self.tokens_out}
-        self.discovery_result = DiscoveryCommits.of(DiscoveryKinds.artifact(artifact), project_id, feature_id, historia_id, draft)
-        complete()
-    }
 }
 
 // Cobre o que e deterministico: validacao de entrada, a cadeia de
 // predecessores (cada gate falha antes de qualquer chamada de LLM) e o
 // caminho de aprovacao, que grava sem chamar a LLM.
 test DiscoveryWorkflowSpec {
-    describe rejects_an_unknown_artifact_listing_every_valid_one {
-        var run = Discovery.run(inputs: {project_id: "spec-test-project", artifact: "bogus"})
+    describe rejects_an_unknown_artifact_before_running {
+        var raised = ""
+        try { Discovery.run(inputs: {project_id: "spec-test-project", artifact: "bogus"}) } catch (e) { raised = "${e}" }
+        is_true(raised.contains("\"bogus\" is not a variant of enum Artifact"))
+    }
+
+    describe rejects_an_artifact_of_another_level_listing_its_own {
+        var run = Discovery.run(inputs: {project_id: "spec-test-project", artifact: "feature"})
         is_false(run.ok)
-        is_true(run.error.contains("artefato desconhecido: 'bogus' (use brief | atributos | requisitos | adr | der | diagramas | features | dependencias | historias | plano)"))
+        is_true(run.error.contains("\"feature\" is not a variant of enum DiscoveryArtifact (use brief | atributos | requisitos | adr | der | diagramas | features | dependencias | historias | plano)"))
     }
 
     describe atributos_and_requisitos_require_brief_first {
         for (var artifact in ["atributos", "requisitos"]) {
-            var run = Discovery.run(inputs: {project_id: "spec-test-project", artifact: artifact})
+            var run = Discovery.run(inputs: {project_id: "spec-test-project", artifact})
             is_true(run.error.contains("gere 'brief' antes de '${artifact}'"))
         }
     }
@@ -130,17 +38,17 @@ test DiscoveryWorkflowSpec {
     describe technical_artifacts_require_requisitos_then_atributos_then_adr {
         var id = Fixture.project("spec-test-discovery-tecnicos")
         for (var artifact in ["adr", "der", "diagramas", "features"]) {
-            var run = Discovery.run(inputs: {project_id: id, artifact: artifact})
+            var run = Discovery.run(inputs: {project_id: id, artifact})
             is_true(run.error.contains("gere 'requisitos' antes de '${artifact}'"))
         }
         Fixture.artifact(id, "requisitos.html", "<html><body>FR-001</body></html>")
         for (var artifact in ["adr", "der", "diagramas", "features"]) {
-            var run = Discovery.run(inputs: {project_id: id, artifact: artifact})
+            var run = Discovery.run(inputs: {project_id: id, artifact})
             is_true(run.error.contains("gere 'atributos' antes de '${artifact}'"))
         }
         Fixture.artifact(id, "atributos.html", "<html><body>NFR-001</body></html>")
         for (var artifact in ["der", "diagramas", "features"]) {
-            var run = Discovery.run(inputs: {project_id: id, artifact: artifact})
+            var run = Discovery.run(inputs: {project_id: id, artifact})
             is_true(run.error.contains("gere 'adr' antes de '${artifact}'"))
         }
         Fixture.artifact(id, "adr/ADR-001-titulo.html", "<html><body>ADR-001</body></html>")
@@ -175,8 +83,18 @@ test DiscoveryWorkflowSpec {
         var run = Discovery.run(inputs: {project_id: id, artifact: "dependencias", approved: true, approval_data: data, approval_tokens_in: 3, approval_tokens_out: 4})
         is_true(run.ok)
         are_equal(run.executed, ["Dispatch", "Commit"])
-        are_equal(run.vars.discovery_result.path, "artifacts/dependencias.html")
+        are_equal(run.vars.result.path, "artifacts/dependencias.html")
         is_true(fs.read(Paths.artifact(id, "dependencias.html")).contains("3 → 4 tokens"))
+        Fixture.drop(id)
+    }
+
+    // Rascunho de historias sem feature_dir (gerado por uma versao que o
+    // perdia): o Commit recalcula a pasta pelo feature_id.
+    describe commit_resolves_the_feature_folder_when_the_draft_lacks_it {
+        var id = Fixture.project("spec-test-discovery-feature-dir")
+        Fixture.artifact(id, "features/FT001-checkout/feature.html", "<html><body>FT001</body></html>")
+        are_equal(DiscoveryCommits.feature_dir(id, "FT001", {data: {historias: []}, tokens_in: 0, tokens_out: 0}), "FT001-checkout")
+        are_equal(DiscoveryCommits.feature_dir(id, "FT001", {data: {historias: [], feature_dir: "FT001-outro"}, tokens_in: 0, tokens_out: 0}), "FT001-outro")
         Fixture.drop(id)
     }
 }

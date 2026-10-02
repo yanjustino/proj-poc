@@ -15,7 +15,7 @@ export tool Paths {
         return project_id
     }
 
-    ensure_safe_relative(relative: string): string -> {
+    internal ensure_safe_relative(relative: string): string -> {
         if (relative.contains("..")) fail("caminho relativo invalido (contem '..'): '" + relative + "'")
         if (relative.starts_with("/")) fail("caminho relativo nao pode ser absoluto: '" + relative + "'")
         return relative

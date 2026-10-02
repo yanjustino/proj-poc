@@ -37,14 +37,14 @@ export tool DerModel {
         _            -> html.escape(nivel)
     }
 
-    entity_type_label(tipo: string): string -> match tipo {
+    internal entity_type_label(tipo: string): string -> match tipo {
         "forte"       -> "Forte"
         "fraca"       -> "Fraca"
         "associativa" -> "Associativa"
         _             -> tipo
     }
 
-    key_label(chave: string): string -> match chave {
+    internal key_label(chave: string): string -> match chave {
         "pk" -> "PK"
         "fk" -> "FK"
         "uk" -> "UK"
@@ -55,13 +55,13 @@ export tool DerModel {
 
     // Rotulo entre aspas (alias de entidade, rotulo de relacionamento):
     // mesmas entidades Mermaid do C4Diagram.mm.
-    mm(text: string): string ->
+    internal mm(text: string): string ->
         text.replace("#", "#35;").replace("\"", "#quot;").replace("<", "#lt;").replace(">", "#gt;")
             .replace("\r", " ").replace("\n", " ")
 
     // Identificador de atributo/tipo no erDiagram: so letras, digitos e "_",
     // comecando por letra — o nome legivel vai no comentario do atributo.
-    token(text: string): string -> {
+    internal token(text: string): string -> {
         var slug = Slug.from_title(text).replace("-", "_")
         if ("0123456789".contains(slug.substring(0, 1))) return "a_" + slug
         return slug
@@ -69,9 +69,9 @@ export tool DerModel {
 
     // Comentario de atributo: entre aspas, e o erDiagram nao aceita aspas
     // escapadas dentro dele.
-    comment(text: string): string -> text.replace("\"", "'").replace("\r", " ").replace("\n", " ")
+    internal comment(text: string): string -> text.replace("\"", "'").replace("\r", " ").replace("\n", " ")
 
-    index_of(entidades: any[], id: string): int -> {
+    internal index_of(entidades: any[], id: string): int -> {
         var i = 0
         for (var e in entidades) {
             if (e.id == id) return i
@@ -80,7 +80,7 @@ export tool DerModel {
         return -1
     }
 
-    name_of(entidades: any[], id: string): string -> {
+    internal name_of(entidades: any[], id: string): string -> {
         var i = self.index_of(entidades, id)
         if (i < 0) return id
         return entidades[i].nome
@@ -88,7 +88,7 @@ export tool DerModel {
 
     // Marcadores pe-de-galinha. O da esquerda descreve quantos "de" existem
     // por "para" (min_de/max_de); o da direita, quantos "para" por "de".
-    left_marker(min: string, max: string): string -> {
+    internal left_marker(min: string, max: string): string -> {
         if (max == "1") return if (min == "1") "||" else "|o"
         return if (min == "1") "}|" else "}o"
     }
@@ -340,7 +340,7 @@ export tool DerModel {
 // Fixtures dos testes abaixo (mhl nao aceita `var` solto no corpo de um
 // `test`, so dentro de cada `describe`).
 tool DerFixtures {
-    logical(): any -> {
+    internal logical(): any -> {
         modo: "greenfield",
         nivel: "logico",
         contexto: "Plataforma de investimentos",

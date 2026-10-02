@@ -18,7 +18,7 @@ export tool RawExtract {
     // Extensoes de texto puro — mesmo branch de leitura, sem parser algum:
     // o conteudo bruto do arquivo vira o `source_text` do prompt de ingest,
     // que ja e format-agnostico (ver ingest.prompt.md).
-    plain_text_extensions(): string[] -> [".txt", ".md", ".json", ".yml", ".yaml", ".sql", ".feature"]
+    internal plain_text_extensions(): string[] -> [".txt", ".md", ".json", ".yml", ".yaml", ".sql", ".feature"]
 
     text(path: string): string -> {
         var lower = path.to_lower()
@@ -29,7 +29,7 @@ export tool RawExtract {
         fail("tipo de arquivo nao suportado no ingest desta versao: '" + path + "' (use " + self.plain_text_extensions().join(", ") + " ou .pdf)")
     }
 
-    from_pdf(path: string): string -> {
+    internal from_pdf(path: string): string -> {
         var result = cmd.exec(["pdftotext", path, "-"], timeout: 30s)
         if (result.exit_code != 0) fail("falha ao extrair texto de '" + path + "' via pdftotext: " + result.stderr)
         return result.stdout

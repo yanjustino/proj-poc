@@ -1,11 +1,12 @@
-// WorkflowsRoot resolve um caminho sob workflows/ para um SUBPROCESSO (o
-// `--output-schema` do Codex), que o interpreta contra a propria CWD — a do
-// mhl, nao a do .mh. O app roda o mhl com CWD no diretorio de dados do
-// usuario e define SENPAI_WORKFLOWS_ROOT; sem a variavel (uso pela CLI na
-// raiz do repo), o caminho relativo "workflows/..." ja resolve certo.
+// WorkflowsRoot resolve um caminho sob workflows/ para um SUBPROCESSO, que o
+// interpreta contra a propria CWD — a do mhl, nao a do .mh. O app roda o mhl
+// com CWD no diretorio de dados do usuario e define SENPAI_WORKFLOWS_ROOT;
+// sem a variavel (uso pela CLI na raiz do repo), "workflows/..." ja resolve.
+// Schemas nao passam por aqui: uma declaracao `schema` ja traz o caminho
+// absoluto do arquivo.
 
-// Contrato de schema que Writer.generate recebe: Claude/Devin usam o
-// conteudo inline; Codex, o caminho do arquivo.
+// Contrato de schema que Writer.generate recebe (o valor de uma declaracao
+// `schema`): Claude/Devin usam o conteudo inline; Codex, o caminho.
 export type SchemaFile = {content: string, path: string}
 
 export tool WorkflowsRoot {
@@ -14,10 +15,6 @@ export tool WorkflowsRoot {
         if (root.is_empty()) return "workflows/" + relative
         return root + "/" + relative
     }
-
-    // `relative` e relativo a workflows/, o mesmo arquivo que o `prompt ...
-    // from` de `content` le.
-    schema(content: string, relative: string): SchemaFile -> {content: content, path: self.resolve(relative)}
 }
 
 test WorkflowsRootSpec {

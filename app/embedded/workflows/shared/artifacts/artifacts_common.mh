@@ -2,7 +2,6 @@
 // compartilham. A geracao em si esta em common_drafts.mh; a gravacao, em
 // artifact_commit.mh.
 
-import { WorkflowsRoot, SchemaFile } from "../core/workflows_root.mh"
 
 export prompt ArtifactSchema() from "artifact_schema.prompt.md"
 
@@ -28,27 +27,18 @@ export prompt DiagramasInstruction(schema_conventions: prompt, requisitos_conten
 // SpecConventions pede rastreabilidade e contratos estruturados (historia_spec.mh).
 export prompt SpecConventions() from "prompts/spec_conventions.prompt.md"
 export prompt PlanoInstruction(schema_conventions: prompt, historia_content: string, feature_content: string, requisitos_content: string, atributos_content: string, adr_content: string, der_content: string, diagramas_content: string, feedback_content: string) from "prompts/plano.prompt.md"
-export prompt HistoriasInstruction(schema_conventions: prompt, spec_conventions: prompt, feature_content: string, requisitos_content: string, atributos_content: string, adr_content: string, der_content: string, diagramas_content: string, feedback_content: string) from "prompts/historias.prompt.md"
+export prompt HistoriasInstruction(schema_conventions: prompt, spec_conventions: prompt, feature_content: string, requisitos_content: string, atributos_content: string, adr_content: string, der_content: string, diagramas_content: string, lote_content: string, feedback_content: string) from "prompts/historias.prompt.md"
 
-prompt HistoriasSchemaContent() from "schemas/historias.schema.json"
-prompt BriefSchemaContent() from "schemas/brief.schema.json"
-prompt AtributosSchemaContent() from "schemas/atributos.schema.json"
-prompt RequisitosSchemaContent() from "schemas/requisitos.schema.json"
-prompt AdrSchemaContent() from "schemas/adr.schema.json"
-prompt DerSchemaContent() from "schemas/der.schema.json"
-prompt DiagramasSchemaContent() from "schemas/diagramas.schema.json"
-prompt PlanoSchemaContent() from "schemas/plano.schema.json"
-
-export tool Schemas {
-    brief(): SchemaFile -> WorkflowsRoot.schema(BriefSchemaContent(), "shared/artifacts/schemas/brief.schema.json")
-    atributos(): SchemaFile -> WorkflowsRoot.schema(AtributosSchemaContent(), "shared/artifacts/schemas/atributos.schema.json")
-    requisitos(): SchemaFile -> WorkflowsRoot.schema(RequisitosSchemaContent(), "shared/artifacts/schemas/requisitos.schema.json")
-    adr(): SchemaFile -> WorkflowsRoot.schema(AdrSchemaContent(), "shared/artifacts/schemas/adr.schema.json")
-    der(): SchemaFile -> WorkflowsRoot.schema(DerSchemaContent(), "shared/artifacts/schemas/der.schema.json")
-    diagramas(): SchemaFile -> WorkflowsRoot.schema(DiagramasSchemaContent(), "shared/artifacts/schemas/diagramas.schema.json")
-    historias(): SchemaFile -> WorkflowsRoot.schema(HistoriasSchemaContent(), "shared/artifacts/schemas/historias.schema.json")
-    plano(): SchemaFile -> WorkflowsRoot.schema(PlanoSchemaContent(), "shared/artifacts/schemas/plano.schema.json")
-}
+// Contratos de saida da LLM. Cada `schema` vale {content, path}: o JSON
+// inline (Claude/Devin) e o caminho absoluto do arquivo (Codex).
+export schema BriefSchema from "schemas/brief.schema.json"
+export schema AtributosSchema from "schemas/atributos.schema.json"
+export schema RequisitosSchema from "schemas/requisitos.schema.json"
+export schema AdrSchema from "schemas/adr.schema.json"
+export schema DerSchema from "schemas/der.schema.json"
+export schema DiagramasSchema from "schemas/diagramas.schema.json"
+export schema HistoriasSchema from "schemas/historias.schema.json"
+export schema PlanoSchema from "schemas/plano.schema.json"
 
 export prompt BriefBody(resumo_executivo: string, resumo_fontes: string, contexto_negocio: string, contexto_fontes: string, objetivos_tabela: string, em_escopo_lista: string, fora_escopo_lista: string, stakeholders_tabela: string, metricas_tabela: string, marcos_tabela: string, riscos_tabela: string, perguntas_lista: string) from "templates/brief_body.html"
 export prompt AtributosBody(contexto: string, contexto_fontes: string, requisitos_tabela: string, restricoes_tabela: string, compliance_tabela: string, exclusoes_lista: string, perguntas_lista: string) from "templates/atributos_body.html"
@@ -91,9 +81,8 @@ export prompt DependenciasBody(mapa_tabela: string, ordem_tabela: string, diagra
 
 test SchemaFileSpec {
     describe exposes_schema_content_and_codex_file_path {
-        var schema_file = Schemas.atributos()
-        var parsed = json.parse(schema_file.content)
-        are_equal(parsed.type, "object")
-        are_equal(schema_file.path, "workflows/shared/artifacts/schemas/atributos.schema.json")
+        are_equal(json.parse(AtributosSchema.content).type, "object")
+        is_true(AtributosSchema.path.ends_with("shared/artifacts/schemas/atributos.schema.json"))
+        is_true(fs.exists(AtributosSchema.path))
     }
 }

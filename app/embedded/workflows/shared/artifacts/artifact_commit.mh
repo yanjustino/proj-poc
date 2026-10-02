@@ -8,7 +8,6 @@
 // titulo alterado mudaria o slug do arquivo.
 
 import { Paths } from "../core/paths.mh"
-import { DirClear } from "../core/dir_clear.mh"
 import { Slug } from "../core/slug.mh"
 import { ArtifactData } from "artifact_data.mh"
 import { ArtifactBody } from "artifact_body.mh"
@@ -22,18 +21,16 @@ export tool ArtifactCommit {
     page(project_id: string, relative: string, title: string, body: string, data: any, draft: Draft) -> {
         var meta = ArtifactMeta.line("artifacts/${relative}", draft.tokens_in, draft.tokens_out)
         ArtifactData.write(project_id, relative, data)
-        fs.write(Paths.artifact(project_id, relative), PageShell(title: title, body: body, meta: meta))
+        fs.write(Paths.artifact(project_id, relative), PageShell(title:, body:, meta:))
     }
 
-    reset(project_id: string, relative_dir: string) -> {
-        var path = Paths.artifact(project_id, relative_dir)
-        DirClear.clear(path)
-        dir.create(path)
+    internal reset(project_id: string, relative_dir: string) -> {
+        dir.clear(Paths.artifact(project_id, relative_dir))
     }
 
-    single(project_id: string, artifact: string, title: string, body: string, draft: Draft): any -> {
+    internal single(project_id: string, artifact: string, title: string, body: string, draft: Draft): any -> {
         self.page(project_id, "${artifact}.html", title, body, draft.data, draft)
-        return {artifact: artifact, path: "artifacts/${artifact}.html"}
+        return {artifact, path: "artifacts/${artifact}.html"}
     }
 
     brief(project_id: string, draft: Draft): any ->
@@ -60,7 +57,7 @@ export tool ArtifactCommit {
             self.page(project_id, "adr/${folder}.html", html.escape("${id} — ${decision.titulo}"), ArtifactBody.adr(decision), decision, draft)
             written += [folder]
         }
-        return {artifact: "adr", written: written}
+        return {artifact: "adr", written}
     }
 
     diagramas(project_id: string, draft: Draft): any -> {
@@ -71,14 +68,15 @@ export tool ArtifactCommit {
             self.page(project_id, "diagramas/${slug}.html", html.escape(diagrama.titulo), ArtifactBody.diagrama(diagrama), diagrama, draft)
             written += [slug]
         }
-        return {artifact: "diagramas", written: written}
+        return {artifact: "diagramas", written}
     }
 
     // Um backlog novo invalida todas as historias: as de uma feature que
     // deixou de existir ficariam orfas em disco.
     features(project_id: string, draft: Draft): any -> {
         self.reset(project_id, "features")
-        DirClear.clear(Paths.artifact(project_id, "historias"))
+        var historias = Paths.artifact(project_id, "historias")
+        if (dir.exists(historias)) dir.clear(historias)
         var written = []
         for (var feature in draft.data.features) {
             var id = ArtifactId.next_feature_id(project_id)
@@ -87,7 +85,7 @@ export tool ArtifactCommit {
             self.page(project_id, "features/${folder}/feature.html", html.escape("${id} — ${feature.titulo}"), ArtifactBody.feature(feature), feature, draft)
             written += [folder]
         }
-        return {artifact: "features", written: written}
+        return {artifact: "features", written}
     }
 
     // `feature_dir` vazio: historias da feature implicita de um projeto de
@@ -104,7 +102,7 @@ export tool ArtifactCommit {
             self.page(project_id, "${base}/${folder}/historia.html", html.escape("${id} — ${historia.titulo}"), ArtifactBody.historia(historia), historia, draft)
             written += [folder]
         }
-        return {artifact: "historias", written: written}
+        return {artifact: "historias", written}
     }
 
     // `assets_prefix` e o caminho de volta ate artifacts/ (mermaid.min.js).

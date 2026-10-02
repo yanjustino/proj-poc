@@ -94,9 +94,9 @@ export tool UsageParser {
             }
         }
         return {
-            tokens_in: tokens_in, tokens_out: tokens_out, content: content,
-            cache_creation_tokens: 0, cache_read_tokens: cache_read_tokens,
-            usage_available: usage_available, cost_usd: cost_usd, cost_source: cost_source
+            tokens_in, tokens_out, content,
+            cache_creation_tokens: 0, cache_read_tokens,
+            usage_available, cost_usd, cost_source
         }
     }
 
@@ -129,7 +129,7 @@ export tool UsageParser {
         return {
             tokens_in: envelope.usage.input_tokens + cache_creation + cache_read,
             tokens_out: envelope.usage.output_tokens,
-            content: content,
+            content,
             cache_creation_tokens: cache_creation,
             cache_read_tokens: cache_read,
             usage_available: true,
@@ -171,9 +171,9 @@ export tool UsageParser {
             }
         }
         return {
-            tokens_in: tokens_in, tokens_out: tokens_out, content: content,
-            cache_creation_tokens: cache_creation_tokens, cache_read_tokens: cache_read_tokens,
-            usage_available: usage_available, cost_usd: 0, cost_source: "unavailable"
+            tokens_in, tokens_out, content,
+            cache_creation_tokens, cache_read_tokens,
+            usage_available, cost_usd: 0, cost_source: "unavailable"
         }
     }
 }
@@ -191,14 +191,14 @@ export tool UsageCost {
         var model_id = if (backend == "Devin") env("SENPAI_DEVIN_MODEL", "") else ""
         var pricing = if (backend == "Devin") env("SENPAI_DEVIN_PRICING", "") else ""
         return self.resolve_with_pricing(
-            usage: usage,
-            backend: backend,
-            model_id: model_id,
+            usage:,
+            backend:,
+            model_id:,
             pricing_json: pricing
         )
     }
 
-    resolve_with_pricing(usage: any, backend: string, model_id: string, pricing_json: string): {
+    internal resolve_with_pricing(usage: any, backend: string, model_id: string, pricing_json: string): {
         cost_usd: number, cost_source: string, cost_model: string,
         cost_pricing_reference: string
     } -> {
@@ -286,7 +286,7 @@ test UsageParserSpec {
             "{\"final_metrics\":{\"total_prompt_tokens\":1000,\"total_completion_tokens\":200,\"total_cached_tokens\":400,\"total_cost_usd\":0}}"
         )
         var cost = UsageCost.resolve_with_pricing(
-            usage: usage,
+            usage:,
             backend: "Devin",
             model_id: "swe-1-6",
             pricing_json: "{\"model_id\":\"swe-1-6\",\"summary\":\"reference\",\"input_usd_per_million\":0.5,\"cached_input_usd_per_million\":0.2,\"output_usd_per_million\":2.5}"
@@ -302,7 +302,7 @@ test UsageParserSpec {
             "{\"final_metrics\":{\"total_prompt_tokens\":1000,\"total_completion_tokens\":200,\"total_cached_tokens\":400}}"
         )
         var cost = UsageCost.resolve_with_pricing(
-            usage: usage,
+            usage:,
             backend: "Devin",
             model_id: "swe-1-6",
             pricing_json: "{\"model_id\":\"swe-1-6\",\"summary\":\"$0.5 / 1M Input\",\"input_usd_per_million\":0.5,\"cached_input_usd_per_million\":0.2,\"output_usd_per_million\":2.5}"
@@ -319,7 +319,7 @@ test UsageParserSpec {
             "{\"final_metrics\":{\"total_prompt_tokens\":1000,\"total_completion_tokens\":200,\"total_cached_tokens\":400}}"
         )
         var cost = UsageCost.resolve_with_pricing(
-            usage: usage,
+            usage:,
             backend: "Devin",
             model_id: "unknown",
             pricing_json: ""
