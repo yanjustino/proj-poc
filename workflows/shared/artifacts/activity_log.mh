@@ -28,7 +28,7 @@ export memory ActivityLog {
 export tool Activity {
     record(project_id: string, event: string, artifact: string, feature_id: string) -> {
         if (dir.exists(Paths.root(project_id))) {
-            ActivityLog.append({event: event, artifact: artifact, feature_id: feature_id})
+            ActivityLog.append({event, artifact, feature_id})
         }
     }
 }

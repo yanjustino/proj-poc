@@ -14,7 +14,7 @@ import { Paths } from "../core/paths.mh"
 export tool RadahnModel {
     // Skills e control steps do catalogo (prompts/02-skills.md). Uma skill
     // fora daqui e uma skill inventada — o Radahn falha no boot com ela.
-    known_kinds(): string[] -> [
+    internal known_kinds(): string[] -> [
         "Parallel", "ForEach",
         "LogicalOperator", "StaticValidation", "EmptyValidation", "JsonValidation", "PostgresQuery", "MySqlQuery",
         "HttpAuthorize", "HttpSearch", "OutputTransformer", "MergeLocalStore", "HttpStatusCodeResult",
@@ -27,7 +27,7 @@ export tool RadahnModel {
         "Command", "UnzipFile"
     ]
 
-    yaml_text(data: any): string -> (data?.radahn?.yaml ?? "").trim()
+    internal yaml_text(data: any): string -> (data?.radahn?.yaml ?? "").trim()
 
     // Aplicavel = o assessment diz que sim E ha um radahn.yaml para levar.
     applicable(data: any): bool -> (data?.radahn?.aplicavel ?? false) && !self.yaml_text(data).is_empty()
@@ -41,7 +41,7 @@ export tool RadahnModel {
     }
 
     // Valor de todo `kind:` do YAML (com ou sem "- " na frente, sem aspas nem comentario).
-    yaml_kinds(yaml: string): string[] -> {
+    internal yaml_kinds(yaml: string): string[] -> {
         var out = []
         for (var line in yaml.split("\n")) {
             var t = line.trim()
@@ -55,9 +55,9 @@ export tool RadahnModel {
     }
 
     // Chaves que jamais podem ter valor literal no YAML (vem de FROM_ENV).
-    secret_keys(): string[] -> ["password:", "secret:", "clientsecret:", "apikey:", "authorization:"]
+    internal secret_keys(): string[] -> ["password:", "secret:", "clientsecret:", "apikey:", "authorization:"]
 
-    literal_secrets(yaml: string): string[] -> {
+    internal literal_secrets(yaml: string): string[] -> {
         var out = []
         for (var line in yaml.split("\n")) {
             var t = line.trim()
@@ -73,7 +73,7 @@ export tool RadahnModel {
         return out
     }
 
-    check_yaml(yaml: string): string[] -> {
+    internal check_yaml(yaml: string): string[] -> {
         var out = []
         if (yaml.contains("\t")) out += ["radahn.yaml usa tabs — o YAML aceita só espaços."]
         if (!yaml.contains("kind: ApplicationWorkflow") && !yaml.contains("kind: ApiWorkflow")) out += ["radahn.yaml sem `kind: ApplicationWorkflow`."]
@@ -87,7 +87,7 @@ export tool RadahnModel {
         return out
     }
 
-    check_assessment(radahn: any): string[] -> self.check({radahn: radahn})
+    check_assessment(radahn: any): string[] -> self.check({radahn})
 
     check(data: any): string[] -> {
         var radahn = data?.radahn
@@ -114,7 +114,7 @@ export tool RadahnModel {
             html.escape(self.aderencia_label(data?.radahn?.aderencia ?? "")) + "</span>"
     }
 
-    list_html(itens: any[]): string -> {
+    internal list_html(itens: any[]): string -> {
         if (itens.is_empty()) return "<p>—</p>"
         return "<ul>" + itens.map((i) -> "<li>" + html.escape(i) + "</li>").join("") + "</ul>"
     }
@@ -152,9 +152,9 @@ export tool RadahnModel {
 }
 
 tool RadahnFixtures {
-    yaml(): string -> "kind: ApplicationWorkflow\nmetadata:\n  name: ordens\nspec:\n  routes:\n    obterOrdem:\n      method: GET\n      url: /ordens/$id\n  behaviors:\n    obterOrdem:\n      - name: Buscar\n        kind: PostgresQuery\n        postgresQuery: { resultType: Item, sql: \"SELECT 1\", parameters: [$id] }\n        onSuccess: NextStep\n      - name: Vazio\n        kind: EmptyValidation\n        onSuccess: Finish\n        onFailure: { statusCode: 404, message: \"nao encontrado\" }\n"
+    internal yaml(): string -> "kind: ApplicationWorkflow\nmetadata:\n  name: ordens\nspec:\n  routes:\n    obterOrdem:\n      method: GET\n      url: /ordens/$id\n  behaviors:\n    obterOrdem:\n      - name: Buscar\n        kind: PostgresQuery\n        postgresQuery: { resultType: Item, sql: \"SELECT 1\", parameters: [$id] }\n        onSuccess: NextStep\n      - name: Vazio\n        kind: EmptyValidation\n        onSuccess: Finish\n        onFailure: { statusCode: 404, message: \"nao encontrado\" }\n"
 
-    plano(): any -> {radahn: {aplicavel: true, aderencia: "alta", justificativa: "GET simples", sinais: ["consulta"], impedimentos: [], skills: ["PostgresQuery"], variaveis_ambiente: ["DB_URL"], lacunas: [], yaml: RadahnFixtures.yaml()}}
+    internal plano(): any -> {radahn: {aplicavel: true, aderencia: "alta", justificativa: "GET simples", sinais: ["consulta"], impedimentos: [], skills: ["PostgresQuery"], variaveis_ambiente: ["DB_URL"], lacunas: [], yaml: RadahnFixtures.yaml()}}
 }
 
 test RadahnModelSpec {

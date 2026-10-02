@@ -13,7 +13,7 @@ import { Traceability } from "historia_spec.mh"
 import { PlanoPrep } from "plano_model.mh"
 import { RadahnAssess } from "../radahn/radahn_assess.mh"
 import {
-    ArtifactSchema, SpecConventions, Schemas,
+    ArtifactSchema, SpecConventions, BriefSchema, RequisitosSchema, AdrSchema, DerSchema, DiagramasSchema, HistoriasSchema, PlanoSchema,
     BriefInstruction, RequisitosInstruction, AdrInstruction, DerInstruction, DiagramasInstruction,
     HistoriasInstruction, PlanoInstruction
 } from "artifacts_common.mh"
@@ -29,7 +29,7 @@ export tool CommonDrafts {
             wiki_content: Context.wiki(project_id),
             feedback_content: ChangesBlock.for_artifact(project_id, "brief", "")
         ),
-        Schemas.brief(), project_id, "brief"
+        BriefSchema, project_id, "brief"
     )
 
     requisitos(project_id: string, brief: string): Draft -> Drafts.generate(
@@ -39,7 +39,7 @@ export tool CommonDrafts {
             wiki_content: Context.wiki(project_id),
             feedback_content: ChangesBlock.for_artifact(project_id, "requisitos", "")
         ),
-        Schemas.requisitos(), project_id, "requisitos"
+        RequisitosSchema, project_id, "requisitos"
     )
 
     adr(project_id: string, requisitos: string, atributos: string): Draft -> Drafts.generate(
@@ -49,7 +49,7 @@ export tool CommonDrafts {
             atributos_content: atributos,
             feedback_content: ChangesBlock.for_artifact(project_id, "adr", "")
         ),
-        Schemas.adr(), project_id, "adr"
+        AdrSchema, project_id, "adr"
     )
 
     der(project_id: string, autorrevisao: bool, requisitos: string, atributos: string, adr: string): Draft -> Drafts.reviewed(AutoReview.generate(
@@ -61,7 +61,7 @@ export tool CommonDrafts {
             adr_content: adr,
             feedback_content: ChangesBlock.for_artifact(project_id, "der", "")
         ),
-        schema_file: Schemas.der(), project_id: project_id, artifact: "der",
+        schema_file: DerSchema, project_id:, artifact: "der",
         prepare: (raw) -> json.parse(raw),
         check: (d) -> ArtifactChecks.der(d)
     ))
@@ -78,7 +78,7 @@ export tool CommonDrafts {
             adr_content: adr,
             feedback_content: ChangesBlock.for_artifact(project_id, "diagramas", "")
         ),
-        schema_file: Schemas.diagramas(), project_id: project_id, artifact: "diagramas",
+        schema_file: DiagramasSchema, project_id:, artifact: "diagramas",
         prepare: (raw) -> C4Diagram.annotate(json.parse(raw), C4Diagram.infra_hint(adr)),
         check: (d) -> ArtifactChecks.diagramas(d)
     ), "diagramas")
@@ -102,7 +102,7 @@ export tool CommonDrafts {
                 lote_content: self.lote(anteriores, pagina),
                 feedback_content: ChangesBlock.for_artifact(project_id, "historias", scope)
             ),
-            schema_file: Schemas.historias(), project_id: project_id, artifact: "historias",
+            schema_file: HistoriasSchema, project_id:, artifact: "historias",
             prepare: (raw) -> Traceability.annotate(json.parse(raw), known),
             check: (d) -> ArtifactChecks.historias(d)
         ), "historias"))
@@ -120,7 +120,7 @@ export tool CommonDrafts {
     // teto de paginas limita o custo se ele nunca disser que terminou.
     // `fetch(anteriores, pagina)` gera uma pagina; `pagina` e a fatia de
     // propostas, vazia no modo aberto.
-    paginate(propostas: any[], fetch: any): Draft -> {
+    internal paginate(propostas: any[], fetch: any): Draft -> {
         var historias = []
         var tokens_in = 0
         var tokens_out = 0
@@ -143,16 +143,16 @@ export tool CommonDrafts {
             else
                 inicio < propostas.size()
         }
-        return {data: {historias: historias}, tokens_in: tokens_in, tokens_out: tokens_out}
+        return {data: {historias}, tokens_in, tokens_out}
     }
 
-    historias_por_pagina(): number -> 4
-    max_paginas(): number -> 8
+    internal historias_por_pagina(): number -> 4
+    internal max_paginas(): number -> 8
 
     // Bloco do prompt de cada pagina: as propostas a detalhar (ou o limite
     // de tamanho, no modo aberto) e, da segunda pagina em diante, o que ja
     // foi gerado, para o modelo continuar sem repetir.
-    lote(anteriores: any[], pagina: any[]): string -> {
+    internal lote(anteriores: any[], pagina: any[]): string -> {
         var geradas = if (anteriores.is_empty()) "" else
             "## Histórias já geradas para este item\n\nEstas já existem: não as repita nem as reescreva; cite-as pelo título em dependências.\n\n${anteriores.map((h) -> "- ${h.titulo}").join("\n")}\n\n"
         if (pagina.is_empty()) {
@@ -170,7 +170,7 @@ export tool CommonDrafts {
             enabled: autorrevisao,
             prompt: PlanoInstruction(
                 schema_conventions: ArtifactSchema(),
-                historia_content: historia_content,
+                historia_content:,
                 feature_content: feature,
                 requisitos_content: tech.requisitos,
                 atributos_content: tech.atributos,
@@ -179,7 +179,7 @@ export tool CommonDrafts {
                 diagramas_content: tech.diagramas,
                 feedback_content: ChangesBlock.for_artifact(project_id, "plano", scope)
             ),
-            schema_file: Schemas.plano(), project_id: project_id, artifact: "plano",
+            schema_file: PlanoSchema, project_id:, artifact: "plano",
             prepare: (raw) -> PlanoPrep.annotate(json.parse(raw), historia, titulo, known),
             check: (d) -> ArtifactChecks.plano(d)
         ))

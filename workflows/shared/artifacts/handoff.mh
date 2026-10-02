@@ -16,7 +16,6 @@
 //       radahn.yaml (so quando o assessment do plano diz que o Radahn se aplica)
 
 import { Paths } from "../core/paths.mh"
-import { DirClear } from "../core/dir_clear.mh"
 import { Readiness } from "readiness.mh"
 import { C4Diagram } from "c4_diagram.mh"
 import { DerModel } from "der_model.mh"
@@ -26,29 +25,29 @@ import { BacklogHtml } from "backlog_rules.mh"
 
 export tool HandoffMd {
     // Texto de uma celula de tabela Markdown: sem quebra de linha, "|" escapado.
-    cell(text: any): string -> (text ?? "").replace("\r", " ").replace("\n", " ").replace("|", "\\|")
+    internal cell(text: any): string -> (text ?? "").replace("\r", " ").replace("\n", " ").replace("|", "\\|")
 
-    line(text: any): string -> (text ?? "").replace("\r", " ").replace("\n", " ")
+    internal line(text: any): string -> (text ?? "").replace("\r", " ").replace("\n", " ")
 
-    bullets(items: any[]): string -> {
+    internal bullets(items: any[]): string -> {
         if (items.is_empty()) return "—\n"
         return items.map((i) -> "- " + self.line(i?.texto ?? i)).join("\n") + "\n"
     }
 
-    status_label(status: string): string -> match status {
+    internal status_label(status: string): string -> match status {
         "pronta"               -> "Pronta"
         "pronta_com_ressalvas" -> "Pronta com ressalvas"
         _                      -> "Não pronta"
     }
 
-    change_tag(mudanca: string): string -> match mudanca {
+    internal change_tag(mudanca: string): string -> match mudanca {
         "as_is"      -> "[já existe] "
         "modificado" -> "[modificado] "
         "removido"   -> "[removido] "
         _            -> ""
     }
 
-    statement(h: any): string -> {
+    internal statement(h: any): string -> {
         var tipo = h?.story_type ?? ""
         if (tipo == "spike" && h?.spike != null) {
             var s = h.spike
@@ -60,13 +59,13 @@ export tool HandoffMd {
         return "- **Resultado técnico:** " + self.line(h?.resultado_tecnico) + "\n- **Habilita:** " + self.line(h?.habilita) + "\n- **Evidenciado por:** " + self.line(h?.evidenciado_por) + "\n"
     }
 
-    fields(campos: any[]): string -> {
+    internal fields(campos: any[]): string -> {
         if (campos.is_empty()) return ""
         return "\n| Campo | Tipo | Obrigatório | Descrição |\n|---|---|---|---|\n" +
             campos.map((c) -> "| `" + self.cell(c.nome) + "`" + (if ((c?.local ?? "") == "") "" else " (" + c.local + ")") + " | " + self.cell(c?.tipo) + " | " + (if (c?.obrigatorio ?? false) "sim" else "não") + " | " + self.cell(c?.descricao) + " |").join("\n") + "\n"
     }
 
-    contracts(h: any): string -> {
+    internal contracts(h: any): string -> {
         var endpoints = h?.contratos?.endpoints ?? []
         var eventos = h?.contratos?.eventos ?? []
         var integracoes = h?.contratos?.integracoes ?? []
@@ -157,7 +156,7 @@ export tool HandoffMd {
 
     // Assessment de aderencia ao Radahn (plano.radahn). Aplicavel: aponta o
     // radahn.yaml que vai na mesma pasta; senao, so registra o porque.
-    radahn(p: any): string -> {
+    internal radahn(p: any): string -> {
         var r = p?.radahn
         if (r == null) return ""
         var out = "## Aderência ao Radahn\n\n"
@@ -265,7 +264,7 @@ export tool Handoff {
     build(project_id: string): any -> {
         project_id = Paths.ensure_valid(project_id)
         var root = Paths.root(project_id) + "/handoff"
-        if (dir.exists(root)) DirClear.clear(root)
+        dir.clear(root)
         dir.create(root + "/docs/adr")
         dir.create(root + "/specs")
         var project = Readiness.read_json(Paths.project_file(project_id))
@@ -328,7 +327,7 @@ export tool Handoff {
             exportadas = exportadas + 1
             if (it.status == "nao_pronta") nao_prontas = nao_prontas + 1
         }
-        return {path: root, total: items.size(), exportadas: exportadas, nao_prontas: nao_prontas}
+        return {path: root, total: items.size(), exportadas, nao_prontas}
     }
 }
 

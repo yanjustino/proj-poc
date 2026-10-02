@@ -18,7 +18,6 @@
 import { Paths } from "../core/paths.mh"
 import { ArtifactChecks } from "artifact_checks.mh"
 import { StoryRules } from "backlog_rules.mh"
-import { DirClear } from "../core/dir_clear.mh"
 
 export tool Readiness {
     read_json(path: string): any -> {
@@ -31,9 +30,9 @@ export tool Readiness {
     }
 
     // Estruturada = gerada com contratos/cenarios/rastreabilidade.
-    is_structured(h: any): bool -> h?.contratos != null && h?.cenarios != null && h?.rastreabilidade != null && !StoryRules.is_legacy(h)
+    internal is_structured(h: any): bool -> h?.contratos != null && h?.cenarios != null && h?.rastreabilidade != null && !StoryRules.is_legacy(h)
 
-    evaluate(h: any, plano: any): any -> {
+    internal evaluate(h: any, plano: any): any -> {
         var bloqueios = []
         var ressalvas = []
         if (!self.is_structured(h)) {
@@ -45,10 +44,10 @@ export tool Readiness {
         else bloqueios = bloqueios + ArtifactChecks.plano(plano).map((a) -> "Plano: " + a)
         ressalvas = ressalvas + (h?.gaps ?? []).map((g) -> "Lacuna: " + g.texto)
         ressalvas = ressalvas + (h?.questoes_abertas ?? []).map((q) -> "Questão em aberto: " + q.texto)
-        return {status: self.status_of(bloqueios, ressalvas), bloqueios: bloqueios, ressalvas: ressalvas}
+        return {status: self.status_of(bloqueios, ressalvas), bloqueios, ressalvas}
     }
 
-    status_of(bloqueios: string[], ressalvas: string[]): string -> {
+    internal status_of(bloqueios: string[], ressalvas: string[]): string -> {
         if (!bloqueios.is_empty()) return "nao_pronta"
         if (!ressalvas.is_empty()) return "pronta_com_ressalvas"
         return "pronta"
@@ -56,7 +55,7 @@ export tool Readiness {
 
     // item: uma historia avaliada, com onde ela esta (`path` relativo a
     // artifacts/, "" para a historia unica do Delivery na raiz).
-    item(dir_path: string, relative: string, feature_dir: string): any -> {
+    internal item(dir_path: string, relative: string, feature_dir: string): any -> {
         var h = self.read_json(dir_path + "/historia.json")
         if (h == null) return null
         var plano = self.read_json(dir_path + "/plano.json")
@@ -64,7 +63,7 @@ export tool Readiness {
         var folder = relative.split("/")[relative.split("/").size() - 1]
         return {
             path: relative,
-            feature_dir: feature_dir,
+            feature_dir,
             historia_id: if (relative.is_empty()) "" else folder.split("-")[0],
             titulo: h?.titulo ?? "",
             story_type: h?.story_type ?? "",
@@ -107,7 +106,7 @@ export tool Readiness {
     // Dependencia (depende_de) de uma historia do MESMO lote que ainda nao
     // esta pronta vira ressalva — o desenvolvimento pode comecar, mas a
     // ordem importa.
-    with_dependencies(items: any[]): any[] -> {
+    internal with_dependencies(items: any[]): any[] -> {
         var out = []
         for (var it in items) {
             var pendentes = []
@@ -177,7 +176,7 @@ test ReadinessSpec {
         are_equal(items[1].path, "historias/FT001-a/US001-b")
         are_equal(items[1].feature_dir, "FT001-a")
         are_equal(items[1].historia_id, "US001")
-        DirClear.clear(root)
+        dir.clear(root)
         dir.delete(root)
     }
 }

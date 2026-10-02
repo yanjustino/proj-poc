@@ -3,7 +3,6 @@
 // prompts/ sao as sources do proprio Radahn — copiadas como estao; aqui so
 // se declara como entram no prompt.
 
-import { WorkflowsRoot, SchemaFile } from "../core/workflows_root.mh"
 
 prompt RadahnModelo() from "prompts/00-modelo-mental.md"
 prompt RadahnSchema() from "prompts/01-schema.md"
@@ -15,10 +14,8 @@ export prompt RadahnInstruction(plano_content: string, historia_content: string,
 // Prompt pronto: a base de conhecimento do Radahn + o que a LLM avalia.
 export tool RadahnPrompt {
     build(plano_content: string, historia_content: string, der_content: string, adr_content: string): string ->
-        RadahnInstruction(plano_content: plano_content, historia_content: historia_content, der_content: der_content, adr_content: adr_content,
+        RadahnInstruction(plano_content:, historia_content:, der_content:, adr_content:,
             modelo: RadahnModelo(), schema: RadahnSchema(), skills: RadahnSkills(), checklist: RadahnChecklist())
 }
 
-prompt RadahnSchemaContent() from "schemas/radahn.schema.json"
-
-export tool RadahnSchemaFile { get(): SchemaFile -> WorkflowsRoot.schema(RadahnSchemaContent(), "shared/radahn/schemas/radahn.schema.json") }
+export schema RadahnOutputSchema from "schemas/radahn.schema.json"

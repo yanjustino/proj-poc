@@ -16,22 +16,22 @@ import { Paths } from "../core/paths.mh"
 import { WikiAlerts } from "wiki_alerts.mh"
 
 export tool WikiLint {
-    categories(): string[] -> ["sources", "entities", "concepts", "answers"]
+    internal categories(): string[] -> ["sources", "entities", "concepts", "answers"]
 
-    normalize_ref(ref: string): string -> {
+    internal normalize_ref(ref: string): string -> {
         var r = ref.trim()
         if (r.starts_with("wiki/")) r = r.substring(5, r.size())
         if (r.ends_with(".md")) r = r.substring(0, r.size() - 3)
         return r
     }
 
-    valid_ref(project_id: string, ref: string): bool -> {
+    internal valid_ref(project_id: string, ref: string): bool -> {
         var r = self.normalize_ref(ref)
         if (!r.matches("^(sources|entities|concepts|answers)/[a-z0-9-]+$")) return false
         return fs.exists(Paths.wiki(project_id, r + ".md"))
     }
 
-    quote_in_page(project_id: string, ref: string, quote: string): bool -> {
+    internal quote_in_page(project_id: string, ref: string, quote: string): bool -> {
         if (quote.trim().is_empty()) return false
         if (!self.valid_ref(project_id, ref)) return false
         var text = WikiAlerts.strip(fs.read(Paths.wiki(project_id, self.normalize_ref(ref) + ".md")))
@@ -40,7 +40,7 @@ export tool WikiLint {
 
     // Devolve o relatório só com o que passou na verificação, as linhas de
     // alerta por página e quantos achados foram descartados.
-    verify(project_id: string, report: any): any -> {
+    internal verify(project_id: string, report: any): any -> {
         var contradictions = []
         var stale_claims = []
         var alerts = []
@@ -52,7 +52,7 @@ export tool WikiLint {
             for (var e in c.evidence) {
                 var page = self.normalize_ref(e.page)
                 if (self.quote_in_page(project_id, page, e.quote) && !pages.any((p) -> p == page)) {
-                    good += [{page: page, quote: e.quote}]
+                    good += [{page, quote: e.quote}]
                     pages += [page]
                 }
             }
@@ -74,9 +74,9 @@ export tool WikiLint {
             var page = self.normalize_ref(s.page)
             var newer = self.normalize_ref(s.superseded_by)
             if (self.quote_in_page(project_id, page, s.quote) && self.valid_ref(project_id, newer)) {
-                stale_claims += [{page: page, quote: s.quote, superseded_by: newer, description: s.description}]
+                stale_claims += [{page, quote: s.quote, superseded_by: newer, description: s.description}]
                 alerts += [{
-                    page: page,
+                    page,
                     line: "Possivelmente superado por " + newer + ": " + s.description + " — trecho: “" + s.quote + "”"
                 }]
             } else {
@@ -91,20 +91,20 @@ export tool WikiLint {
 
         return {
             report: {
-                contradictions: contradictions,
-                stale_claims: stale_claims,
+                contradictions,
+                stale_claims,
                 missing_concepts: report.missing_concepts,
-                orphan_pages: orphan_pages,
+                orphan_pages,
                 notes: report.notes
             },
-            alerts: alerts,
-            discarded: discarded
+            alerts,
+            discarded
         }
     }
 
     // Remove os alertas antigos de toda a wiki e grava os novos — idempotente:
     // rodar o lint duas vezes nunca acumula blocos.
-    write_alerts(project_id: string, alerts: any[]): number -> {
+    internal write_alerts(project_id: string, alerts: any[]): number -> {
         for (var category in self.categories()) {
             var dir_path = Paths.wiki_dir(project_id) + "/" + category
             if (dir.exists(dir_path)) {
@@ -127,7 +127,7 @@ export tool WikiLint {
         return pages.size()
     }
 
-    render_report(report: any, discarded: number): string -> {
+    internal render_report(report: any, discarded: number): string -> {
         var out = "# Verificação da wiki\n\nGerado em " + time.format(time.now(), "yyyy-MM-dd") + ".\n\n"
         out = out + "## Contradições\n\n"
         if (report.contradictions.is_empty()) out = out + "Nenhuma.\n\n"

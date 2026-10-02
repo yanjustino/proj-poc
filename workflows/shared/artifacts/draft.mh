@@ -11,7 +11,7 @@ export type Draft = {data: any, tokens_in: number, tokens_out: number}
 
 export tool Drafts {
     generate(prompt: string, schema_file: SchemaFile, project_id: string, artifact: string): Draft -> {
-        var response = Writer.generate(prompt: prompt, schema_file: schema_file, project_id: project_id, artifact: artifact)
+        var response = Writer.generate(prompt: prompt, schema_file:, project_id:, artifact:)
         return {data: json.parse(response.content), tokens_in: response.tokens_in, tokens_out: response.tokens_out}
     }
 
@@ -20,7 +20,7 @@ export tool Drafts {
     reviewed(review: any): Draft -> {
         var data = review.data
         data["autorrevisao"] = review.revisao
-        return {data: data, tokens_in: review.tokens_in, tokens_out: review.tokens_out}
+        return {data, tokens_in: review.tokens_in, tokens_out: review.tokens_out}
     }
 
     // Mesmo registro copiado em cada item de uma colecao (diagramas,
@@ -28,7 +28,7 @@ export tool Drafts {
     reviewed_items(review: any, field: string): Draft -> {
         var data = review.data
         data[field] = AutoReview.tag_items(data[field], review.revisao)
-        return {data: data, tokens_in: review.tokens_in, tokens_out: review.tokens_out}
+        return {data, tokens_in: review.tokens_in, tokens_out: review.tokens_out}
     }
 
     // Rascunho com campos que o codigo acrescenta ao dado (ex.: a pasta onde
@@ -37,7 +37,7 @@ export tool Drafts {
     with(draft: Draft, fields: any): Draft -> {
         var data = draft.data
         for (var key in fields.keys()) data[key] = fields[key]
-        return {data: data, tokens_in: draft.tokens_in, tokens_out: draft.tokens_out}
+        return {data, tokens_in: draft.tokens_in, tokens_out: draft.tokens_out}
     }
 
     // Uma segunda chamada sobre o mesmo rascunho (Radahn sobre o plano).

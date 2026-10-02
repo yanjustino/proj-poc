@@ -33,7 +33,7 @@ import { Paths } from "../core/paths.mh"
 // todo o contexto no prompt e so deve produzir dados, sem explorar o CWD do
 // mhl (que contem todos os work-items).
 tool DevinConfig {
-    path(): string -> WorkflowsRoot.resolve("shared/agents/devin-generator.json")
+    internal path(): string -> WorkflowsRoot.resolve("shared/agents/devin-generator.json")
 }
 
 export agent Devin {
@@ -209,7 +209,7 @@ export tool Writer {
     // Writer e chamado por modulos importadores. `self` preserva o escopo do
     // adapter em runtime e evita que Discovery/Wiki/Delivery tentem resolver
     // um simbolo auxiliar como DevinPromptFile no proprio modulo.
-    generate_devin(instruction: string, schema: string, project_id: string): {
+    internal generate_devin(instruction: string, schema: string, project_id: string): {
         raw: string, exported: string
     } -> {
         var prompt = 
@@ -251,7 +251,7 @@ export tool Writer {
             fs.delete(prompt_path)
             if (fs.exists(export_path)) fs.delete(export_path)
         }
-        return {raw: raw, exported: exported}
+        return {raw, exported}
     }
 
     generate(prompt: string, schema_file: SchemaFile, project_id: string, artifact: string): {
@@ -270,7 +270,7 @@ export tool Writer {
             var devin_result = self.generate_devin(
                 instruction: prompt,
                 schema: schema_file.content,
-                project_id: project_id
+                project_id:
             )
             devin_raw = devin_result.raw
             devin_exported = devin_result.exported
@@ -285,12 +285,12 @@ export tool Writer {
             nameof(Claude) -> UsageParser.extract_claude(raw)
             nameof(Codex) -> UsageParser.extract_codex(raw)
         }
-        var cost = UsageCost.resolve(usage: usage, backend: picked)
+        var cost = UsageCost.resolve(usage:, backend: picked)
         var duration_s = time.diff(time.now(), started_at)
 
         Usage.append({
-            artifact: artifact,
-            duration_s: duration_s,
+            artifact,
+            duration_s,
             tokens_in: usage.tokens_in,
             tokens_out: usage.tokens_out,
             cache_creation_tokens: usage.cache_creation_tokens,
@@ -309,7 +309,7 @@ export tool Writer {
         // depurar uma geracao nao precisa tambem abrir usage.jsonl e juntar
         // os dois por artifact/timestamp.
         PromptLog.append({
-            artifact: artifact,
+            artifact,
             backend: picked,
             prompt: prompt,
             response: raw,
@@ -346,11 +346,11 @@ agent MockDevinExportPath {
 }
 
 tool MockWriter {
-    generate(prompt: string, schema_file: SchemaFile, project_id: string, artifact: string): string -> {
+    internal generate(prompt: string, schema_file: SchemaFile, project_id: string, artifact: string): string -> {
         return MockCodexSchemaPath.run(prompt: prompt, schema: schema_file.path)
     }
 
-    generate_devin(prompt_path: string, export_path: string): string -> {
+    internal generate_devin(prompt_path: string, export_path: string): string -> {
         return MockDevinExportPath.run(prompt: prompt_path, schema: export_path)
     }
 }

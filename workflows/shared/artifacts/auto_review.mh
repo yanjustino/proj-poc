@@ -24,17 +24,16 @@ export tool AutoReview {
     // avisos. Devolve o dado escolhido, o consumo somado das chamadas e o
     // registro da revisao (exibido na pagina — ver note_html).
     generate(enabled: bool, prompt: string, schema_file: SchemaFile, project_id: string, artifact: string, prepare: any, check: any): any ->
-        self.execute((p) -> Writer.generate(prompt: p, schema_file: schema_file, project_id: project_id, artifact: artifact), enabled, prompt, prepare, check)
+        self.execute((p) -> Writer.generate(prompt: p, schema_file:, project_id:, artifact:), enabled, prompt, prepare, check)
 
     // execute: o nucleo (nao "run": nome reservado do mhl para Workflow.run), com a chamada ao modelo injetada (`call(prompt)`) — e o
     // que o teste usa para provar o teto de duas chamadas com um modelo falso
     // que sempre devolve uma resposta com avisos.
-    execute(call: any, enabled: bool, prompt: string, prepare: any, check: any): any -> {
+    internal execute(call: any, enabled: bool, prompt: string, prepare: any, check: any): any -> {
         var first = call(prompt)
         var data = prepare(first.content)
         var avisos = check(data)
-        var tokens_in = first.tokens_in
-        var tokens_out = first.tokens_out
+        var {tokens_in, tokens_out} = first
         var revisao = {tentada: false, aplicada: false, avisos_antes: avisos.size(), avisos_depois: avisos.size()}
 
         if (enabled && !avisos.is_empty()) {
@@ -58,12 +57,12 @@ export tool AutoReview {
                 avisos_depois: if (melhorou) avisos_revisados.size() else avisos.size(),
             }
         }
-        return {data: data, tokens_in: tokens_in, tokens_out: tokens_out, revisao: revisao}
+        return {data, tokens_in, tokens_out, revisao}
     }
 
     // Os avisos (sem repeticao, no maximo 40) e a resposta anterior — o
     // modelo corrige o que foi apontado em vez de gerar do zero.
-    block(avisos: string[], previous: string): string -> {
+    internal block(avisos: string[], previous: string): string -> {
         var unicos = []
         for (var a in avisos) {
             if (!unicos.contains(a) && unicos.size() < 40) unicos += [a]

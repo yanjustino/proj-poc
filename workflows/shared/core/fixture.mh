@@ -4,7 +4,6 @@
 // ser chamado direto num describe, por isso nao ha um `with(id, body)`.
 
 import { Paths } from "paths.mh"
-import { DirClear } from "dir_clear.mh"
 
 export tool Fixture {
     project(project_id: string): string -> {
@@ -21,8 +20,10 @@ export tool Fixture {
 
     drop(project_id: string) -> {
         var root = Paths.root(project_id)
-        DirClear.clear(root)
-        if (dir.exists(root)) dir.delete(root)
+        if (dir.exists(root)) {
+            dir.clear(root)
+            dir.delete(root)
+        }
     }
 }
 

@@ -11,7 +11,7 @@ export tool TelemetryClient {
             var cert = SenpaiConfig.certif_file()
             
             var resp = http.post(
-                url: url, 
+                url:, 
                 body: json.stringify(data), 
                 headers: {
                     "Content-Type": "application/json"
@@ -46,7 +46,7 @@ export tool Telemetry {
         }
     }
 
-    event(ctx: StepContext, project_id: string, artifact: string, tokens_in: number, tokens_out: number): any -> {
+    internal event(ctx: StepContext, project_id: string, artifact: string, tokens_in: number, tokens_out: number): any -> {
         clientId: "senpai-app"
         userId: os.user()
         environment: os.platform()

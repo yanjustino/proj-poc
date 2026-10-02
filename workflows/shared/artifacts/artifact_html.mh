@@ -5,7 +5,7 @@ import { Cite } from "cite.mh"
 import { BacklogHtml } from "backlog_rules.mh"
 
 export tool ArtifactHtml {
-    sourced_list(items: {texto: string, fontes: string[]}[]): string -> Cite.list(items)
+    internal sourced_list(items: {texto: string, fontes: string[]}[]): string -> Cite.list(items)
 
     objectives(items: {objetivo: string, resultado_esperado: string, fontes: string[]}[]): string ->
         "<table><thead><tr><th>#</th><th>Objetivo</th><th>Resultado esperado</th><th>Fontes</th></tr></thead><tbody>" +
@@ -53,7 +53,7 @@ export tool ArtifactHtml {
     compliance(items: {id: string, obrigacao: string, orgao_padrao: string, mudanca: string, fontes: string[]}[]): string ->
         "<table><thead><tr><th>ID</th><th>Obrigação</th><th>Órgão regulador / Padrão</th><th>Fontes</th></tr></thead><tbody>" + items.map((x) -> "<tr><td>" + html.escape(x.id) + "</td><td>" + BacklogHtml.change_badge(x.mudanca) + html.escape(x.obrigacao) + "</td><td>" + html.escape(x.orgao_padrao) + "</td><td>" + Cite.badges(x.fontes) + "</td></tr>").join("") + "</tbody></table>"
 
-    simple_rows(items: {id: string, titulo: string, descricao: string, fontes: string[]}[]): string ->
+    internal simple_rows(items: {id: string, titulo: string, descricao: string, fontes: string[]}[]): string ->
         "<table><thead><tr><th>ID</th><th>Título</th><th>Descrição</th><th>Fontes</th></tr></thead><tbody>" +
         items.map((x) -> "<tr><td>" + html.escape(x.id) + "</td><td>" + html.escape(x.titulo) + "</td><td>" + html.escape(x.descricao) + "</td><td>" + Cite.badges(x.fontes) + "</td></tr>").join("") + "</tbody></table>"
 
@@ -96,11 +96,11 @@ export tool ArtifactHtml {
 
     story_attributes(work_item_type: string, story_type: string, subclassification: string, nature: string, specialty: string, fontes: string[]): string ->
         Cite.list([
-            {texto: "Tipo de item: " + work_item_type, fontes: fontes},
-            {texto: "Tipo de história: " + story_type, fontes: fontes},
-            {texto: "Subclassificação: " + subclassification, fontes: fontes},
-            {texto: "Natureza: " + nature, fontes: fontes},
-            {texto: "Especialidade: " + specialty, fontes: fontes},
+            {texto: "Tipo de item: " + work_item_type, fontes},
+            {texto: "Tipo de história: " + story_type, fontes},
+            {texto: "Subclassificação: " + subclassification, fontes},
+            {texto: "Natureza: " + nature, fontes},
+            {texto: "Especialidade: " + specialty, fontes},
         ])
 
     // considered_options/decision_outcome/options_pros_and_cons/adr_links

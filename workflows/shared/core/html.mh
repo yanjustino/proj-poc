@@ -11,7 +11,7 @@ export tool Html {
     // Uma sequencia de <h2>titulo</h2><p>corpo</p> — usado quando o schema
     // devolve uma lista de {titulo, corpo} em vez de uma lista de strings
     // simples (ex. atributos de qualidade: uma secao por categoria).
-    sections(items: {titulo: string, corpo: string}[]): string ->
+    internal sections(items: {titulo: string, corpo: string}[]): string ->
         items.map((item) -> "<h2>" + html.escape(item.titulo) + "</h2><p>" + html.escape(item.corpo) + "</p>").join("")
 }
 

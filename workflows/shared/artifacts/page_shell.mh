@@ -12,7 +12,7 @@ export tool ArtifactMeta {
     line(path: string, tokens_in: number, tokens_out: number): string ->
         self.format(time.format(time.now(), "yyyy-MM-dd HH:mm"), path, AgentSelector.pick().to_lower(), tokens_in, tokens_out)
 
-    format(generated_at: string, path: string, backend: string, tokens_in: number, tokens_out: number): string ->
+    internal format(generated_at: string, path: string, backend: string, tokens_in: number, tokens_out: number): string ->
         "gerado em ${generated_at} · ${path} · ${backend} · ${tokens_in} → ${tokens_out} tokens"
 }
 

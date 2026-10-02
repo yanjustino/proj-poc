@@ -1,112 +1,27 @@
 // Delivery gera os artefatos de um projeto de Feature/enabler ou de Historia
-// standalone. O que muda por artefato esta em delivery_artifacts.mh; aqui
-// fica so o fluxo, o mesmo do Discovery (ver discovery.mh):
-// Dispatch -> Generate -> Gate (pausa no Modo Buddy) -> Commit.
+// standalone: o fluxo comum (artifact_flow.mh) no nivel delivery. O que muda
+// por artefato esta em delivery_artifacts.mh.
+//
+// Um projeto de Delivery tipicamente evolui um sistema em producao: as
+// instrucoes de feature/historia nunca assumem greenfield.
 
 import { Paths } from "../shared/core/paths.mh"
 import { Fixture } from "../shared/core/fixture.mh"
-import { ChangesBlock } from "../shared/artifacts/changes_log.mh"
-import { Activity } from "../shared/artifacts/activity_log.mh"
-import { Telemetry } from "../shared/telemetry/telemetry.mh"
-import { DeliveryKinds, DeliveryDrafts, DeliveryCommits } from "delivery_artifacts.mh"
+import { ArtifactFlow, Level } from "../artifact_flow/artifact_flow.mh"
 
-workflow Delivery {
+// `feature_id` e do Discovery; fixado aqui so para sair do contrato do Delivery.
+workflow Delivery = ArtifactFlow with { level: Level.delivery, feature_id: "" } {
     description: "Gera brief, requisitos, ADR, DER, diagramas, detalhamento final e histórias para Feature ou Historia standalone."
-
-    input project_id: string
-    input mode: string        // DeliveryMode
-    input artifact: string    // DeliveryArtifact
-    // Plano de implementacao: no modo feature, de uma historia do lote
-    // (ex.: "US0001"); no modo historia, ignorado.
-    input historia_id: string = ""
-    input buddy: bool = false
-    input approved: bool = false
-    // Aprovacao de um rascunho revisado e pedido de mudanca: mesmo contrato
-    // dos inputs equivalentes em discovery.mh.
-    input approval_data: any = null
-    input approval_tokens_in: number = 0
-    input approval_tokens_out: number = 0
-    input feedback: string = ""
-    input autorrevisao: bool = false
-
-    // pending_data/tokens_in/tokens_out/current_artifact sao lidos pelo app
-    // numa run pausada; feedback_consumed: ver discovery.mh.
-    var delivery_result = null
-    var tokens_in = 0
-    var tokens_out = 0
-    var current_artifact = ""
-    var pending_data = null
-    var feedback_consumed = false
-
-    output: {
-        artifact: artifact,
-        result: delivery_result,
-        tokens_in: tokens_in,
-        tokens_out: tokens_out,
-    }
-
-    step_end: (ctx) -> Telemetry.step_end(ctx, self.project_id, self.artifact, self.tokens_in, self.tokens_out)
-
-    step Dispatch {
-        Paths.ensure_valid(project_id)
-        DeliveryKinds.check(mode, artifact)
-        self.current_artifact = artifact
-        var scope = DeliveryKinds.scope(artifact, historia_id)
-        if (approved && approval_data != null) {
-            self.pending_data = approval_data
-            self.tokens_in = approval_tokens_in
-            self.tokens_out = approval_tokens_out
-            Activity.record(project_id, "approved", artifact, scope)
-            goto Commit
-        }
-        if (buddy && !approved && !feedback.is_empty()) {
-            self.feedback_consumed = true
-            ChangesBlock.record(project_id, artifact, scope, feedback)
-        }
-        Activity.record(project_id, "started", artifact, scope)
-        goto Generate
-    }
-
-    step Generate {
-        var draft = DeliveryDrafts.of(DeliveryKinds.artifact(artifact), project_id, mode, historia_id, autorrevisao)
-        self.pending_data = draft.data
-        self.tokens_in = draft.tokens_in
-        self.tokens_out = draft.tokens_out
-        goto Gate
-    }
-
-    // Ver Gate em discovery.mh.
-    step Gate {
-        var scope = DeliveryKinds.scope(artifact, historia_id)
-        if (buddy && !approved) {
-            if (!feedback.is_empty() && !self.feedback_consumed) {
-                self.feedback_consumed = true
-                ChangesBlock.record(project_id, artifact, scope, feedback)
-                goto Generate
-            }
-            self.feedback_consumed = false
-            Activity.record(project_id, "draft_ready", artifact, scope)
-            pause("revise o conteudo de '${artifact}' antes de gravar em artifacts/")
-        }
-        if (buddy) Activity.record(project_id, "approved", artifact, scope)
-        goto Commit
-    }
-
-    step Commit {
-        var draft = {data: self.pending_data, tokens_in: self.tokens_in, tokens_out: self.tokens_out}
-        self.delivery_result = DeliveryCommits.of(DeliveryKinds.artifact(artifact), project_id, mode, historia_id, draft)
-        complete()
-    }
 }
 
 // Cobre o que e deterministico: validacao de entrada, a cadeia de
 // predecessores (cada gate falha antes de qualquer chamada de LLM) e o
 // caminho de aprovacao, que grava sem chamar a LLM.
 test DeliveryWorkflowSpec {
-    describe rejects_an_invalid_mode_before_touching_anything {
-        var run = Delivery.run(inputs: {project_id: "spec-test-project", mode: "epico", artifact: "requisitos"})
-        is_false(run.ok)
-        is_true(run.error.contains("mode invalido: 'epico' (use feature | historia)"))
+    describe rejects_an_invalid_mode_before_running {
+        var raised = ""
+        try { Delivery.run(inputs: {project_id: "spec-test-project", mode: "epico", artifact: "requisitos"}) } catch (e) { raised = "${e}" }
+        is_true(raised.contains("\"epico\" is not a variant of enum DeliveryMode (use feature | historia)"))
     }
 
     describe rejects_a_final_artifact_that_does_not_match_mode {
@@ -121,16 +36,22 @@ test DeliveryWorkflowSpec {
         is_true(run.error.contains("so existe quando mode"))
     }
 
-    describe rejects_an_unknown_artifact_listing_every_valid_one {
-        var run = Delivery.run(inputs: {project_id: "spec-test-project", mode: "feature", artifact: "bogus"})
+    describe rejects_an_unknown_artifact_before_running {
+        var raised = ""
+        try { Delivery.run(inputs: {project_id: "spec-test-project", mode: "feature", artifact: "bogus"}) } catch (e) { raised = "${e}" }
+        is_true(raised.contains("\"bogus\" is not a variant of enum Artifact"))
+    }
+
+    describe rejects_an_artifact_of_another_level_listing_its_own {
+        var run = Delivery.run(inputs: {project_id: "spec-test-project", mode: "feature", artifact: "atributos"})
         is_false(run.ok)
-        is_true(run.error.contains("artefato desconhecido: 'bogus' (use brief | requisitos | adr | der | diagramas | feature | historia | historias | plano)"))
+        is_true(run.error.contains("\"atributos\" is not a variant of enum DeliveryArtifact (use brief | requisitos | adr | der | diagramas | feature | historia | historias | plano)"))
     }
 
     describe the_approval_path_validates_the_artifact_too {
-        var run = Delivery.run(inputs: {project_id: "spec-test-project", mode: "feature", artifact: "bogus", approved: true, approval_data: {}})
+        var run = Delivery.run(inputs: {project_id: "spec-test-project", mode: "feature", artifact: "atributos", approved: true, approval_data: {}})
         is_false(run.ok)
-        is_true(run.error.contains("artefato desconhecido"))
+        is_true(run.error.contains("is not a variant of enum DeliveryArtifact"))
     }
 
     describe adr_requires_brief_then_requisitos {
@@ -146,12 +67,12 @@ test DeliveryWorkflowSpec {
     describe der_and_diagramas_require_requisitos_then_adr {
         var id = Fixture.project("spec-test-delivery-der")
         for (var artifact in ["der", "diagramas"]) {
-            var run = Delivery.run(inputs: {project_id: id, mode: "feature", artifact: artifact})
+            var run = Delivery.run(inputs: {project_id: id, mode: "feature", artifact})
             is_true(run.error.contains("gere 'requisitos' antes de '${artifact}'"))
         }
         Fixture.artifact(id, "requisitos.html", "<html><body>FR-001</body></html>")
         for (var artifact in ["der", "diagramas"]) {
-            var run = Delivery.run(inputs: {project_id: id, mode: "feature", artifact: artifact})
+            var run = Delivery.run(inputs: {project_id: id, mode: "feature", artifact})
             is_true(run.error.contains("gere 'adr' antes de '${artifact}'"))
         }
         Fixture.drop(id)
@@ -202,10 +123,10 @@ test DeliveryWorkflowSpec {
             fatores_decisao: [], opcoes_consideradas: [], opcoes_pros_contras: [], links: [],
         }
         var inputs = {project_id: id, mode: "feature", artifact: "adr", approved: true, approval_data: {decisions: [decision]}, approval_tokens_in: 5}
-        Delivery.run(inputs: inputs)
-        var run = Delivery.run(inputs: inputs)
+        Delivery.run(inputs:)
+        var run = Delivery.run(inputs:)
         is_true(run.ok)
-        are_equal(run.vars.delivery_result.written, ["ADR-001-banco"])
+        are_equal(run.vars.result.written, ["ADR-001-banco"])
         are_equal(dir.list(Paths.artifact(id, "adr")).filter((p) -> p.ends_with(".html")).size(), 1)
         Fixture.drop(id)
     }

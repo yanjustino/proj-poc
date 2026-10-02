@@ -10,7 +10,6 @@
 // impede um cliente de gravar um JSON que os templates nao saberiam renderizar.
 
 import { Paths } from "../shared/core/paths.mh"
-import { Closed } from "../shared/core/closed_set.mh"
 import { ArtifactData } from "../shared/artifacts/artifact_data.mh"
 import { ArtifactBody } from "../shared/artifacts/artifact_body.mh"
 import { PageShell } from "../shared/artifacts/page_shell.mh"
@@ -19,9 +18,6 @@ import { ChangesLog } from "../shared/artifacts/changes_log.mh"
 enum EditableArtifact { brief, atributos, requisitos }
 
 tool ArtifactEdit {
-    kind(name: string): EditableArtifact ->
-        Closed.parse("artefato nao editavel", name, [EditableArtifact.brief, EditableArtifact.atributos, EditableArtifact.requisitos])
-
     title_for(kind: EditableArtifact): string -> match kind {
         EditableArtifact.brief      -> "Brief"
         EditableArtifact.atributos  -> "Atributos de Qualidade"
@@ -62,7 +58,7 @@ workflow ArtifactSave {
     description: "Grava a edicao manual de um artefato de documento unico (brief | atributos | requisitos): JSON e HTML re-renderizado."
 
     input project_id: string
-    input artifact: string // EditableArtifact
+    input artifact: EditableArtifact
     input data: any
     input sections: any = [] // [{titulo, conteudo}] das secoes alteradas, montado pelo editor
 
@@ -73,7 +69,6 @@ workflow ArtifactSave {
     }
 
     step Save {
-        var kind = ArtifactEdit.kind(artifact)
         var html_relative = artifact + ".html"
         var html_path = Paths.artifact(project_id, html_relative)
         var json_path = Paths.artifact(project_id, ArtifactData.json_relative(html_relative))
@@ -86,8 +81,8 @@ workflow ArtifactSave {
         }
 
         var rendered = PageShell(
-            title: ArtifactEdit.title_for(kind),
-            body: ArtifactEdit.render(kind, data),
+            title: ArtifactEdit.title_for(artifact),
+            body: ArtifactEdit.render(artifact, data),
             meta: "editado em ${time.format(time.now(), "yyyy-MM-dd HH:mm")} · artifacts/${html_relative}"
         )
         ArtifactData.write(project_id, html_relative, data)
@@ -95,7 +90,7 @@ workflow ArtifactSave {
         self.saved_path = html_relative
         if (!sections.is_empty()) {
             ChangesLog.append({
-                artifact: artifact,
+                artifact,
                 feature_id: "",
                 origem: "edicao_manual",
                 secoes: sections.map((section) -> section.titulo),
@@ -130,10 +125,10 @@ test ArtifactEditDirectiveSpec {
 }
 
 test ArtifactSaveSpec {
-    describe rejects_a_non_editable_artifact_before_touching_disk {
-        var run = ArtifactSave.run(inputs: {project_id: "spec-nao-existe", artifact: "adr", data: {}})
-        is_false(run.ok)
-        is_true(run.error.contains("artefato nao editavel: 'adr' (use brief | atributos | requisitos)"))
+    describe rejects_a_non_editable_artifact_before_running {
+        var raised = ""
+        try { ArtifactSave.run(inputs: {project_id: "spec-nao-existe", artifact: "adr", data: {}}) } catch (e) { raised = "${e}" }
+        is_true(raised.contains("\"adr\" is not a variant of enum EditableArtifact (use brief | atributos | requisitos)"))
     }
 
     describe fails_when_the_artifact_was_never_generated {

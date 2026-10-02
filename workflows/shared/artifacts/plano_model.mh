@@ -46,11 +46,11 @@ export tool PlanoModel {
     // Texto de mensagem/participante no sequenceDiagram: sem quebras, e sem
     // os caracteres que o parser interpreta (";" encerra a instrucao, "#"
     // inicia entidade) — trocados pelas entidades do proprio Mermaid.
-    mm(text: string): string ->
+    internal mm(text: string): string ->
         text.replace("#", "#35;").replace(";", "#59;").replace("<", "#lt;").replace(">", "#gt;")
             .replace("\r", " ").replace("\n", " ")
 
-    participants(fluxo: any[]): string[] -> {
+    internal participants(fluxo: any[]): string[] -> {
         var out = []
         for (var passo in fluxo) {
             if (!out.contains(passo.de)) out += [passo.de]
@@ -80,7 +80,7 @@ export tool PlanoModel {
 
     // Criterios de aceite da historia citados (CA1, CA2…) por tarefas de teste
     // e pela estrategia de testes — o que conta como "coberto por teste".
-    tested_criteria(data: any): string[] -> {
+    internal tested_criteria(data: any): string[] -> {
         var out = []
         for (var t in (data?.tarefas ?? [])) {
             if (t?.tipo == "teste") out = out + (t?.criterios ?? [])
@@ -89,7 +89,7 @@ export tool PlanoModel {
         return out.map((c) -> c.to_upper().trim())
     }
 
-    all_criteria_refs(data: any): string[] -> {
+    internal all_criteria_refs(data: any): string[] -> {
         var out = []
         for (var t in (data?.tarefas ?? [])) out = out + (t?.criterios ?? [])
         for (var t in (data?.testes ?? [])) out = out + (t?.criterios ?? [])
@@ -237,7 +237,7 @@ export tool PlanoPrep {
 }
 
 tool PlanoFixtures {
-    plano(): any -> {
+    internal plano(): any -> {
         criterios_total: 2,
         abordagem: "x",
         componentes: [{conteiner: "API de Ordens", componente: "OrdemController", mudanca: "novo endpoint", fontes: ["inferência"]}],

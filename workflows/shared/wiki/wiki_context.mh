@@ -29,7 +29,7 @@ export tool WikiContext {
     for_lint(project_id: string): string ->
         self.all_pages(project_id).split("\n\n---\n\n# ").map((section) -> WikiAlerts.strip(section)).join("\n\n---\n\n# ")
 
-    read_file_if_exists(path: string): string -> {
+    internal read_file_if_exists(path: string): string -> {
         if (!fs.exists(path)) return "(vazio)"
         return fs.read(path)
     }

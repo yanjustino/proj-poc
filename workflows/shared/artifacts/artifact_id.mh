@@ -12,12 +12,12 @@ import { Paths } from "../core/paths.mh"
 import { Slug } from "../core/slug.mh"
 
 export tool ArtifactId {
-    next_sequential(dir_path: string, prefix: string): string -> {
+    internal next_sequential(dir_path: string, prefix: string): string -> {
         var n = self.count_existing(dir_path) + 1
         return prefix + self.pad3(n)
     }
 
-    count_existing(dir_path: string): number -> {
+    internal count_existing(dir_path: string): number -> {
         if (!dir.exists(dir_path)) return 0
         var count = 0
         for (var entry in dir.list(dir_path)) {
@@ -26,7 +26,7 @@ export tool ArtifactId {
         return count
     }
 
-    pad3(n: number): string -> {
+    internal pad3(n: number): string -> {
         if (n < 10) return "00${n}"
         if (n < 100) return "0${n}"
         return "${n}"

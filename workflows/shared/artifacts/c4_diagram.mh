@@ -28,11 +28,11 @@
 import { Cite } from "cite.mh"
 
 export tool C4Diagram {
-    is_c4(diagram_type: string): bool -> diagram_type.starts_with("c4-")
+    internal is_c4(diagram_type: string): bool -> diagram_type.starts_with("c4-")
 
     // Estruturado = tipo C4 com o modelo de elementos preenchido. Um
     // checkpoint/arquivo antigo (so diagrama_mermaid) cai no caminho legado.
-    is_structured(data: any): bool ->
+    internal is_structured(data: any): bool ->
         self.is_c4(data.diagram_type) && (data?.elementos ?? []).size() > 0
 
     // Nivel hierarquico: deterministico a partir do tipo (antes era um campo
@@ -60,7 +60,7 @@ export tool C4Diagram {
         _               -> html.escape(diagram_type)
     }
 
-    audience(diagram_type: string): string -> match diagram_type {
+    internal audience(diagram_type: string): string -> match diagram_type {
         "c4-context"    -> "Todos — pessoas técnicas e não técnicas, dentro e fora do time de desenvolvimento."
         "c4-container"  -> "Pessoas técnicas dentro e fora do time — arquitetos, desenvolvedores e operação/suporte."
         "c4-component"  -> "Arquitetos e desenvolvedores."
@@ -68,7 +68,7 @@ export tool C4Diagram {
         _               -> ""
     }
 
-    element_type_label(tipo: string): string -> match tipo {
+    internal element_type_label(tipo: string): string -> match tipo {
         "pessoa"          -> "Pessoa"
         "sistema"         -> "Sistema de software"
         "sistema_externo" -> "Sistema externo"
@@ -83,7 +83,7 @@ export tool C4Diagram {
     // (person #08427B, system #1168BD, external #999999, container #438DD5,
     // component #85BBF0). No de implantacao nao e uma classe: vira subgraph
     // e recebe `style` proprio (ver mermaid()).
-    element_class(tipo: string): string -> match tipo {
+    internal element_class(tipo: string): string -> match tipo {
         "pessoa"          -> "pessoa"
         "sistema"         -> "sistema"
         "sistema_externo" -> "externo"
@@ -93,7 +93,7 @@ export tool C4Diagram {
         _                 -> "externo"
     }
 
-    class_color(css_class: string): string -> match css_class {
+    internal class_color(css_class: string): string -> match css_class {
         "pessoa"     -> "#08427B"
         "sistema"    -> "#1168BD"
         "container"  -> "#438DD5"
@@ -106,11 +106,11 @@ export tool C4Diagram {
     // por html.escape no template (<pre class="mermaid">), e o Mermaid le o
     // textContent — entao "&lt;" viraria "<" de novo antes do parser. "#"
     // primeiro, senao as entidades introduzidas abaixo seriam re-escapadas.
-    mm(text: string): string ->
+    internal mm(text: string): string ->
         text.replace("#", "#35;").replace("\"", "#quot;").replace("<", "#lt;").replace(">", "#gt;")
             .replace("\r", " ").replace("\n", " ")
 
-    index_of_id(elementos: any[], id: string): int -> {
+    internal index_of_id(elementos: any[], id: string): int -> {
         var i = 0
         for (var el in elementos) {
             if (el.id == id) return i
@@ -119,7 +119,7 @@ export tool C4Diagram {
         return -1
     }
 
-    name_of(elementos: any[], id: string): string -> {
+    internal name_of(elementos: any[], id: string): string -> {
         var i = self.index_of_id(elementos, id)
         if (i < 0) return id
         return elementos[i].nome
@@ -128,7 +128,7 @@ export tool C4Diagram {
     // Um no_pai so vale se apontar para um no de implantacao existente (e nao
     // para o proprio elemento); qualquer outra coisa trata o elemento como
     // raiz — ele ainda aparece no desenho, e check() aponta o problema.
-    effective_parent(elementos: any[], el: any): string -> {
+    internal effective_parent(elementos: any[], el: any): string -> {
         var pai = el?.no_pai ?? ""
         if (pai.is_empty() || pai == el.id) return ""
         var i = self.index_of_id(elementos, pai)
@@ -136,7 +136,7 @@ export tool C4Diagram {
         return pai
     }
 
-    node_label(el: any): string -> {
+    internal node_label(el: any): string -> {
         var tecnologia = el?.tecnologia ?? ""
         var kind = self.element_type_label(el.tipo)
         if (!tecnologia.is_empty()) kind = kind + ": " + self.mm(tecnologia)
@@ -146,7 +146,7 @@ export tool C4Diagram {
         return label
     }
 
-    node_line(el: any, i: int): string -> {
+    internal node_line(el: any, i: int): string -> {
         var label = self.node_label(el)
         var shape = match el.tipo {
             "pessoa"      -> "([\"" + label + "\"])"
@@ -161,7 +161,7 @@ export tool C4Diagram {
     // ciclo entre nos nunca e alcancado a partir da raiz (nenhum membro tem
     // pai "" efetivo), entao a recursao termina — o ciclo so some do desenho
     // e check() o denuncia.
-    deployment_nodes(elementos: any[], parent: string): string -> {
+    internal deployment_nodes(elementos: any[], parent: string): string -> {
         var out = ""
         var i = 0
         for (var el in elementos) {
@@ -184,13 +184,13 @@ export tool C4Diagram {
     // conteineres na fronteira do sistema (diagrama de conteiner),
     // componentes na fronteira do conteiner (diagrama de componente). Pessoas,
     // sistemas externos e (no de componente) os outros conteineres ficam fora.
-    inside_boundary(diagram_type: string, tipo: string): bool -> {
+    internal inside_boundary(diagram_type: string, tipo: string): bool -> {
         if (diagram_type == "c4-container") return tipo == "container" || tipo == "banco_dados"
         if (diagram_type == "c4-component") return tipo == "componente"
         return false
     }
 
-    relation_line(elementos: any[], rel: any): string -> {
+    internal relation_line(elementos: any[], rel: any): string -> {
         var de = self.index_of_id(elementos, rel.de)
         var para = self.index_of_id(elementos, rel.para)
         if (de < 0 || para < 0) return ""
@@ -200,7 +200,7 @@ export tool C4Diagram {
         return "    n${de} -->|\"" + label + "\"| n${para}\n"
     }
 
-    mermaid(data: any): string -> {
+    internal mermaid(data: any): string -> {
         var t = data.diagram_type
         var elementos = data.elementos
         var out = "flowchart TB\n" +
@@ -324,9 +324,9 @@ export tool C4Diagram {
 
     // --- Conformidade -----------------------------------------------------
 
-    count_type(elementos: any[], tipo: string): int -> elementos.filter((el) -> el.tipo == tipo).size()
+    internal count_type(elementos: any[], tipo: string): int -> elementos.filter((el) -> el.tipo == tipo).size()
 
-    names_of_types(elementos: any[], tipos: string[]): string ->
+    internal names_of_types(elementos: any[], tipos: string[]): string ->
         elementos.filter((el) -> tipos.contains(el.tipo)).map((el) -> el.nome).join(", ")
 
     // check: violacoes das regras C4 dentro de UM diagrama. Texto cru (nomes
@@ -410,9 +410,9 @@ export tool C4Diagram {
 
     // --- Consistencia entre os diagramas do mesmo lote ---------------------
 
-    normalized(text: string): string -> text.to_lower().trim()
+    internal normalized(text: string): string -> text.to_lower().trim()
 
-    names_by_types(diagramas: any[], diagram_type: string, tipos: string[]): string[] -> {
+    internal names_by_types(diagramas: any[], diagram_type: string, tipos: string[]): string[] -> {
         var out = []
         for (var d in diagramas) {
             if (d.diagram_type == diagram_type && self.is_structured(d)) {
@@ -429,7 +429,7 @@ export tool C4Diagram {
     // contexto/conteiner ausentes (recomendados para todo time) e nomes que
     // nao batem entre os niveis (o zoom de um nivel para o seguinte precisa
     // manter as mesmas pessoas, sistemas externos e conteineres).
-    batch_warnings(diagramas: any[]): any[] -> {
+    internal batch_warnings(diagramas: any[]): any[] -> {
         var has_context = diagramas.any((d) -> d.diagram_type == "c4-context")
         var has_container = diagramas.any((d) -> d.diagram_type == "c4-container")
         var context_people = self.names_by_types(diagramas, "c4-context", ["pessoa", "sistema_externo"])
@@ -525,7 +525,7 @@ export tool C4Diagram {
 // Fixtures dos testes abaixo (mhl nao aceita `var` solto no corpo de um
 // `test`, so dentro de cada `describe`).
 tool C4Fixtures {
-    context(): any -> {
+    internal context(): any -> {
         titulo: "Contexto",
         diagram_type: "c4-context",
         descricao: "Visão geral",
@@ -544,7 +544,7 @@ tool C4Fixtures {
         diagrama_mermaid: "",
     }
 
-    container(): any -> {
+    internal container(): any -> {
         titulo: "Contêineres",
         diagram_type: "c4-container",
         descricao: "Contêineres",

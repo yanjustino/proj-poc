@@ -28,7 +28,7 @@ export tool WikiPages {
     // #/##/listas — negrito dentro de paragrafo sairia como asteriscos
     // literais no visualizador estatico da wiki (ver o proprio comentario de
     // topo desse tool).
-    natureza_line(natureza: string): string -> match natureza {
+    internal natureza_line(natureza: string): string -> match natureza {
         "sistema_atual" -> "Natureza: Sistema atual — já existe e roda hoje.\n\n"
         "pedido_novo"   -> "Natureza: Pedido novo — ainda não implementado.\n\n"
         "ambos"         -> "Natureza: Sistema atual e pedido novo — descreve o que existe e propõe uma mudança.\n\n"

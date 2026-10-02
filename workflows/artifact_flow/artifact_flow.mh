@@ -1,0 +1,143 @@
+// O fluxo comum de geracao de artefatos: Dispatch -> Generate -> Gate (pausa
+// no Modo Buddy) -> Commit. Discovery e Delivery sao aliases deste workflow
+// interno (discovery.mh, delivery.mh), cada um fixando `level`; o que muda
+// por artefato mora nas tools de cada nivel, despachadas por ArtifactLevels.
+
+import { Paths } from "../shared/core/paths.mh"
+import { ChangesBlock } from "../shared/artifacts/changes_log.mh"
+import { Activity } from "../shared/artifacts/activity_log.mh"
+import { Telemetry } from "../shared/telemetry/telemetry.mh"
+import { Draft } from "../shared/artifacts/draft.mh"
+import { DiscoveryArtifact, DiscoveryKinds, DiscoveryDrafts, DiscoveryCommits } from "../discovery/discovery_artifacts.mh"
+import { DeliveryArtifact, DeliveryMode, DeliveryKinds, DeliveryDrafts, DeliveryCommits } from "../delivery/delivery_artifacts.mh"
+
+export enum Level { discovery, delivery }
+
+// Todo artefato de algum nivel. A entrada recusa qualquer outro nome; cada
+// nivel aceita so os seus (DiscoveryArtifact / DeliveryArtifact).
+export enum Artifact { brief, atributos, requisitos, adr, der, diagramas, features, dependencias, feature, historia, historias, plano }
+
+export tool ArtifactLevels {
+    // Valida a combinacao de entradas do nivel antes de qualquer geracao.
+    check(level: Level, artifact: Artifact, mode: DeliveryMode, feature_id: string, historia_id: string) -> match level {
+        Level.discovery -> DiscoveryKinds.check(self.discovery(artifact), feature_id, historia_id)
+        Level.delivery  -> DeliveryKinds.check(mode, self.delivery(artifact))
+    }
+
+    // Chave que separa o historico (ChangesLog, ActivityLog) de cada item.
+    scope(level: Level, artifact: Artifact, feature_id: string, historia_id: string): string -> match level {
+        Level.discovery -> DiscoveryKinds.scope(self.discovery(artifact), feature_id, historia_id)
+        Level.delivery  -> DeliveryKinds.scope(self.delivery(artifact), historia_id)
+    }
+
+    draft(level: Level, artifact: Artifact, project_id: string, mode: DeliveryMode, feature_id: string, historia_id: string, autorrevisao: bool): Draft -> match level {
+        Level.discovery -> DiscoveryDrafts.of(self.discovery(artifact), project_id, feature_id, historia_id, autorrevisao)
+        Level.delivery  -> DeliveryDrafts.of(self.delivery(artifact), project_id, mode, historia_id, autorrevisao)
+    }
+
+    commit(level: Level, artifact: Artifact, project_id: string, mode: DeliveryMode, feature_id: string, historia_id: string, draft: Draft): any -> match level {
+        Level.discovery -> DiscoveryCommits.of(self.discovery(artifact), project_id, feature_id, historia_id, draft)
+        Level.delivery  -> DeliveryCommits.of(self.delivery(artifact), project_id, mode, historia_id, draft)
+    }
+
+    internal discovery(artifact: Artifact): DiscoveryArtifact -> DiscoveryArtifact.parse("${artifact}")
+    internal delivery(artifact: Artifact): DeliveryArtifact -> DeliveryArtifact.parse("${artifact}")
+}
+
+export internal workflow ArtifactFlow {
+    input level: Level
+    input project_id: string
+    input artifact: Artifact
+    // Delivery: o modo do projeto (o artefato final e o proprio modo).
+    // Discovery fixa um valor que nao usa.
+    input mode: DeliveryMode
+    // Discovery: a feature das historias e do plano. Delivery fixa "".
+    input feature_id: string = ""
+    // Plano de implementacao: a historia (ex.: "US0001"); no Delivery em
+    // modo historia, ignorado.
+    input historia_id: string = ""
+    input buddy: bool = false
+    input approved: bool = false
+    // Aprovacao de um rascunho revisado: a UI envia o pending_data de uma
+    // run pausada e Dispatch vai direto ao Commit, sem chamar a LLM. Serve
+    // tambem para um checkpoint criado por outra versao deste workflow.
+    input approval_data: any = null
+    input approval_tokens_in: number = 0
+    input approval_tokens_out: number = 0
+    // Pedido de mudanca. Chega no resume de uma run pausada (Gate) ou num
+    // StartRun novo sobre um artefato ja aprovado (Dispatch); nos dois casos
+    // custa exatamente uma geracao.
+    input feedback: string = ""
+    // Autorrevisao (auto_review.mh): com avisos de conformidade na geracao,
+    // uma unica chamada extra pede a correcao antes da pausa.
+    input autorrevisao: bool = false
+
+    // pending_data/tokens_in/tokens_out/current_artifact sao lidos pelo app
+    // numa run pausada (checkpoint-recovery.js, run-tracker.js).
+    var result = null
+    var tokens_in = 0
+    var tokens_out = 0
+    var current_artifact = ""
+    var pending_data = null
+    // Garante que um pedido de mudanca gera uma unica regeneracao (inputs
+    // sao somente leitura). Volta a false antes de cada pausa, liberando o
+    // proximo pedido.
+    var feedback_consumed = false
+
+    output: {artifact, result, tokens_in, tokens_out}
+
+    step_end: (ctx) -> Telemetry.step_end(ctx, self.project_id, "${self.artifact}", self.tokens_in, self.tokens_out)
+
+    step Dispatch {
+        Paths.ensure_valid(project_id)
+        ArtifactLevels.check(level, artifact, mode, feature_id, historia_id)
+        self.current_artifact = "${artifact}"
+        var scope = ArtifactLevels.scope(level, artifact, feature_id, historia_id)
+        if (approved && approval_data != null) {
+            self.pending_data = approval_data
+            self.tokens_in = approval_tokens_in
+            self.tokens_out = approval_tokens_out
+            Activity.record(project_id, "approved", "${artifact}", scope)
+            goto Commit
+        }
+        if (buddy && !approved && !feedback.is_empty()) {
+            self.feedback_consumed = true
+            ChangesBlock.record(project_id, "${artifact}", scope, feedback)
+        }
+        Activity.record(project_id, "started", "${artifact}", scope)
+        goto Generate
+    }
+
+    step Generate {
+        var draft = ArtifactLevels.draft(level, artifact, project_id, mode, feature_id, historia_id, autorrevisao)
+        self.pending_data = draft.data
+        self.{tokens_in, tokens_out} = draft
+        goto Gate
+    }
+
+    // Pausar nunca custa uma nova chamada de LLM: o rascunho ja esta em
+    // pending_data. No resume, approved:true grava; approved:false com
+    // feedback registra o pedido (ChangesBlock) e regenera com todo o
+    // historico de pedidos deste item; sem feedback, pausa de novo.
+    step Gate {
+        var scope = ArtifactLevels.scope(level, artifact, feature_id, historia_id)
+        if (buddy && !approved) {
+            if (!feedback.is_empty() && !self.feedback_consumed) {
+                self.feedback_consumed = true
+                ChangesBlock.record(project_id, "${artifact}", scope, feedback)
+                goto Generate
+            }
+            self.feedback_consumed = false
+            Activity.record(project_id, "draft_ready", "${artifact}", scope)
+            pause("revise o conteudo de '${artifact}' antes de gravar em artifacts/")
+        }
+        if (buddy) Activity.record(project_id, "approved", "${artifact}", scope)
+        goto Commit
+    }
+
+    step Commit {
+        var draft = {data: self.pending_data, tokens_in: self.tokens_in, tokens_out: self.tokens_out}
+        self.result = ArtifactLevels.commit(level, artifact, project_id, mode, feature_id, historia_id, draft)
+        complete()
+    }
+}

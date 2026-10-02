@@ -7,8 +7,6 @@
 // (as_is/modificado/novo/removido) e nunca assumem greenfield.
 
 import { Paths } from "../shared/core/paths.mh"
-import { Closed } from "../shared/core/closed_set.mh"
-import { WorkflowsRoot, SchemaFile } from "../shared/core/workflows_root.mh"
 import { Context } from "../shared/artifacts/context.mh"
 import { ContextSlice } from "../shared/artifacts/context_slice.mh"
 import { Require } from "../shared/artifacts/require.mh"
@@ -28,25 +26,15 @@ export enum DeliveryMode { feature, historia }
 export enum DeliveryArtifact { brief, requisitos, adr, der, diagramas, feature, historia, historias, plano }
 
 export tool DeliveryKinds {
-    artifact(name: string): DeliveryArtifact -> Closed.parse("artefato desconhecido", name, [
-        DeliveryArtifact.brief, DeliveryArtifact.requisitos, DeliveryArtifact.adr, DeliveryArtifact.der,
-        DeliveryArtifact.diagramas, DeliveryArtifact.feature, DeliveryArtifact.historia,
-        DeliveryArtifact.historias, DeliveryArtifact.plano,
-    ])
-
-    mode(name: string): DeliveryMode -> Closed.parse("mode invalido", name, [DeliveryMode.feature, DeliveryMode.historia])
-
     // O artefato final e o proprio modo; `historias` quebra a feature final.
-    check(mode_name: string, artifact_name: string) -> {
-        var mode = self.mode(mode_name)
-        var artifact = self.artifact(artifact_name)
+    check(mode: DeliveryMode, artifact: DeliveryArtifact) -> {
         var final = artifact == DeliveryArtifact.feature || artifact == DeliveryArtifact.historia
-        if (final && artifact_name != mode_name) fail("artifact '${artifact_name}' nao bate com mode '${mode_name}'")
+        if (final && "${artifact}" != "${mode}") fail("artifact '${artifact}' nao bate com mode '${mode}'")
         if (artifact == DeliveryArtifact.historias && mode != DeliveryMode.feature) fail("'historias' so existe quando mode=\"feature\"")
     }
 
     // Chave que separa o historico (ChangesLog, ActivityLog) de cada plano.
-    scope(artifact_name: string, historia_id: string): string -> if (artifact_name == "plano") historia_id else ""
+    scope(artifact: DeliveryArtifact, historia_id: string): string -> if (artifact == DeliveryArtifact.plano) historia_id else ""
 }
 
 // Delivery nao gera atributos de qualidade: este texto fixo ocupa o lugar
@@ -75,19 +63,14 @@ prompt HistoriaInstruction(
     feedback_content: string
 ) from "prompts/historia.prompt.md"
 
-prompt FeatureSchemaContent() from "schemas/feature.schema.json"
-prompt HistoriaSchemaContent() from "schemas/historia.schema.json"
-
-tool DeliverySchemas {
-    feature(): SchemaFile -> WorkflowsRoot.schema(FeatureSchemaContent(), "delivery/schemas/feature.schema.json")
-    historia(): SchemaFile -> WorkflowsRoot.schema(HistoriaSchemaContent(), "delivery/schemas/historia.schema.json")
-}
+schema FeatureSchema from "schemas/feature.schema.json"
+schema HistoriaSchema from "schemas/historia.schema.json"
 
 // Predecessores: brief -> requisitos -> adr -> der | diagramas -> feature |
 // historia -> historias. historias e plano recebem o contexto recortado pelo
 // que o item cita, com texto fixo no lugar do que nao foi gerado.
 export tool DeliveryDrafts {
-    of(kind: DeliveryArtifact, project_id: string, mode: string, historia_id: string, autorrevisao: bool): Draft -> match kind {
+    of(kind: DeliveryArtifact, project_id: string, mode: DeliveryMode, historia_id: string, autorrevisao: bool): Draft -> match kind {
         DeliveryArtifact.brief      -> self.brief(project_id)
         DeliveryArtifact.requisitos -> self.requisitos(project_id)
         DeliveryArtifact.adr        -> self.adr(project_id)
@@ -99,36 +82,36 @@ export tool DeliveryDrafts {
         DeliveryArtifact.plano      -> self.plano(project_id, mode, historia_id, autorrevisao)
     }
 
-    brief(project_id: string): Draft -> CommonDrafts.brief(project_id)
+    internal brief(project_id: string): Draft -> CommonDrafts.brief(project_id)
 
-    requisitos(project_id: string): Draft ->
+    internal requisitos(project_id: string): Draft ->
         CommonDrafts.requisitos(project_id, Require.artifact(project_id, "brief", "requisitos"))
 
-    adr(project_id: string): Draft -> {
+    internal adr(project_id: string): Draft -> {
         Require.artifact(project_id, "brief", "adr")
         return CommonDrafts.adr(project_id, Require.artifact(project_id, "requisitos", "adr"), NoAtributos.text())
     }
 
-    der(project_id: string, autorrevisao: bool): Draft -> {
+    internal der(project_id: string, autorrevisao: bool): Draft -> {
         var requisitos = Require.artifact(project_id, "requisitos", "der")
         return CommonDrafts.der(project_id, autorrevisao, requisitos, NoAtributos.text(), Require.adr(project_id, "der"))
     }
 
-    diagramas(project_id: string, autorrevisao: bool): Draft -> {
+    internal diagramas(project_id: string, autorrevisao: bool): Draft -> {
         var requisitos = Require.artifact(project_id, "requisitos", "diagramas")
         return CommonDrafts.diagramas(project_id, autorrevisao, requisitos, NoAtributos.text(), Require.adr(project_id, "diagramas"))
     }
 
     // O artefato final exige todos os predecessores.
-    final_context(project_id: string, before: string): any -> {
+    internal final_context(project_id: string, before: string): any -> {
         Require.artifact(project_id, "brief", before)
         var requisitos = Require.artifact(project_id, "requisitos", before)
         var adr = Require.adr(project_id, before)
         var der = Require.artifact(project_id, "der", before)
-        return {requisitos: requisitos, adr: adr, der: der, diagramas: Require.diagramas(project_id, before)}
+        return {requisitos, adr, der, diagramas: Require.diagramas(project_id, before)}
     }
 
-    feature(project_id: string, autorrevisao: bool): Draft -> {
+    internal feature(project_id: string, autorrevisao: bool): Draft -> {
         var ctx = self.final_context(project_id, "feature")
         return Drafts.reviewed(AutoReview.generate(
             enabled: autorrevisao,
@@ -140,14 +123,14 @@ export tool DeliveryDrafts {
                 diagramas_content: ctx.diagramas,
                 feedback_content: ChangesBlock.for_artifact(project_id, "feature", "")
             ),
-            schema_file: DeliverySchemas.feature(), project_id: project_id, artifact: "feature",
+            schema_file: FeatureSchema, project_id:, artifact: "feature",
             prepare: (raw) -> json.parse(raw),
             check: (d) -> ArtifactChecks.feature(d)
         ))
     }
 
     // A historia unica recebe os mesmos avisos de rastreabilidade de um lote.
-    historia(project_id: string, autorrevisao: bool): Draft -> {
+    internal historia(project_id: string, autorrevisao: bool): Draft -> {
         var ctx = self.final_context(project_id, "historia")
         var known = Traceability.known(project_id)
         return Drafts.reviewed(AutoReview.generate(
@@ -161,13 +144,13 @@ export tool DeliveryDrafts {
                 diagramas_content: ctx.diagramas,
                 feedback_content: ChangesBlock.for_artifact(project_id, "historia", "")
             ),
-            schema_file: DeliverySchemas.historia(), project_id: project_id, artifact: "historia",
+            schema_file: HistoriaSchema, project_id:, artifact: "historia",
             prepare: (raw) -> Traceability.annotate({historias: [json.parse(raw)]}, known).historias[0],
             check: (d) -> ArtifactChecks.historia(d)
         ))
     }
 
-    tech(project_id: string, refs: string[]): TechContext -> {
+    internal tech(project_id: string, refs: string[]): TechContext -> {
         requisitos: ContextSlice.requisitos(project_id, refs),
         atributos: NoAtributos.text(),
         adr: Require.optional(ContextSlice.adrs(project_id, refs), "este projeto"),
@@ -176,7 +159,7 @@ export tool DeliveryDrafts {
     }
 
     // Quebra a feature final (a unica do projeto) em historias.
-    historias(project_id: string, autorrevisao: bool): Draft -> {
+    internal historias(project_id: string, autorrevisao: bool): Draft -> {
         var feature = Require.artifact(project_id, "feature", "historias")
         var feature_data = ContextSlice.read(project_id, "feature.json")
         return CommonDrafts.historias(project_id, autorrevisao, feature, self.tech(project_id, ContextSlice.refs(feature_data)), feature_data?.historias_propostas ?? [], "")
@@ -187,14 +170,14 @@ export tool DeliveryDrafts {
     // proprio historia.html do projeto.
     // Pasta da historia ("" no modo historia, cuja historia e a raiz) e o
     // caminho de volta ate artifacts/ a partir dela.
-    plano_location(project_id: string, mode: string, historia_id: string): any -> {
-        if (mode == "historia") return {folder: "", assets_prefix: "./"}
+    plano_location(project_id: string, mode: DeliveryMode, historia_id: string): any -> {
+        if (mode == DeliveryMode.historia) return {folder: "", assets_prefix: "./"}
         if (historia_id.is_empty()) fail("'historia_id' e obrigatorio para artifact: \"plano\" no modo feature")
         return {folder: "historias/${ArtifactId.find_historia_dir(project_id, "historias", historia_id)}/", assets_prefix: "../../"}
     }
 
-    plano(project_id: string, mode: string, historia_id: string, autorrevisao: bool): Draft -> {
-        var standalone = mode == "historia"
+    internal plano(project_id: string, mode: DeliveryMode, historia_id: string, autorrevisao: bool): Draft -> {
+        var standalone = mode == DeliveryMode.historia
         var location = self.plano_location(project_id, mode, historia_id)
         var folder = location.folder
         var historia_rel = "${folder}historia.html"
@@ -209,7 +192,7 @@ export tool DeliveryDrafts {
 }
 
 export tool DeliveryCommits {
-    of(kind: DeliveryArtifact, project_id: string, mode: string, historia_id: string, draft: Draft): any -> match kind {
+    of(kind: DeliveryArtifact, project_id: string, mode: DeliveryMode, historia_id: string, draft: Draft): any -> match kind {
         DeliveryArtifact.brief      -> ArtifactCommit.brief(project_id, draft)
         DeliveryArtifact.requisitos -> ArtifactCommit.requisitos(project_id, draft)
         DeliveryArtifact.adr        -> ArtifactCommit.adr(project_id, draft)
@@ -222,23 +205,23 @@ export tool DeliveryCommits {
     }
 
     // O titulo do artefato final e o nome do projeto.
-    final(project_id: string, mode: string, body: string, draft: Draft): any -> {
+    internal final(project_id: string, mode: string, body: string, draft: Draft): any -> {
         var title = html.escape(json.parse(fs.read(Paths.project_file(project_id))).name)
         ArtifactCommit.page(project_id, "${mode}.html", title, body, draft.data, draft)
         return {artifact: mode, path: "artifacts/${mode}.html"}
     }
 
-    feature(project_id: string, draft: Draft): any ->
+    internal feature(project_id: string, draft: Draft): any ->
         self.final(project_id, "feature", ArtifactBody.feature(draft.data), draft)
 
-    historia(project_id: string, draft: Draft): any -> {
+    internal historia(project_id: string, draft: Draft): any -> {
         SpecFiles.write(project_id, "", draft.data)
         return self.final(project_id, "historia", ArtifactBody.historia(draft.data), draft)
     }
 
     // Caminhos do rascunho quando ele os traz; senao recalculados — ver
     // DiscoveryCommits.historias.
-    plano(project_id: string, mode: string, historia_id: string, draft: Draft): any -> {
+    internal plano(project_id: string, mode: DeliveryMode, historia_id: string, draft: Draft): any -> {
         var plano_rel = draft.data?.plano_rel
         var assets_prefix = draft.data?.assets_prefix
         if (plano_rel == null || assets_prefix == null) {

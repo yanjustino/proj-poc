@@ -26,7 +26,7 @@ export tool Slug {
     // Cobre os acentos comuns em portugues — nao e normalizacao Unicode
     // completa (o MHL nao tem isso nativamente), so o bastante para nomes de
     // arquivo legiveis a partir de titulos em pt-BR.
-    strip_accents(text: string): string ->
+    internal strip_accents(text: string): string ->
         text
             .replace("á", "a").replace("à", "a").replace("â", "a").replace("ã", "a").replace("ä", "a")
             .replace("é", "e").replace("è", "e").replace("ê", "e").replace("ë", "e")

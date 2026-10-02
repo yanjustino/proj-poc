@@ -19,7 +19,6 @@
 
 import { Paths } from "../core/paths.mh"
 import { Context } from "context.mh"
-import { DirClear } from "../core/dir_clear.mh"
 
 export tool ContextSlice {
     // refs: toda string citada em qualquer campo "fontes"/"*_fontes" do
@@ -34,7 +33,7 @@ export tool ContextSlice {
 
     // Devolve as strings coletadas (arrays sao passados por copia no mhl —
     // anexar a um parametro dentro da recursao nao chegaria a quem chamou).
-    collect(value: any, is_source: bool): string[] -> {
+    internal collect(value: any, is_source: bool): string[] -> {
         var t = type_of(value)
         if (t == "string") return if (is_source) [value] else []
         var out = []
@@ -51,7 +50,7 @@ export tool ContextSlice {
 
     // ids citados de um artefato: "requisitos/FR-003" -> "FR-003"; um ID sem
     // prefixo ("FR-003", vindo da rastreabilidade) tambem conta.
-    ids_for(refs: string[], artifact: string, id_prefixes: string[]): string[] -> {
+    internal ids_for(refs: string[], artifact: string, id_prefixes: string[]): string[] -> {
         var out = []
         for (var r in refs) {
             var ref = r.trim()
@@ -61,7 +60,7 @@ export tool ContextSlice {
         return out
     }
 
-    cites_whole(refs: string[], artifact: string): bool -> refs.any((r) -> r.trim() == artifact)
+    internal cites_whole(refs: string[], artifact: string): bool -> refs.any((r) -> r.trim() == artifact)
 
     read(project_id: string, relative: string): any -> {
         var path = Paths.artifact(project_id, relative)
@@ -73,7 +72,7 @@ export tool ContextSlice {
         }
     }
 
-    filter_items(items: any[], ids: string[]): any[] -> items.filter((i) -> ids.contains(i?.id ?? ""))
+    internal filter_items(items: any[], ids: string[]): any[] -> items.filter((i) -> ids.contains(i?.id ?? ""))
 
     requisitos(project_id: string, refs: string[]): string -> {
         var full = Context.artifact(project_id, "requisitos.html")
@@ -203,7 +202,7 @@ test ContextSliceSpec {
         is_true(!diag.contains("SEQUENCIA LOGIN"))
         is_true(ContextSlice.diagramas(project_id, ["diagramas/sequencia-login"]).contains("SEQUENCIA LOGIN"))
 
-        DirClear.clear(root)
+        dir.clear(root)
         dir.delete(root)
     }
 }

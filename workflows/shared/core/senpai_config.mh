@@ -18,10 +18,10 @@ export tool SenpaiConfig {
         return config[key]
     }
 
-    config_file(): string -> "${os.home_dir()}/.senpai/senpai-config.json"
+    internal config_file(): string -> "${os.home_dir()}/.senpai/senpai-config.json"
     certif_file(): string -> "${os.home_dir()}/.senpai/ca_bundle.pem"
 
-    create_if_not_exists(config_file: string) -> {
+    internal create_if_not_exists(config_file: string) -> {
         if (!fs.exists(config_file)) {
             var default_config = {
                 telemetry_enabled: false

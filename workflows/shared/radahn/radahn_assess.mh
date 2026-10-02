@@ -11,12 +11,12 @@
 
 import { AutoReview } from "../artifacts/auto_review.mh"
 import { RadahnModel } from "radahn_model.mh"
-import { RadahnPrompt, RadahnSchemaFile } from "radahn_prompts.mh"
+import { RadahnPrompt, RadahnOutputSchema } from "radahn_prompts.mh"
 
 export tool RadahnAssess {
     // O que a LLM precisa ver do plano — sem as anotacoes internas
     // (avisos de contexto, autorrevisao, caminhos).
-    plan_view(plano: any): any -> {
+    internal plan_view(plano: any): any -> {
         abordagem: plano?.abordagem, componentes: plano?.componentes ?? [], adrs: plano?.adrs ?? [], dados: plano?.dados ?? [],
         fluxo: plano?.fluxo ?? [], erros: plano?.erros ?? [], seguranca: plano?.seguranca ?? [], tarefas: plano?.tarefas ?? [], testes: plano?.testes ?? []
     }
@@ -24,7 +24,7 @@ export tool RadahnAssess {
     // attach: o plano com o assessment (ou o erro) anexado. Mapas passados a uma
     // tool chegam por valor — alterar `plano` la dentro nao muda o do chamador —,
     // entao o plano anotado e DEVOLVIDO, nunca mutado no lugar.
-    attach(plano: any, assessment: any, erro: string): any -> {
+    internal attach(plano: any, assessment: any, erro: string): any -> {
         if (assessment != null) plano["radahn"] = assessment
         if (!erro.is_empty()) plano["radahn_erro"] = erro
         return plano
@@ -38,7 +38,7 @@ export tool RadahnAssess {
             var review = AutoReview.generate(
                 enabled: autorrevisao,
                 prompt: RadahnPrompt.build(json.stringify(self.plan_view(plano)), historia_content, der_content, adr_content),
-                schema_file: RadahnSchemaFile.get(), project_id: project_id, artifact: "radahn",
+                schema_file: RadahnOutputSchema, project_id:, artifact: "radahn",
                 prepare: (raw) -> json.parse(raw),
                 check: (d) -> RadahnModel.check_assessment(d)
             )
@@ -50,7 +50,7 @@ export tool RadahnAssess {
 }
 
 tool RadahnAssessFixtures {
-    plano(): any -> {abordagem: "x", componentes: [{conteiner: "API"}], fluxo: [], tarefas: [{id: "T1"}], testes: [], avisos_contexto: ["x"], autorrevisao: {tentada: true}, historia_dir: "h"}
+    internal plano(): any -> {abordagem: "x", componentes: [{conteiner: "API"}], fluxo: [], tarefas: [{id: "T1"}], testes: [], avisos_contexto: ["x"], autorrevisao: {tentada: true}, historia_dir: "h"}
 }
 
 test RadahnAssessSpec {
