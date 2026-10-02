@@ -41,8 +41,21 @@ prompt FeaturesInstruction(
     adr_content: string,
     der_content: string,
     diagramas_content: string,
+    lote_content: string,
     feedback_content: string
 ) from "prompts/features.prompt.md"
+
+// Primeira etapa das features: so a quebra (titulo, tipo, resumo, cobertura,
+// quem habilita quem) — pequena o bastante para nunca estourar a saida.
+prompt FeaturesRoteiroInstruction(
+    schema_conventions: prompt,
+    atributos_content: string,
+    requisitos_content: string,
+    adr_content: string,
+    der_content: string,
+    diagramas_content: string,
+    feedback_content: string
+) from "prompts/features_roteiro.prompt.md"
 
 // `features_content` traz o codigo FT00N de cada feature no cabecalho, para
 // as dependencias citarem o id real (inexistente quando o backlog e gerado).
@@ -53,6 +66,7 @@ prompt DependenciasInstruction(
 ) from "prompts/dependencias.prompt.md"
 
 schema FeaturesSchema from "schemas/features.schema.json"
+schema FeaturesRoteiroSchema from "schemas/features_roteiro.schema.json"
 schema DependenciasSchema from "schemas/dependencias.schema.json"
 
 // Predecessores: brief -> atributos | requisitos -> adr -> der | diagramas
@@ -107,12 +121,35 @@ export tool DiscoveryDrafts {
         return CommonDrafts.diagramas(project_id, autorrevisao, q.requisitos, q.atributos, Require.adr(project_id, "diagramas"))
     }
 
+    // O backlog inteiro numa resposta so passa do limite de tokens de saida
+    // do modelo em oportunidades grandes (cada feature preenche ~20 secoes
+    // com fontes) — o Devin corta a resposta no meio. Duas etapas, como nas
+    // historias com propostas: um roteiro curto decide a quebra inteira, e
+    // cada chamada seguinte detalha no maximo features_por_pagina itens dele,
+    // vendo o roteiro todo para manter cobertura e dependencias coerentes.
+    // As verificacoes (FeatureRules) sao por item, entao a autorrevisao de
+    // cada pagina continua valendo.
     internal features(project_id: string, autorrevisao: bool): Draft -> {
         var q = self.quality(project_id, "features")
         var adr = Require.adr(project_id, "features")
         var der = Require.optional(Context.artifact(project_id, "der.html"), "esta oportunidade")
         var diagramas = Require.diagramas(project_id, "features")
-        return Drafts.reviewed_items(AutoReview.generate(
+        var feedback = ChangesBlock.for_artifact(project_id, "features", "")
+        var roteiro = Drafts.generate(
+            FeaturesRoteiroInstruction(
+                schema_conventions: ArtifactSchema(),
+                atributos_content: q.atributos,
+                requisitos_content: q.requisitos,
+                adr_content: adr,
+                der_content: der,
+                diagramas_content: diagramas,
+                feedback_content: feedback
+            ),
+            FeaturesRoteiroSchema, project_id, "features"
+        )
+        var itens = roteiro.data?.features ?? []
+        if (itens.is_empty()) fail("o roteiro de features veio vazio — regenere as features")
+        var detalhe = self.paginate_features(itens, (pagina) -> Drafts.reviewed_items(AutoReview.generate(
             enabled: autorrevisao,
             prompt: FeaturesInstruction(
                 schema_conventions: ArtifactSchema(),
@@ -121,12 +158,51 @@ export tool DiscoveryDrafts {
                 adr_content: adr,
                 der_content: der,
                 diagramas_content: diagramas,
-                feedback_content: ChangesBlock.for_artifact(project_id, "features", "")
+                lote_content: self.features_lote(itens, pagina),
+                feedback_content: feedback
             ),
             schema_file: FeaturesSchema, project_id:, artifact: "features",
             prepare: (raw) -> json.parse(raw),
             check: (d) -> ArtifactChecks.features(d)
-        ), "features")
+        ), "features"))
+        return {data: detalhe.data, tokens_in: roteiro.tokens_in + detalhe.tokens_in, tokens_out: roteiro.tokens_out + detalhe.tokens_out}
+    }
+
+    internal features_por_pagina(): number -> 3
+
+    // `fetch(pagina)` detalha uma fatia do roteiro; junta as features na
+    // ordem e soma o consumo de todas as chamadas.
+    internal paginate_features(itens: any[], fetch: any): Draft -> {
+        var features = []
+        var tokens_in = 0
+        var tokens_out = 0
+        var inicio = 0
+        while (inicio < itens.size()) {
+            var fim = inicio + self.features_por_pagina()
+            if (fim > itens.size()) fim = itens.size()
+            var draft = fetch(itens[inicio..fim])
+            features += draft.data?.features ?? []
+            tokens_in += draft.tokens_in
+            tokens_out += draft.tokens_out
+            inicio = fim
+        }
+        return {data: {features}, tokens_in, tokens_out}
+    }
+
+    // Bloco do prompt de cada pagina: o roteiro inteiro (para citar os
+    // outros itens pelo titulo exato) e os itens que esta resposta detalha.
+    internal features_lote(itens: any[], pagina: any[]): string -> {
+        var roteiro = itens.map((f) -> {
+            var tipo = if ((f?.subtipo_enabler ?? "nao_aplicavel") == "nao_aplicavel") f?.tipo_item ?? "" else "${f?.tipo_item ?? ""}/${f.subtipo_enabler}"
+            var cobre = f?.requisitos ?? []
+            var habilita = f?.habilita ?? []
+            return "- ${f?.titulo ?? ""} (${tipo}) — ${f?.resumo ?? ""}" +
+                (if (cobre.is_empty()) "" else " · cobre: ${cobre.join(", ")}") +
+                (if (habilita.is_empty()) "" else " · habilita: ${habilita.join("; ")}")
+        }).join("\n")
+        var lista = pagina.map((f) -> "- ${f?.titulo ?? ""}").join("\n")
+        return "## Roteiro da quebra (todos os itens da oportunidade)\n\nA quebra já está decidida: não crie, remova nem renomeie itens. Em `itens_habilitados` e `dependencias_integridade`, cite os outros itens pelo título exato daqui. Cada requisito pertence ao item que o cobre neste roteiro.\n\n${roteiro}\n\n" +
+            "## Itens a detalhar nesta resposta\n\nDetalhe exatamente estes ${pagina.size()} itens, um para cada, com o mesmo título, `tipo_item` e `subtipo_enabler` do roteiro; os demais são detalhados em outras respostas. Se a fonte mostrar que um item não se sustenta, registre isso em `gaps`/`questoes_abertas` dele em vez de trocá-lo.\n\n${lista}"
     }
 
     // features/ e uma pasta de pastas (features/FT001-slug/feature.html),
@@ -217,5 +293,37 @@ export tool DiscoveryCommits {
         result["feature_id"] = feature_id
         result["historia_id"] = historia_id
         return result
+    }
+}
+
+test DiscoveryFeaturesSpec {
+    // Cada pagina detalha a sua fatia do roteiro, na ordem; o consumo de
+    // todas as chamadas e somado. O falso modelo registra cada chamada num
+    // arquivo (lambdas nao alteram variaveis de fora).
+    describe each_page_details_its_own_slice_of_the_outline {
+        var log_path = "spec-test-paginate-features.log"
+        if (fs.exists(log_path)) fs.delete(log_path)
+        var itens = ["A", "B", "C", "D", "E", "F", "G"].map((t) -> {titulo: t})
+        var draft = DiscoveryDrafts.paginate_features(itens, (pagina) -> {
+            fs.append(log_path, "${pagina.map((f) -> f.titulo).join("")}\n")
+            return {data: {features: pagina.map((f) -> {titulo: f.titulo})}, tokens_in: 10, tokens_out: 4}
+        })
+        are_equal(draft.data.features.map((f) -> f.titulo), ["A", "B", "C", "D", "E", "F", "G"])
+        are_equal(fs.read(log_path), "ABC\nDEF\nG\n")
+        are_equal(draft.tokens_in, 30)
+        are_equal(draft.tokens_out, 12)
+        fs.delete(log_path)
+    }
+
+    describe lote_lists_the_whole_outline_and_only_the_page_items_to_detail {
+        var itens = [
+            {titulo: "Base de mensageria", tipo_item: "enabler", subtipo_enabler: "infraestrutura", resumo: "Tópico Kafka provisionado", requisitos: ["NFR-002"], habilita: ["Consumir solicitações"]},
+            {titulo: "Consumir solicitações", tipo_item: "feature_negocio", subtipo_enabler: "nao_aplicavel", resumo: "Processa solicitações", requisitos: ["FR-001", "FR-002"], habilita: []},
+        ]
+        var lote = DiscoveryDrafts.features_lote(itens, [itens[1]])
+        is_true(lote.contains("- Base de mensageria (enabler/infraestrutura) — Tópico Kafka provisionado · cobre: NFR-002 · habilita: Consumir solicitações"))
+        is_true(lote.contains("- Consumir solicitações (feature_negocio) — Processa solicitações · cobre: FR-001, FR-002\n"))
+        is_true(lote.contains("Detalhe exatamente estes 1 itens"))
+        is_true(lote.ends_with("\n\n- Consumir solicitações"))
     }
 }

@@ -1,6 +1,6 @@
 ${schema_conventions}
 
-Com base nos artefatos abaixo, quebre a oportunidade em itens de backlog no nível de feature. Cada item deve ser classificado como `feature_negocio` ou `enabler` e deve preencher toda a estrutura de detalhamento: classificação, hipótese de benefício, itens habilitados, resumo, objetivo, personas, escopo, regras de negócio, interações com dados, critérios FAC, histórias propostas, dependências, gaps e questões abertas. Use arrays vazios para seções sem evidência; não invente conteúdo para completar o template.
+Com base nos artefatos abaixo, detalhe itens de backlog no nível de feature. A quebra da oportunidade já foi decidida num roteiro (no fim deste pedido): detalhe só os itens que ele indica para esta resposta, com o mesmo título, tipo e subtipo, e use o roteiro inteiro para manter cobertura e dependências coerentes com os demais itens. Cada item deve ser classificado como `feature_negocio` ou `enabler` e deve preencher toda a estrutura de detalhamento: classificação, hipótese de benefício, itens habilitados, resumo, objetivo, personas, escopo, regras de negócio, interações com dados, critérios FAC, histórias propostas, dependências, gaps e questões abertas. Use arrays vazios para seções sem evidência; não invente conteúdo para completar o template.
 
 Aplique estas regras de classificação:
 
@@ -33,5 +33,7 @@ ${der_content}
 ## Diagramas C4 já gerados
 
 ${diagramas_content}
+
+${lote_content}
 
 ${feedback_content}
