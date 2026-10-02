@@ -29,12 +29,13 @@ else
   echo "warning: $mermaid_src not found (run npm install in app/frontend first) — assets/mermaid.min.js left unchanged" >&2
 fi
 
-# goos-goarch:dist-binary-name:embedded-name — the 3 platforms
+# goos-goarch:dist-binary-name:embedded-name — the 4 platforms
 # embedded_mhl_<goos>_<goarch>.go actually embeds today (darwin/amd64 has no
 # //go:embed file yet; see README.md).
 bin_targets=(
   "darwin-arm64:mhl:mhl-darwin-arm64"
   "linux-amd64:mhl:mhl-linux-amd64"
+  "linux-arm64:mhl:mhl-linux-arm64"
   "windows-amd64:mhl.exe:mhl-windows-amd64.exe"
 )
 

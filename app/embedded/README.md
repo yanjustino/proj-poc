@@ -15,7 +15,8 @@ this repo** — a real `mhl` release build for that platform, not something
 
 1. Get (or build) the `mhl` binaries — `./build.sh release` in the
    `mhl-runtime` source tree produces `dist/<goos>-<goarch>/mhl[.exe]` for
-   all supported platforms in one go.
+   linux/amd64, darwin/arm64 and windows/amd64; `./build.sh linux-arm64`
+   adds `dist/linux-arm64/mhl` (`scripts/build-all.sh` runs both).
 2. Copy (or `rsync -a`) that `dist/` tree to `dist/` at this repo's root
    (next to `workflows/`) — `./sync.sh` reads from there by default (pass a
    different path as its one argument to read from somewhere else).
@@ -24,8 +25,9 @@ this repo** — a real `mhl` release build for that platform, not something
    prints its sha256 — skipping any platform whose `dist/` copy is missing
    (with a warning) rather than clobbering a working binary with nothing.
 4. Rebuild — `app/embedded_mhl_<goos>_<goarch>.go` already has the matching
-   `//go:embed` directive for the 4 platforms the plan targets
-   (`darwin/arm64`, `linux/amd64`, `windows/amd64`; `darwin/amd64` has no
+   `//go:embed` directive for the platforms the plan targets
+   (`darwin/arm64`, `linux/amd64`, `linux/arm64`, `windows/amd64`;
+   `darwin/amd64` has no
    binary yet — add `bin/mhl-darwin-amd64` and a matching
    `embedded_mhl_darwin_amd64.go` file when one becomes available).
 
@@ -62,7 +64,7 @@ built by `mhl-runtime`'s own `./build.sh release`).
 
 `pdftotext` (poppler), what `RawExtract` (`workflows/shared/wiki/raw_extract.mh`)
 runs to turn a `.pdf` in `raw/` into text. Unlike `mhl`, **this one is built
-in this repo**: `./build-pdftotext.sh <darwin-arm64|linux-amd64|windows-amd64>`
+in this repo**: `./build-pdftotext.sh <darwin-arm64|linux-amd64|linux-arm64|windows-amd64>`
 compiles poppler + freetype from pinned, sha256-checked sources into a single
 static executable (darwin needs cmake + ninja + Xcode CLT; linux and windows
 build inside docker). Nothing optional is linked (no fontconfig, nss, gpg,
@@ -77,7 +79,7 @@ next to the vendored `mhl` and `prependToPath`s that directory, so the bare
 `pdftotext` in `cmd.exec` resolves to the vendored copy before any system one.
 `darwin/amd64` has no copy (same as `mhl`): there the workflow falls back to
 a `pdftotext` on `PATH`. To upgrade poppler, bump the version and sha256 at
-the top of `build-pdftotext.sh`, rebuild the three platforms and commit.
+the top of `build-pdftotext.sh`, rebuild the four platforms and commit.
 
 Redistribution: poppler is GPL-2.0-or-later and freetype is FTL/GPLv2 — see
 `THIRD_PARTY.md`.

@@ -57,15 +57,15 @@ fi
 step "mhl-runtime: go test ./..."
 ( cd "$MHL_RUNTIME_DIR" && ./build.sh test )
 
-step "mhl-runtime: release build (linux/amd64, darwin/arm64, windows/amd64)"
-( cd "$MHL_RUNTIME_DIR" && ./build.sh release )
+step "mhl-runtime: release build (linux/amd64, linux/arm64, darwin/arm64, windows/amd64)"
+( cd "$MHL_RUNTIME_DIR" && ./build.sh release && ./build.sh linux-arm64 )
 
 step "staging dist/ from mhl-runtime"
 # Only the per-platform subdirs build.sh's release target produces (and
 # sync.sh's bin_targets reads) — not a blanket mirror of mhl-runtime/dist/,
 # which can also hold host-build artifacts (e.g. a plain "dist/mhl" from an
 # ad hoc `./build.sh build`) that don't belong in this repo's tracked dist/.
-for platform_dir in linux-amd64 darwin-arm64 windows-amd64; do
+for platform_dir in linux-amd64 linux-arm64 darwin-arm64 windows-amd64; do
   mkdir -p "$ROOT/dist/$platform_dir"
   rsync -a --delete "$MHL_RUNTIME_DIR/dist/$platform_dir/" "$ROOT/dist/$platform_dir/"
 done

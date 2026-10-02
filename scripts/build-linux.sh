@@ -1,5 +1,5 @@
 #!/usr/bin/env bash
-# Compila o Senpai para Linux x64. Precisa rodar num host Linux de verdade
+# Compila o Senpai para Linux x64 (padrão) ou ARM64. Precisa rodar num host Linux de verdade
 # — ao contrário do Windows (cross-compilável via MinGW, ver
 # build-windows.sh), os bindings GTK/WebKitGTK do Wails não cruzam sistema
 # operacional — mas, se o host não for Linux e o Docker estiver instalado,
@@ -12,16 +12,47 @@
 #   ./scripts/build-linux.sh
 #   SENPAI_VERSION=v1.2.3 ./scripts/build-linux.sh
 #   WAILS=/caminho/para/wails ./scripts/build-linux.sh --debug
+#   SENPAI_LINUX_ARCH=arm64 ./scripts/build-linux.sh
+#   SENPAI_LINUX_DISTRO=rhel ./scripts/build-linux.sh
+#
+# SENPAI_LINUX_ARCH escolhe a arquitetura: amd64 (padrão) ou arm64 — este
+# último para Ubuntu ARM64, como uma VM Parallels/UTM num Mac Apple Silicon
+# (que não executa um binário x86-64: "Exec format error").
+#
+# SENPAI_LINUX_DISTRO escolhe a base do build via Docker: debian (padrão,
+# webkit2gtk-4.1 + glibc 2.34 — Ubuntu 22.04+, Debian 12+) ou rhel (Rocky
+# Linux 8, webkit2gtk-4.0 + glibc 2.28 — RHEL 8 e 9; só amd64). Ver
+# scripts/docker/linux-rhel-build.Dockerfile. Num host Linux nativo a
+# distro não muda o build (ele usa o WebKitGTK do próprio host), só o nome
+# da pasta de saída.
 #
 # Saída:
-#   dist/linux-amd64/senpai-app
+#   dist/linux-<arch>/senpai-app         (debian)
+#   dist/linux-amd64-rhel/senpai-app     (rhel)
 set -euo pipefail
 
 ROOT="$(CDPATH= cd -P -- "$(dirname -- "${BASH_SOURCE[0]}")/.." && pwd)"
 APP_DIR="$ROOT/app"
-TARGET="linux/amd64"
-OUTPUT_NAME="senpai-linux-amd64"
-DIST_DIR="$ROOT/dist/linux-amd64"
+ARCH="${SENPAI_LINUX_ARCH:-amd64}"
+case "$ARCH" in
+  amd64|arm64) ;;
+  *) echo "erro: SENPAI_LINUX_ARCH deve ser amd64 ou arm64 (recebido: $ARCH)." >&2; exit 2 ;;
+esac
+DISTRO="${SENPAI_LINUX_DISTRO:-debian}"
+case "$DISTRO" in
+  debian) suffix=""; dockerfile="linux-build.Dockerfile" ;;
+  rhel) suffix="-rhel"; dockerfile="linux-rhel-build.Dockerfile" ;;
+  *) echo "erro: SENPAI_LINUX_DISTRO deve ser debian ou rhel (recebido: $DISTRO)." >&2; exit 2 ;;
+esac
+if [ "$DISTRO" = "rhel" ] && [ "$ARCH" != "amd64" ]; then
+  echo "erro: o build rhel só existe para amd64." >&2
+  exit 2
+fi
+TARGET="linux/$ARCH"
+OUTPUT_NAME="senpai-linux-$ARCH$suffix"
+DIST_DIR="$ROOT/dist/linux-$ARCH$suffix"
+# Imagem e volumes de cache por arquitetura E distro (ver o bloco do Docker).
+docker_id="$ARCH$suffix"
 FINAL_BIN="$DIST_DIR/senpai-app"
 APP_VERSION="${SENPAI_VERSION:-$(git -C "$ROOT" describe --tags --always --dirty 2>/dev/null || printf 'dev')}"
 
@@ -63,17 +94,16 @@ if [ "$(go env GOHOSTOS)" != "linux" ] && [ "${SENPAI_IN_DOCKER:-}" != "1" ]; th
     exit 1
   fi
 
-  step "host não é Linux — usando Docker (scripts/docker/linux-build.Dockerfile)"
-  # --platform linux/amd64 em build E run: num host arm64 (Apple Silicon), o
-  # Docker roda containers arm64 nativos por padrão — mas o alvo aqui é
-  # SEMPRE linux/amd64 (dist/linux-amd64/, mesma convenção do resto do
-  # projeto), e o Wails usa cgo, então um container arm64 tentando compilar
-  # pra amd64 falha direto no gcc ("unrecognized command-line option
-  # '-m64'", medido). Forçar a imagem inteira pra amd64 (emulado via
-  # Rosetta/QEMU do Docker Desktop) evita precisar de mais um toolchain
-  # cruzado dentro do container — o gcc que a imagem instala já nasce nativo
-  # x86_64.
-  docker build -q --platform linux/amd64 -t senpai-linux-build -f "$ROOT/scripts/docker/linux-build.Dockerfile" "$ROOT/scripts/docker" >/dev/null
+  step "host não é Linux — usando Docker (scripts/docker/$dockerfile)"
+  # --platform linux/$ARCH em build E run: o Wails usa cgo, então um
+  # container de uma arquitetura tentando compilar pra outra falha direto no
+  # gcc ("unrecognized command-line option '-m64'", medido). A imagem
+  # inteira roda na arquitetura do alvo — amd64 emulado via Rosetta/QEMU do
+  # Docker Desktop num host Apple Silicon, arm64 nativo — e o gcc que ela
+  # instala já nasce nativo pro alvo, sem toolchain cruzado. Imagem e
+  # volumes levam a arquitetura no nome: node_modules (rollup nativo) e o
+  # cache do Go de uma arquitetura não servem pra outra.
+  docker build -q --platform "linux/$ARCH" -t "senpai-linux-build-$docker_id" -f "$ROOT/scripts/docker/$dockerfile" "$ROOT/scripts/docker" >/dev/null
 
   step "compilando dentro do container"
   # Roda como root (padrão da imagem) em vez de --user <uid>:<gid> do host —
@@ -110,16 +140,18 @@ if [ "$(go env GOHOSTOS)" != "linux" ] && [ "${SENPAI_IN_DOCKER:-}" != "1" ]; th
   # corrompido, mas gera erro/ruído à toa mexendo em algo que este script
   # não tem nenhum motivo pra tocar).
   exec docker run --rm \
-    --platform linux/amd64 \
+    --platform "linux/$ARCH" \
     -e SENPAI_IN_DOCKER=1 \
     -e SENPAI_VERSION="${SENPAI_VERSION:-}" \
+    -e SENPAI_LINUX_ARCH="$ARCH" \
+    -e SENPAI_LINUX_DISTRO="$DISTRO" \
     -v "$ROOT:/workspace" \
     -v senpai-linux-build-gomod:/go/pkg/mod \
-    -v senpai-linux-build-gocache:/root/.cache/go-build \
+    -v "senpai-linux-build-gocache-$docker_id:/root/.cache/go-build" \
     -v senpai-linux-build-npm:/root/.npm \
-    -v senpai-linux-build-node-modules:/workspace/app/frontend/node_modules \
+    -v "senpai-linux-build-node-modules-$docker_id:/workspace/app/frontend/node_modules" \
     -w /workspace \
-    senpai-linux-build \
+    "senpai-linux-build-$docker_id" \
     bash -c '(cd app/frontend && npm ci) && bash scripts/build-linux.sh "$@" && chown -R '"$(id -u):$(id -g)"' dist app/build app/embedded' bash $extra_arg
 fi
 
@@ -175,9 +207,14 @@ elif ! pkg-config --exists webkit2gtk-4.0 2>/dev/null; then
   exit 1
 fi
 
-if [ ! -f "$APP_DIR/embedded/bin/mhl-linux-amd64" ]; then
-  echo "erro: runtime MHL para Linux não encontrado em app/embedded/bin/." >&2
-  echo "gere dist/linux-amd64/mhl e execute app/embedded/sync.sh primeiro." >&2
+if [ ! -f "$APP_DIR/embedded/bin/mhl-linux-$ARCH" ] && [ ! -f "$ROOT/dist/linux-$ARCH/mhl" ]; then
+  echo "erro: runtime MHL para linux/$ARCH não encontrado em app/embedded/bin/ nem em dist/linux-$ARCH/." >&2
+  echo "gere dist/linux-$ARCH/mhl (mhl-runtime: ./build.sh release, ou ./build.sh linux-arm64) e execute app/embedded/sync.sh." >&2
+  exit 1
+fi
+if [ ! -f "$APP_DIR/embedded/bin/pdftotext-linux-$ARCH" ]; then
+  echo "erro: pdftotext para linux/$ARCH não encontrado em app/embedded/bin/." >&2
+  echo "gere com: app/embedded/build-pdftotext.sh linux-$ARCH" >&2
   exit 1
 fi
 

@@ -8,8 +8,14 @@ Com base nos requisitos, nos atributos de qualidade e nas decisões arquiteturai
 
 Para os tipos `c4-*`, você **não** escreve Mermaid (`diagrama_mermaid` fica vazio): descreva o modelo em `escopo`, `elementos` e `relacoes`. O desenho, a legenda e as cores são gerados por código a partir disso.
 
-- Cada elemento tem um `id` curto e único no diagrama, um `nome`, um `tipo`, a `tecnologia` (quando o nível pede), uma `descricao` de uma frase com a responsabilidade dele e as `fontes`.
+- Cada elemento tem um `id` curto e único no diagrama, um `nome`, um `tipo`, a `tecnologia` (quando o nível pede), uma `descricao` e as `fontes`.
 - Cada relação liga dois elementos por `id` (`de` → `para`) e tem uma `descricao` com verbo que diga o que a origem faz com o destino (ex.: "Envia pedidos para", "Lê e grava dados de clientes em"), mais `tecnologia` quando o nível pede.
+- **Textos curtos — eles aparecem dentro das caixas e setas do desenho**, como nos exemplos de https://c4model.com:
+  - `nome`: poucas palavras (ex.: "Worker de Conciliação").
+  - `descricao` do elemento: **uma frase curta, até ~80 caracteres**, só com a responsabilidade principal (ex.: "Concilia a conta IVP e aloca os recursos nos planos."). Sem códigos de transação, nomes de tabela, listas de casos ou justificativas — esse detalhe fica nos requisitos e nas ADRs.
+  - `tecnologia`: só o nome, até ~30 caracteres (ex.: "Java/Quarkus", "Amazon S3", "Kafka"). Alternativas, ressalvas e "a confirmar" não entram aqui — pertencem a uma ADR.
+  - `descricao` da relação: até ~45 caracteres (ex.: "Consome mensagens de", "Grava resultados em").
+  - Tecnologia ou protocolo desconhecido: deixe `tecnologia` **vazia** e cite `gap` nas `fontes` — nunca escreva "não definido nas fontes" ou equivalente no texto.
 - Inclua somente elementos **diretamente conectados** ao escopo: todo elemento precisa aparecer em ao menos uma relação.
 - Use os **mesmos nomes** entre os níveis: as pessoas e os sistemas externos do diagrama de contêiner são os mesmos do contexto; o contêiner em escopo de um diagrama de componente é um contêiner do diagrama de contêiner.
 - Tecnologia que não esteja nos artefatos abaixo (em especial nas ADRs) deve ser citada como `gap` em vez de inventada. Uma dedução razoável usa `inferência`.

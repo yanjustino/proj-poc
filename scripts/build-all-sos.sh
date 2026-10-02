@@ -19,6 +19,8 @@
 # Saída: a soma das saídas de cada script individual —
 #   dist/windows-amd64/senpai-app.exe
 #   dist/linux-amd64/senpai-app      (nativo, ou via Docker se o host não for Linux)
+#   dist/linux-arm64/senpai-app      (idem; Docker nativo num Mac Apple Silicon)
+#   dist/linux-amd64-rhel/senpai-app (RHEL 8/9; via Docker Rocky Linux 8)
 #   dist/darwin-arm64/senpai-app.app (só rodando em macOS)
 set -uo pipefail
 # Deliberadamente sem -e: uma plataforma falhando não deve impedir as
@@ -46,9 +48,9 @@ summary=""
 any_failed=0
 
 attempt() {
-  local label="$1" script="$2"
+  local label="$1" script="$2" linux_arch="${3:-}" linux_distro="${4:-}"
   step "$label"
-  if "$ROOT/scripts/$script" $extra_arg; then
+  if SENPAI_LINUX_ARCH="$linux_arch" SENPAI_LINUX_DISTRO="$linux_distro" "$ROOT/scripts/$script" $extra_arg; then
     summary="${summary}  ✓ ${label}\n"
   else
     summary="${summary}  ✗ ${label} (falhou — veja o log acima)\n"
@@ -64,7 +66,9 @@ skip() {
 }
 
 attempt "Windows x64" build-windows.sh
-attempt "Linux x64" build-linux.sh
+attempt "Linux x64" build-linux.sh amd64
+attempt "Linux arm64" build-linux.sh arm64
+attempt "Linux x64 (RHEL 8/9)" build-linux.sh amd64 rhel
 
 if [ "$HOST_OS" = "darwin" ]; then
   attempt "macOS arm64" build-macos.sh

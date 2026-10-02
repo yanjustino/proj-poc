@@ -110,6 +110,25 @@ export tool C4Diagram {
         text.replace("#", "#35;").replace("\"", "#quot;").replace("<", "#lt;").replace(">", "#gt;")
             .replace("\r", " ").replace("\n", " ")
 
+    // clip corta o texto da LLM para caber numa caixa do desenho, como nos
+    // exemplos do c4model.com (nome, [tipo: tecnologia] e uma frase curta).
+    // Corta em fronteira de palavra — nunca no meio de um caractere
+    // multibyte — e marca o corte com "…"; o texto inteiro continua nas
+    // tabelas de elementos e relacoes, abaixo do diagrama.
+    internal clip(text: string, max: int): string -> {
+        var t = text.trim()
+        if (t.size() <= max) return t
+        var out = ""
+        var full = false
+        for (var w in t.split(" ")) {
+            var next = if (out.is_empty()) w else out + " " + w
+            if (!full && next.size() <= max) out = next
+            else full = true
+        }
+        if (out.is_empty()) return t.split(" ")[0] + "…"
+        return out + "…"
+    }
+
     internal index_of_id(elementos: any[], id: string): int -> {
         var i = 0
         for (var el in elementos) {
@@ -136,13 +155,20 @@ export tool C4Diagram {
         return pai
     }
 
+    // Limites do texto dentro do desenho (caracteres). O no de implantacao
+    // e um subgraph: a descricao dele so vai para a tabela, senao o titulo
+    // da caixa vira um paragrafo por cima dos conteineres.
+    internal max_tecnologia(): int -> 32
+    internal max_descricao(): int -> 80
+    internal max_relacao(): int -> 48
+
     internal node_label(el: any): string -> {
-        var tecnologia = el?.tecnologia ?? ""
+        var tecnologia = self.clip(el?.tecnologia ?? "", self.max_tecnologia())
         var kind = self.element_type_label(el.tipo)
         if (!tecnologia.is_empty()) kind = kind + ": " + self.mm(tecnologia)
         var label = "<b>" + self.mm(el.nome) + "</b><br/>[" + kind + "]"
-        var descricao = el?.descricao ?? ""
-        if (!descricao.is_empty()) label = label + "<br/><small>" + self.mm(descricao) + "</small>"
+        var descricao = self.clip(el?.descricao ?? "", self.max_descricao())
+        if (!descricao.is_empty() && el.tipo != "no_implantacao") label = label + "<br/><small>" + self.mm(descricao) + "</small>"
         return label
     }
 
@@ -194,8 +220,8 @@ export tool C4Diagram {
         var de = self.index_of_id(elementos, rel.de)
         var para = self.index_of_id(elementos, rel.para)
         if (de < 0 || para < 0) return ""
-        var label = self.mm(rel?.descricao ?? "")
-        var tecnologia = rel?.tecnologia ?? ""
+        var label = self.mm(self.clip(rel?.descricao ?? "", self.max_relacao()))
+        var tecnologia = self.clip(rel?.tecnologia ?? "", self.max_tecnologia())
         if (!tecnologia.is_empty()) label = label + "<br/>[" + self.mm(tecnologia) + "]"
         return "    n${de} -->|\"" + label + "\"| n${para}\n"
     }
@@ -203,7 +229,11 @@ export tool C4Diagram {
     internal mermaid(data: any): string -> {
         var t = data.diagram_type
         var elementos = data.elementos
-        var out = "flowchart TB\n" +
+        // wrappingWidth: o padrao do Mermaid (200px) quebra cada caixa numa
+        // coluna estreita e alta; 280px aproxima as proporcoes dos exemplos
+        // do c4model.com.
+        var out = "%%{init: {\"flowchart\": {\"wrappingWidth\": 280}}}%%\n" +
+            "flowchart TB\n" +
             "    classDef pessoa fill:#08427B,stroke:#073B6F,color:#ffffff\n" +
             "    classDef sistema fill:#1168BD,stroke:#0B4884,color:#ffffff\n" +
             "    classDef externo fill:#999999,stroke:#8A8A8A,color:#ffffff\n" +
@@ -580,7 +610,7 @@ test C4DiagramSpec {
 
     describe context_mermaid_has_one_node_per_element_with_c4_classes {
         var m = C4Diagram.mermaid(C4Fixtures.context())
-        is_true(m.starts_with("flowchart TB\n"))
+        is_true(m.starts_with("%%{init: {\"flowchart\": {\"wrappingWidth\": 280}}}%%\nflowchart TB\n"))
         is_true(m.contains("n0([\"<b>Cliente</b><br/>[Pessoa]<br/><small>Compra</small>\"]):::pessoa"))
         is_true(m.contains("n1[\"<b>Loja</b><br/>[Sistema de software]<br/><small>Vende #quot;tudo#quot;</small>\"]:::sistema"))
         is_true(m.contains("<b>Gateway #lt;PSP#gt;</b>"))
@@ -594,6 +624,31 @@ test C4DiagramSpec {
         is_true(m.contains("n2[(\"<b>Banco</b><br/>[Contêiner: banco de dados]\")]:::container"))
         is_true(m.contains("n1[\"<b>API</b><br/>[Contêiner: Java]\"]:::container"))
         is_true(m.contains("n0 -->|\"Usa<br/>[HTTPS]\"| n1"))
+    }
+
+    describe clip_cuts_long_text_on_a_word_boundary {
+        are_equal(C4Diagram.clip("  curto  ", 10), "curto")
+        are_equal(C4Diagram.clip("Lê e grava resultados de conciliação", 20), "Lê e grava…")
+        are_equal(C4Diagram.clip("Supercalifragilístico", 5), "Supercalifragilístico…")
+    }
+
+    describe diagram_labels_are_clipped_but_tables_keep_the_full_text {
+        var longa = "Executa a conciliação cíclica da conta IVP e portabilidades em confirmação, alocação de recursos nos planos e confirmação TDP0005"
+        var d = {
+            diagram_type: "c4-container",
+            escopo: {nome: "Loja", descricao: "", fontes: []},
+            elementos: [
+                {id: "w", nome: "Worker", tipo: "container", tecnologia: "Java + Quarkus ou Radan — stack a confirmar pela avaliação", descricao: longa, no_pai: "", fontes: []},
+                {id: "db", nome: "Banco", tipo: "banco_dados", tecnologia: "PostgreSQL", descricao: "", no_pai: "", fontes: []},
+            ],
+            relacoes: [{de: "w", para: "db", descricao: "Lê e grava resultados de conciliação e alocações dos planos em", tecnologia: "JDBC", fontes: []}],
+        }
+        var m = C4Diagram.mermaid(d)
+        is_true(!m.contains("TDP0005"))
+        is_true(!m.contains("avaliação"))
+        is_true(m.contains("…"))
+        is_true(C4Diagram.elements_table(d).contains("TDP0005"))
+        is_true(C4Diagram.relations_table(d).contains("alocações dos planos em"))
     }
 
     describe a_clean_context_diagram_has_no_warnings {

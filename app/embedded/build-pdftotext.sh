@@ -8,6 +8,7 @@
 #
 #   ./build-pdftotext.sh darwin-arm64    native, needs Xcode CLT (or a clang) + cmake + ninja
 #   ./build-pdftotext.sh linux-amd64     via docker (alpine, fully static, musl)
+#   ./build-pdftotext.sh linux-arm64     same, arm64 container (native on Apple Silicon)
 #   ./build-pdftotext.sh windows-amd64   via docker (debian + mingw-w64 cross, static)
 #
 # Why build from source instead of copying Homebrew's/apt's binary: those
@@ -58,7 +59,7 @@ build_inside() {
     darwin-arm64)
       common+=(-DCMAKE_OSX_ARCHITECTURES=arm64 "-DCMAKE_OSX_DEPLOYMENT_TARGET=$MACOSX_DEPLOYMENT_TARGET")
       ;;
-    linux-amd64)
+    linux-amd64|linux-arm64)
       common+=(-DCMAKE_EXE_LINKER_FLAGS=-static -DZLIB_USE_STATIC_LIBS=ON)
       ;;
     windows-amd64)
@@ -101,7 +102,7 @@ build_inside() {
   [ "$platform" = windows-amd64 ] && built="$built.exe"
   case "$platform" in
     windows-amd64) x86_64-w64-mingw32-strip "$built" ;;
-    linux-amd64) strip "$built" ;;
+    linux-amd64|linux-arm64) strip "$built" ;;
     darwin-arm64) strip -x "$built" ;;
   esac
   cp "$built" "$out"
@@ -114,12 +115,13 @@ if [ "${1:-}" = "--inside" ]; then
   exit 0
 fi
 
-platform="${1:?uso: $0 darwin-arm64|linux-amd64|windows-amd64}"
+platform="${1:?uso: $0 darwin-arm64|linux-amd64|linux-arm64|windows-amd64}"
 cd "$(dirname "${BASH_SOURCE[0]}")"
 mkdir -p bin
 case "$platform" in
   darwin-arm64) dest="bin/pdftotext-darwin-arm64" ;;
   linux-amd64) dest="bin/pdftotext-linux-amd64" ;;
+  linux-arm64) dest="bin/pdftotext-linux-arm64" ;;
   windows-amd64) dest="bin/pdftotext-windows-amd64.exe" ;;
   *) echo "plataforma desconhecida: $platform" >&2; exit 2 ;;
 esac
@@ -128,11 +130,11 @@ case "$platform" in
   darwin-arm64)
     (build_inside "$platform" "$PWD/$dest")
     ;;
-  linux-amd64)
-    docker run --rm --platform linux/amd64 -v "$PWD:/embedded" alpine:3.20 sh -c '
+  linux-amd64|linux-arm64)
+    docker run --rm --platform "linux/${platform#linux-}" -v "$PWD:/embedded" alpine:3.20 sh -c '
       apk add --no-cache bash build-base cmake samurai curl xz coreutils zlib-dev zlib-static >/dev/null &&
       ln -sf /usr/bin/samu /usr/local/bin/ninja &&
-      bash /embedded/build-pdftotext.sh --inside linux-amd64 /embedded/'"$dest"
+      bash /embedded/build-pdftotext.sh --inside '"$platform"' /embedded/'"$dest"
     ;;
   windows-amd64)
     docker run --rm -v "$PWD:/embedded" debian:bookworm-slim sh -c '
