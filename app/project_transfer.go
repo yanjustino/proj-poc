@@ -24,7 +24,7 @@ import (
 // ImportProject reads it back. The zip holds everything needed to recreate a
 // work-item (identity, raw sources, wiki, artifacts, wiki index state, change
 // and activity history, usage) plus a manifest with a format version and a
-// sha256 per file. prompt_log.jsonl and run_logs/ are deliberately left out:
+// sha256 and modification time per file. prompt_log.jsonl and run_logs/ are deliberately left out:
 // they can carry sensitive prompt text and are not needed to continue work.
 
 const (
@@ -47,6 +47,11 @@ type transferEntry struct {
 	Path   string `json:"path"`
 	Size   int64  `json:"size"`
 	SHA256 string `json:"sha256"`
+	// ModifiedAt (RFC3339Nano, UTC) is the source file's mtime, restored on
+	// import: the artifacts tab's "Desatualizado" badge compares mtimes, so
+	// files recreated in extraction order would look stale. Optional so that
+	// packages exported before it existed still import (format_version 1).
+	ModifiedAt string `json:"modified_at,omitempty"`
 }
 
 type transferManifest struct {
@@ -251,6 +256,10 @@ func addTransferFile(writer *zip.Writer, source string, relative string) (transf
 		return transferEntry{}, fmt.Errorf("abrir %s para exportacao: %w", relative, err)
 	}
 	defer in.Close()
+	info, err := in.Stat()
+	if err != nil {
+		return transferEntry{}, fmt.Errorf("ler %s para exportacao: %w", relative, err)
+	}
 	dest, err := writer.Create(relative)
 	if err != nil {
 		return transferEntry{}, fmt.Errorf("adicionar %s ao pacote: %w", relative, err)
@@ -260,7 +269,12 @@ func addTransferFile(writer *zip.Writer, source string, relative string) (transf
 	if err != nil {
 		return transferEntry{}, fmt.Errorf("copiar %s para o pacote: %w", relative, err)
 	}
-	return transferEntry{Path: relative, Size: size, SHA256: hex.EncodeToString(hash.Sum(nil))}, nil
+	return transferEntry{
+		Path:       relative,
+		Size:       size,
+		SHA256:     hex.EncodeToString(hash.Sum(nil)),
+		ModifiedAt: info.ModTime().UTC().Format(time.RFC3339Nano),
+	}, nil
 }
 
 // ImportProject asks for a package (.zip) and recreates the work-item from
@@ -334,6 +348,9 @@ func (a *App) importProjectFrom(zipPath string) (importResult, error) {
 		}
 	}()
 
+	// Files from a package without modified_at all get this one timestamp, so
+	// none of them looks newer than another (see transferEntry.ModifiedAt).
+	importedAt := time.Now()
 	seen := make(map[string]bool, len(expected))
 	var total int64
 	for _, file := range reader.File {
@@ -360,6 +377,16 @@ func (a *App) importProjectFrom(zipPath string) (importResult, error) {
 		}
 		if sum != want.SHA256 {
 			return importResult{}, fmt.Errorf("pacote corrompido: checksum diferente em %q", file.Name)
+		}
+		modified := importedAt
+		if want.ModifiedAt != "" {
+			modified, err = time.Parse(time.RFC3339Nano, want.ModifiedAt)
+			if err != nil {
+				return importResult{}, fmt.Errorf("pacote invalido: modified_at invalido em %q", file.Name)
+			}
+		}
+		if err := os.Chtimes(filepath.Join(staging, filepath.FromSlash(file.Name)), modified, modified); err != nil {
+			return importResult{}, fmt.Errorf("restaurar data de %q: %w", file.Name, err)
 		}
 		total += written
 		if total > transferMaxTotalBytes {

@@ -94,6 +94,26 @@ export tool WikiActions {
 }
 
 test WikiActionsSpec {
+    // Os alertas ficam até a próxima verificação decidir se o fato novo os
+    // resolveu — e continuam no fim, depois do bloco de fatos novo.
+    describe ingest_keeps_the_review_alerts_after_the_new_facts {
+        var id = Fixture.project("spec-test-wiki-ingest-alerts")
+        dir.create(Paths.wiki(id, "sources"))
+        dir.create(Paths.wiki(id, "entities"))
+        dir.create(Paths.wiki(id, "concepts"))
+        fs.write(Paths.wiki(id, "concepts/aplicativo.md"), "# Aplicativo\n\n## Fatos (2026-01-01)\n\n- Será mobile\n\n## Alertas da revisão\n\n- Contradição com sources/ata-2: mobile × webapp\n")
+        WikiActions.commit_ingest(id, {
+            source_title: "Ata 3", source_summary: "Resumo 3", natureza: "pedido_novo", index_summary: "ata 3",
+            entities: [],
+            concepts: [{title: "Aplicativo", aliases: [], facts: ["Decidido: será webapp"]}],
+        })
+        var page = fs.read(Paths.wiki(id, "concepts/aplicativo.md"))
+        is_true(page.contains("- Será mobile"))
+        is_true(page.contains("- Decidido: será webapp"))
+        is_true(page.trim().ends_with("- Contradição com sources/ata-2: mobile × webapp"))
+        Fixture.drop(id)
+    }
+
     // Uma segunda fonte que chama o mesmo conceito por um alias ja conhecido
     // acrescenta fatos a pagina existente em vez de criar outra, e o indice
     // de busca do app traz o titulo, os aliases e o texto.

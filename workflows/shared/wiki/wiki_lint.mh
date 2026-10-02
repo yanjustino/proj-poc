@@ -2,17 +2,23 @@
 // em estado verificado e persistido, deterministicamente (C3):
 //
 //   1. descarta o que não é verificável — toda contradição/alegação superada
-//      precisa citar um trecho que existe literalmente na página apontada
+//      precisa citar um trecho que existe literalmente na página apontada,
+//      e uma alegação superada também o trecho da página que a decide
 //      (a LLM aponta, o código confere; padrão de "evidence-verified
 //      findings" do LLM Wiki de Karpathy);
-//   2. grava o bloco "Alertas da revisão" nas páginas afetadas, para que
+//   2. fecha as contradições que uma fonte mais nova já decidiu: se, tirando
+//      os trechos superados, sobra menos de duas páginas em disputa, a
+//      contradição sai das pendências e vai para resolved_contradictions —
+//      é o que faz uma fonte ingerida para responder a um alerta fechá-lo;
+//   3. grava o bloco "Alertas da revisão" nas páginas afetadas, para que
 //      qualquer leitor da wiki (e todo artefato gerado a partir dela, via
 //      WikiContext) enxergue a pendência junto do fato em disputa;
-//   3. grava wiki/lint.md com o relatório legível da última verificação.
+//   4. grava wiki/lint.md com o relatório legível da última verificação.
 //
 // Só mexe em wiki/**; nunca em raw/ nem em outro work-item (C1/C2).
 
 import { Paths } from "../core/paths.mh"
+import { Fixture } from "../core/fixture.mh"
 import { WikiAlerts } from "wiki_alerts.mh"
 
 export tool WikiLint {
@@ -38,13 +44,42 @@ export tool WikiLint {
         return WikiAlerts.squash(text).contains(WikiAlerts.squash(quote))
     }
 
+    // Um trecho de evidência está superado quando uma alegação superada
+    // verificada cita a mesma página e o mesmo trecho (ou um que contém o
+    // outro — a LLM às vezes recorta a citação de forma diferente).
+    internal superseding(stale_claims: any[], page: string, quote: string): string[] -> {
+        var q = WikiAlerts.squash(quote)
+        return stale_claims
+            .filter((s) -> s.page == page && (WikiAlerts.squash(s.quote).contains(q) || q.contains(WikiAlerts.squash(s.quote))))
+            .map((s) -> s.superseded_by)
+    }
+
     // Devolve o relatório só com o que passou na verificação, as linhas de
     // alerta por página e quantos achados foram descartados.
     internal verify(project_id: string, report: any): any -> {
         var contradictions = []
+        var resolved_contradictions = []
         var stale_claims = []
         var alerts = []
         var discarded = 0
+
+        // Primeiro as superadas: são elas que decidem quais contradições
+        // continuam pendentes.
+        for (var s in report.stale_claims) {
+            var page = self.normalize_ref(s.page)
+            var newer = self.normalize_ref(s.superseded_by)
+            if (page != newer &&
+                self.quote_in_page(project_id, page, s.quote) &&
+                self.quote_in_page(project_id, newer, s?.resolution_quote ?? "")) {
+                stale_claims += [{page, quote: s.quote, superseded_by: newer, resolution_quote: s.resolution_quote, description: s.description}]
+                alerts += [{
+                    page,
+                    line: WikiAlerts.resolved_prefix() + newer + ": " + s.description + " — trecho: “" + s.quote + "”"
+                }]
+            } else {
+                discarded += 1
+            }
+        }
 
         for (var c in report.contradictions) {
             var good = []
@@ -59,28 +94,27 @@ export tool WikiLint {
             if (pages.size() < 2) {
                 discarded += 1
             } else {
-                contradictions += [{description: c.description, evidence: good}]
+                var resolved_by = []
+                var standing = []
                 for (var g in good) {
-                    var others = pages.filter((p) -> p != g.page).join(", ")
-                    alerts += [{
-                        page: g.page,
-                        line: "Contradição com " + others + ": " + c.description + " — trecho: “" + g.quote + "”"
-                    }]
+                    var by = self.superseding(stale_claims, g.page, g.quote)
+                    if (by.is_empty()) standing += [g]
+                    for (var b in by) {
+                        if (!resolved_by.any((p) -> p == b)) resolved_by += [b]
+                    }
                 }
-            }
-        }
-
-        for (var s in report.stale_claims) {
-            var page = self.normalize_ref(s.page)
-            var newer = self.normalize_ref(s.superseded_by)
-            if (self.quote_in_page(project_id, page, s.quote) && self.valid_ref(project_id, newer)) {
-                stale_claims += [{page, quote: s.quote, superseded_by: newer, description: s.description}]
-                alerts += [{
-                    page,
-                    line: "Possivelmente superado por " + newer + ": " + s.description + " — trecho: “" + s.quote + "”"
-                }]
-            } else {
-                discarded += 1
+                if (standing.size() < 2) {
+                    resolved_contradictions += [{description: c.description, evidence: good, resolved_by}]
+                } else {
+                    contradictions += [{description: c.description, evidence: standing}]
+                    for (var g in standing) {
+                        var others = standing.filter((o) -> o.page != g.page).map((o) -> o.page).join(", ")
+                        alerts += [{
+                            page: g.page,
+                            line: "Contradição com " + others + ": " + c.description + " — trecho: “" + g.quote + "”"
+                        }]
+                    }
+                }
             }
         }
 
@@ -92,6 +126,7 @@ export tool WikiLint {
         return {
             report: {
                 contradictions,
+                resolved_contradictions,
                 stale_claims,
                 missing_concepts: report.missing_concepts,
                 orphan_pages,
@@ -129,15 +164,20 @@ export tool WikiLint {
 
     internal render_report(report: any, discarded: number): string -> {
         var out = "# Verificação da wiki\n\nGerado em " + time.format(time.now(), "yyyy-MM-dd") + ".\n\n"
-        out = out + "## Contradições\n\n"
+        out = out + "## Contradições pendentes\n\n"
         if (report.contradictions.is_empty()) out = out + "Nenhuma.\n\n"
         for (var c in report.contradictions) {
             out = out + "- " + c.description + " (" + c.evidence.map((e) -> e.page).join(", ") + ")\n"
         }
-        out = out + "\n## Alegações possivelmente superadas\n\n"
-        if (report.stale_claims.is_empty()) out = out + "Nenhuma.\n\n"
+        out = out + "\n## Contradições resolvidas por fonte mais nova\n\n"
+        if (report.resolved_contradictions.is_empty()) out = out + "Nenhuma.\n\n"
+        for (var rc in report.resolved_contradictions) {
+            out = out + "- " + rc.description + " (" + rc.evidence.map((e) -> e.page).join(", ") + ") → resolvida por " + rc.resolved_by.join(", ") + "\n"
+        }
+        out = out + "\n## Trechos superados\n\n"
+        if (report.stale_claims.is_empty()) out = out + "Nenhum.\n\n"
         for (var s in report.stale_claims) {
-            out = out + "- " + s.page + " → superada por " + s.superseded_by + ": " + s.description + "\n"
+            out = out + "- " + s.page + " → superado por " + s.superseded_by + ": " + s.description + "\n"
         }
         out = out + "\n## Conceitos sem página\n\n"
         if (report.missing_concepts.is_empty()) out = out + "Nenhum.\n\n"
@@ -160,6 +200,7 @@ export tool WikiLint {
         fs.write(Paths.wiki(project_id, "lint.md"), self.render_report(verified.report, verified.discarded))
         return {
             contradictions: verified.report.contradictions,
+            resolved_contradictions: verified.report.resolved_contradictions,
             stale_claims: verified.report.stale_claims,
             missing_concepts: verified.report.missing_concepts,
             orphan_pages: verified.report.orphan_pages,
@@ -183,15 +224,72 @@ test WikiLintSpec {
         is_false(WikiLint.valid_ref("spec-test-project", "entities/nao-existe"))
     }
 
+    // Fluxo do usuário: a verificação apontou "mobile × webapp" entre duas
+    // fontes, e uma terceira, ingerida depois, decide por webapp.
+    describe a_newer_source_that_settles_a_contradiction_closes_it {
+        var id = Fixture.project("spec-test-wiki-lint-resolve")
+        dir.create(Paths.wiki(id, "sources"))
+        fs.write(Paths.wiki(id, "sources/ata-1.md"), "# Ata 1\n\nO app será mobile.\n")
+        fs.write(Paths.wiki(id, "sources/ata-2.md"), "# Ata 2\n\nO app será webapp.\n\n## Alertas da revisão\n\n- Contradição com sources/ata-1: antigo\n")
+        fs.write(Paths.wiki(id, "sources/ata-3.md"), "# Ata 3\n\nDecidido: o app será webapp, não mobile.\n")
+        var applied = WikiLint.apply(id, {
+            contradictions: [{description: "mobile × webapp", evidence: [
+                {page: "sources/ata-1", quote: "O app será mobile."},
+                {page: "sources/ata-2", quote: "O app será webapp."}
+            ]}],
+            stale_claims: [{
+                page: "sources/ata-1", quote: "será mobile", superseded_by: "sources/ata-3",
+                resolution_quote: "Decidido: o app será webapp", description: "a ata 3 decidiu por webapp"
+            }],
+            missing_concepts: [], orphan_pages: [], notes: ""
+        })
+        are_equal(applied.contradictions.size(), 0)
+        are_equal(applied.resolved_contradictions.size(), 1)
+        are_equal(applied.resolved_contradictions[0].resolved_by, ["sources/ata-3"])
+        are_equal(applied.discarded, 0)
+        var ata1 = fs.read(Paths.wiki(id, "sources/ata-1.md"))
+        is_true(ata1.contains("- Superado por sources/ata-3: a ata 3 decidiu por webapp"))
+        is_false(ata1.contains("Contradição"))
+        is_false(fs.read(Paths.wiki(id, "sources/ata-2.md")).contains(WikiAlerts.heading()))
+        Fixture.drop(id)
+    }
+
+    describe a_contradiction_no_newer_source_settles_stays_pending {
+        var id = Fixture.project("spec-test-wiki-lint-pending")
+        dir.create(Paths.wiki(id, "sources"))
+        fs.write(Paths.wiki(id, "sources/ata-1.md"), "# Ata 1\n\nO app será mobile.\n")
+        fs.write(Paths.wiki(id, "sources/ata-2.md"), "# Ata 2\n\nO app será webapp.\n")
+        var applied = WikiLint.apply(id, {
+            contradictions: [{description: "mobile × webapp", evidence: [
+                {page: "sources/ata-1", quote: "O app será mobile."},
+                {page: "sources/ata-2", quote: "O app será webapp."}
+            ]}],
+            // Sem trecho que decida na página apontada: descartada, e a
+            // contradição continua pendente.
+            stale_claims: [{
+                page: "sources/ata-1", quote: "será mobile", superseded_by: "sources/ata-2",
+                resolution_quote: "trecho inventado", description: "x"
+            }],
+            missing_concepts: [], orphan_pages: [], notes: ""
+        })
+        are_equal(applied.contradictions.size(), 1)
+        are_equal(applied.resolved_contradictions.size(), 0)
+        are_equal(applied.discarded, 1)
+        is_true(fs.read(Paths.wiki(id, "sources/ata-2.md")).contains("- Contradição com sources/ata-1: mobile × webapp"))
+        Fixture.drop(id)
+    }
+
     describe render_report_lists_each_section {
         var text = WikiLint.render_report({
             contradictions: [{description: "d", evidence: [{page: "sources/a", quote: "q"}, {page: "sources/b", quote: "r"}]}],
+            resolved_contradictions: [{description: "e", evidence: [{page: "sources/a", quote: "q"}, {page: "sources/b", quote: "r"}], resolved_by: ["sources/c"]}],
             stale_claims: [],
             missing_concepts: [{title: "Certificado digital", description: "citado"}],
             orphan_pages: [],
             notes: ""
         }, 1)
         is_true(text.contains("- d (sources/a, sources/b)"))
+        is_true(text.contains("- e (sources/a, sources/b) → resolvida por sources/c"))
         is_true(text.contains("- Certificado digital: citado"))
         is_true(text.contains("descartados"))
     }

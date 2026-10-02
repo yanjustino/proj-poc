@@ -1,10 +1,11 @@
 // tool WikiAlerts — o bloco "Alertas da revisão" que o lint grava no FIM de
-// uma página da wiki (contradições e alegações superadas apontadas pela
-// verificação). Fica sempre por último, então "tudo antes do cabeçalho" é a
-// página sem alertas — sem parser de markdown. O lint nunca vê o próprio
-// bloco (WikiContext.for_lint), e um novo ingest que toca a página o remove
-// antes de anexar fatos (WikiPages.upsert_fact_page): o fato novo pode ter
-// resolvido o alerta, e a próxima verificação o recria se ainda valer.
+// uma página da wiki (contradições pendentes e trechos que uma fonte mais
+// nova já superou). Fica sempre por último, então "tudo antes do cabeçalho"
+// é a página sem alertas — sem parser de markdown. O lint nunca vê o próprio
+// bloco (WikiContext.for_lint) e é o único que o reescreve: um novo ingest
+// insere os fatos antes dele (insert) em vez de apagá-lo, porque só a
+// verificação sabe se o fato novo resolveu o alerta — apagar só nas páginas
+// tocadas deixava contradições pela metade (um lado sem alerta, o outro com).
 
 export tool WikiAlerts {
     heading(): string -> "## Alertas da revisão"
@@ -14,6 +15,22 @@ export tool WikiAlerts {
         if (!page.contains(marker)) return page
         return page.split(marker)[0].trim() + "\n\n"
     }
+
+    // O bloco inteiro ("" quando a página não tem alertas).
+    tail(page: string): string -> {
+        var marker = "\n" + self.heading()
+        if (!page.contains(marker)) return ""
+        return self.heading() + page.split(marker)[1]
+    }
+
+    // Acrescenta `text` ao conteúdo da página, mantendo o bloco no fim.
+    insert(page: string, text: string): string -> self.strip(page) + text + self.tail(page)
+
+    // Linha de um trecho que uma fonte mais nova já decidiu (WikiLint) — não
+    // é pendência, é a indicação de qual versão vale.
+    resolved_prefix(): string -> "Superado por "
+
+    is_resolved(line: string): bool -> line.starts_with(self.resolved_prefix())
 
     block(lines: string[]): string ->
         self.heading() + "\n\n" + lines.map((line) -> "- " + line).join("\n") + "\n"
@@ -36,6 +53,24 @@ test WikiAlertsSpec {
 
     describe strip_leaves_a_page_without_alerts_untouched {
         are_equal(WikiAlerts.strip("# A\n\n- x\n\n"), "# A\n\n- x\n\n")
+    }
+
+    describe insert_keeps_the_alert_block_at_the_end {
+        var page = "# A\n\n## Fatos (2026-01-01)\n\n- velho\n\n## Alertas da revisão\n\n- Contradição com sources/b: x\n"
+        are_equal(
+            WikiAlerts.insert(page, "## Fatos (2026-02-01)\n\n- novo\n\n"),
+            "# A\n\n## Fatos (2026-01-01)\n\n- velho\n\n## Fatos (2026-02-01)\n\n- novo\n\n## Alertas da revisão\n\n- Contradição com sources/b: x\n"
+        )
+    }
+
+    describe insert_appends_to_a_page_without_alerts {
+        are_equal(WikiAlerts.insert("# A\n\n", "- x\n\n"), "# A\n\n- x\n\n")
+    }
+
+    describe is_resolved_tells_superseded_lines_from_pending_ones {
+        is_true(WikiAlerts.is_resolved("Superado por sources/c: virou webapp"))
+        is_false(WikiAlerts.is_resolved("Contradição com sources/b: x"))
+        is_false(WikiAlerts.is_resolved("Possivelmente superado por sources/b: x"))
     }
 
     describe block_renders_one_bullet_per_line {

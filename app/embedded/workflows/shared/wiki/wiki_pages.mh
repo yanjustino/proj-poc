@@ -39,10 +39,10 @@ export tool WikiPages {
         var slug = Slug.from_title(title)
         var path = Paths.wiki(project_id, dir + "/" + slug + ".md")
         if (!fs.exists(path)) fs.write(path, "# " + title + "\n\n")
-        // Fato novo pode resolver um alerta da revisão — ver WikiAlerts.
-        fs.write(path, WikiAlerts.strip(fs.read(path)))
         var block = "## Fatos (" + time.format(time.now(), "yyyy-MM-dd") + ")\n\n" + Markdown.list(facts) + "\n\n"
-        fs.append(path, block)
+        // Os alertas da revisão ficam (e no fim) até a próxima verificação
+        // decidir se o fato novo os resolveu — ver WikiAlerts.
+        fs.write(path, WikiAlerts.insert(fs.read(path), block))
     }
 
     write_answer(project_id: string, slug: string, title: string, body: string) ->

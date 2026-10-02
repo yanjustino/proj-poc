@@ -2,11 +2,14 @@ package main
 
 import (
 	"archive/zip"
+	"crypto/sha256"
+	"encoding/hex"
 	"encoding/json"
 	"os"
 	"path/filepath"
 	"strings"
 	"testing"
+	"time"
 )
 
 func seedTransferProject(t *testing.T, dataDir string, projectID string) string {
@@ -119,6 +122,83 @@ func TestImportProjectRoundTripIntoEmptyDataDir(t *testing.T) {
 	}
 }
 
+// Extraction order is alphabetical (artifacts/ < raw/ < wiki/), so without
+// restored mtimes a dependency or wiki/index.md extracted later would mark
+// the artifacts that read it as "Desatualizado" right after import.
+func TestImportProjectRestoresModificationTimes(t *testing.T) {
+	source := &App{dataDir: t.TempDir()}
+	projectDir := seedTransferProject(t, source.dataDir, "mtimes")
+	base := time.Date(2026, 3, 1, 12, 0, 0, 123456789, time.UTC)
+	want := map[string]time.Time{
+		"wiki/entities/cliente.md":         base,
+		"raw/fonte.md":                     base.Add(time.Minute),
+		"artifacts/features/checkout.html": base.Add(time.Hour),
+	}
+	for name, mtime := range want {
+		if err := os.Chtimes(filepath.Join(projectDir, filepath.FromSlash(name)), mtime, mtime); err != nil {
+			t.Fatalf("chtimes %s: %v", name, err)
+		}
+	}
+	zipPath, err := source.exportProjectTo("mtimes", t.TempDir())
+	if err != nil {
+		t.Fatalf("export: %v", err)
+	}
+
+	target := &App{dataDir: t.TempDir()}
+	if _, err := target.importProjectFrom(zipPath); err != nil {
+		t.Fatalf("import: %v", err)
+	}
+	for name, mtime := range want {
+		info, err := os.Stat(filepath.Join(target.dataDir, "projects", "mtimes", filepath.FromSlash(name)))
+		if err != nil {
+			t.Fatalf("stat %s: %v", name, err)
+		}
+		if !info.ModTime().Equal(mtime) {
+			t.Errorf("%s mtime = %v, want %v", name, info.ModTime().UTC(), mtime)
+		}
+	}
+}
+
+func TestImportProjectWithoutModifiedAtUsesOneTimestamp(t *testing.T) {
+	files := map[string]string{
+		"project.json":         `{"id":"legacy","name":"Legado"}`,
+		"artifacts/brief.html": "<h1>Brief</h1>",
+		"raw/fonte.md":         "# Fonte\n",
+		"wiki/index.md":        "# Indice\n",
+	}
+	var manifest transferManifest
+	manifest.FormatVersion = 1
+	manifest.ProjectID = "legacy"
+	entries := map[string]string{}
+	for name, content := range files {
+		sum := sha256.Sum256([]byte(content))
+		manifest.Files = append(manifest.Files, transferEntry{Path: name, Size: int64(len(content)), SHA256: hex.EncodeToString(sum[:])})
+		entries[name] = content
+	}
+	encoded, err := json.Marshal(manifest)
+	if err != nil {
+		t.Fatal(err)
+	}
+	entries[transferManifestName] = string(encoded)
+
+	app := &App{dataDir: t.TempDir()}
+	if _, err := app.importProjectFrom(writeTestZip(t, entries)); err != nil {
+		t.Fatalf("import: %v", err)
+	}
+	var first time.Time
+	for name := range files {
+		info, err := os.Stat(filepath.Join(app.dataDir, "projects", "legacy", filepath.FromSlash(name)))
+		if err != nil {
+			t.Fatalf("stat %s: %v", name, err)
+		}
+		if first.IsZero() {
+			first = info.ModTime()
+		} else if !info.ModTime().Equal(first) {
+			t.Errorf("%s mtime = %v, want the same %v as every other file", name, info.ModTime(), first)
+		}
+	}
+}
+
 func TestImportProjectCopiesWhenIDAlreadyExists(t *testing.T) {
 	app := &App{dataDir: t.TempDir()}
 	original := seedTransferProject(t, app.dataDir, "dup")
@@ -187,6 +267,10 @@ func TestImportProjectRejectsBadPackages(t *testing.T) {
 		"checksum errado": {
 			"senpai-export.json": `{"format_version":1,"project_id":"x","files":[{"path":"project.json","sha256":"` + emptySum + `"}]}`,
 			"project.json":       `{"id":"x","name":"n"}`,
+		},
+		"modified_at invalido": {
+			"senpai-export.json": `{"format_version":1,"project_id":"x","files":[{"path":"project.json","sha256":"` + emptySum + `","modified_at":"ontem"}]}`,
+			"project.json":       "",
 		},
 		"arquivo fora do manifesto": {
 			"senpai-export.json": `{"format_version":1,"project_id":"x","files":[{"path":"project.json","sha256":"` + emptySum + `"}]}`,

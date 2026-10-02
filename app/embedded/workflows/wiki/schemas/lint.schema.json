@@ -5,7 +5,7 @@
   "properties": {
     "contradictions": {
       "type": "array",
-      "description": "Contradições entre páginas. Cada uma exige evidência de pelo menos duas páginas diferentes.",
+      "description": "Contradições que nenhuma página mais nova decide. Cada uma exige evidência de pelo menos duas páginas diferentes.",
       "items": {
         "type": "object",
         "additionalProperties": false,
@@ -29,15 +29,16 @@
     },
     "stale_claims": {
       "type": "array",
-      "description": "Alegações que uma fonte mais nova provavelmente já superou.",
+      "description": "Trechos que uma página mais nova já decidiu ou substituiu — inclusive cada lado vencido de uma contradição que uma fonte mais nova resolveu.",
       "items": {
         "type": "object",
         "additionalProperties": false,
-        "required": ["page", "quote", "superseded_by", "description"],
+        "required": ["page", "quote", "superseded_by", "resolution_quote", "description"],
         "properties": {
           "page": { "type": "string", "description": "Página que contém a alegação possivelmente obsoleta." },
           "quote": { "type": "string", "description": "Trecho COPIADO LITERALMENTE dessa página com a alegação." },
-          "superseded_by": { "type": "string", "description": "Página (normalmente uma fonte) que traz o fato mais novo." },
+          "superseded_by": { "type": "string", "description": "Página mais nova (normalmente uma fonte) que decide ou substitui o trecho." },
+          "resolution_quote": { "type": "string", "description": "Trecho COPIADO LITERALMENTE da página superseded_by que decide ou substitui a alegação." },
           "description": { "type": "string", "description": "Por que a alegação provavelmente foi superada." }
         }
       }

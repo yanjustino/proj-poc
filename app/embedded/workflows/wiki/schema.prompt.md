@@ -13,4 +13,4 @@ Regras:
 3. Só liste uma entidade ou conceito em `entities`/`concepts` se a fonte atual disser algo novo e relevante sobre ele — não repita o que já é óbvio ou o que só está tangencialmente mencionado.
 4. Títulos de entidade/conceito são o nome canônico mais curto e claro (ex.: "Time de Pagamentos", não "o time que cuida dos pagamentos da empresa").
 5. Resumos (`source_summary`, `index_summary`) são sempre escritos em português, de forma direta — sem preencher com generalidades.
-6. Uma página pode terminar com `## Alertas da revisão`: pendências apontadas pela verificação da wiki (contradição entre páginas ou alegação possivelmente superada). Trate o fato sinalizado como em disputa — nunca o afirme como vigente sem mencionar o alerta.
+6. Uma página pode terminar com `## Alertas da revisão`, escrito pela verificação da wiki. Uma linha `Contradição com …` é pendência: trate o fato sinalizado como em disputa — nunca o afirme como vigente sem mencionar o alerta. Uma linha `Superado por <página>: …` não é pendência: o trecho citado foi substituído pela página indicada, e é a versão dela que vale.

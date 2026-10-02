@@ -67,6 +67,7 @@ export async function renderWikiTab(container, project) {
         </div>
       </div>
     </div>
+    <p class="wiki-lint-stale" data-lint-stale hidden>${icon('alertCircle', 13)}<span>A wiki recebeu conteúdo depois da última verificação. Verifique de novo para fechar os alertas que as fontes novas resolveram.</span></p>
     <label class="wiki-search-box">
       ${icon('search', 14)}
       <input type="search" placeholder="Buscar por título, sinônimo ou conteúdo" aria-label="Buscar na wiki" data-wiki-search />
@@ -85,6 +86,7 @@ export async function renderWikiTab(container, project) {
   const treeEl = container.querySelector('[data-tree]');
   const wikiCountEl = container.querySelector('[data-wiki-count]');
   const searchInput = container.querySelector('[data-wiki-search]');
+  const lintStaleEl = container.querySelector('[data-lint-stale]');
   showEmpty('Selecione uma página da wiki para ler.');
 
   // latestByName is listProjectDir's own result, keyed by top-level name
@@ -383,6 +385,7 @@ export async function renderWikiTab(container, project) {
       return;
     }
     latestByName = Object.fromEntries(nodes.map((n) => [n.name, n]));
+    lintStaleEl.hidden = !lintIsBehind(latestByName);
     const pageCount = nodes.reduce((total, node) => total + (node.isDir ? (node.children || []).filter((child) => !child.isDir).length : node.name === 'index.md' ? 1 : 0), 0);
     wikiCountEl.textContent = `${pageCount} ${pageCount === 1 ? 'página' : 'páginas'}`;
     if (groupsWithContent().length === 0) {
@@ -597,6 +600,17 @@ function escapeChar(c) {
   return HTML_ESCAPES[c] || c;
 }
 
+// lintIsBehind says whether the wiki changed after the last "Verificar wiki".
+// wiki/index.md is rewritten by every ingest and filed answer, never by the
+// verification itself (which writes the pages' alert blocks and lint.md), so
+// an index newer than lint.md means content the alerts haven't seen yet. No
+// lint.md means the wiki was never verified: nothing to be behind.
+function lintIsBehind(byName) {
+  const lint = Date.parse(byName['lint.md']?.modifiedAt ?? '');
+  const index = Date.parse(byName['index.md']?.modifiedAt ?? '');
+  return !Number.isNaN(lint) && !Number.isNaN(index) && index > lint;
+}
+
 // renderLintReport shows the verified report Wiki's lint action returns (see
 // workflows/shared/wiki/wiki_lint.mh). The same findings were already written
 // into the affected pages as "Alertas da revisão" and into wiki/lint.md, so
@@ -607,14 +621,16 @@ function renderLintReport(result) {
     <h4>${title} (${items.length})</h4>
     ${items.length ? `<ul>${items.map((item) => `<li>${item}</li>`).join('')}</ul>` : '<p class="modal-hint">Nenhuma.</p>'}`;
   const pages = (list) => list.map((p) => `<code>${escapeHtml(p)}</code>`).join(', ');
+  const resolved = result.resolved_contradictions || [];
   const total = result.contradictions.length + result.stale_claims.length;
   return `
     <div class="lint-report">
       <p>${total
         ? `${result.pages_annotated} página(s) receberam um bloco <strong>Alertas da revisão</strong>. O relatório completo ficou em <code>wiki/lint.md</code>.`
         : 'Nenhuma inconsistência verificada.'}</p>
-      ${section('Contradições', result.contradictions.map((c) => `${escapeHtml(c.description)} — ${pages(c.evidence.map((e) => e.page))}`))}
-      ${section('Alegações possivelmente superadas', result.stale_claims.map((c) => `${pages([c.page])} → superada por ${pages([c.superseded_by])}: ${escapeHtml(c.description)}`))}
+      ${section('Contradições pendentes', result.contradictions.map((c) => `${escapeHtml(c.description)} — ${pages(c.evidence.map((e) => e.page))}`))}
+      ${section('Contradições resolvidas por fonte mais nova', resolved.map((c) => `${escapeHtml(c.description)} — ${pages(c.evidence.map((e) => e.page))} → resolvida por ${pages(c.resolved_by)}`))}
+      ${section('Trechos superados', result.stale_claims.map((c) => `${pages([c.page])} → superado por ${pages([c.superseded_by])}: ${escapeHtml(c.description)}`))}
       ${section('Conceitos sem página', result.missing_concepts.map((c) => `<strong>${escapeHtml(c.title)}</strong>: ${escapeHtml(c.description)}`))}
       ${section('Páginas isoladas', result.orphan_pages.map((p) => pages([p])))}
       ${result.notes ? `<p>${escapeHtml(result.notes)}</p>` : ''}

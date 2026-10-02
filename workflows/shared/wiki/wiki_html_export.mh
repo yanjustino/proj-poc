@@ -67,6 +67,9 @@ export tool WikiHtmlExport {
 
     // Uma entrada por página: corpo sem o bloco de alertas (renderizado à
     // parte, em destaque) e `haystack` em minúsculas para achar menções.
+    // `alerts` são só as pendências — é o que marca a página (ponto, selo,
+    // banner do índice); `superseded` são os trechos que uma fonte mais nova
+    // já decidiu, mostrados à parte e sem contar como alerta.
     internal build_catalog(project_id: string, state: any): any[] -> {
         var catalog = []
         for (var category in self.categories()) {
@@ -82,7 +85,8 @@ export tool WikiHtmlExport {
                     natureza: entry?.natureza ?? "",
                     aliases: entry?.aliases ?? [],
                     body_md: body,
-                    alerts: self.alert_lines(markdown),
+                    alerts: self.alert_lines(markdown).filter((line) -> !WikiAlerts.is_resolved(line)),
+                    superseded: self.alert_lines(markdown).filter((line) -> WikiAlerts.is_resolved(line)),
                     haystack: WikiAlerts.squash(body).to_lower()
                 }]
             }
@@ -196,7 +200,9 @@ export tool WikiHtmlExport {
         html.escape(text).split(" ").map((word) -> self.link_word(word, catalog, prefix)).join(" ")
 
     // Linhas de alerta gravadas por WikiLint: "Contradição com X: ... — trecho:
-    // “...”" / "Possivelmente superado por X: ... — trecho: “...”".
+    // “...”" / "Superado por X: ... — trecho: “...”". "Possivelmente superado
+    // por X" é o formato anterior, que fica nas páginas até a próxima
+    // verificação.
     internal render_alert(line: string, catalog: any[]): string -> {
         var kind = "other"
         var tag = "Alerta"
@@ -204,6 +210,10 @@ export tool WikiHtmlExport {
         if (line.starts_with("Contradição ")) {
             kind = "contradiction"
             tag = "Contradição"
+            text = line.substring(tag.size() + 1, line.size())
+        } else if (WikiAlerts.is_resolved(line)) {
+            kind = "resolved"
+            tag = "Superado"
             text = line.substring(tag.size() + 1, line.size())
         } else if (line.starts_with("Possivelmente superado ")) {
             kind = "stale"
@@ -218,13 +228,22 @@ export tool WikiHtmlExport {
     }
 
     internal render_alerts(item: any, catalog: any[]): string -> {
-        if (item.alerts.is_empty()) return ""
-        var n = item.alerts.size()
-        var noun = "alertas"
-        if (n == 1) noun = "alerta"
-        return "<aside class=\"wiki-alerts\" role=\"note\"><h2><span class=\"wiki-alert-icon\">!</span>${n} ${noun} da revisão</h2>" +
-            "<p>A verificação da wiki apontou inconsistências neste conteúdo — confira antes de usar como fato.</p>" +
-            "<ul>" + item.alerts.map((line) -> self.render_alert(line, catalog)).join("") + "</ul></aside>"
+        var out = ""
+        if (!item.alerts.is_empty()) {
+            var n = item.alerts.size()
+            var noun = "alertas"
+            if (n == 1) noun = "alerta"
+            out = "<aside class=\"wiki-alerts\" role=\"note\"><h2><span class=\"wiki-alert-icon\">!</span>${n} ${noun} da revisão</h2>" +
+                "<p>A verificação da wiki apontou inconsistências neste conteúdo — confira antes de usar como fato.</p>" +
+                "<ul>" + item.alerts.map((line) -> self.render_alert(line, catalog)).join("") + "</ul></aside>"
+        }
+        var superseded = item?.superseded ?? []
+        if (!superseded.is_empty()) {
+            out = out + "<aside class=\"wiki-alerts wiki-superseded\" role=\"note\"><h2>Trechos superados</h2>" +
+                "<p>Uma fonte mais nova substituiu estes trechos — vale a versão da página indicada.</p>" +
+                "<ul>" + superseded.map((line) -> self.render_alert(line, catalog)).join("") + "</ul></aside>"
+        }
+        return out
     }
 
     // Em iframe (aba Wiki do app) um link relativo não resolve: o srcdoc não
@@ -437,6 +456,10 @@ export tool WikiHtmlExport {
         .wiki-alerts>ul:not(.wiki-links)>li:last-child{margin-bottom:0}
         .wiki-alert-contradiction{border-left:4px solid var(--bad)!important}
         .wiki-alert-stale{border-left:4px solid var(--warn)!important}
+        .wiki-superseded{border-color:var(--line);border-left-color:var(--muted);background:var(--surface)}
+        .wiki-superseded h2{color:var(--muted)}
+        .wiki-alert-resolved{border-left:4px solid var(--muted)!important}
+        .wiki-alert-resolved .wiki-tag{background:var(--bg);color:var(--muted);border:1px solid var(--line)}
         .wiki-tag{display:inline-block;font-size:10px;font-weight:700;letter-spacing:.05em;text-transform:uppercase;padding:2px 8px;border-radius:999px;margin-bottom:4px}
         .wiki-alert-contradiction .wiki-tag{background:var(--bad-bg);color:var(--bad);border:1px solid var(--bad-line)}
         .wiki-alert-stale .wiki-tag{background:var(--warn-bg);color:var(--warn);border:1px solid var(--warn-line)}
@@ -565,6 +588,17 @@ test WikiHtmlExportSpec {
         var stale = WikiHtmlExport.render_alert("Possivelmente superado por sources/b: virou webapp", catalog)
         is_true(stale.contains("wiki-alert-stale"))
         is_false(stale.contains("<blockquote>"))
+        var resolved = WikiHtmlExport.render_alert("Superado por sources/b: virou webapp — trecho: “mobile”", catalog)
+        is_true(resolved.contains("wiki-alert-resolved"))
+        is_true(resolved.contains("<a href=\"../sources/b.html\">B</a>"))
+    }
+
+    describe render_alerts_shows_superseded_lines_apart_from_pending_ones {
+        var catalog = [{dir: "sources", slug: "b", title: "B"}]
+        var only_superseded = WikiHtmlExport.render_alerts({alerts: [], superseded: ["Superado por sources/b: x"]}, catalog)
+        is_true(only_superseded.contains("Trechos superados"))
+        is_false(only_superseded.contains("da revisão"))
+        are_equal(WikiHtmlExport.render_alerts({alerts: [], superseded: []}, catalog), "")
     }
 
     describe related_finds_mentions_in_both_directions {
