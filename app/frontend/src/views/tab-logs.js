@@ -22,6 +22,55 @@ import { dotClass } from '../status.js';
 import { STATE_LABEL } from '../run-tracker.js';
 import { icon } from '../icons.js';
 import { callCostNote } from '../cost.js';
+import { ARTIFACT_LABELS } from './tab-artefatos.js';
+
+// runTitle: what a run was, from the meta app.go writes when the run starts
+// (run_log_meta.go) — or, for a log persisted before that existed, from the
+// step names the log itself recorded. `internal`: the wiki's automatic
+// HTML sync (every time the Wiki tab opens), hidden by default.
+const WIKI_ACTION_TITLE = {
+  ingest: (m) => `Ingestão${m.raw_paths?.length ? `: ${m.raw_paths.join(', ')}` : ''}`,
+  query: (m) => `Pergunta à wiki${m.question ? `: “${m.question}”` : ''}`,
+  lint: () => 'Verificação da wiki',
+  sync_html: () => 'Sincronização da wiki',
+  create_concept: (m) => `${m.approved ? 'Gravação' : 'Criação'} de conceito${m.concept_title ? `: ${m.concept_title}` : ''}`,
+};
+const STEP_TITLE = [
+  ['SyncHtml', 'Sincronização da wiki'],
+  ['IngestGenerate', 'Ingestão na wiki'],
+  ['IngestCommit', 'Ingestão na wiki'],
+  ['Query', 'Pergunta à wiki'],
+  ['Lint', 'Verificação da wiki'],
+  ['ConceptGenerate', 'Criação de conceito'],
+  ['ConceptCommit', 'Gravação de conceito'],
+  ['Generate', 'Geração de artefato'],
+  ['Commit', 'Aprovação de artefato'],
+];
+
+function runTitle(entry) {
+  const m = entry.meta;
+  if (m) {
+    if (m.workflow === 'Wiki') {
+      const title = (WIKI_ACTION_TITLE[m.action] || (() => `Wiki: ${m.action || 'execução'}`))(m);
+      return { title, kind: 'Wiki', internal: m.action === 'sync_html' };
+    }
+    if (m.workflow === 'Discovery' || m.workflow === 'Delivery') {
+      const verb = m.approved ? 'Aprovação' : m.feedback ? 'Pedido de mudança' : 'Geração';
+      const scope = [m.feature_id, m.historia_id].filter(Boolean).join(' / ');
+      const name = ARTIFACT_LABELS[m.artifact] || m.artifact || 'artefato';
+      return { title: `${verb}: ${name}${scope ? ` (${scope})` : ''}`, kind: m.workflow, internal: false };
+    }
+    if (m.workflow === 'ArtifactSave') return { title: `Edição: ${ARTIFACT_LABELS[m.artifact] || m.artifact || 'artefato'}`, kind: 'Edição', internal: false };
+    return { title: [m.workflow, m.action].filter(Boolean).join(' · '), kind: m.workflow, internal: false };
+  }
+  const steps = entry.steps || [];
+  const match = STEP_TITLE.find(([step]) => steps.includes(step));
+  return {
+    title: match ? match[1] : 'Execução',
+    kind: steps.length ? steps.filter((s) => s !== 'Dispatch' && s !== 'Done').join(' → ') : '',
+    internal: steps.includes('SyncHtml'),
+  };
+}
 
 function formatDate(iso) {
   if (!iso) return '';
@@ -73,13 +122,34 @@ export async function renderLogsTab(container, project) {
         <h2>Logs</h2>
         <p>Execuções registradas para este work-item — clique numa linha para ver o log completo e as chamadas de LLM.</p>
       </div>
-      <button class="button secondary small" data-refresh>${icon('download', 14)} Atualizar</button>
+      <div class="logs-tab-actions">
+        <label class="check" data-internal-toggle hidden><input type="checkbox" data-show-internal /> <span data-internal-label></span></label>
+        <button class="button secondary small" data-refresh>${icon('download', 14)} Atualizar</button>
+      </div>
     </div>
     <div class="list-area" data-list><p class="empty-nav">Carregando…</p></div>
   `;
 
   const listEl = container.querySelector('[data-list]');
   const refreshButton = container.querySelector('[data-refresh]');
+  const internalToggle = container.querySelector('[data-internal-toggle]');
+  const internalCheckbox = container.querySelector('[data-show-internal]');
+  let showInternal = false;
+  try {
+    showInternal = localStorage.getItem('senpai-logs-internal') === '1';
+  } catch {
+    // Hidden by default.
+  }
+  internalCheckbox.checked = showInternal;
+  internalCheckbox.addEventListener('change', () => {
+    showInternal = internalCheckbox.checked;
+    try {
+      localStorage.setItem('senpai-logs-internal', showInternal ? '1' : '0');
+    } catch {
+      // Not remembered.
+    }
+    render();
+  });
 
   let entries = [];
   // llmCalls: every prompt/response call recorded for the WHOLE project
@@ -99,6 +169,15 @@ export async function renderLogsTab(container, project) {
   const llmOpenStates = new Map(); // "runId:index" -> aberto/fechado, sobrevive a um re-render
 
   function render() {
+    const internalCount = entries.filter((entry) => runTitle(entry).internal).length;
+    internalToggle.hidden = internalCount === 0;
+    container.querySelector('[data-internal-label]').textContent = `Mostrar sincronizações automáticas (${internalCount})`;
+    const visible = showInternal ? entries : entries.filter((entry) => !runTitle(entry).internal || entry.runId === expandedRunId);
+    if (entries.length > 0 && visible.length === 0) {
+      listEl.className = 'list-area';
+      listEl.innerHTML = '<div class="collection-map-empty">Só há sincronizações automáticas da wiki — marque a opção acima para vê-las.</div>';
+      return;
+    }
     if (entries.length === 0) {
       listEl.className = 'list-area';
       listEl.innerHTML = '<div class="collection-map-empty">Nenhum log registrado ainda para este work-item.</div>';
@@ -116,7 +195,7 @@ export async function renderLogsTab(container, project) {
           </tr>
         </thead>
         <tbody>
-          ${entries.map((entry) => rowHtml(entry)).join('')}
+          ${visible.map((entry) => rowHtml(entry)).join('')}
         </tbody>
       </table>
     `;
@@ -133,7 +212,10 @@ export async function renderLogsTab(container, project) {
     return `
       <tr class="data-row ${expanded ? 'selected' : ''}" data-run-id="${escapeHtml(entry.runId)}" title="${escapeHtml(entry.runId)}">
         <td class="data-row-dot"><span class="status-dot" data-status-dot></span></td>
-        <td class="data-row-name"><span>${escapeHtml(entry.runId)}</span></td>
+        <td class="data-row-name logs-run-name">${(() => {
+          const { title, kind } = runTitle(entry);
+          return `<span class="logs-run-title"><strong>${escapeHtml(title)}</strong><small>${escapeHtml([kind, entry.runId.slice(0, 8)].filter(Boolean).join(' · '))}</small></span>`;
+        })()}</td>
         <td class="data-row-when">${escapeHtml(formatDate(entry.modifiedAt))} · ${formatSize(entry.sizeBytes)}</td>
         <td class="data-row-actions"><i class="logs-chevron ${expanded ? 'open' : ''}">${icon('arrowDown', 14)}</i></td>
       </tr>

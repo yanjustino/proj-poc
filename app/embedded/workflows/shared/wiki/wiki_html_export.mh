@@ -45,17 +45,44 @@ export tool WikiHtmlExport {
 
     // Indice da busca da aba Wiki do app (tab-wiki.js): titulo, aliases,
     // resumo e o texto da pagina, que o app normaliza (caixa e acento) e
-    // pontua no navegador, sem chamar a LLM.
+    // pontua no navegador, sem chamar a LLM. Leva tambem os sinais com que
+    // a aba ordena e filtra uma wiki grande: quantas paginas citam esta
+    // (cited_by) e quantas ela cita (mentions) — a mesma regra do "Navegar"
+    // de cada pagina —, quantos fatos tem, a data do ultimo bloco de fatos e
+    // quantos alertas pendentes.
     internal search_index(catalog: any[]): any[] -> catalog.map((item) -> {
-        group: item.dir,
-        label: item.label,
-        slug: item.slug,
-        title: item.title,
-        aliases: item.aliases,
-        summary: item.summary,
-        natureza: item.natureza,
-        text: self.plain_text(item.body_md),
+        var rel = self.related(item, catalog)
+        return {
+            group: item.dir,
+            label: item.label,
+            slug: item.slug,
+            title: item.title,
+            aliases: item.aliases,
+            summary: item.summary,
+            natureza: item.natureza,
+            text: self.plain_text(item.body_md),
+            cited_by: rel.cited_by.size(),
+            mentions: rel.mentions.size(),
+            facts: self.fact_count(item.body_md),
+            updated_at: self.last_facts_date(item.body_md),
+            alerts: item.alerts.size(),
+        }
     })
+
+    // Itens de lista do corpo — numa entidade/conceito, um por fato.
+    internal fact_count(markdown: string): number ->
+        markdown.split("\n").filter((line) -> line.trim().starts_with("- ")).size()
+
+    // Data do bloco "## Fatos (yyyy-MM-dd)" mais recente, ou "" (fontes e
+    // respostas nao tem esses blocos — o app usa a data do arquivo).
+    internal last_facts_date(markdown: string): string -> {
+        var dates = markdown.split("\n")
+            .map((line) -> line.trim())
+            .filter((line) -> line.starts_with("## Fatos (") && line.size() >= 20)
+            .map((line) -> line.substring(10, 20))
+            .sort_by((d) -> d)
+        return if (dates.is_empty()) "" else dates[dates.size() - 1]
+    }
 
     // Texto corrido para busca e trechos: sem cabecalhos ("## Fatos (data)")
     // nem marcadores de lista, uma linha por item separada por " · ".
@@ -538,6 +565,26 @@ test WikiHtmlExportSpec {
         )
         is_true(section.contains("<span class=\"wiki-natureza wiki-natureza-pedido-novo\">pedido novo</span>"))
         is_true(section.contains("Schema</strong>"))
+    }
+
+    // Os sinais de ordenacao da aba Wiki: citacoes nos dois sentidos, fatos,
+    // ultimo bloco de fatos e alertas pendentes (o resolvido nao conta).
+    describe search_index_carries_ranking_signals {
+        var catalog = [
+            {dir: "entities", label: "Entidades", slug: "b3", title: "B3", summary: "", natureza: "", aliases: [],
+             body_md: "## Fatos (2026-01-02)\n\n- Custodia na Clearing\n\n## Fatos (2026-03-04)\n\n- Batch diario",
+             alerts: ["Contradição com x"], superseded: [], haystack: "custodia na clearing batch diario"},
+            {dir: "concepts", label: "Conceitos", slug: "clearing", title: "Clearing", summary: "", natureza: "", aliases: [],
+             body_md: "- Opera junto da B3", alerts: [], superseded: [], haystack: "opera junto da b3"},
+        ]
+        var index = WikiHtmlExport.search_index(catalog)
+        are_equal(index[0].cited_by, 0)
+        are_equal(index[0].mentions, 1)
+        are_equal(index[0].facts, 2)
+        are_equal(index[0].updated_at, "2026-03-04")
+        are_equal(index[0].alerts, 1)
+        are_equal(index[1].cited_by, 1)
+        are_equal(index[1].updated_at, "")
     }
 
     describe build_search_entries_flattens_every_category {

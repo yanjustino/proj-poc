@@ -1031,6 +1031,7 @@ func (a *App) StartRun(workflow string, argumentsJSON string) (string, error) {
 		a.runProjectsMu.Lock()
 		a.runProjects[status.RunID] = projectID
 		a.runProjectsMu.Unlock()
+		a.writeRunLogMeta(projectID, status.RunID, workflow, arguments)
 	}
 	return encodeStatus(status)
 }
@@ -1363,9 +1364,11 @@ func (a *App) ReadPersistedRunLogs(projectID string, runID string) (string, erro
 // enough to list and pick one, the content itself comes from
 // ReadPersistedRunLogs(projectID, RunID).
 type projectRunLogEntry struct {
-	RunID      string `json:"runId"`
-	SizeBytes  int64  `json:"sizeBytes"`
-	ModifiedAt string `json:"modifiedAt"`
+	RunID      string      `json:"runId"`
+	SizeBytes  int64       `json:"sizeBytes"`
+	ModifiedAt string      `json:"modifiedAt"`
+	Meta       *runLogMeta `json:"meta,omitempty"`  // what the run was (run_log_meta.go)
+	Steps      []string    `json:"steps,omitempty"` // only without Meta: step names read from the log
 }
 
 // ListProjectRunLogs lists every run this project has a persisted log for
@@ -1404,11 +1407,17 @@ func (a *App) ListProjectRunLogs(projectID string) (string, error) {
 			// just skipped, not a reason to fail the whole list.
 			continue
 		}
-		logs = append(logs, projectRunLogEntry{
+		logPath := filepath.Join(dir, entry.Name())
+		item := projectRunLogEntry{
 			RunID:      strings.TrimSuffix(entry.Name(), ".log"),
 			SizeBytes:  info.Size(),
 			ModifiedAt: info.ModTime().UTC().Format(time.RFC3339),
-		})
+			Meta:       readRunLogMeta(logPath),
+		}
+		if item.Meta == nil {
+			item.Steps = runLogSteps(logPath)
+		}
+		logs = append(logs, item)
 	}
 	sort.Slice(logs, func(i, j int) bool { return logs[i].ModifiedAt > logs[j].ModifiedAt })
 	body, err := json.Marshal(logs)

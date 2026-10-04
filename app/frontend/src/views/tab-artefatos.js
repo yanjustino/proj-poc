@@ -45,6 +45,9 @@ function labelFor(name) {
   return LABELS[name] || name;
 }
 
+// Shared with tab-logs.js, which titles a run by the artifact it generated.
+export { LABELS as ARTIFACT_LABELS };
+
 // Texto do aviso "Desatualizado": artefatos regenerados e/ou a wiki com
 // conteúdo novo depois deste artefato.
 function staleMessage(staleDeps) {
