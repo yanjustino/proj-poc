@@ -14,13 +14,14 @@ import {
   startAndWatch,
   watchExistingRun,
 } from '../api.js';
-import { sequenceFor, isReady, missingDeps, featureIdOf, featureTitleOf, computeStaleness, latestMtimeOf } from '../artifacts.js';
+import { sequenceFor, isReady, missingDeps, featureIdOf, featureTitleOf, computeStaleness, latestMtimeOf, staleHistoriaFeatureIds } from '../artifacts.js';
 import { createRunTracker } from '../run-tracker.js';
 import { inlineMermaid, hasMermaidDiagram } from '../mermaid-inline.js';
 import { beginCustom, buildDocFrame, showHtmlDoc, showEmpty, showAction, showLoading, setFooter, setToolbarAction } from '../reading-pane.js';
 import { setActiveRun, getActiveRun, clearActiveRun } from '../active-runs.js';
 import { dotClass } from '../status.js';
 import { icon } from '../icons.js';
+import { sendButtonHtml, enhanceComposer } from '../composer.js';
 import { isEditable, isEditorOpen, mountArtifactEditor } from '../artifact-editor.js';
 import { approvalRecoveryArgs, waitForRecoveryTerminal } from '../checkpoint-recovery.js';
 import { enqueueLlmRun, llmJob, cancelQueuedLlmJob, subscribeLlmJobs } from '../llm-queue.js';
@@ -299,6 +300,9 @@ export async function renderArtefatosTab(container, project, { onChanged }) {
   // história folder under it that already has its historia.html committed.
   // Feeds the nested história rows under each feature (historiaItemRowsFor).
   let historiasByFeatureId = new Map();
+  // staleHistoriaFeatures: feature ids whose histórias predate the current
+  // version of their feature (artifacts.js's staleHistoriaFeatureIds).
+  let staleHistoriaFeatures = new Set();
   // expandedFeatures: feature row keys whose nested história rows are
   // showing. Collapsed by default — N features × M histórias each would
   // otherwise bury the rest of the map — and expanded automatically when a
@@ -806,6 +810,11 @@ export async function renderArtefatosTab(container, project, { onChanged }) {
       }
     }
     staleness = computeStaleness(sequence, doneNames, byName, await wikiMtime());
+    staleHistoriaFeatures = staleHistoriaFeatureIds(
+      sequence.find((entry) => entry.artifact === 'features'),
+      byName,
+      historiasByFeatureId,
+    );
     try {
       const log = await workItemChangesLog(project.id);
       manualEdits = new Map();
@@ -1795,14 +1804,14 @@ export async function renderArtefatosTab(container, project, { onChanged }) {
   // submit.
   //
   // Discovery's per-feature "historias" isn't its own `sequence` entry (see
-  // artifacts.js's own comment on why) so it has no staleness entry to read
-  // — its own inclusion here stays unconditional on `historiasDoneFeatureIds`
-  // whenever "features" is involved, same as before this change, because
-  // that one is a distinct, already-justified warning about an id-collision
-  // risk (features/ recycling its own FT00N ids on regeneration could
-  // silently reattach old, mismatched histórias under a new feature that
-  // lands on the same id — a correctness concern, not just staleness), not
-  // part of the generic blanket-note problem this function otherwise fixes.
+  // artifacts.js's own comment on why), so it isn't in `staleness`. It used
+  // to be appended here unconditionally whenever any história existed and
+  // "features" was this artifact or downstream of it — which put "Histórias
+  // está desatualizado" under the Brief (and every other upstream preview)
+  // even with every história already up to date. Now it follows the same
+  // real-mtime rule as everything else, per feature: listed only when some
+  // feature was regenerated after a história built from it
+  // (staleHistoriaFeatureIds, computed in refreshDoneState).
   function manualEditNoteFor(artifact) {
     const count = manualEdits.get(artifact) ?? 0;
     if (count === 0) return '';
@@ -1815,7 +1824,7 @@ export async function renderArtefatosTab(container, project, { onChanged }) {
     if (
       workflow === 'Discovery' &&
       (artifact === 'features' || downstream.includes('features')) &&
-      historiasDoneFeatureIds.size > 0
+      staleHistoriaFeatures.size > 0
     ) {
       labels.push('Histórias');
     }
@@ -1921,17 +1930,25 @@ export async function renderArtefatosTab(container, project, { onChanged }) {
     const composer = document.createElement('div');
     composer.className = 'run-composer';
     composer.innerHTML = `
-      <textarea class="run-feedback-input" placeholder="Pedir uma mudança neste artefato já aprovado (opcional) — vazio, só regera a partir do contexto atual (wiki e artefatos anteriores)."></textarea>
-      <div class="run-composer-actions" style="justify-content: flex-end;">
-        <button class="button secondary small" data-submit>Regerar</button>
+      <textarea class="run-feedback-input" rows="1" placeholder="Pedir uma mudança neste artefato (opcional)…"></textarea>
+      <div class="run-composer-actions">
+        <div class="composer-tools">
+          <span class="composer-chip static" data-mode title="Sem texto, regera a partir do contexto atual (wiki e artefatos anteriores)">${icon('refreshCw', 14)} <span data-mode-label>Regerar</span></span>
+        </div>
+        ${sendButtonHtml({ attrs: 'data-submit', label: 'Regerar' })}
       </div>
     `;
     const textarea = composer.querySelector('textarea');
     const button = composer.querySelector('[data-submit]');
+    const modeLabel = composer.querySelector('[data-mode-label]');
+    enhanceComposer(composer, { allowEmpty: true });
     // Texto opcional: sem ele, é uma regeneração simples (como "Atualizar"),
     // sem registrar diretiva no histórico de mudanças.
     textarea.addEventListener('input', () => {
-      button.textContent = textarea.value.trim() ? 'Solicitar mudança' : 'Regerar';
+      const label = textarea.value.trim() ? 'Solicitar mudança' : 'Regerar';
+      modeLabel.textContent = label;
+      button.title = label;
+      button.setAttribute('aria-label', label);
     });
     button.addEventListener('click', () => {
       const text = textarea.value.trim();

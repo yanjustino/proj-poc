@@ -217,6 +217,40 @@ export function computeStaleness(sequence, doneNames, byName, wikiMtime = null) 
   return result;
 }
 
+// staleHistoriaFeatureIds: Discovery's histórias aren't a `sequence` entry
+// (one folder per feature, generated per feature), so computeStaleness never
+// sees them. Same rule, applied per feature: the feature ids whose
+// feature document (featuresEntry.itemFile inside its folder) was rewritten
+// measurably after the OLDEST historia.html generated from it — i.e. at
+// least one história predates the current version of its feature.
+// `historiasByFeatureId` is tab-artefatos.js's own map (featureId ->
+// { folders: [story folder nodes] }).
+export function staleHistoriaFeatureIds(featuresEntry, byName, historiasByFeatureId) {
+  const stale = new Set();
+  const featuresNode = featuresEntry && byName[featuresEntry.dir];
+  if (!featuresNode || !featuresNode.children) return stale;
+  const mtime = (node) => {
+    const t = node && node.modifiedAt ? Date.parse(node.modifiedAt) : NaN;
+    return Number.isNaN(t) ? null : t;
+  };
+  for (const folder of featuresNode.children) {
+    if (!folder.isDir) continue;
+    const featureId = featureIdOf(folder.name);
+    const historias = historiasByFeatureId.get(featureId);
+    if (!historias) continue;
+    const featureMtime = mtime((folder.children || []).find((f) => !f.isDir && f.name === featuresEntry.itemFile));
+    if (featureMtime === null) continue;
+    for (const storyFolder of historias.folders) {
+      const storyMtime = mtime((storyFolder.children || []).find((f) => !f.isDir && f.name === 'historia.html'));
+      if (storyMtime !== null && featureMtime - storyMtime > STALE_EPSILON_MS) {
+        stale.add(featureId);
+        break;
+      }
+    }
+  }
+  return stale;
+}
+
 // featureIdOf extracts the feature_id ArtifactId.find_feature_dir expects
 // (the prefix before the first "-") from a folder name like
 // "FT001-nome-da-feature".

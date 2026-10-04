@@ -28,6 +28,7 @@ import { llmJobsForProject } from '../llm-queue.js';
 import { ingestQueueSnapshot } from '../ingest-queue.js';
 import { formatAgeShort } from '../time-format.js';
 import { openNewWorkItemModal } from './new-workitem.js';
+import { createSelectCombobox } from './select-combobox.js';
 import { renderWorkItemView } from './workitem-view.js';
 import { getState, setState, subscribe } from '../state.js';
 import { mountReadingPane } from '../reading-pane.js';
@@ -169,6 +170,9 @@ export async function mountShell(root) {
   const modelCustomRow = root.querySelector('[data-model-custom-row]');
   const modelCustomInputEl = root.querySelector('[data-model-custom-input]');
   const modelCustomApplyEl = root.querySelector('[data-model-custom-apply]');
+  // Searchable stand-in for the model <select> — Devin alone lists dozens
+  // of models. The select stays the source of truth (see select-combobox.js).
+  const modelCombo = createSelectCombobox(modelSelectEl, { searchPlaceholder: 'Buscar modelo…', emptyText: 'Nenhum modelo encontrado' });
   const appVersionEl = root.querySelector('[data-app-version]');
   const themeToggleEl = root.querySelector('[data-theme-toggle]');
 
@@ -404,6 +408,7 @@ export async function mountShell(root) {
       modelSelectEl.value = '';
     }
     modelSelectEl.disabled = false;
+    modelCombo.sync();
     updateModelCost();
 
     // Devin-only: the cost snapshot the app persisted alongside the model

@@ -4,6 +4,7 @@ import { renderMarkdown } from '../markdown.js';
 import { createRunTracker } from '../run-tracker.js';
 import { showMarkdownDoc, showHtmlDoc, showEmpty, setFooter, beginCustom, setToolbarAction } from '../reading-pane.js';
 import { icon } from '../icons.js';
+import { sendButtonHtml, enhanceComposer } from '../composer.js';
 import { formatRelativeTime } from '../time-format.js';
 
 const GROUPS = [
@@ -88,13 +89,17 @@ export async function renderWikiTab(container, project) {
   const askComposer = document.createElement('div');
   askComposer.className = 'run-composer wiki-ask-composer';
   askComposer.innerHTML = `
-    <textarea class="run-feedback-input wiki-ask-input" rows="2" placeholder="Pergunte à wiki — o que você quer saber sobre este work-item?" data-question></textarea>
+    <textarea class="run-feedback-input wiki-ask-input" rows="1" placeholder="Pergunte à wiki sobre este work-item…" data-question></textarea>
     <div data-ask-tracker></div>
     <div class="run-composer-actions">
-      <label class="check"><input type="checkbox" data-file-answer /> Arquivar a resposta como página nova</label>
-      <button class="button primary small" data-ask>${icon('zap', 13)} Perguntar</button>
+      <div class="composer-tools">
+        <span class="composer-chip static">${icon('zap', 14)} Wiki</span>
+        <label class="composer-chip composer-toggle" title="Também salva a resposta como uma página nova da wiki"><input type="checkbox" data-file-answer />${icon('inbox', 14)} Arquivar resposta</label>
+      </div>
+      ${sendButtonHtml({ attrs: 'data-ask', label: 'Perguntar' })}
     </div>
   `;
+  const syncAskComposer = enhanceComposer(askComposer, { submitOnEnter: false });
 
   // The one "criar página de conceito" run this tab follows (see
   // startConcept).
@@ -726,6 +731,7 @@ export async function renderWikiTab(container, project) {
     showMarkdownDoc(title, renderMarkdown(answer.answer_body || ''));
     // Keeps the composer under the answer, for a follow-up question.
     questionInput.value = '';
+    syncAskComposer();
     askTrackerEl.innerHTML = '';
     setFooter(askComposer);
     if (answer.filed_as) {

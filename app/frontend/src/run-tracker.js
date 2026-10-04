@@ -7,6 +7,7 @@ import { resumeAndWatch, cancelRun } from './api.js';
 import { friendlyRunError } from './run-errors.js';
 import { dotClass } from './status.js';
 import { icon } from './icons.js';
+import { sendButtonHtml, enhanceComposer } from './composer.js';
 
 // WORKING_MESSAGE is the friendly headline shown while a run is actually
 // executing/queued (see render()'s own working/queued branch) — feedback
@@ -375,14 +376,16 @@ export function createRunTracker({ resumeArgs = { approved: true }, onCancel, on
     } else {
       composer.hidden = false;
       composer.innerHTML = `
-        <textarea class="run-feedback-input" placeholder="Pedir uma mudança nesta versão (opcional) — a próxima geração considera isto." ${busy ? 'disabled' : ''}>${escapeHtml(feedbackText)}</textarea>
+        <textarea class="run-feedback-input" rows="1" placeholder="Pedir uma mudança nesta versão…" ${busy ? 'disabled' : ''}>${escapeHtml(feedbackText)}</textarea>
         <div class="run-composer-actions">
-          <button class="button tertiary small run-cancel" ${busy ? 'disabled' : ''}>${busyAction === 'cancel' ? 'Cancelando…' : 'Cancelar'}</button>
-          <div class="run-composer-actions-right">
-            <button class="button secondary small run-feedback-submit" ${busy ? 'disabled' : ''}>${busyAction === 'regenerate' ? 'Enviando…' : 'Regerar'}</button>
+          <div class="composer-tools">
+            <button class="composer-chip run-cancel" title="Cancelar esta execução" ${busy ? 'disabled' : ''}>${icon('x', 15)} ${busyAction === 'cancel' ? 'Cancelando…' : 'Cancelar'}</button>
+            <span class="composer-chip static" title="A próxima geração considera o seu pedido">${icon('refreshCw', 14)} ${busyAction === 'regenerate' ? 'Regerando…' : 'Regerar com pedido'}</span>
           </div>
+          ${sendButtonHtml({ className: 'run-feedback-submit', label: 'Regerar com este pedido', busy: busyAction === 'regenerate', disabled: busy })}
         </div>
       `;
+      enhanceComposer(composer);
       approveAction.hidden = false;
       approveAction.innerHTML = `<button class="button primary small run-approve" ${busy ? 'disabled' : ''}>${busyAction === 'approve' ? 'Aplicando…' : 'Aprovar'}</button>`;
     }

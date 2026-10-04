@@ -35,9 +35,9 @@
   --control-lg: 42px;
 }
 html[data-theme='light'] {
-  --bg-0: #f7f7f7;
+  --bg-0: #ffffff;
   --surface: #ffffff;
-  --surface-2: #ededed;
+  --surface-2: #f2f2f3;
   --surface-3: #d6d6d6;
   --ink: #1a1a1a;
   --rice-paper: #1a1a1a;
@@ -229,6 +229,39 @@ body.pane-resizing iframe { pointer-events: none; }
 .sidebar-agent select:disabled { opacity: .6; }
 .sidebar-agent[hidden] { display: none; }
 .sidebar-agent-block[hidden] { display: none; }
+/* Searchable model picker (views/select-combobox.js). Anchored to the
+   whole .sidebar-agent row so the popover is as wide as the sidebar allows,
+   and opens upward — the sidebar clips anything below its bottom edge. */
+.sidebar-agent { position: relative; }
+.combo { flex: 1 1 auto; min-width: 0; }
+.combo-trigger { width: 100%; height: var(--control-sm); display: flex; align-items: center; gap: 6px; border: 1px solid var(--line); border-radius: var(--radius-sm); background: var(--surface); color: var(--ink); font: 12px var(--mono); padding: 0 8px; text-align: left; cursor: pointer; }
+.combo-trigger:hover:not(:disabled) { border-color: var(--surface-3); }
+.combo.open .combo-trigger, .combo-trigger:focus-visible { border-color: var(--vermilion); outline: none; }
+.combo-trigger:disabled { opacity: .6; cursor: default; }
+.combo-value { flex: 1 1 auto; min-width: 0; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
+.combo-caret { flex: none; display: grid; place-items: center; color: var(--muted); transform: rotate(-90deg); transition: transform .12s; }
+.combo.open .combo-caret { transform: rotate(90deg); }
+.combo-popover { position: absolute; left: 0; right: 0; bottom: calc(100% + 6px); z-index: 30; display: flex; flex-direction: column; max-height: min(420px, 60vh); background: var(--surface); border: 1px solid var(--line); border-radius: var(--radius-md); box-shadow: var(--shadow); overflow: hidden; font-family: var(--sans); }
+.combo-popover[hidden] { display: none; }
+.combo-search { flex: none; display: flex; align-items: center; gap: 7px; padding: 0 10px; height: 36px; border-bottom: 1px solid var(--line); color: var(--muted); }
+.combo-search input { flex: 1 1 auto; min-width: 0; border: 0; outline: 0; background: transparent; color: var(--ink); font: 13px var(--sans); }
+.combo-search input::placeholder { color: var(--muted); }
+.combo-list { flex: 1 1 auto; overflow-y: auto; padding: 4px; }
+.combo-group { padding: 8px 8px 4px; font: 700 10px var(--sans); text-transform: uppercase; letter-spacing: .1em; color: var(--muted); }
+.combo-option { display: flex; align-items: center; gap: 8px; padding: 6px 8px; border-radius: var(--radius-sm); font-size: 13px; color: var(--ink); cursor: pointer; }
+.combo-option.highlighted { background: var(--surface-2); }
+.combo-option.selected { color: var(--vermilion); }
+.combo-option-label { flex: 1 1 auto; min-width: 0; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
+.combo-option mark { background: transparent; color: var(--vermilion); font-weight: 700; }
+.combo-check { flex: none; display: grid; place-items: center; }
+.combo-empty { padding: 14px 8px; font-size: 12px; color: var(--muted); text-align: center; }
+.combo-footer { flex: none; padding: 5px 10px; border-top: 1px solid var(--line); font: 10px var(--mono); color: var(--muted); }
+html[data-theme='light'] .combo-trigger { background: #161618; border-color: #2c2c31; color: #f7f7f7; }
+html[data-theme='light'] .combo-popover { background: #161618; border-color: #2c2c31; }
+html[data-theme='light'] .combo-search, html[data-theme='light'] .combo-footer { border-color: #2c2c31; color: #a3a3a9; }
+html[data-theme='light'] .combo-search input, html[data-theme='light'] .combo-option { color: #f7f7f7; }
+html[data-theme='light'] .combo-option.highlighted { background: #2a2a2e; }
+html[data-theme='light'] .combo-option.selected { color: var(--vermilion); }
 .sidebar-agent-hint { display: block; margin: 2px 0 0; padding-left: 7px; font-size: 11px; font-family: var(--mono); color: var(--muted); opacity: .7; overflow-wrap: anywhere; }
 .sidebar-agent-hint:empty { display: none; }
 
@@ -342,7 +375,7 @@ body.pane-resizing iframe { pointer-events: none; }
    widths where both sides can't fit side by side at all. */
 .artifact-filters-row { display: flex; align-items: center; justify-content: space-between; flex-wrap: wrap; gap: 10px 14px; margin: 0 0 12px; }
 .artifact-category-filters { display: flex; gap: 5px; margin: 0; overflow-x: auto; }
-.artifact-filter:hover { border-color: #c9c5ba; color: var(--ink); }
+.artifact-filter:hover { border-color: #c8c8cc; color: var(--ink); }
 .artifact-filter.active { background: var(--ink); border-color: var(--ink); color: var(--surface); }
 /* Cards vs. table — added once a work-item's full artifact volume (Brief,
    Atributos, Requisitos, N ADRs, DER, N Diagramas, N Features, Dependências,
@@ -428,7 +461,7 @@ body.pane-resizing iframe { pointer-events: none; }
 .artifact-group-header:first-child { margin-top: 0; }
 .artifact-group-header h3 { margin: 0; padding-bottom: 7px; border-bottom: 1px solid var(--line); font-size: 11px; font-weight: 600; text-transform: uppercase; letter-spacing: .07em; color: var(--muted); }
 .artifact-card { min-height: 158px; border: 1px solid var(--line); border-radius: 15px; background: var(--surface); display: flex; flex-direction: column; overflow: hidden; position: relative; transition: transform .18s ease, box-shadow .18s ease, border-color .18s ease; }
-.artifact-card:hover { transform: translateY(-2px); border-color: #cbc7bb; box-shadow: var(--shadow); }
+.artifact-card:hover { transform: translateY(-2px); border-color: #c8c8cc; box-shadow: var(--shadow); }
 .artifact-card.selected { border-color: var(--ink); box-shadow: 0 0 0 1px var(--ink); }
 .artifact-card-main { border: 0; background: transparent; color: inherit; padding: 15px 15px 8px; text-align: left; display: flex; flex: 1; flex-direction: column; align-items: flex-start; width: 100%; }
 .artifact-card-main:disabled { cursor: not-allowed; opacity: .53; }
@@ -487,7 +520,7 @@ body.pane-resizing iframe { pointer-events: none; }
 .dor-reason-bloqueio::before { content: "✗"; }
 .dor-reason-ressalva { color: var(--amber); }
 .dor-reason-ressalva::before { content: "•"; }
-.artifact-card-foot { min-height: 38px; display: flex; align-items: center; gap: 7px; margin: 0 15px; padding: 10px 0 12px; color: var(--muted); font: 500 9px var(--mono); border-top: 1px solid #f0eee8; }
+.artifact-card-foot { min-height: 38px; display: flex; align-items: center; gap: 7px; margin: 0 15px; padding: 10px 0 12px; color: var(--muted); font: 500 9px var(--mono); border-top: 1px solid #ececec; }
 /* .artifact-card-foot-actions: groups whichever of Exportar/Atualizar/Gerar
    apply to this row and pushes the group as a whole to the right — the
    buttons themselves used to carry their own margin-left:auto, which
@@ -544,7 +577,7 @@ body.pane-resizing iframe { pointer-events: none; }
    which also names this class ".dot" — kept ".status-dot" instead since
    that was already this app's own naming and the DOM already used it in
    more places. Modifier classes come from status.js's dotClass(). */
-.status-dot { width: 8px; height: 8px; border-radius: 50%; background: #d8d5ca; flex: none; }
+.status-dot { width: 8px; height: 8px; border-radius: 50%; background: #d4d4d8; flex: none; }
 .status-dot.done { background: var(--green); }
 .status-dot.working, .status-dot.queued { background: var(--blue); box-shadow: 0 0 0 4px var(--blue-soft); }
 .status-dot.paused { background: var(--amber); }
@@ -582,7 +615,7 @@ body.pane-resizing iframe { pointer-events: none; }
 .doc-source { white-space: pre-wrap; font-family: var(--mono); font-size: 11px; color: var(--muted); background: var(--surface-2); padding: 12px; }
 .doc-subhead { font-size: 11px; font-weight: 700; text-transform: uppercase; letter-spacing: .07em; color: var(--muted); margin: 18px 0 8px; }
 .doc-index { list-style: none; margin: 0; padding: 0; }
-.doc-index-item { display: flex; align-items: flex-start; gap: 12px; width: 100%; text-align: left; border: 0; border-radius: var(--radius-sm); border-bottom: 1px solid var(--line); background: transparent; padding: 14px 8px; font-size: 13px; color: #55534b; }
+.doc-index-item { display: flex; align-items: flex-start; gap: 12px; width: 100%; text-align: left; border: 0; border-radius: var(--radius-sm); border-bottom: 1px solid var(--line); background: transparent; padding: 14px 8px; font-size: 13px; color: #4a4a50; }
 .doc-index-item:hover { background: var(--surface-2); color: var(--ink); }
 .doc-index-icon { flex: none; width: 30px; height: 30px; border-radius: 8px; display: grid; place-items: center; background: var(--blue-soft); color: var(--blue-deep); margin-top: 1px; }
 .doc-index-copy { min-width: 0; display: flex; flex-direction: column; gap: 4px; }
@@ -654,14 +687,31 @@ body.pane-resizing iframe { pointer-events: none; }
    hairline. Mounted into .doc-footer (see reading-pane.js's setFooter), so
    it reads as a composer pinned at the bottom of the pane, not another
    block of the scrolling document. */
-.run-composer { display: flex; flex-direction: column; gap: 6px; border: 1px solid var(--line); border-radius: var(--radius-lg); background: var(--surface); box-shadow: var(--soft-shadow); padding: 10px 12px 8px; transition: border-color .15s; }
-.run-composer:focus-within { border-color: var(--blue); }
-.run-feedback-input { width: 100%; min-height: 80px; max-height: 240px; resize: vertical; border: 0; background: transparent; color: var(--ink); padding: 2px; font-size: 12px; font-family: var(--sans); outline: none; }
+.run-composer { display: flex; flex-direction: column; gap: 12px; border: 1px solid var(--line); border-radius: 14px; background: var(--surface); box-shadow: 0 1px 3px rgba(0,0,0,.06); padding: 18px 14px 12px 20px; cursor: text; transition: border-color .15s, box-shadow .15s; }
+.run-composer:focus-within { border-color: rgba(236,112,0,.55); box-shadow: 0 0 0 3px rgba(236,112,0,.1); }
+/* Grows with its content (composer.js's enhanceComposer), no resize grip. */
+.run-feedback-input { width: 100%; min-height: 68px; max-height: 320px; resize: none; overflow-y: auto; border: 0; background: transparent; color: var(--ink); padding: 0; font: 15px/1.5 var(--sans); outline: none; }
 .run-feedback-input::placeholder { color: var(--muted); }
-.run-composer-actions { display: flex; align-items: center; justify-content: space-between; gap: 8px; padding-top: 6px; border-top: 1px solid var(--line); }
+.run-composer-actions { display: flex; align-items: center; justify-content: space-between; gap: 8px; margin-left: -8px; cursor: default; }
 .run-composer-actions-right { display: flex; align-items: center; gap: 8px; }
-.wiki-ask-input { min-height: 44px; }
-.wiki-ask-composer .run-composer-actions .button { gap: 6px; }
+/* Borderless icon + label chips, like a chat app's mode/tool toggles. */
+.composer-tools { display: flex; align-items: center; gap: 2px; flex-wrap: wrap; min-width: 0; }
+.composer-chip { position: relative; display: inline-flex; align-items: center; gap: 6px; height: 30px; padding: 0 8px; border: 0; border-radius: 8px; background: transparent; color: var(--ink); font: 400 14px var(--sans); white-space: nowrap; cursor: pointer; }
+.composer-chip .icon { flex: none; }
+.composer-chip:hover:not(.static):not(:disabled) { background: var(--surface-2); }
+.composer-chip.static { cursor: default; }
+.composer-chip:disabled { opacity: .5; cursor: default; }
+.composer-toggle input { position: absolute; opacity: 0; width: 0; height: 0; pointer-events: none; }
+.composer-toggle:has(input:checked) { color: var(--vermilion); background: var(--blue-soft); }
+.composer-toggle:has(input:focus-visible) { box-shadow: 0 0 0 2px var(--vermilion); }
+/* Round send arrow: orange when there's something to send, greyed out
+   while the field is empty (.is-empty) or the request is in flight. */
+.composer-send { flex: none; width: 32px; height: 32px; border: 0; border-radius: 50%; display: grid; place-items: center; background: var(--vermilion); color: #fff; cursor: pointer; transition: background .15s, color .15s; }
+.composer-send:hover:not(:disabled) { background: var(--vermilion-dark); }
+.run-composer.is-empty .composer-send:not(.busy),
+.composer-send:disabled:not(.busy) { background: transparent; color: var(--muted); opacity: .6; cursor: default; }
+.composer-send.busy { cursor: default; }
+.composer-send.busy .icon { animation: sidebar-reconnect-spin 1s linear infinite; }
 .run-composer-warning-wrap { display: flex; flex-direction: column; gap: 8px; }
 .run-composer-warning { display: flex; align-items: flex-start; gap: 10px; background: rgba(255,171,0, .12); border: 1px solid rgba(255,171,0, .35); border-radius: var(--radius-md); padding: 10px 12px; }
 .run-composer-warning-icon { flex: none; color: var(--amber); margin-top: 1px; }
@@ -680,13 +730,13 @@ label.check input { accent-color: var(--blue); width: 15px; height: 15px; }
 .logs-step-group summary::-webkit-details-marker { display: none; }
 .logs-step-group summary small { color: var(--muted); font-family: var(--mono); font-size: 10px; }
 .logs-step-group summary strong { flex: 1 1 auto; min-width: 0; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
-.logs-step-group pre { margin: 0; padding: 10px 12px; border-top: 1px solid var(--line); white-space: pre-wrap; word-break: break-word; font-family: var(--mono); font-size: 11px; line-height: 1.6; color: #55534b; }
+.logs-step-group pre { margin: 0; padding: 10px 12px; border-top: 1px solid var(--line); white-space: pre-wrap; word-break: break-word; font-family: var(--mono); font-size: 11px; line-height: 1.6; color: #4a4a50; }
 .llm-call-body { display: grid; gap: 1px; background: var(--line); border-top: 1px solid var(--line); }
 .llm-call-block { background: var(--surface); padding: 10px 12px; }
 .llm-call-block-head { display: flex; align-items: center; justify-content: space-between; gap: 8px; margin: 0 0 6px; }
 .llm-call-block-head h5 { margin: 0; font-size: 10px; text-transform: uppercase; letter-spacing: .04em; color: var(--muted); }
 .llm-call-block-head .button { padding: 2px 8px; font-size: 10px; }
-.llm-call-block pre { margin: 0; padding: 0; border: 0; white-space: pre-wrap; word-break: break-word; font-family: var(--mono); font-size: 11px; line-height: 1.6; color: #55534b; max-height: 260px; overflow: auto; }
+.llm-call-block pre { margin: 0; padding: 0; border: 0; white-space: pre-wrap; word-break: break-word; font-family: var(--mono); font-size: 11px; line-height: 1.6; color: #4a4a50; max-height: 260px; overflow: auto; }
 
 /* Logs tab — per-project version, a full-width table (one row per run) with
    each row expanding a second, nested row right below it instead of the
@@ -704,7 +754,7 @@ label.check input { accent-color: var(--blue); width: 15px; height: 15px; }
 .logs-detail-row:hover { background: transparent; } /* a linha de detalhe não é clicável — não deve responder como se fosse */
 .logs-detail { padding: 14px; border-top: 1px solid var(--line); background: var(--bg-0); display: flex; flex-direction: column; gap: 10px; }
 .logs-detail-head { display: flex; align-items: center; justify-content: space-between; gap: 12px; }
-.logs-detail .logs-output { white-space: pre-wrap; word-break: break-word; font-family: var(--mono); font-size: 11px; line-height: 1.6; color: #55534b; padding: 0; background: transparent; }
+.logs-detail .logs-output { white-space: pre-wrap; word-break: break-word; font-family: var(--mono); font-size: 11px; line-height: 1.6; color: #4a4a50; padding: 0; background: transparent; }
 
 /* One button family for the whole app — replaces the old .btn/.pill-btn/
    .doc-action split (docs/design-system-senpai.html §05/§11: those three
@@ -722,7 +772,7 @@ label.check input { accent-color: var(--blue); width: 15px; height: 15px; }
 .button.primary:hover { background: var(--blue-deep); }
 .button.secondary { background: var(--surface); border-color: var(--line); color: var(--ink); box-shadow: var(--soft-shadow); }
 .button.secondary:hover { background: var(--surface-2); }
-.button.tertiary { background: var(--surface-2); color: #55534b; }
+.button.tertiary { background: var(--surface-2); color: #4a4a50; }
 .button.tertiary:hover { background: var(--surface-3); color: var(--ink); }
 .button.danger { background: var(--red); color: var(--surface); }
 .button.danger:hover { background: #b02a07; }
@@ -743,24 +793,24 @@ label.check input { accent-color: var(--blue); width: 15px; height: 15px; }
 .collection-map-actions { display: flex; align-items: center; gap: 7px; }
 .collection-filters, .wiki-group-filters { display: flex; gap: 5px; margin-bottom: 12px; overflow-x: auto; }
 .collection-filter { flex: none; border: 1px solid var(--line); background: var(--surface); border-radius: 999px; padding: 6px 9px; color: var(--muted); font-size: 10px; }
-.collection-filter:hover { border-color: #c9c5ba; color: var(--ink); }
+.collection-filter:hover { border-color: #c8c8cc; color: var(--ink); }
 .collection-filter.active { background: var(--ink); border-color: var(--ink); color: var(--surface); }
 .collection-map-empty { grid-column: 1 / -1; border: 1px dashed var(--line); border-radius: 14px; padding: 34px 20px; text-align: center; color: var(--muted); font-size: 12px; }
 
 /* Fontes */
 .source-card-grid { display: grid; grid-template-columns: repeat(auto-fit, minmax(190px, 1fr)); gap: 11px; }
 .source-card { min-height: 154px; border: 1px solid var(--line); border-radius: 15px; background: var(--surface); padding: 15px; display: flex; flex-direction: column; overflow: hidden; transition: transform .18s ease, box-shadow .18s ease, border-color .18s ease; }
-.source-card:hover { transform: translateY(-2px); border-color: #cbc7bb; box-shadow: var(--shadow); }
+.source-card:hover { transform: translateY(-2px); border-color: #c8c8cc; box-shadow: var(--shadow); }
 .source-card-kind { display: flex; align-items: center; gap: 7px; color: var(--muted); font: 700 9px var(--sans); letter-spacing: .09em; }
 .source-card-kind i { width: 27px; height: 27px; border-radius: 8px; display: grid; place-items: center; background: var(--blue-soft); color: var(--blue-deep); }
 .source-card.ready .source-card-kind i { background: #e5f5eb; color: #28724e; }
 .source-card > strong { margin: 15px 0 5px; color: var(--ink); font-size: 13px; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
 .source-card > p { margin: 0; color: var(--muted); font-size: 10px; line-height: 1.45; }
-.source-card > footer { display: flex; align-items: center; gap: 7px; margin-top: auto; padding-top: 12px; border-top: 1px solid #f0eee8; color: var(--muted); font: 500 9px var(--mono); }
+.source-card > footer { display: flex; align-items: center; gap: 7px; margin-top: auto; padding-top: 12px; border-top: 1px solid #ececec; color: var(--muted); font: 500 9px var(--mono); }
 .source-card-action { margin-left: auto; border: 0; background: transparent; color: var(--blue-deep); padding: 3px 0 3px 6px; font: 600 10px var(--sans); }
 .source-card-action:hover { color: var(--ink); }
 .source-card-action:disabled { opacity: .5; cursor: not-allowed; }
-.source-card .run-tracker { border-top: 1px solid #f0eee8; padding-top: 9px; }
+.source-card .run-tracker { border-top: 1px solid #ececec; padding-top: 9px; }
 
 /* Wiki — tree/ask/lint controls only now; the page itself renders in the
    shared reading pane. .wiki-doc stays as a class (applied to the reading
@@ -768,14 +818,14 @@ label.check input { accent-color: var(--blue); width: 15px; height: 15px; }
 .wiki-map-head { margin-top: 0; }
 .wiki-card-grid { display: grid; grid-template-columns: repeat(auto-fit, minmax(190px, 1fr)); gap: 11px; }
 .wiki-page-card { min-height: 154px; border: 1px solid var(--line); border-radius: 15px; background: var(--surface); overflow: hidden; transition: transform .18s ease, box-shadow .18s ease, border-color .18s ease; }
-.wiki-page-card:hover { transform: translateY(-2px); border-color: #cbc7bb; box-shadow: var(--shadow); }
+.wiki-page-card:hover { transform: translateY(-2px); border-color: #c8c8cc; box-shadow: var(--shadow); }
 .wiki-page-card.selected { border-color: var(--ink); box-shadow: 0 0 0 1px var(--ink); }
 .wiki-page-card > button { width: 100%; height: 100%; min-height: 154px; border: 0; background: transparent; padding: 15px; text-align: left; display: flex; flex-direction: column; align-items: flex-start; color: inherit; }
 .wiki-page-kind { display: flex; align-items: center; gap: 7px; color: var(--muted); font-size: 9px; text-transform: uppercase; letter-spacing: .09em; font-weight: 700; }
 .wiki-page-kind i { width: 27px; height: 27px; border-radius: 8px; display: grid; place-items: center; background: #eeebff; color: #6551af; }
 .wiki-page-card strong { margin: 15px 0 5px; color: var(--ink); font-size: 13px; }
 .wiki-page-card button > span:not(.wiki-page-kind) { color: var(--muted); font-size: 10px; line-height: 1.45; }
-.wiki-page-card footer { display: flex; align-items: center; gap: 7px; width: 100%; margin-top: auto; padding-top: 12px; border-top: 1px solid #f0eee8; color: var(--muted); font: 500 9px var(--mono); }
+.wiki-page-card footer { display: flex; align-items: center; gap: 7px; width: 100%; margin-top: auto; padding-top: 12px; border-top: 1px solid #ececec; color: var(--muted); font: 500 9px var(--mono); }
 
 /* The reading pane itself: serif body copy, mirroring the reference's
    document-viewer typography — everything else in the app (chrome, nav,
@@ -796,7 +846,7 @@ label.check input { accent-color: var(--blue); width: 15px; height: 15px; }
 .wiki-lint-stale { display: flex; align-items: flex-start; gap: 6px; margin: 0 0 10px; padding: 8px 10px; border-radius: var(--radius-md); background: rgba(255,171,0,.12); color: var(--amber); font-size: 12px; line-height: 1.4; }
 .wiki-lint-stale[hidden] { display: none; }
 .wiki-lint-stale svg { flex: none; margin-top: 2px; }
-.wiki-lint-report pre { background: var(--surface-2); color: #55534b; padding: 12px; font-size: 11px; overflow: auto; max-height: 260px; }
+.wiki-lint-report pre { background: var(--surface-2); color: #4a4a50; padding: 12px; font-size: 11px; overflow: auto; max-height: 260px; }
 
 /* Cite badges (mirror the ones templates already render inside artifacts) */
 .cite { display: inline-block; font-family: var(--mono); font-size: 10px; padding: 1px 6px; margin-left: 2px; }
@@ -922,6 +972,13 @@ label.check input { accent-color: var(--vermilion); }
 .modal input:focus, .modal select:focus, .modal textarea:focus { border-color: var(--vermilion); box-shadow: 0 0 0 3px rgba(236,112,0,.13); }
 .run-feedback-input { color: var(--rice-paper); }
 .run-composer { background: var(--surface-2); }
+.composer-chip { color: var(--rice-paper); }
+.composer-chip:hover:not(.static):not(:disabled) { background: var(--surface-3); }
+/* Light theme: white card on a light grey strip, as in a chat app. */
+html[data-theme='light'] .run-composer { background: #fff; border-color: #e3e3e3; box-shadow: 0 2px 8px rgba(0,0,0,.06); }
+html[data-theme='light'] .run-composer:focus-within { border-color: rgba(236,112,0,.5); box-shadow: 0 0 0 3px rgba(236,112,0,.08); }
+html[data-theme='light'] .composer-chip { color: #1a1a1a; }
+html[data-theme='light'] .composer-chip:hover:not(.static):not(:disabled) { background: #f0f0f0; }
 .run-generating-stage { color: var(--muted); }
 .modal-backdrop { background: rgba(0,0,0,.7); backdrop-filter: blur(6px); }
 .modal { border-color: var(--line); border-radius: var(--radius-lg); background: var(--surface); }
@@ -966,7 +1023,7 @@ html, body { font-size: 15px; }
 .doc-empty, .doc-index-item { font-size: 15px; }
 .doc-source, .doc-subhead, .doc-loading-label { font-size: 12px; }
 .run-tracker, label.check { font-size: 13px; }
-.run-feedback-input { font-size: 14px; }
+.run-feedback-input { font-size: 15px; }
 .button { font-size: 14px; }
 .button.small { font-size: 12px; }
 .button.large { font-size: 15px; }
