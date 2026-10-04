@@ -30,5 +30,5 @@ window.addEventListener('unhandledrejection', (event) => {
 mountShell(document.getElementById('app')).catch((err) => {
   reportError('mountShell failed', err);
   document.getElementById('app').innerHTML =
-    `<div style="padding:40px;font-family:sans-serif;color:#a23b2e;background:#faf9f6;min-height:100vh">Falha ao iniciar a interface: ${String(err)}</div>`;
+    `<div style="padding:40px;font-family:sans-serif;color:#b02a07;background:#f7f7f7;min-height:100vh">Falha ao iniciar a interface: ${String(err)}</div>`;
 });

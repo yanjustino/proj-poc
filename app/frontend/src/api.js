@@ -47,6 +47,32 @@ export async function waitUntilReady() {
   }
 }
 
+// ensureReady: every call that needs the mhl bridge (StartRun, GetRunStatus,
+// WatchRun, ...) waits here first, so one made while mhl is still compiling
+// the workflows — the sidebar and the restored work-item now render from
+// disk before that (LocalProjects, shell.js) — waits for it instead of
+// failing with "mhl bridge is not running". Above all, a reattach to a
+// paused run must not fail early: its caller would drop the run from
+// active-runs.js. Once ready it costs nothing; a failure is not cached, so
+// "Tentar novamente" (retryStartup) gets a fresh wait.
+let readyPromise = null;
+export function ensureReady() {
+  if (!readyPromise) {
+    readyPromise = waitUntilReady().catch((err) => {
+      readyPromise = null;
+      throw err;
+    });
+  }
+  return readyPromise;
+}
+
+// localProjectList: the work-items read straight from disk by the Go side
+// (App.LocalProjects), without mhl — same records as workItemList, for the
+// sidebar at launch.
+export async function localProjectList() {
+  return parseJSON(await App.LocalProjects(), 'LocalProjects');
+}
+
 // retryStartup refaz a inicialização quando ela falhou (sem bridge de pé);
 // com o bridge já pronto, não faz nada — quem precisa só recarregar a
 // lista não deve derrubar uma conexão que funciona.
@@ -60,14 +86,17 @@ export async function appVersion() {
 }
 
 export async function listWorkflows() {
+  await ensureReady();
   return parseJSON(await App.ListWorkflows(), 'ListWorkflows');
 }
 
 export async function getWorkflowManifest(name) {
+  await ensureReady();
   return parseJSON(await App.GetWorkflowManifest(name), 'GetWorkflowManifest');
 }
 
 export async function getRunStatus(runId) {
+  await ensureReady();
   return parseJSON(await App.GetRunStatus(runId), 'GetRunStatus');
 }
 
@@ -261,6 +290,7 @@ export { isFullyTerminal };
 // direct return value of StartRun covers that race today, but keeping the
 // order right here matters if that ever changes).
 export async function startAndWatch(workflow, args, onUpdate) {
+  await ensureReady();
   const start = await parseJSON(await App.StartRun(workflow, JSON.stringify(args)), 'StartRun');
   onUpdate(start);
   const runId = start.runId;
@@ -304,6 +334,7 @@ export async function watchExistingRun(runId, onUpdate) {
     }
   });
 
+  await ensureReady();
   const current = await parseJSON(await App.GetRunStatus(runId), 'GetRunStatus');
   onUpdate(current);
   if (!isFullyTerminal(current)) {
@@ -320,6 +351,7 @@ export async function watchExistingRun(runId, onUpdate) {
 // registered for this runId (never torn down on pause, see isFullyTerminal
 // above), so no new subscription is needed here.
 export async function resumeAndWatch(runId, args, onUpdate) {
+  await ensureReady();
   const resumed = await parseJSON(await App.ResumeRun(runId, JSON.stringify(args)), 'ResumeRun');
   onUpdate(resumed);
   if (!isFullyTerminal(resumed)) {
@@ -335,6 +367,7 @@ export async function resumeAndWatch(runId, args, onUpdate) {
 // a 'run:<runId>' event, so the caller must apply this return value itself
 // rather than waiting on the same EventsOn subscription startAndWatch used.
 export async function cancelRun(runId) {
+  await ensureReady();
   return parseJSON(await App.CancelRun(runId), 'CancelRun');
 }
 
@@ -486,6 +519,7 @@ function callWorkflowOnce(workflow, args) {
 }
 
 async function runWorkflowOnce(workflow, args) {
+  await ensureReady();
   let status = await parseJSON(await App.StartRun(workflow, JSON.stringify(args)), 'StartRun');
   const deadline = Date.now() + CALL_TIMEOUT_MS;
 

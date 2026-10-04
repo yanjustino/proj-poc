@@ -8,6 +8,8 @@ import { renderMudancasTab } from './tab-mudancas.js';
 import { showEmpty as showEmptyReadingPane } from '../reading-pane.js';
 import { openConfirmDeleteModal } from './confirm-delete-modal.js';
 import { listActiveRunsForProject } from '../active-runs.js';
+import { llmJobsForProject, subscribeLlmJobs } from '../llm-queue.js';
+import { ingestQueueSnapshot, subscribeIngestQueue } from '../ingest-queue.js';
 import { STATE_LABEL } from '../run-tracker.js';
 import { dotClass } from '../status.js';
 import { icon } from '../icons.js';
@@ -92,7 +94,10 @@ export async function renderWorkItemView(container, project, { initialTab = 'art
         <p>${formatDate(project.created_at)} · ${escapeHtml(project.id)}</p>
         ${project.continuidade_de ? `<p class="hero-continuidade">Continuidade de: ${escapeHtml(project.continuidade_de)}</p>` : ''}
       </div>
-      <button class="icon-btn" aria-label="Excluir work-item" title="Excluir work-item" data-delete>${icon('trash', 15)}</button>
+      <div class="hero-actions">
+        <div class="token-pill" data-token-pill hidden></div>
+        <button class="icon-btn" aria-label="Excluir work-item" title="Excluir work-item" data-delete>${icon('trash', 15)}</button>
+      </div>
     </div>
     <div class="summary" data-summary></div>
     <div class="tabs">
@@ -106,6 +111,7 @@ export async function renderWorkItemView(container, project, { initialTab = 'art
   `;
 
   const summaryEl = container.querySelector('[data-summary]');
+  const tokenPillEl = container.querySelector('[data-token-pill]');
   const tabContent = container.querySelector('[data-tab-content]');
   const tabButtons = [...container.querySelectorAll('.tab-btn')];
 
@@ -114,20 +120,31 @@ export async function renderWorkItemView(container, project, { initialTab = 'art
     if (deleted) await onDeleted?.();
   });
 
-  // pipelineStage resolves "what's actually happening right now" across
-  // every run this project has ever started (active-runs.js's registry,
-  // not just whatever tab-artefatos.js's own trackers Map currently holds —
-  // that's thrown away on every remount, this survives it, see that
-  // module's own comment). A paused run is the most actionable state
-  // (someone needs to actually look at it), so it wins over a merely
-  // working/queued one when both exist; a registry entry whose run mhl no
-  // longer knows about (long finished, or from a session so old the
-  // process restarted) fails GetRunStatus and is silently dropped here —
-  // tab-artefatos.js's own reattach flow is what actually clears a truly
-  // dead entry, this is read-only.
+  // pipelineStage resolves "what's actually happening right now" for this
+  // work-item from every place a run can be: the app's own queues (a
+  // generation waiting for an LLM slot, a source waiting to be ingested —
+  // neither has a runId yet) and active-runs.js's registry (every run
+  // started, from any tab, surviving remounts and restarts). A paused run is
+  // the most actionable state (someone needs to look at it), so it wins over
+  // a working/queued one; a registry entry mhl no longer knows about fails
+  // GetRunStatus and is dropped here — clearing it is the owning tab's job.
   async function pipelineStage() {
-    const entries = listActiveRunsForProject(project.id);
-    if (entries.length === 0) return { state: null, count: 0 };
+    const live = [];
+    const seenRunIds = new Set();
+    for (const { key, status } of llmJobsForProject(project.id)) {
+      if (status.runId) seenRunIds.add(status.runId);
+      if (status.state === 'working' || status.state === 'queued') {
+        live.push({ state: status.state, artifact: status.vars?.artifact || key.slice(project.id.length + 1) });
+      }
+    }
+    const ingest = ingestQueueSnapshot(project.id);
+    if (ingest.running) {
+      if (ingest.running.status?.runId) seenRunIds.add(ingest.running.status.runId);
+      live.push({ state: 'working', artifact: `ingest:${ingest.running.name}` });
+    }
+    ingest.queued.forEach((name) => live.push({ state: 'queued', artifact: `ingest:${name}` }));
+
+    const entries = listActiveRunsForProject(project.id).filter(({ runId }) => !seenRunIds.has(runId));
     const statuses = await Promise.all(
       entries.map(({ runId }) =>
         getRunStatus(runId)
@@ -135,18 +152,40 @@ export async function renderWorkItemView(container, project, { initialTab = 'art
           .catch(() => null),
       ),
     );
-    const live = statuses.filter(Boolean);
+    // status.vars is already a plain object here — getRunStatus parses it.
+    for (const status of statuses.filter(Boolean)) {
+      const vars = status.vars || {};
+      live.push({ state: status.state, artifact: vars.artifact || vars.current_artifact || null });
+    }
     if (live.length === 0) return { state: null, count: 0 };
     const paused = live.filter((s) => s.state === 'paused');
-    const chosen = paused[0] || live[0];
-    const count = (paused.length > 0 ? paused : live).length;
-    // status.vars is already a plain object by the time it reaches here —
-    // GetRunStatus's own json.RawMessage field round-trips through one
-    // JSON.parse (api.js's getRunStatus), not two (same as run-tracker.js's
-    // own `s.vars || {}` reads it).
-    const vars = chosen.vars || {};
-    return { state: chosen.state, count, artifact: vars.artifact || vars.current_artifact || null };
+    const working = live.filter((s) => s.state === 'working');
+    const group = paused.length ? paused : working.length ? working : live;
+    return { state: group[0].state, count: group.length, artifact: stageArtifactLabel(group[0].artifact) };
   }
+
+  // The stage card on its own: refreshed live (queue notifications plus a
+  // short poll for transitions only mhl sees, like a resumed review) without
+  // re-running the summary's mhl queries.
+  async function refreshStage() {
+    const card = summaryEl.querySelector('[data-goto-artefatos]');
+    if (!card || !container.isConnected) return;
+    const stage = await pipelineStage();
+    const { label, sub } = stageText(stage);
+    card.className = `summary-card summary-card-progress summary-card-clickable ${stage.state ? `summary-card-stage-${dotClass(stage.state)}` : ''}`;
+    card.querySelector('[data-stage-head]').innerHTML = `<b>${escapeHtml(label)}</b><span>${escapeHtml(sub)}</span>`;
+  }
+
+  let stageTimer = null;
+  function scheduleStage() {
+    clearTimeout(stageTimer);
+    stageTimer = setTimeout(() => refreshStage().catch(() => {}), 250);
+  }
+  const unsubscribeLlm = subscribeLlmJobs((key) => {
+    if (key.startsWith(`${project.id}:`)) scheduleStage();
+  });
+  const unsubscribeIngest = subscribeIngestQueue(project.id, scheduleStage);
+  const stagePoll = setInterval(() => refreshStage().catch(() => {}), STAGE_POLL_MS);
 
   // Last successful reading of each mhl-backed source, for this work-item.
   // A failed refresh keeps showing these (flagged as not refreshed) instead
@@ -200,9 +239,8 @@ export async function renderWorkItemView(container, project, { initialTab = 'art
     const totalCache = cacheCreation + cacheRead;
     const cost = summarizeCost(usage);
     const cacheSharePct = tokensIn > 0 ? Math.round((cacheRead / tokensIn) * 100) : 0;
-    // Cost gets its own visible row (below) now — the tooltip keeps just
-    // the cache creation/read split, detail that doesn't earn a whole row
-    // of its own the way cost does.
+    // The pill shows cache share, input, output and cost; its tooltip adds
+    // the cache creation/read split.
     const tokensTitle =
       [
         totalCache > 0 ? `${cacheCreation.toLocaleString('pt-BR')} tokens de criação de cache` : null,
@@ -214,14 +252,7 @@ export async function renderWorkItemView(container, project, { initialTab = 'art
     const ingestedCount = rawNodes.filter((n) => ingestedNames.includes(n.name)).length;
     const lastActivity = productivity?.last_activity_at ? formatRelativeTime(Date.parse(productivity.last_activity_at)) : '—';
 
-    // Singular: the specific artifact ("ADR") reads as the headline, its
-    // state ("aguarda aprovação") as the subtext. Plural: no single
-    // artifact to headline, so the count takes that spot instead and the
-    // shared state (every counted run is either all-paused or all-active,
-    // never mixed — see pipelineStage's own paused-wins-over-active choice)
-    // still reads fine as the subtext either way.
-    const stageLabel = !stage.state ? 'Nada em andamento' : stage.count > 1 ? `${stage.count} execuções` : stage.artifact || STATE_LABEL[stage.state] || stage.state;
-    const stageSub = !stage.state ? 'todas as execuções concluídas ou paradas' : STATE_LABEL[stage.state] || stage.state;
+    const { label: stageLabel, sub: stageSub } = stageText(stage);
 
     summaryEl.innerHTML = `
       <div class="summary-card summary-card-progress">
@@ -247,7 +278,7 @@ export async function renderWorkItemView(container, project, { initialTab = 'art
       <div class="summary-card summary-card-progress summary-card-clickable ${stage.state ? `summary-card-stage-${dotClass(stage.state)}` : ''}" data-goto-artefatos title="Ver na aba Artefatos">
         <div class="summary-progress-head">
           <span class="summary-icon">${icon('clock', 16)}</span>
-          <div><b>${escapeHtml(stageLabel)}</b><span>${escapeHtml(stageSub)}</span></div>
+          <div data-stage-head><b>${escapeHtml(stageLabel)}</b><span>${escapeHtml(stageSub)}</span></div>
         </div>
         <div class="summary-tokens-stack">
           <div class="summary-tokens-row">${icon('inbox', 13)}<b>${ingestedCount} de ${rawNodes.length}</b><span>fontes ingeridas</span></div>
@@ -256,19 +287,24 @@ export async function renderWorkItemView(container, project, { initialTab = 'art
         </div>
       </div>
       ${productivityCardHtml(productivity, productivityFailure)}
-      <div class="summary-card summary-card-progress summary-card-tokens" title="${escapeHtml(tokensTitle)}">
-        <div class="summary-progress-head">
-          <span class="summary-icon">${icon('layers', 16)}</span>
-          <div><b>Uso de tokens</b></div>
-        </div>
-        <div class="summary-tokens-stack">
-          <div class="summary-tokens-row">${icon('arrowDown', 13)}<b>${tokensIn.toLocaleString('pt-BR')}</b><span>entrada</span></div>
-          <div class="summary-tokens-row">${icon('arrowUp', 13)}<b>${tokensOut.toLocaleString('pt-BR')}</b><span>saída</span></div>
-          ${totalCache > 0 ? `<div class="summary-tokens-row">${icon('layers', 13)}<b>${cacheSharePct}%</b><span>do input veio do cache</span></div>` : ''}
-          <div class="summary-tokens-row">${icon('dollarSign', 13)}<b>${escapeHtml(cost.value)}</b><span>${escapeHtml(cost.label)}</span></div>
-          ${failureRowHtml(usageFailure)}
-        </div>
-      </div>
+    `;
+
+    // Token usage lives only in this hero pill (it replaced the "Uso de
+    // tokens" summary card): cache share, input, output, cost.
+    tokenPillEl.hidden = false;
+    tokenPillEl.title = `${tokensTitle} · US$: ${cost.label}${usageFailure ? ` · ${usageFailure.text}` : ''}`;
+    tokenPillEl.classList.toggle('token-pill-stale', Boolean(usageFailure));
+    tokenPillEl.innerHTML = `
+      <span class="token-pill-label">Tokens</span>
+      <span class="token-pill-group">
+        <span class="token-pill-item" aria-label="do input veio do cache">${icon('gauge', 13)}${cacheSharePct}%</span>
+        <span class="token-pill-sep"></span>
+        <span class="token-pill-item" aria-label="tokens de entrada">${icon('arrowDown', 13)}${tokensIn.toLocaleString('pt-BR')}</span>
+        <span class="token-pill-sep"></span>
+        <span class="token-pill-item" aria-label="tokens de saída">${icon('arrowUp', 13)}${tokensOut.toLocaleString('pt-BR')}</span>
+        <span class="token-pill-sep"></span>
+        <span class="token-pill-item" aria-label="${escapeHtml(cost.label)}">${icon('dollarSign', 13)}${escapeHtml(cost.value)}</span>
+      </span>
     `;
 
     const stageCard = summaryEl.querySelector('[data-goto-artefatos]');
@@ -311,7 +347,35 @@ export async function renderWorkItemView(container, project, { initialTab = 'art
   await refreshSummary();
   await showTab(initialTab);
 
-  return () => disposeTab?.();
+  return () => {
+    disposeTab?.();
+    clearInterval(stagePoll);
+    clearTimeout(stageTimer);
+    unsubscribeLlm();
+    unsubscribeIngest();
+  };
+}
+
+const STAGE_POLL_MS = 4000;
+
+// Singular: the specific artifact ("adr") headlines, its state the
+// subtext. Plural: the count headlines — the group is all-paused or
+// all-working (see pipelineStage), so the shared state still reads right.
+function stageText(stage) {
+  if (!stage.state) return { label: 'Nada em andamento', sub: 'todas as execuções concluídas ou paradas' };
+  const sub = STATE_LABEL[stage.state] || stage.state;
+  if (stage.count > 1) return { label: `${stage.count} execuções`, sub };
+  return { label: stage.artifact || sub, sub };
+}
+
+// Run names as people read them: "ingest:ata.pdf" → "Ingestão: ata.pdf".
+function stageArtifactLabel(artifact) {
+  if (!artifact) return null;
+  if (artifact.startsWith('ingest:')) return `Ingestão: ${artifact.slice(7)}`;
+  if (artifact.startsWith('concept:')) return `Conceito: ${artifact.slice(8)}`;
+  if (artifact === 'lint' || artifact === 'wiki-lint') return 'Verificação da wiki';
+  if (artifact === 'query' || artifact === 'wiki-query') return 'Pergunta à wiki';
+  return artifact;
 }
 
 function formatDate(iso) {

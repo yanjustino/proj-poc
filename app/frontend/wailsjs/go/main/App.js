@@ -114,6 +114,10 @@ export function ListWorkflows() {
   return window['go']['main']['App']['ListWorkflows']();
 }
 
+export function LocalProjects() {
+  return window['go']['main']['App']['LocalProjects']();
+}
+
 export function LogFrontendError(arg1) {
   return window['go']['main']['App']['LogFrontendError'](arg1);
 }

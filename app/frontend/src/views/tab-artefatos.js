@@ -24,7 +24,6 @@ import { icon } from '../icons.js';
 import { isEditable, isEditorOpen, mountArtifactEditor } from '../artifact-editor.js';
 import { approvalRecoveryArgs, waitForRecoveryTerminal } from '../checkpoint-recovery.js';
 import { enqueueLlmRun, llmJob, cancelQueuedLlmJob, subscribeLlmJobs } from '../llm-queue.js';
-import { getAutoReview } from '../preferences.js';
 import { formatRelativeTime } from '../time-format.js';
 
 const LABELS = {
@@ -1449,6 +1448,10 @@ export async function renderArtefatosTab(container, project, { onChanged }) {
       onSaved: async () => {
         await refreshDoneState();
         if (active) renderList();
+        // ArtifactSave records the edit in changes.jsonl — the summary's
+        // "pedidos de mudança" (and última atividade) must count it now,
+        // not only on the next remount.
+        onChanged();
       },
       onClose: () => {
         if (active) renderDetail();
@@ -2263,9 +2266,10 @@ export async function renderArtefatosTab(container, project, { onChanged }) {
     // entirely and writes straight to artifacts/ — every generation looked
     // "auto-approved" with no Aprovar step at all. Pinning it here keeps the
     // review gate always on, just without a toggle to accidentally turn off.
-    // autorrevisao: the sidebar toggle (preferences.js) — the workflow makes
-    // at most one extra LLM call when the draft fails its checks.
-    const args = { ...runTargetArgs(row), buddy: true, autorrevisao: getAutoReview(), ...(feedback ? { feedback } : {}) };
+    // autorrevisao: true always, for the same reason — an internal step, not
+    // a user choice (the sidebar toggle is gone). The workflow makes at most
+    // one extra LLM call when the draft fails its checks, before the pause.
+    const args = { ...runTargetArgs(row), buddy: true, autorrevisao: true, ...(feedback ? { feedback } : {}) };
 
     // Status arrives through onLlmJobUpdate (subscribed at mount), not a
     // callback bound to this mount — the job may start after the tab has

@@ -100,6 +100,14 @@ export function llmJob(key) {
   return jobs.get(key)?.status ?? null;
 }
 
+// llmJobsForProject: every job this queue still owns for `projectId`
+// ({key, status}) — queued ones have no runId yet, so active-runs.js doesn't
+// know about them (workitem-view.js's "em andamento" card reads both).
+export function llmJobsForProject(projectId) {
+  const prefix = `${projectId}:`;
+  return [...jobs.entries()].filter(([key]) => key.startsWith(prefix)).map(([key, job]) => ({ key, status: job.status }));
+}
+
 // cancelQueuedLlmJob drops a job that hasn't started yet. Returns false when
 // the job already has a run in mhl — that one is canceled through mhl.
 export function cancelQueuedLlmJob(key) {

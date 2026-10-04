@@ -1,8 +1,8 @@
-import { listProjectDir, readProjectFile, startAndWatch, watchExistingRun, isFullyTerminal, wikiSyncHtml } from '../api.js';
+import { listProjectDir, readProjectFile, startAndWatch, watchExistingRun, isFullyTerminal, wikiSyncHtml, cancelRun } from '../api.js';
 import { setActiveRun, getActiveRun, clearActiveRun } from '../active-runs.js';
 import { renderMarkdown } from '../markdown.js';
 import { createRunTracker } from '../run-tracker.js';
-import { showMarkdownDoc, showHtmlDoc, showEmpty } from '../reading-pane.js';
+import { showMarkdownDoc, showHtmlDoc, showEmpty, setFooter, beginCustom, setToolbarAction } from '../reading-pane.js';
 import { icon } from '../icons.js';
 import { formatRelativeTime } from '../time-format.js';
 
@@ -22,8 +22,8 @@ const GROUP_DESCRIPTIONS = {
   answers: 'Respostas arquivadas para consulta posterior.',
 };
 
-// renderWikiTab owns only the middle column now (ask box + group tabs/tree
-// + lint controls) — the actual page content goes to the shared reading
+// renderWikiTab owns only the middle column now (group tabs/tree + lint
+// controls) — the actual page content goes to the shared reading
 // pane (reading-pane.js), which persists across tab switches and is what
 // the user reads from, matching the 3-column reference layout (nav | list |
 // document).
@@ -43,23 +43,13 @@ export async function renderWikiTab(container, project) {
   // fontes/entidades/conceitos, the combined list became too long to
   // navigate at a glance.
   container.innerHTML = `
-    <section class="wiki-query-card">
-      <div class="wiki-query-heading"><span>${icon('zap', 15)}</span><div><strong>Pergunte à sua wiki</strong><small>Consulte o conhecimento consolidado neste work-item.</small></div></div>
-      <div class="wiki-ask">
-        <input type="text" placeholder="O que você quer saber?" data-question />
-        <button class="button primary" data-ask>Perguntar</button>
-      </div>
-      <label class="check"><input type="checkbox" data-file-answer /> Arquivar a resposta como página nova</label>
-      <div data-ask-tracker></div>
-      <div class="wiki-answer" data-answer hidden></div>
-    </section>
-
     <div class="collection-map-head wiki-map-head">
       <div>
         <div class="collection-map-title"><h2>Páginas da wiki</h2><span data-wiki-count>0 páginas</span></div>
         <p>Conhecimento organizado por fontes, entidades e conceitos.</p>
       </div>
       <div class="collection-map-actions">
+        <button class="button tertiary small" data-lint-open hidden>${icon('fileText', 14)} Última verificação</button>
         <button class="button tertiary small" data-lint-btn>${icon('checkCircle', 14)} Verificar wiki</button>
         <div class="view-toggle" data-view-toggle>
           <button class="view-toggle-btn" data-view="cards" title="Ver como cards">${icon('grid', 15)}</button>
@@ -78,15 +68,43 @@ export async function renderWikiTab(container, project) {
 
     <div class="wiki-lint-report">
       <div data-lint-tracker></div>
-      <div data-lint-result></div>
     </div>
   `;
+
+  // "Pergunte à sua wiki" lives in the reading pane, not in this column: the
+  // same chat-style composer as a paused run's (.run-composer), pinned to
+  // the pane's footer while the Índice — or an answer it produced — is
+  // open. Built once per mount, so detaching it (setHeader clears the
+  // footer on every page switch) keeps the input and a run's live tracker
+  // intact for when the Índice is opened again.
+  const askComposer = document.createElement('div');
+  askComposer.className = 'run-composer wiki-ask-composer';
+  askComposer.innerHTML = `
+    <textarea class="run-feedback-input wiki-ask-input" rows="2" placeholder="Pergunte à wiki — o que você quer saber sobre este work-item?" data-question></textarea>
+    <div data-ask-tracker></div>
+    <div class="run-composer-actions">
+      <label class="check"><input type="checkbox" data-file-answer /> Arquivar a resposta como página nova</label>
+      <button class="button primary small" data-ask>${icon('zap', 13)} Perguntar</button>
+    </div>
+  `;
+
+  // The one "criar página de conceito" run this tab follows (see
+  // startConcept).
+  // pausedRunId: the paused run an approval replaced (see approveConcept),
+  // retired once the replacement has written the page.
+  const concept = { run: false, title: '', tracker: null, pausedRunId: null };
+  // paneView: what this tab last put in the reading pane — 'report' (última
+  // verificação), 'concept' (the creation above) or null (a page, an
+  // answer). A concept status change only repaints the view that is
+  // actually showing, never takes the pane over.
+  let paneView = null;
 
   const tabsEl = container.querySelector('[data-tree-tabs]');
   const treeEl = container.querySelector('[data-tree]');
   const wikiCountEl = container.querySelector('[data-wiki-count]');
   const searchInput = container.querySelector('[data-wiki-search]');
   const lintStaleEl = container.querySelector('[data-lint-stale]');
+  const lintOpenButton = container.querySelector('[data-lint-open]');
   showEmpty('Selecione uma página da wiki para ler.');
 
   // latestByName is listProjectDir's own result, keyed by top-level name
@@ -156,8 +174,14 @@ export async function renderWikiTab(container, project) {
   window.addEventListener('message', onWikiMessage);
 
   async function openPage(root, relative, label) {
+    paneView = null;
     openPath = relative;
     markActiveRow();
+    await showPage(root, relative, label);
+    if (active && openPath === relative && relative === 'index.md') setFooter(askComposer);
+  }
+
+  async function showPage(root, relative, label) {
     try {
       const html = await readProjectFile(project.id, root, htmlRelativeFor(relative));
       showHtmlDoc(label, html, { allowScripts: true });
@@ -386,6 +410,7 @@ export async function renderWikiTab(container, project) {
     }
     latestByName = Object.fromEntries(nodes.map((n) => [n.name, n]));
     lintStaleEl.hidden = !lintIsBehind(latestByName);
+    lintOpenButton.hidden = !latestByName['lint.json'] && !latestByName['lint.md'];
     const pageCount = nodes.reduce((total, node) => total + (node.isDir ? (node.children || []).filter((child) => !child.isDir).length : node.name === 'index.md' ? 1 : 0), 0);
     wikiCountEl.textContent = `${pageCount} ${pageCount === 1 ? 'página' : 'páginas'}`;
     if (groupsWithContent().length === 0) {
@@ -408,11 +433,10 @@ export async function renderWikiTab(container, project) {
     showEmpty('Adicione fontes na aba "Fontes" para gerar a wiki.');
   }
 
-  const questionInput = container.querySelector('[data-question]');
-  const fileAnswerCheckbox = container.querySelector('[data-file-answer]');
-  const askButton = container.querySelector('[data-ask]');
-  const askTrackerEl = container.querySelector('[data-ask-tracker]');
-  const answerEl = container.querySelector('[data-answer]');
+  const questionInput = askComposer.querySelector('[data-question]');
+  const fileAnswerCheckbox = askComposer.querySelector('[data-file-answer]');
+  const askButton = askComposer.querySelector('[data-ask]');
+  const askTrackerEl = askComposer.querySelector('[data-ask-tracker]');
 
   // Verificar e Perguntar continuam rodando no mhl quando o usuário troca de
   // aba; o runId fica em active-runs.js para a próxima montagem desta aba
@@ -454,39 +478,217 @@ export async function renderWikiTab(container, project) {
   async function showAnswer(result) {
     const answer = result || {};
     const title = answer.answer_title || questionInput.value.trim() || 'Resposta';
-    answerEl.hidden = false;
-    answerEl.innerHTML = `<b>${escapeHtml(title)}</b><div>${renderMarkdown(answer.answer_body || '')}</div>`;
+    paneView = null;
+    openPath = null;
+    markActiveRow();
     showMarkdownDoc(title, renderMarkdown(answer.answer_body || ''));
+    // Keeps the composer under the answer, for a follow-up question.
+    questionInput.value = '';
+    askTrackerEl.innerHTML = '';
+    setFooter(askComposer);
     if (answer.filed_as) {
       await loadSearchIndex();
       await buildTree();
     }
   }
 
-  askButton.addEventListener('click', () => {
+  function ask() {
     const question = questionInput.value.trim();
-    if (!question) return;
-    answerEl.hidden = true;
+    if (!question || askButton.disabled) return;
     const args = { project_id: project.id, action: 'query', question, file_answer: fileAnswerCheckbox.checked };
     followRun(askKey, askButton, askTrackerEl, (onUpdate) => startAndWatch('Wiki', args, onUpdate), showAnswer);
+  }
+  askButton.addEventListener('click', ask);
+  // Enter pergunta; Shift+Enter quebra a linha.
+  questionInput.addEventListener('keydown', (event) => {
+    if (event.key === 'Enter' && !event.shiftKey && !event.isComposing) {
+      event.preventDefault();
+      ask();
+    }
   });
 
   const lintButton = container.querySelector('[data-lint-btn]');
   const lintTrackerEl = container.querySelector('[data-lint-tracker]');
-  const lintResultEl = container.querySelector('[data-lint-result]');
+  const conceptKey = `${project.id}:wiki-concept`;
 
-  // A verificação grava alertas nas páginas: recarrega a lista e o índice
-  // de busca junto com o relatório.
-  async function showLintReport(result) {
-    lintResultEl.innerHTML = renderLintReport(result);
+  // A verificação grava alertas nas páginas e regera wiki/html
+  // (record_lint): recarrega a lista e o índice de busca, e abre o
+  // relatório na pré-visualização — é dali que saem as ações por item.
+  async function showLintReport() {
+    lintTrackerEl.innerHTML = '';
     await loadSearchIndex();
     await buildTree();
+    if (active) await openLintReport();
   }
 
   lintButton.addEventListener('click', () => {
-    lintResultEl.innerHTML = '';
     followRun(lintKey, lintButton, lintTrackerEl, (onUpdate) => startAndWatch('Wiki', { project_id: project.id, action: 'lint' }, onUpdate), showLintReport);
   });
+  lintOpenButton.addEventListener('click', () => openLintReport());
+
+  // "Última verificação": wiki/lint.json (gravado por WikiLint.apply) vira
+  // o relatório com ações; uma wiki verificada antes do lint.json existir
+  // só tem o lint.md, mostrado como texto.
+  async function openLintReport() {
+    paneView = 'report';
+    openPath = null;
+    markActiveRow();
+    let report = null;
+    try {
+      report = JSON.parse(await readProjectFile(project.id, 'wiki', 'lint.json'));
+    } catch {
+      try {
+        const text = await readProjectFile(project.id, 'wiki', 'lint.md');
+        if (active) showMarkdownDoc('Última verificação', renderMarkdown(text));
+      } catch {
+        if (active) showEmpty('A wiki ainda não foi verificada.');
+      }
+      return;
+    }
+    if (!active) return;
+    const when = report.generated_at ? formatRelativeTime(Date.parse(report.generated_at)) : '';
+    const body = beginCustom('Última verificação', 'verificação');
+    body.classList.add('lint-doc');
+    body.innerHTML = renderLintReport(report, { conceptState, when, titleOf: (ref) => titleByPath[`${ref}.md`] });
+    body.querySelector('[data-open-index]')?.addEventListener('click', () => openPage('wiki', 'index.md', 'Índice'));
+    body.querySelectorAll('[data-jump]').forEach((el) => {
+      el.addEventListener('click', () => body.querySelector(`#${el.dataset.jump}`)?.scrollIntoView({ behavior: 'smooth', block: 'start' }));
+    });
+    body.querySelectorAll('[data-open-page]').forEach((el) => {
+      el.addEventListener('click', () => openPage('wiki', `${el.dataset.openPage}.md`, titleByPath[`${el.dataset.openPage}.md`] || el.dataset.openPage));
+    });
+    body.querySelectorAll('[data-create-concept]').forEach((el) => {
+      const item = report.missing_concepts[Number(el.dataset.createConcept)];
+      el.addEventListener('click', () => (concept.run ? showConcept() : startConcept(item)));
+    });
+  }
+
+  // conceptState says what the report can offer for a missing concept: a
+  // page that already exists (ingested since, or created here), the one
+  // creation in flight, or "Criar página".
+  function conceptState(title) {
+    const key = fold(title).trim();
+    const page = searchIndex.find((e) => e.group === 'concepts' && (fold(e.title).trim() === key || e.aliases.some((a) => fold(a).trim() === key)));
+    if (page) return { kind: 'exists', path: page.path.replace(/\.md$/, '') };
+    if (concept.run && fold(concept.title).trim() === key) return { kind: 'running', state: concept.tracker?.status?.state };
+    return { kind: concept.run ? 'busy' : 'create' };
+  }
+
+  // Criar página de conceito (Wiki action create_concept): a LLM escreve a
+  // página só com o que a wiki já diz, e a run pausa (buddy) para o revisor
+  // aprovar, pedir mudança (Regerar) ou cancelar — o mesmo composer dos
+  // artefatos. Uma criação por vez; o runId fica em active-runs.js para a
+  // próxima montagem da aba reencontrar a revisão pendente.
+  function newConceptTracker() {
+    return createRunTracker({
+      onUpdate: onConceptUpdate,
+      onApprove: approveConcept,
+      onCancel: () => {
+        clearActiveRun(conceptKey);
+        concept.run = false;
+        concept.tracker = null;
+        if (active && paneView !== null) openLintReport();
+      },
+    });
+  }
+
+  // Aprovar starts a fresh commit-only run carrying the reviewed draft
+  // (approval_data) instead of resuming the paused one: a resume fails
+  // whenever the Wiki workflow changed after the pause was checkpointed
+  // ("checkpoint was written for a different pipeline definition"). Same
+  // approach as tab-artefatos.js's approvePendingDocument.
+  async function approveConcept(paused) {
+    const draft = paused.vars?.pending_concept;
+    if (!draft) throw new Error('Rascunho da página não encontrado na execução pausada.');
+    concept.pausedRunId = paused.runId;
+    const args = { project_id: project.id, action: 'create_concept', concept_title: concept.title || draft.title, buddy: true, approved: true, approval_data: draft };
+    await startAndWatch('Wiki', args, onConceptUpdate);
+  }
+
+  function startConcept(item) {
+    concept.run = true;
+    concept.title = item.title;
+    concept.tracker = newConceptTracker();
+    showConcept();
+    const where = item.pages?.length ? ` Citado em: ${item.pages.join(', ')}.` : '';
+    const args = { project_id: project.id, action: 'create_concept', concept_title: item.title, concept_description: `${item.description || ''}${where}`, buddy: true };
+    startAndWatch('Wiki', args, onConceptUpdate).catch((err) => onConceptUpdate({ runId: '', state: 'failed', error: String(err) }));
+  }
+
+  async function onConceptUpdate(status) {
+    if (status.runId && !isFullyTerminal(status)) setActiveRun(conceptKey, status.runId);
+    const title = (status.vars?.current_artifact || '').replace(/^concept:/, '');
+    if (title) concept.title = title;
+    if (!concept.tracker) return;
+    const before = concept.tracker.status?.state;
+    concept.tracker.update(status);
+    if (isFullyTerminal(status)) {
+      clearActiveRun(conceptKey);
+      concept.run = false;
+      if (concept.pausedRunId) {
+        // Written: the replaced pause can go. Failed: it still holds the
+        // only copy of the draft, so the next mount finds it again.
+        if (status.state === 'completed') cancelRun(concept.pausedRunId).catch(() => {});
+        else setActiveRun(conceptKey, concept.pausedRunId);
+        concept.pausedRunId = null;
+      }
+    }
+    if (!active) return;
+    if (status.state === 'completed') {
+      const slug = status.vars?.result?.slug;
+      concept.tracker = null;
+      await loadSearchIndex();
+      await buildTree();
+      if (slug && paneView === 'concept') await openPage('wiki', `concepts/${slug}.md`, status.vars.result.title || slug);
+      else if (paneView === 'report') await openLintReport();
+      return;
+    }
+    if (status.state === before) return;
+    if (paneView === 'concept') showConcept();
+    else if (paneView === 'report') await openLintReport();
+  }
+
+  // showConcept: the creation in the reading pane — the live tracker while
+  // the LLM writes, then the proposed page with Aprovar in the toolbar and
+  // the Regerar/Cancelar composer pinned below it.
+  function showConcept() {
+    const tracker = concept.tracker;
+    if (!tracker) return;
+    openPath = null;
+    markActiveRow();
+    paneView = 'concept';
+    const body = beginCustom(`Novo conceito: ${concept.title}`, 'revisão');
+    body.appendChild(tracker.element);
+    const status = tracker.status;
+    if (status?.state === 'paused') {
+      setFooter(tracker.composer);
+      setToolbarAction(tracker.approveAction);
+      const draft = status.vars?.pending_concept;
+      if (draft) {
+        const preview = document.createElement('div');
+        preview.className = 'wiki-doc concept-preview';
+        preview.innerHTML = `
+          <h1>${escapeHtml(draft.title)}</h1>
+          ${draft.aliases?.length ? `<p class="concept-preview-aliases">Também: ${draft.aliases.map(escapeHtml).join(', ')}</p>` : ''}
+          <h2>Fatos</h2>
+          <ul>${(draft.facts || []).map((f) => `<li>${escapeHtml(f)}</li>`).join('')}</ul>`;
+        body.appendChild(preview);
+      }
+    }
+  }
+
+  {
+    const runId = getActiveRun(conceptKey);
+    if (runId) {
+      concept.run = true;
+      concept.tracker = newConceptTracker();
+      watchExistingRun(runId, onConceptUpdate).catch(() => {
+        clearActiveRun(conceptKey);
+        concept.run = false;
+        concept.tracker = null;
+      });
+    }
+  }
 
   for (const [key, button, trackerEl, onCompleted] of [
     [lintKey, lintButton, lintTrackerEl, showLintReport],
@@ -611,30 +813,80 @@ function lintIsBehind(byName) {
   return !Number.isNaN(lint) && !Number.isNaN(index) && index > lint;
 }
 
-// renderLintReport shows the verified report Wiki's lint action returns (see
-// workflows/shared/wiki/wiki_lint.mh). The same findings were already written
-// into the affected pages as "Alertas da revisão" and into wiki/lint.md, so
-// this is only the summary of what that run found.
-function renderLintReport(result) {
+// renderLintReport shows the last verification (wiki/lint.json, written by
+// workflows/shared/wiki/wiki_lint.mh) in the reading pane, laid out like the
+// wiki's own pages (WikiHtmlExport.page_css: crumbs, category + title, stat
+// tiles, sections of cards, alert tags) — rendered as app DOM rather than an
+// iframe because its buttons drive the app (open a page, create a concept).
+// The findings themselves were already written into the affected pages as
+// "Alertas da revisão". A missing concept gets its action from conceptState.
+const CONCEPT_RUN_LABEL = { paused: 'Revisar página', working: 'Gerando…', queued: 'Na fila…' };
+const LINT_KIND_LABEL = { sources: 'Fonte', entities: 'Entidade', concepts: 'Conceito', answers: 'Resposta' };
+
+function renderLintReport(result, { conceptState, when, titleOf }) {
   if (!result) return '';
-  const section = (title, items) => `
-    <h4>${title} (${items.length})</h4>
-    ${items.length ? `<ul>${items.map((item) => `<li>${item}</li>`).join('')}</ul>` : '<p class="modal-hint">Nenhuma.</p>'}`;
-  const pages = (list) => list.map((p) => `<code>${escapeHtml(p)}</code>`).join(', ');
   const resolved = result.resolved_contradictions || [];
-  const total = result.contradictions.length + result.stale_claims.length;
+  const pill = (ref) => {
+    const kind = LINT_KIND_LABEL[ref.split('/')[0]] || 'Página';
+    return `<li><button class="lp-pill" data-open-page="${escapeHtml(ref)}"><span class="lp-kind">${kind}</span>${escapeHtml(titleOf(ref) || ref)}</button></li>`;
+  };
+  const pills = (refs) => `<ul class="lp-links">${refs.map(pill).join('')}</ul>`;
+  const alertCard = (kind, tag, text, refs) => `
+    <li class="lp-alert lp-alert-${kind}">
+      <span class="lp-tag">${tag}</span>
+      <div class="lp-alert-text">${escapeHtml(text)}</div>
+      ${pills(refs)}
+    </li>`;
+  const section = (id, title, items, empty, inner) => `
+    <section class="lp-section" id="${id}">
+      <h2>${title} <span class="lp-count">${items.length}</span></h2>
+      ${items.length ? inner(items) : `<p class="lp-empty">${empty}</p>`}
+    </section>`;
+  const conceptAction = (c, i) => {
+    const state = conceptState(c.title);
+    if (state.kind === 'exists') return `<button class="button tertiary small" data-open-page="${escapeHtml(state.path)}">${icon('checkCircle', 13)} Abrir página</button>`;
+    if (state.kind === 'running') return `<button class="button secondary small" data-create-concept="${i}">${CONCEPT_RUN_LABEL[state.state] || 'Ver criação'}</button>`;
+    if (state.kind === 'busy') return `<button class="button tertiary small" disabled title="Outra página de conceito está sendo criada">${icon('plus', 13)} Criar página</button>`;
+    return `<button class="button primary small" data-create-concept="${i}" title="A LLM escreve a página só com o que a wiki já diz; você revisa antes de gravar">${icon('plus', 13)} Criar página</button>`;
+  };
+  const stats = [
+    ['lp-contradicoes', result.contradictions.length, 'contradições'],
+    ['lp-superados', result.stale_claims.length, 'trechos superados'],
+    ['lp-conceitos', result.missing_concepts.length, 'conceitos sem página'],
+    ['lp-isoladas', result.orphan_pages.length, 'páginas isoladas'],
+  ];
+  const pending = result.contradictions.length + result.stale_claims.length;
+  const subtitle = [when ? `Gerada ${when}` : null, pending ? `${result.pages_annotated} página(s) receberam alertas da revisão` : 'Nenhuma inconsistência encontrada'].filter(Boolean).join(' · ');
   return `
-    <div class="lint-report">
-      <p>${total
-        ? `${result.pages_annotated} página(s) receberam um bloco <strong>Alertas da revisão</strong>. O relatório completo ficou em <code>wiki/lint.md</code>.`
-        : 'Nenhuma inconsistência verificada.'}</p>
-      ${section('Contradições pendentes', result.contradictions.map((c) => `${escapeHtml(c.description)} — ${pages(c.evidence.map((e) => e.page))}`))}
-      ${section('Contradições resolvidas por fonte mais nova', resolved.map((c) => `${escapeHtml(c.description)} — ${pages(c.evidence.map((e) => e.page))} → resolvida por ${pages(c.resolved_by)}`))}
-      ${section('Trechos superados', result.stale_claims.map((c) => `${pages([c.page])} → superado por ${pages([c.superseded_by])}: ${escapeHtml(c.description)}`))}
-      ${section('Conceitos sem página', result.missing_concepts.map((c) => `<strong>${escapeHtml(c.title)}</strong>: ${escapeHtml(c.description)}`))}
-      ${section('Páginas isoladas', result.orphan_pages.map((p) => pages([p])))}
-      ${result.notes ? `<p>${escapeHtml(result.notes)}</p>` : ''}
-      ${result.discarded ? `<p class="modal-hint">${result.discarded} achado(s) descartado(s) por não citarem um trecho verificável.</p>` : ''}
+    <div class="lint-page">
+      <nav class="lp-crumbs"><button data-open-index>Wiki</button><span>›</span><span>Verificação</span></nav>
+      <header class="lp-head">
+        <span class="lp-category">Verificação da wiki</span>
+        <h1>Última verificação</h1>
+        <p>${escapeHtml(subtitle)}</p>
+      </header>
+      <div class="lp-stats">
+        ${stats.map(([id, n, label]) => `<button class="lp-stat ${n ? 'lp-stat-hot' : ''}" data-jump="${id}"><strong>${n}</strong><span>${label}</span></button>`).join('')}
+      </div>
+      ${result.notes ? `<aside class="lp-notes"><h2>Observações</h2><p>${escapeHtml(result.notes)}</p></aside>` : ''}
+      ${section('lp-contradicoes', 'Contradições pendentes', result.contradictions, 'Nenhuma contradição pendente.', (items) => `
+        <ul class="lp-list">${items.map((c) => alertCard('contradiction', 'Contradição', c.description, c.evidence.map((e) => e.page))).join('')}</ul>`)}
+      ${resolved.length ? section('lp-resolvidas', 'Resolvidas por fonte mais nova', resolved, '', (items) => `
+        <ul class="lp-list">${items.map((c) => alertCard('resolved', 'Resolvida', c.description, [...c.evidence.map((e) => e.page), ...c.resolved_by])).join('')}</ul>`) : ''}
+      ${section('lp-superados', 'Trechos superados', result.stale_claims, 'Nenhum trecho superado.', (items) => `
+        <ul class="lp-list">${items.map((c) => alertCard('stale', 'Superado', c.description, [c.page, c.superseded_by])).join('')}</ul>`)}
+      ${section('lp-conceitos', 'Conceitos sem página', result.missing_concepts, 'Todo conceito citado tem página.', (items) => `
+        <ul class="lp-list">${items.map((c, i) => `
+          <li class="lp-card lp-concept">
+            <div class="lp-concept-head">
+              <div><strong>${escapeHtml(c.title)}</strong><small>${escapeHtml(c.description)}</small></div>
+              ${conceptAction(c, i)}
+            </div>
+            ${c.pages?.length ? `<div class="lp-concept-pages"><span class="lp-kind">Citado em ${c.pages.length} páginas</span>${pills(c.pages)}</div>` : ''}
+          </li>`).join('')}</ul>`)}
+      ${section('lp-isoladas', 'Páginas isoladas', result.orphan_pages, 'Nenhuma página isolada.', (items) => `
+        <p class="lp-hint">Nenhuma outra página aponta para estas.</p>${pills(items)}`)}
+      ${result.discarded ? `<p class="lp-footnote">${result.discarded} achado(s) descartado(s) na verificação: sem trecho verificável, termo genérico ou conceito que já tem página.</p>` : ''}
     </div>`;
 }
 

@@ -1,7 +1,13 @@
 {
   "type": "object",
   "additionalProperties": false,
-  "required": ["contradictions", "stale_claims", "orphan_pages", "missing_concepts", "notes"],
+  "required": [
+    "contradictions",
+    "stale_claims",
+    "orphan_pages",
+    "missing_concepts",
+    "notes"
+  ],
   "properties": {
     "contradictions": {
       "type": "array",
@@ -9,18 +15,33 @@
       "items": {
         "type": "object",
         "additionalProperties": false,
-        "required": ["description", "evidence"],
+        "required": [
+          "description",
+          "evidence"
+        ],
         "properties": {
-          "description": { "type": "string", "description": "A contradição explicada em uma frase." },
+          "description": {
+            "type": "string",
+            "description": "A contradição explicada em uma frase."
+          },
           "evidence": {
             "type": "array",
             "items": {
               "type": "object",
               "additionalProperties": false,
-              "required": ["page", "quote"],
+              "required": [
+                "page",
+                "quote"
+              ],
               "properties": {
-                "page": { "type": "string", "description": "Referência da página como no cabeçalho dela, ex.: sources/aplicativo-mobile-para-motoristas ou entities/plataforma-de-motoristas." },
-                "quote": { "type": "string", "description": "Trecho COPIADO LITERALMENTE da página, sem parafrasear." }
+                "page": {
+                  "type": "string",
+                  "description": "Referência da página como no cabeçalho dela, ex.: sources/aplicativo-mobile-para-motoristas ou entities/plataforma-de-motoristas."
+                },
+                "quote": {
+                  "type": "string",
+                  "description": "Trecho COPIADO LITERALMENTE da página, sem parafrasear."
+                }
               }
             }
           }
@@ -33,31 +54,86 @@
       "items": {
         "type": "object",
         "additionalProperties": false,
-        "required": ["page", "quote", "superseded_by", "resolution_quote", "description"],
+        "required": [
+          "page",
+          "quote",
+          "superseded_by",
+          "resolution_quote",
+          "description"
+        ],
         "properties": {
-          "page": { "type": "string", "description": "Página que contém a alegação possivelmente obsoleta." },
-          "quote": { "type": "string", "description": "Trecho COPIADO LITERALMENTE dessa página com a alegação." },
-          "superseded_by": { "type": "string", "description": "Página mais nova (normalmente uma fonte) que decide ou substitui o trecho." },
-          "resolution_quote": { "type": "string", "description": "Trecho COPIADO LITERALMENTE da página superseded_by que decide ou substitui a alegação." },
-          "description": { "type": "string", "description": "Por que a alegação provavelmente foi superada." }
+          "page": {
+            "type": "string",
+            "description": "Página que contém a alegação possivelmente obsoleta."
+          },
+          "quote": {
+            "type": "string",
+            "description": "Trecho COPIADO LITERALMENTE dessa página com a alegação."
+          },
+          "superseded_by": {
+            "type": "string",
+            "description": "Página mais nova (normalmente uma fonte) que decide ou substitui o trecho."
+          },
+          "resolution_quote": {
+            "type": "string",
+            "description": "Trecho COPIADO LITERALMENTE da página superseded_by que decide ou substitui a alegação."
+          },
+          "description": {
+            "type": "string",
+            "description": "Por que a alegação provavelmente foi superada."
+          }
         }
       }
     },
     "orphan_pages": {
       "type": "array",
-      "items": { "type": "string" },
+      "items": {
+        "type": "string"
+      },
       "description": "Referências de páginas isoladas do resto da wiki (sem relação clara com outras páginas)."
     },
     "missing_concepts": {
       "type": "array",
-      "description": "Conceitos citados repetidamente no texto das páginas mas que ainda não têm página própria.",
+      "description": "Conceitos do domínio deste work-item citados em pelo menos duas páginas diferentes que ainda não têm página própria. No máximo 5, os mais citados primeiro. Lista vazia se nenhum atende aos critérios.",
       "items": {
         "type": "object",
         "additionalProperties": false,
-        "required": ["title", "description"],
+        "required": [
+          "title",
+          "description",
+          "mentions"
+        ],
         "properties": {
-          "title": { "type": "string", "description": "Nome canônico curto do conceito." },
-          "description": { "type": "string", "description": "Onde aparece e por que merece página própria." }
+          "title": {
+            "type": "string",
+            "description": "Nome canônico curto do conceito, exatamente como aparece no texto das páginas."
+          },
+          "description": {
+            "type": "string",
+            "description": "O que o conceito é neste work-item e por que merece página própria, em uma frase."
+          },
+          "mentions": {
+            "type": "array",
+            "description": "Uma citação por página onde o conceito aparece — pelo menos duas páginas diferentes.",
+            "items": {
+              "type": "object",
+              "additionalProperties": false,
+              "required": [
+                "page",
+                "quote"
+              ],
+              "properties": {
+                "page": {
+                  "type": "string",
+                  "description": "Referência da página como no cabeçalho dela, ex.: entities/b3."
+                },
+                "quote": {
+                  "type": "string",
+                  "description": "Trecho COPIADO LITERALMENTE da página que contém o nome do conceito."
+                }
+              }
+            }
+          }
         }
       }
     },

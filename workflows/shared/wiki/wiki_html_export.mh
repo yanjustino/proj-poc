@@ -429,7 +429,7 @@ export tool WikiHtmlExport {
     }
 
     internal page_css(): string -> """
-        :root{--bg:#fff;--surface:#fff;--ink:#1d1d1a;--muted:#6f6d60;--line:#e1ded2;--accent:#b4372c;--accent-soft:#f6e3e0;--link:#1f5fa8;--warn:#9a5b00;--warn-bg:#fff4dc;--warn-line:#f0cf8a;--bad:#a3261b;--bad-bg:#fdecea;--bad-line:#f1b9b3}
+        :root{--bg:#fff;--surface:#fff;--ink:#1a1a1a;--muted:#6e6e6e;--line:#e3e3e3;--accent:#ec7000;--accent-soft:#fff0e0;--link:#003399;--warn:#9a5b00;--warn-bg:#fff4dc;--warn-line:#f0cf8a;--bad:#b02a07;--bad-bg:#fdece6;--bad-line:#f3b9a8}
         :root{color-scheme:light}
         *{box-sizing:border-box}
         body{margin:0;background:var(--bg);color:var(--ink);font:15px/1.65 -apple-system,BlinkMacSystemFont,'Segoe UI',sans-serif}

@@ -4,10 +4,11 @@
 export schema IngestSchema from "schemas/ingest.schema.json"
 export schema QuerySchema from "schemas/query.schema.json"
 export schema LintSchema from "schemas/lint.schema.json"
+export schema ConceptSchema from "schemas/concept.schema.json"
 
 test WikiSchemaFileSpec {
     describe each_schema_carries_its_json_and_an_absolute_path {
-        for (var s in [{schema: IngestSchema, file: "ingest"}, {schema: QuerySchema, file: "query"}, {schema: LintSchema, file: "lint"}]) {
+        for (var s in [{schema: IngestSchema, file: "ingest"}, {schema: QuerySchema, file: "query"}, {schema: LintSchema, file: "lint"}, {schema: ConceptSchema, file: "concept"}]) {
             are_equal(json.parse(s.schema.content).type, "object")
             is_true(s.schema.path.ends_with("wiki/schemas/${s.file}.schema.json"))
             is_true(fs.exists(s.schema.path))

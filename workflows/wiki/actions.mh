@@ -73,6 +73,17 @@ export tool WikiActions {
         return applied
     }
 
+    // Grava a pagina de conceito aprovada (acao create_concept), pelo mesmo
+    // caminho do ingest: um titulo ou alias ja conhecido recebe os fatos na
+    // pagina existente em vez de ganhar outra.
+    commit_concept(project_id: string, data: any): {slug: string, title: string, facts_added: number} -> {
+        self.upsert_fact(project_id, "concepts", data)
+        var title = WikiIndex.canonical_title(project_id, "concepts", data.title)
+        self.log(project_id, "concept", title)
+        WikiHtmlExport.sync(project_id)
+        return {slug: Slug.from_title(title), title, facts_added: data.facts.size()}
+    }
+
     // sync_html regera wiki/html/ sob demanda, sem depender de um novo
     // ingest/query/file_answer — a aba Wiki chama isso ao abrir, pra cobrir
     // work-items cuja wiki existia antes de WikiHtmlExport existir.
@@ -94,6 +105,22 @@ export tool WikiActions {
 }
 
 test WikiActionsSpec {
+    // Conceito apontado pela verificacao: vira pagina em concepts/, entra no
+    // indice e no HTML (busca do app) como qualquer conceito ingerido.
+    describe commit_concept_writes_the_page_and_indexes_it {
+        var id = Fixture.project("spec-test-wiki-commit-concept")
+        dir.create(Paths.wiki(id, "sources"))
+        dir.create(Paths.wiki(id, "entities"))
+        dir.create(Paths.wiki(id, "concepts"))
+        var r = WikiActions.commit_concept(id, {title: "Settlement", aliases: ["Liquidação"], facts: ["Responsabilidade do backoffice (ver entities/backoffice)"]})
+        are_equal(r.slug, "settlement")
+        are_equal(r.facts_added, 1)
+        is_true(fs.read(Paths.wiki(id, "concepts/settlement.md")).contains("- Responsabilidade do backoffice (ver entities/backoffice)"))
+        var search = json.parse(fs.read(Paths.wiki(id, "html/search.json")))
+        are_equal(search.find((e) -> e.group == "concepts").aliases, ["Liquidação"])
+        Fixture.drop(id)
+    }
+
     // Os alertas ficam até a próxima verificação decidir se o fato novo os
     // resolveu — e continuam no fim, depois do bloco de fatos novo.
     describe ingest_keeps_the_review_alerts_after_the_new_facts {

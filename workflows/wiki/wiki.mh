@@ -2,19 +2,21 @@
 // dados estruturados; componentes determinísticos cuidam de arquivos e índice.
 
 import { Paths } from "../shared/core/paths.mh"
+import { Fixture } from "../shared/core/fixture.mh"
 import { Writer } from "../shared/agents/agents.mh"
 import { RawExtract } from "../shared/wiki/raw_extract.mh"
 import { WikiContext } from "../shared/wiki/wiki_context.mh"
 import { WikiIndex } from "../shared/wiki/wiki_index.mh"
 import { WikiActions } from "actions.mh"
-import { IngestSchema, QuerySchema, LintSchema } from "schema_files.mh"
+import { IngestSchema, QuerySchema, LintSchema, ConceptSchema } from "schema_files.mh"
 
-enum WikiAction { ingest, query, lint, sync_html }
+enum WikiAction { ingest, query, lint, sync_html, create_concept }
 
 prompt WikiSchema() from "schema.prompt.md"
 prompt IngestInstruction(schema_conventions: prompt, source_name: string, source_text: string, catalog_content: string) from "prompts/ingest.prompt.md"
 prompt QueryInstruction(schema_conventions: prompt, question: string, wiki_content: string) from "prompts/query.prompt.md"
 prompt LintInstruction(schema_conventions: prompt, wiki_content: string) from "prompts/lint.prompt.md"
+prompt ConceptInstruction(schema_conventions: prompt, concept_title: string, concept_description: string, feedback_block: string, wiki_content: string) from "prompts/concept.prompt.md"
 
 workflow Wiki {
     description: "Ingestao, consulta e saneamento da wiki de um work-item (padrao wiki-llm.md)."
@@ -25,13 +27,28 @@ workflow Wiki {
     input question: string = ""      // query
     input file_answer: bool = false  // query
     input buddy: bool = false        // ingest: true pausa pra revisao antes de gravar (Modo Buddy)
-    input approved: bool = false     // ingest: "yes" da revisao, passado no mhl_run_resume
+    input approved: bool = false     // ingest/create_concept: "yes" da revisao, passado no mhl_run_resume
+    input concept_title: string = ""        // create_concept: o conceito apontado pela verificacao
+    input concept_description: string = ""  // create_concept: onde a verificacao o viu citado
+    input feedback: string = ""             // create_concept: pedido de mudanca no resume da pausa
+    // create_concept: aprovacao de um rascunho revisado. O app envia o
+    // pending_concept da run pausada numa run nova, que vai direto ao
+    // Commit sem chamar a LLM — retomar a pausa falharia se o workflow
+    // mudou desde que ela foi gravada (mesmo padrao de ArtifactFlow).
+    input approval_data: any = null
 
     var wiki_result = null
     var tokens_in = 0
     var tokens_out = 0
     var current_artifact = ""
     var ingest_data = null
+    // create_concept: o rascunho em revisao (lido pelo app na pausa) e os
+    // pedidos de mudanca acumulados. feedback_consumed garante uma unica
+    // regeneracao por pedido (inputs sao somente leitura) — mesmo padrao
+    // do Gate de ArtifactFlow.
+    var pending_concept = null
+    var concept_feedback = []
+    var feedback_consumed = false
 
     output: {
         action,
@@ -46,6 +63,7 @@ workflow Wiki {
         WikiAction.query     -> Query
         WikiAction.lint      -> Lint
         WikiAction.sync_html -> SyncHtml
+        WikiAction.create_concept -> ConceptGenerate
     }
 
     step Dispatch {
@@ -170,6 +188,55 @@ workflow Wiki {
         goto Done
     }
 
+    // create_concept: Generate -> Gate (pausa no Modo Buddy) -> Commit, como
+    // o ingest. A LLM so recebe o conteudo da wiki: a pagina nasce do que as
+    // paginas ja dizem, cada fato citando a de origem.
+    step ConceptGenerate {
+        if (concept_title.trim().is_empty()) fail("'concept_title' e obrigatorio para action: \"create_concept\"")
+        self.current_artifact = "concept:" + concept_title.trim()
+        if (approved && approval_data != null) {
+            if ((approval_data?.title ?? "").trim().is_empty() || (approval_data?.facts ?? []).is_empty()) fail("approval_data invalido: a pagina aprovada precisa de titulo e fatos")
+            self.pending_concept = approval_data
+            goto ConceptCommit
+        }
+        var feedback_block = if (concept_feedback.is_empty()) "" else "\n## Pedidos de mudança do revisor\n\nUma versão anterior foi recusada. Atenda a todos, do mais antigo ao mais novo:\n\n" + concept_feedback.map((f) -> "- " + f).join("\n") + "\n"
+        var response = Writer.generate(
+            prompt: ConceptInstruction(
+                schema_conventions: WikiSchema(),
+                concept_title: concept_title.trim(),
+                concept_description:,
+                feedback_block:,
+                wiki_content: WikiContext.all_pages(project_id)
+            ),
+            schema_file: ConceptSchema,
+            project_id:,
+            artifact: current_artifact
+        )
+        self.{tokens_in, tokens_out} = response
+        var data = json.parse(response.content)
+        if (data.facts.is_empty()) fail("a wiki nao tem fatos verificaveis sobre '${concept_title.trim()}' — adicione uma fonte que fale dele")
+        self.pending_concept = data
+        goto ConceptGate
+    }
+
+    step ConceptGate {
+        if (buddy && !approved) {
+            if (!feedback.is_empty() && !self.feedback_consumed) {
+                self.feedback_consumed = true
+                self.concept_feedback = self.concept_feedback + [feedback]
+                goto ConceptGenerate
+            }
+            self.feedback_consumed = false
+            pause("revise a pagina de conceito '${self.pending_concept.title}' antes de gravar na wiki")
+        }
+        goto ConceptCommit
+    }
+
+    step ConceptCommit {
+        self.wiki_result = WikiActions.commit_concept(project_id, pending_concept)
+        goto Done
+    }
+
     step Done { complete() }
 }
 
@@ -179,7 +246,7 @@ test WikiWorkflowSpec {
     describe rejects_an_unknown_action_before_running {
         var raised = ""
         try { Wiki.run(inputs: {project_id: "spec-test-project", action: "bogus"}) } catch (e) { raised = "${e}" }
-        is_true(raised.contains("\"bogus\" is not a variant of enum WikiAction (use ingest | query | lint | sync_html)"))
+        is_true(raised.contains("\"bogus\" is not a variant of enum WikiAction (use ingest | query | lint | sync_html | create_concept)"))
     }
 
     describe rejects_an_invalid_project_id_before_touching_anything {
@@ -204,6 +271,38 @@ test WikiWorkflowSpec {
         var run = Wiki.run(inputs: {project_id: "spec-test-project", action: "ingest", raw_paths: ["nao-existe.md"]})
         is_false(run.ok)
         is_true(run.error.contains("fonte nao encontrada"))
+    }
+
+    describe create_concept_rejects_an_empty_title_before_calling_the_llm {
+        var run = Wiki.run(inputs: {project_id: "spec-test-project", action: "create_concept", concept_title: "  "})
+        is_false(run.ok)
+        is_true(run.error.contains("'concept_title' e obrigatorio"))
+    }
+
+    // Aprovar um rascunho e uma run nova so de gravacao: nenhuma chamada a
+    // LLM, e a pagina sai igual ao que foi revisado.
+    describe create_concept_commits_an_approved_draft_without_calling_the_llm {
+        var id = Fixture.project("spec-test-wiki-approve-concept")
+        dir.create(Paths.wiki(id, "sources"))
+        dir.create(Paths.wiki(id, "entities"))
+        dir.create(Paths.wiki(id, "concepts"))
+        var run = Wiki.run(inputs: {
+            project_id: id, action: "create_concept", concept_title: "Settlement", approved: true, buddy: true,
+            approval_data: {title: "Settlement", aliases: [], facts: ["Feito pelo backoffice (ver entities/backoffice)"]}
+        })
+        is_true(run.ok)
+        are_equal(run.output.result.slug, "settlement")
+        is_true(fs.read(Paths.wiki(id, "concepts/settlement.md")).contains("- Feito pelo backoffice (ver entities/backoffice)"))
+        Fixture.drop(id)
+    }
+
+    describe create_concept_rejects_an_approved_draft_without_facts {
+        var run = Wiki.run(inputs: {
+            project_id: "spec-test-project", action: "create_concept", concept_title: "X", approved: true, buddy: true,
+            approval_data: {title: "X", aliases: [], facts: []}
+        })
+        is_false(run.ok)
+        is_true(run.error.contains("approval_data invalido"))
     }
 
     describe query_rejects_an_empty_question_before_calling_the_llm {

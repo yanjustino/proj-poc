@@ -57,6 +57,8 @@ export function ListRuns():Promise<string>;
 
 export function ListWorkflows():Promise<string>;
 
+export function LocalProjects():Promise<string>;
+
 export function LogFrontendError(arg1:string):Promise<void>;
 
 export function MCPStatus():Promise<string>;

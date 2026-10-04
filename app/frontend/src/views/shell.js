@@ -1,7 +1,8 @@
 import { ToggleMaximise, LogFrontendError } from '../../wailsjs/go/main/App';
 import {
   workItemList,
-  waitUntilReady,
+  localProjectList,
+  ensureReady,
   mcpStatus,
   reconnectMCP,
   retryStartup,
@@ -26,7 +27,7 @@ import { renderWorkItemView } from './workitem-view.js';
 import { getState, setState, subscribe } from '../state.js';
 import { mountReadingPane } from '../reading-pane.js';
 import { icon } from '../icons.js';
-import { getAutoReview, setAutoReview, getPaneWidth, setPaneWidth } from '../preferences.js';
+import { getPaneWidth, setPaneWidth } from '../preferences.js';
 import brandSymbol from '../assets/images/senpai-symbol.png';
 
 const LEVEL_SHORT = { discovery: 'Discovery', delivery: 'Delivery' };
@@ -90,9 +91,6 @@ export async function mountShell(root) {
           </div>
           <small class="sidebar-agent-hint" data-model-cost></small>
         </div>
-        <label class="sidebar-agent sidebar-check" title="Quando um artefato gerado tem avisos de conformidade, pede uma correção ao modelo (uma única chamada extra) antes da sua revisão.">
-          <input type="checkbox" data-autorrevisao /> Autorrevisão
-        </label>
         <div class="sidebar-status" data-mcp-status></div>
         <div class="sidebar-version" data-app-version>Senpai</div>
       </aside>
@@ -119,9 +117,6 @@ export async function mountShell(root) {
   const modelCustomApplyEl = root.querySelector('[data-model-custom-apply]');
   const appVersionEl = root.querySelector('[data-app-version]');
   const themeToggleEl = root.querySelector('[data-theme-toggle]');
-  const autoReviewEl = root.querySelector('[data-autorrevisao]');
-  autoReviewEl.checked = getAutoReview();
-  autoReviewEl.addEventListener('change', () => setAutoReview(autoReviewEl.checked));
 
   function renderThemeToggle() {
     const isLight = document.documentElement.dataset.theme === 'light';
@@ -460,11 +455,36 @@ export async function mountShell(root) {
     renderNav();
   }
 
+  // Lista lida direto do disco (App.LocalProjects), sem o mhl: na abertura
+  // a barra lateral e o work-item restaurado aparecem enquanto o mhl ainda
+  // compila os workflows (~5s). O que precisa dele (resumo, abas, gerar)
+  // espera sozinho em api.js (ensureReady). Uma falha aqui não é erro de
+  // tela: a lista do mhl, logo em seguida, é a que vale.
+  async function loadLocalProjects() {
+    try {
+      projects = await localProjectList();
+      LogFrontendError(`loadLocalProjects: ok, ${projects.length} project(s)`).catch(() => {});
+    } catch (err) {
+      LogFrontendError(`loadLocalProjects: failed: ${err && err.stack ? err.stack : err}`).catch(() => {});
+      return;
+    }
+    renderNav();
+  }
+
   // Conexão, lista e área principal: a abertura do app e cada nova
   // tentativa passam por aqui, então uma falha na abertura também se
   // recupera (antes, a área principal nunca chegava a ser montada).
   async function startShell() {
-    await waitUntilReady();
+    if (!mainStarted && projects.length === 0) {
+      await loadLocalProjects();
+      if (projects.length > 0) {
+        mainStarted = true;
+        // Not awaited: the work-item view waits on mhl for its summary and
+        // tabs, and the official list below must not wait on that.
+        renderMain().catch((err) => LogFrontendError(`renderMain (local): ${err && err.stack ? err.stack : err}`).catch(() => {}));
+      }
+    }
+    await ensureReady();
     await loadProjects();
     if (!mainStarted) {
       mainStarted = true;

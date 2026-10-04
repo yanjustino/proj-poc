@@ -6,6 +6,9 @@
 //      e uma alegação superada também o trecho da página que a decide
 //      (a LLM aponta, o código confere; padrão de "evidence-verified
 //      findings" do LLM Wiki de Karpathy);
+//      Um conceito sem página também precisa ser citado literalmente em
+//      duas páginas, não pode ser um termo genérico nem já ter página (com
+//      outro nome inclusive) — e só os 5 mais citados ficam;
 //   2. fecha as contradições que uma fonte mais nova já decidiu: se, tirando
 //      os trechos superados, sobra menos de duas páginas em disputa, a
 //      contradição sai das pendências e vai para resolved_contradictions —
@@ -19,7 +22,9 @@
 
 import { Paths } from "../core/paths.mh"
 import { Fixture } from "../core/fixture.mh"
+import { Slug } from "../core/slug.mh"
 import { WikiAlerts } from "wiki_alerts.mh"
+import { WikiIndex } from "wiki_index.mh"
 
 export tool WikiLint {
     internal categories(): string[] -> ["sources", "entities", "concepts", "answers"]
@@ -52,6 +57,58 @@ export tool WikiLint {
         return stale_claims
             .filter((s) -> s.page == page && (WikiAlerts.squash(s.quote).contains(q) || q.contains(WikiAlerts.squash(s.quote))))
             .map((s) -> s.superseded_by)
+    }
+
+    // Termos que aparecem em qualquer work-item e nunca rendem uma página
+    // de conceito útil, comparados pelo slug do título.
+    internal generic_terms(): string[] -> [
+        "sistema", "sistemas", "aplicacao", "aplicacoes", "aplicativo", "app", "plataforma",
+        "usuario", "usuarios", "cliente", "clientes", "dado", "dados", "banco-de-dados", "base-de-dados",
+        "api", "apis", "integracao", "integracoes", "pdf", "arquivo", "arquivos", "documento", "documentos",
+        "relatorio", "relatorios", "tela", "telas", "interface", "funcionalidade", "funcionalidades",
+        "requisito", "requisitos", "processo", "processos", "projeto", "mvp", "email", "e-mail", "login",
+        "servico", "servicos", "backend", "frontend", "web", "mobile", "portal", "site", "planilha"
+    ]
+
+    internal max_missing_concepts(): number -> 5
+
+    // Já existe página para este título: o arquivo com o slug dele, ou uma
+    // entidade/conceito do índice cujo título ou alias tem o mesmo slug.
+    internal has_page(project_id: string, title: string): bool -> {
+        var key = Slug.from_title(title)
+        if (fs.exists(Paths.wiki(project_id, "concepts/" + key + ".md")) || fs.exists(Paths.wiki(project_id, "entities/" + key + ".md"))) return true
+        var state = WikiIndex.load(project_id)
+        return (state.get("entities", []) + state.get("concepts", [])).any((e) ->
+            Slug.from_title(e.title) == key || (e?.aliases ?? []).any((a) -> Slug.from_title(a) == key)
+        )
+    }
+
+    // O trecho cita o conceito: o slug do trecho tem o slug do título
+    // começando numa palavra (aceita plural e flexão no fim).
+    internal quote_names(quote: string, key: string): bool -> ("-" + Slug.from_title(quote)).contains("-" + key)
+
+    internal verify_concepts(project_id: string, items: any[]): any -> {
+        var kept = []
+        var discarded = 0
+        for (var m in items) {
+            var key = Slug.from_title(m.title)
+            var pages = []
+            for (var e in m?.mentions ?? []) {
+                var page = self.normalize_ref(e.page)
+                if (!pages.any((p) -> p == page) && self.quote_names(e.quote, key) && self.quote_in_page(project_id, page, e.quote)) pages += [page]
+            }
+            var duplicate = kept.any((k) -> Slug.from_title(k.title) == key)
+            if (key.is_empty() || self.generic_terms().contains(key) || pages.size() < 2 || duplicate || self.has_page(project_id, m.title)) {
+                discarded += 1
+            } else {
+                kept += [{title: m.title, description: m.description, pages}]
+            }
+        }
+        var top = []
+        for (var k in kept.sort_by((k) -> 0 - k.pages.size())) {
+            if (top.size() < self.max_missing_concepts()) top += [k]
+        }
+        return {concepts: top, discarded}
     }
 
     // Devolve o relatório só com o que passou na verificação, as linhas de
@@ -118,6 +175,9 @@ export tool WikiLint {
             }
         }
 
+        var concepts = self.verify_concepts(project_id, report.missing_concepts)
+        discarded += concepts.discarded
+
         var orphan_pages = []
         for (var o in report.orphan_pages) {
             if (self.valid_ref(project_id, o)) orphan_pages += [self.normalize_ref(o)]
@@ -128,7 +188,7 @@ export tool WikiLint {
                 contradictions,
                 resolved_contradictions,
                 stale_claims,
-                missing_concepts: report.missing_concepts,
+                missing_concepts: concepts.concepts,
                 orphan_pages,
                 notes: report.notes
             },
@@ -182,7 +242,7 @@ export tool WikiLint {
         out = out + "\n## Conceitos sem página\n\n"
         if (report.missing_concepts.is_empty()) out = out + "Nenhum.\n\n"
         for (var m in report.missing_concepts) {
-            out = out + "- " + m.title + ": " + m.description + "\n"
+            out = out + "- " + m.title + ": " + m.description + " (" + (m?.pages ?? []).join(", ") + ")\n"
         }
         out = out + "\n## Páginas isoladas\n\n"
         if (report.orphan_pages.is_empty()) out = out + "Nenhuma.\n\n"
@@ -190,15 +250,17 @@ export tool WikiLint {
             out = out + "- " + o + "\n"
         }
         if (!report.notes.is_empty()) out = out + "\n## Observações\n\n" + report.notes + "\n"
-        if (discarded > 0) out = out + "\nAchados descartados por não citarem um trecho verificável: ${discarded}.\n"
+        if (discarded > 0) out = out + "\nAchados descartados na verificação (sem trecho verificável, termo genérico ou conceito que já tem página): ${discarded}.\n"
         return out
     }
 
+    // Alem do lint.md legivel, grava o mesmo resultado em wiki/lint.json —
+    // e dele que o app monta a "Ultima verificacao" com as acoes por item.
     apply(project_id: string, raw_report: any): any -> {
         var verified = self.verify(project_id, raw_report)
         var annotated = self.write_alerts(project_id, verified.alerts)
         fs.write(Paths.wiki(project_id, "lint.md"), self.render_report(verified.report, verified.discarded))
-        return {
+        var result = {
             contradictions: verified.report.contradictions,
             resolved_contradictions: verified.report.resolved_contradictions,
             stale_claims: verified.report.stale_claims,
@@ -208,6 +270,18 @@ export tool WikiLint {
             discarded: verified.discarded,
             pages_annotated: annotated
         }
+        fs.write(Paths.wiki(project_id, "lint.json"), json.stringify({
+            generated_at: time.format(time.now(), "2006-01-02T15:04:05Z07:00"),
+            contradictions: result.contradictions,
+            resolved_contradictions: result.resolved_contradictions,
+            stale_claims: result.stale_claims,
+            missing_concepts: result.missing_concepts,
+            orphan_pages: result.orphan_pages,
+            notes: result.notes,
+            discarded: result.discarded,
+            pages_annotated: result.pages_annotated
+        }))
+        return result
     }
 }
 
@@ -276,6 +350,50 @@ test WikiLintSpec {
         are_equal(applied.resolved_contradictions.size(), 0)
         are_equal(applied.discarded, 1)
         is_true(fs.read(Paths.wiki(id, "sources/ata-2.md")).contains("- Contradição com sources/ata-1: mobile × webapp"))
+        // O app lê a última verificação do lint.json, com o mesmo resultado.
+        var saved = json.parse(fs.read(Paths.wiki(id, "lint.json")))
+        are_equal(saved.contradictions.size(), 1)
+        are_equal(saved.discarded, 1)
+        is_false(saved.generated_at.is_empty())
+        Fixture.drop(id)
+    }
+
+    // "Conceitos sem página" passa pela mesma régua das contradições: citado
+    // literalmente em duas páginas, não genérico, sem página com outro nome.
+    describe missing_concepts_keep_only_specific_terms_cited_in_two_pages {
+        var id = Fixture.project("spec-test-wiki-lint-concepts")
+        dir.create(Paths.wiki(id, "entities"))
+        dir.create(Paths.wiki(id, "concepts"))
+        fs.write(Paths.wiki(id, "entities/b3.md"), "# B3\n\n- Posições sincronizadas por Batch diário com o sistema da B3.\n- O settlement ocorre em D+1.\n")
+        fs.write(Paths.wiki(id, "entities/backoffice.md"), "# Backoffice\n\n- Executa o Batch diário de conciliação.\n- Gera PDF do extrato pelo sistema.\n")
+        fs.write(Paths.wiki(id, "concepts/liquidacao.md"), "# Liquidação\n\n- O settlement é responsabilidade do backoffice.\n")
+        WikiIndex.upsert(id, "concepts", {slug: "liquidacao", title: "Liquidação", summary: "x", aliases: ["Settlement"]})
+        var mention = (page, quote) -> {page, quote}
+        var applied = WikiLint.apply(id, {
+            contradictions: [], stale_claims: [], orphan_pages: [], notes: "",
+            missing_concepts: [
+                {title: "Batch diário", description: "sincronização", mentions: [
+                    mention("entities/b3", "Posições sincronizadas por Batch diário"),
+                    mention("entities/backoffice", "Executa o Batch diário de conciliação.")
+                ]},
+                // Genérico, mesmo citado em duas páginas.
+                {title: "Sistema", description: "x", mentions: [
+                    mention("entities/b3", "com o sistema da B3"), mention("entities/backoffice", "pelo sistema")
+                ]},
+                // Já tem página, pelo alias.
+                {title: "Settlement", description: "x", mentions: [
+                    mention("entities/b3", "O settlement ocorre em D+1."), mention("concepts/liquidacao", "O settlement é responsabilidade do backoffice.")
+                ]},
+                // Uma página só, e o segundo trecho não existe.
+                {title: "Conciliação", description: "x", mentions: [
+                    mention("entities/backoffice", "Batch diário de conciliação"), mention("entities/b3", "conciliação inventada")
+                ]}
+            ]
+        })
+        are_equal(applied.missing_concepts.size(), 1)
+        are_equal(applied.missing_concepts[0].title, "Batch diário")
+        are_equal(applied.missing_concepts[0].pages, ["entities/b3", "entities/backoffice"])
+        are_equal(applied.discarded, 3)
         Fixture.drop(id)
     }
 
@@ -284,13 +402,13 @@ test WikiLintSpec {
             contradictions: [{description: "d", evidence: [{page: "sources/a", quote: "q"}, {page: "sources/b", quote: "r"}]}],
             resolved_contradictions: [{description: "e", evidence: [{page: "sources/a", quote: "q"}, {page: "sources/b", quote: "r"}], resolved_by: ["sources/c"]}],
             stale_claims: [],
-            missing_concepts: [{title: "Certificado digital", description: "citado"}],
+            missing_concepts: [{title: "Certificado digital", description: "citado", pages: ["sources/a", "sources/b"]}],
             orphan_pages: [],
             notes: ""
         }, 1)
         is_true(text.contains("- d (sources/a, sources/b)"))
         is_true(text.contains("- e (sources/a, sources/b) → resolvida por sources/c"))
-        is_true(text.contains("- Certificado digital: citado"))
+        is_true(text.contains("- Certificado digital: citado (sources/a, sources/b)"))
         is_true(text.contains("descartados"))
     }
 }

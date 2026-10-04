@@ -1477,10 +1477,11 @@ func (a *App) projectRootDir(projectID string, root string, allowed []string) (s
 	if !ok {
 		return "", fmt.Errorf("root invalido: %q", root)
 	}
-	if a.dataDir == "" {
-		return "", fmt.Errorf("data dir nao resolvido — veja o log de startup")
+	dataDir, err := a.resolvedDataDir()
+	if err != nil {
+		return "", err
 	}
-	dir := filepath.Join(a.dataDir, "projects", projectID, root)
+	dir := filepath.Join(dataDir, "projects", projectID, root)
 	if root == "artifacts" {
 		// Best-effort (§3.5 of the plan): every caller that touches a
 		// project's artifacts/ — list or read alike — gets a chance to have
