@@ -35,6 +35,11 @@ export tool ArtifactId {
     next_feature_id(project_id: string): string ->
         self.next_sequential(Paths.artifact(project_id, "features"), "FT")
 
+    // Codigo da n-esima feature (1-based) de um lote gravado do zero — o que
+    // next_feature_id devolve depois do reset de ArtifactCommit.features. O
+    // mapa de dependencias, gerado antes do Commit, cita os itens por ele.
+    feature_id_at(n: number): string -> "FT" + self.pad3(n)
+
     // feature_dir default "" = historias de uma feature standalone do
     // Delivery (artifacts/historias/US00N-slug/, sem prefixo de feature —
     // so existe uma feature implicita nesse projeto). Discovery passa o

@@ -5,6 +5,8 @@ export function AddRawFile(arg1:string,arg2:string):Promise<string>;
 
 export function AddRawText(arg1:string,arg2:string,arg3:string):Promise<string>;
 
+export function AddRawURL(arg1:string,arg2:string,arg3:string):Promise<string>;
+
 export function AppVersion():Promise<string>;
 
 export function CancelRun(arg1:string):Promise<string>;
@@ -66,6 +68,8 @@ export function MCPStatus():Promise<string>;
 export function MarkRawIngested(arg1:string,arg2:string):Promise<string>;
 
 export function OpenHTMLInBrowser(arg1:string):Promise<void>;
+
+export function ProjectsActivity():Promise<string>;
 
 export function ReadPersistedRunLogs(arg1:string,arg2:string):Promise<string>;
 

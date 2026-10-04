@@ -1,6 +1,7 @@
 import './style.css';
 import { LogFrontendError } from '../wailsjs/go/main/App';
 import { mountShell } from './views/shell.js';
+import { initZoom } from './zoom.js';
 
 // Apply the saved preference before the shell is mounted, avoiding a flash
 // of the dark theme when a user has chosen the light one.
@@ -9,6 +10,9 @@ try {
 } catch {
   document.documentElement.dataset.theme = 'dark';
 }
+
+// Same reason as the theme: restore the saved zoom before the first paint.
+initZoom();
 
 // Forward every uncaught error/rejection into the Go process's own log
 // (App.LogFrontendError) — a packaged production build has no reachable

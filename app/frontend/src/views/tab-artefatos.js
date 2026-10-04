@@ -66,7 +66,7 @@ const ARTIFACT_DESCRIPTIONS = {
   der: 'Entidades, atributos e relacionamentos essenciais do domínio.',
   diagramas: 'Visões dos componentes, limites e principais fluxos do sistema.',
   features: 'Features de negócio e enablers conectados aos requisitos e objetivos.',
-  dependencias: 'Grafo de dependências entre itens do backlog e ordem de execução sugerida.',
+  dependencias: 'Grafo de dependências entre itens do backlog e ordem de execução sugerida, gerado junto com o Backlog da solução.',
   historias: 'Histórias detalhadas para implementação e validação.',
   feature: 'Detalhamento da entrega, classificação e critérios de aceite.',
   historia: 'Comportamento esperado, regras e critérios de aceite da história.',
@@ -1050,18 +1050,23 @@ export async function renderArtefatosTab(container, project, { onChanged }) {
     const ready = isRowReady(row);
     const state = tracker && tracker.status ? tracker.status.state : done ? 'completed' : null;
     const dot = state ? dotClass(state) : '';
+    const generatedWith = row.entry?.generatedWith;
     const statusText = state
       ? state === 'completed'
         ? 'gerado'
         : state
-      : ready
-        ? 'pronto para gerar'
-        : `depende de: ${missingDeps(row.entry, doneNames).map(labelFor).join(', ')}`;
+      : generatedWith
+        ? `gerado com ${labelFor(generatedWith)}`
+        : ready
+          ? 'pronto para gerar'
+          : `depende de: ${missingDeps(row.entry, doneNames).map(labelFor).join(', ')}`;
     // Only exactly the "pronto para gerar" case (ready, not done, no tracker
     // running/failed) gets the inline button — a failed/paused row already
     // has its own action in the reading pane (Tentar novamente / Aprovar e
     // continuar), right next to the content that explains why.
-    const showGenerate = ready && !done && !state;
+    // A row generated as part of another artifact (generatedWith) never
+    // gets its own "Gerar" — it comes from that artifact's run.
+    const showGenerate = ready && !done && !state && !generatedWith;
     // A category group is never itself openable — it has no document of its
     // own, only children (see groupRowFor) — clicking it should just toggle
     // expand/collapse (data-toggle), wired independently of data-key/
@@ -1538,7 +1543,10 @@ export async function renderArtefatosTab(container, project, { onChanged }) {
       return;
     }
 
-    if (ready) {
+    if (row.entry.generatedWith) {
+      const body = beginCustom(row.label);
+      body.innerHTML = `<p class="doc-empty">Gerado junto com ${escapeHtml(labelFor(row.entry.generatedWith))}.</p>`;
+    } else if (ready) {
       const body = showAction(row.label, 'Gerar', () => generate(row));
       body.innerHTML = `<p class="doc-empty">${description}</p>`;
     } else {
@@ -1658,6 +1666,9 @@ export async function renderArtefatosTab(container, project, { onChanged }) {
         }
         body.appendChild(wrap);
       });
+      // Features carry their dependency map in the same draft (see
+      // ArtifactCommit.features) — shown last, as it will be written.
+      if (row.entry.artifact === 'features' && data.dependencias) await appendPendingDependencias(data.dependencias, body, stillCurrent);
       return;
     }
 
@@ -1677,6 +1688,31 @@ export async function renderArtefatosTab(container, project, { onChanged }) {
     } else {
       body.appendChild(buildPendingPreview(tracker.status));
     }
+  }
+
+  async function appendPendingDependencias(mapa, body, stillCurrent) {
+    let html = null;
+    try {
+      html = await artifactPreview('dependencias', mapa);
+    } catch {
+      html = null;
+    }
+    if (!stillCurrent()) return;
+    const wrap = document.createElement('div');
+    wrap.className = 'doc-pending-item';
+    const title = document.createElement('div');
+    title.className = 'doc-pending-item-title';
+    title.textContent = labelFor('dependencias');
+    wrap.appendChild(title);
+    if (html) {
+      wrap.appendChild(buildDocFrame(html, { mermaid: hasMermaidDiagram(html), inlineMermaid, autoHeight: true }));
+    } else {
+      const err = document.createElement('p');
+      err.className = 'doc-empty';
+      err.textContent = 'Não foi possível pré-visualizar o mapa de dependências.';
+      wrap.appendChild(err);
+    }
+    body.appendChild(wrap);
   }
 
   // buildPendingPreview is appendPausedPreview's fallback — a plain
@@ -1802,13 +1838,21 @@ export async function renderArtefatosTab(container, project, { onChanged }) {
     return { key: row.groupKey, label: labelFor(row.groupKey), entry: row.entry, category: row.category };
   }
 
+  // generatedWithRow: the row that actually produces a `generatedWith`
+  // document (artifacts.js) — the dependency map only exists as part of the
+  // Features run, so changing or updating it regenerates the whole backlog.
+  function generatedWithRow(row) {
+    const entry = sequence.find((e) => e.artifact === row.entry.generatedWith);
+    return { key: entry.artifact, label: labelFor(entry.artifact), entry, category: entry.category };
+  }
+
   // canRequestChanges: whether THIS exact row is a single document that can
   // be regenerated directly (feedback -> that same row). An expanded
   // collection item (row.groupKey set) is handled separately in
   // renderPreview via canonicalGroupRow — it still gets the composer, just
   // targeting the group, with an explicit note about the batch scope.
   function canRequestChanges(row) {
-    return !row.groupKey && !row.entry.collectionKind;
+    return !row.groupKey && !row.entry.collectionKind && !row.entry.generatedWith;
   }
 
   // updateTargetFor: which row a stale row's own "Atualizar" button
@@ -1824,6 +1868,7 @@ export async function renderArtefatosTab(container, project, { onChanged }) {
   function updateTargetFor(row) {
     if (canRequestChanges(row)) return row;
     if (row.groupKey) return canonicalGroupRow(row);
+    if (row.entry?.generatedWith) return generatedWithRow(row);
     return null;
   }
 
@@ -1947,6 +1992,12 @@ export async function renderArtefatosTab(container, project, { onChanged }) {
       });
     } else if (canRequestChanges(row)) {
       footer = buildRequestChangesComposer(row, { note: [manualEditNoteFor(row.key), downstreamWarningFor(row.key)].filter(Boolean).join(' ') });
+    } else if (row.entry?.generatedWith) {
+      const target = generatedWithRow(row);
+      footer = buildRequestChangesComposer(row, {
+        targetRow: target,
+        note: [`Isto regenera todo o lote de "${target.label}", junto com este documento.`, downstreamWarningFor(target.key)].filter(Boolean).join(' '),
+      });
     } else if (row.groupKey) {
       // One item out of a collection (an ADR, a diagram, a feature, a
       // história) — the composer still shows here (real gap this closes:

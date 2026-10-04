@@ -9,6 +9,7 @@
 import { icon } from './icons.js';
 import { OpenHTMLInBrowser } from '../wailsjs/go/main/App';
 import { inlineMermaidStandalone } from './mermaid-inline.js';
+import artifactShellTemplate from '../../../workflows/shared/artifacts/page_shell.prompt.md?raw';
 
 let els = null;
 let fullscreenTarget = null;
@@ -197,6 +198,22 @@ function widenReadingWidth(html) {
   return html.includes('</head>') ? html.replace('</head>', WIDE_READING_OVERRIDE + '</head>') : WIDE_READING_OVERRIDE + html;
 }
 
+// Same problem as the width above, but for the whole look: every artifact's
+// <style> block is a frozen copy of page_shell.prompt.md from whenever it
+// was generated, so a visual refresh of that template would otherwise only
+// reach artifacts regenerated afterwards. Swap the stored block for the
+// template's current one at render time — read straight from the workflow
+// file (Vite ?raw), so there's a single source of truth for the CSS.
+// Only PageShell output carries the `<div class="meta">` footer, which is
+// what keeps the wiki's own exported pages (also shown via showHtmlDoc) out
+// of this. `rawHtml` on disk (and "Ver fonte") is left untouched.
+const STYLE_BLOCK = /<style>[\s\S]*?<\/style>/;
+const ARTIFACT_STYLE = STYLE_BLOCK.exec(artifactShellTemplate)?.[0] ?? '';
+function restyleArtifact(html) {
+  if (!ARTIFACT_STYLE || !html.includes('<div class="meta">')) return html;
+  return html.replace(STYLE_BLOCK, () => ARTIFACT_STYLE);
+}
+
 // buildDocFrame builds the sandboxed iframe every rendered-HTML view uses
 // (a finished artifact via showHtmlDoc below, or a paused run's live
 // preview via tab-artefatos.js/ArtifactPreview) — pulled out so both get
@@ -220,7 +237,7 @@ function widenReadingWidth(html) {
 // from `mermaid` because that flag also controls the inlineMermaid rewrite,
 // which a caller like this has no use for.
 export function buildDocFrame(rawHtml, { mermaid, inlineMermaid, autoHeight, allowScripts } = {}) {
-  const widened = widenReadingWidth(rawHtml);
+  const widened = widenReadingWidth(restyleArtifact(rawHtml));
   const iframe = document.createElement('iframe');
   iframe.className = autoHeight ? 'doc-frame doc-frame-auto' : 'doc-frame';
   iframe.setAttribute('sandbox', mermaid || allowScripts ? 'allow-scripts allow-same-origin' : 'allow-same-origin');
@@ -249,7 +266,8 @@ export function showHtmlDoc(title, rawHtml, { mermaid, inlineMermaid, allowScrip
   // the Blob URL buildDocFrame's own inlineMermaid produces below (scoped to
   // this app's webview) — inline the actual mermaid source into this copy
   // instead, the one setExternalHtml hands to "abrir no navegador".
-  setExternalHtml(mermaid ? inlineMermaidStandalone(rawHtml) : rawHtml);
+  const restyled = restyleArtifact(rawHtml);
+  setExternalHtml(mermaid ? inlineMermaidStandalone(restyled) : restyled);
   let showingSource = false;
 
   function render() {

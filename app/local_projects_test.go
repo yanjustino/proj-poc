@@ -5,6 +5,7 @@ import (
 	"os"
 	"path/filepath"
 	"testing"
+	"time"
 )
 
 func writeProjectFile(t *testing.T, dataDir, id, body string) {
@@ -66,5 +67,41 @@ func TestLocalProjects_BeforeStartup(t *testing.T) {
 	var projects []map[string]any
 	if err := json.Unmarshal([]byte(body), &projects); err != nil || len(projects) != 1 || projects[0]["name"] != "Um" {
 		t.Fatalf("unexpected body %s (err %v)", body, err)
+	}
+}
+
+// Last activity is the newest mtime anywhere under the project; pending
+// sources are raw/ files (dotfiles excluded) missing from .ingested.json.
+func TestReadProjectActivity_LastChangeAndPendingSources(t *testing.T) {
+	dataDir := t.TempDir()
+	writeProjectFile(t, dataDir, "wi_a", `{"id":"wi_a"}`)
+	projectDir := filepath.Join(dataDir, "projects", "wi_a")
+	rawDir := filepath.Join(projectDir, "raw")
+	if err := os.MkdirAll(rawDir, 0o755); err != nil {
+		t.Fatal(err)
+	}
+	for _, name := range []string{"a.md", "b.pdf", "c.md"} {
+		if err := os.WriteFile(filepath.Join(rawDir, name), []byte("x"), 0o644); err != nil {
+			t.Fatal(err)
+		}
+	}
+	if err := writeIngestedRaw(rawDir, []string{"a.md"}); err != nil {
+		t.Fatal(err)
+	}
+	old := time.Date(2026, 1, 1, 0, 0, 0, 0, time.UTC)
+	recent := time.Date(2026, 5, 1, 12, 0, 0, 0, time.UTC)
+	_ = filepath.Walk(projectDir, func(path string, _ os.FileInfo, _ error) error {
+		return os.Chtimes(path, old, old)
+	})
+	if err := os.Chtimes(filepath.Join(rawDir, "c.md"), recent, recent); err != nil {
+		t.Fatal(err)
+	}
+
+	activity := readProjectActivity(projectDir)
+	if activity.PendingSources != 2 {
+		t.Fatalf("pending = %d, want 2", activity.PendingSources)
+	}
+	if activity.LastActivity != recent.Format(time.RFC3339) {
+		t.Fatalf("lastActivity = %q, want %q", activity.LastActivity, recent.Format(time.RFC3339))
 	}
 }

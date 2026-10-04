@@ -40,12 +40,12 @@ export const DISCOVERY_SEQUENCE = [
   // der is real context for features when present, but never blocks it —
   // deliberately left out of `deps` (see discovery.mh's FeaturesGenerate).
   { artifact: 'features', deps: ['atributos', 'requisitos', 'adr', 'diagramas'], dir: 'features', collectionKind: 'folders', itemFile: 'feature.html', category: 'Backlog da solução' },
-  // dependencias reads every feature already committed under features/ (see
-  // discovery.partial.backlog.mh's DependenciasGenerate) — an LLM call, not
-  // a client-side guess, replacing an earlier from-scratch heuristic that
-  // tried to fuzzy-match feature titles in tab-artefatos.js and got it
-  // wrong often enough to be worse than nothing.
-  { artifact: 'dependencias', deps: ['features'], path: 'dependencias.html', category: 'Backlog da solução' },
+  // dependencias is written by the features run itself (the map is the last
+  // step of DiscoveryDrafts.features, committed by ArtifactCommit.features)
+  // — `generatedWith` makes it a read-only row: no "Gerar" of its own, and
+  // "Solicitar mudança"/"Atualizar" regenerate features instead. The
+  // workflow no longer accepts artifact: "dependencias".
+  { artifact: 'dependencias', deps: ['features'], generatedWith: 'features', path: 'dependencias.html', category: 'Backlog da solução' },
   // historias has no fixed `deps` entry here — it's per-feature and only
   // exists once `features` produced at least one folder; see
   // artifactsForProject()/listFeatureIds() below.

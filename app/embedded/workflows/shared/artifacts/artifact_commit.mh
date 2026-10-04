@@ -45,9 +45,6 @@ export tool ArtifactCommit {
     der(project_id: string, draft: Draft): any ->
         self.single(project_id, "der", "DER", ArtifactBody.der(draft.data), draft)
 
-    dependencias(project_id: string, draft: Draft): any ->
-        self.single(project_id, "dependencias", "Mapa de Dependências", ArtifactBody.dependencias(draft.data), draft)
-
     adr(project_id: string, draft: Draft): any -> {
         self.reset(project_id, "adr")
         var written = []
@@ -72,7 +69,9 @@ export tool ArtifactCommit {
     }
 
     // Um backlog novo invalida todas as historias: as de uma feature que
-    // deixou de existir ficariam orfas em disco.
+    // deixou de existir ficariam orfas em disco. O mapa de dependencias vem
+    // no mesmo rascunho e e gravado depois das features; um rascunho sem ele
+    // (gerado por uma versao anterior) apaga o mapa do backlog antigo.
     features(project_id: string, draft: Draft): any -> {
         self.reset(project_id, "features")
         var historias = Paths.artifact(project_id, "historias")
@@ -84,6 +83,14 @@ export tool ArtifactCommit {
             dir.create(Paths.artifact(project_id, "features/${folder}"))
             self.page(project_id, "features/${folder}/feature.html", html.escape("${id} — ${feature.titulo}"), ArtifactBody.feature(feature), feature, draft)
             written += [folder]
+        }
+        var mapa = draft.data?.dependencias
+        if (mapa == null) {
+            for (var name in ["dependencias.html", "dependencias.json"]) {
+                if (fs.exists(Paths.artifact(project_id, name))) fs.delete(Paths.artifact(project_id, name))
+            }
+        } else {
+            self.page(project_id, "dependencias.html", "Mapa de Dependências", ArtifactBody.dependencias(mapa), mapa, draft)
         }
         return {artifact: "features", written}
     }
@@ -130,6 +137,38 @@ test ArtifactCommitSpec {
         var result = ArtifactCommit.adr(id, draft)
         are_equal(result.written, ["ADR-001-banco", "ADR-002-banco"])
         are_equal(dir.list(Paths.artifact(id, "adr")).filter((p) -> p.ends_with(".html")).size(), 2)
+        Fixture.drop(id)
+    }
+
+    describe features_writes_the_dependency_map_with_the_codes_it_mints {
+        var id = Fixture.project("spec-test-commit-features")
+        var mapa = {
+            features: [
+                {feature_codigo: "FT001", feature_titulo: "Base", depende_de: []},
+                {feature_codigo: "FT002", feature_titulo: "Consumo", depende_de: [{feature_codigo: "FT001", justificativa: "usa a base", fontes: ["ADR-001"]}]},
+            ],
+            ordem_execucao: [{feature_codigo: "FT001", feature_titulo: "Base"}, {feature_codigo: "FT002", feature_titulo: "Consumo"}],
+            diagrama_mermaid: "graph LR\nFT001 --> FT002",
+            gaps: [],
+        }
+        var feature = {
+            titulo: "Base", tipo_item: "enabler", subtipo_enabler: "infraestrutura", classificacao_fontes: ["NFR-001"],
+            hipotese_beneficio: "h", hipotese_beneficio_fontes: ["NFR-001"],
+            medicao_beneficio: {metrica: "m", baseline: "", meta: "x", janela: "30 dias", guardrails: [], fontes: []},
+            itens_habilitados: [], resumo: "r", resumo_fontes: ["NFR-001"], objetivo: "o", objetivo_fontes: ["NFR-001"],
+            personas: [], em_escopo: [], fora_escopo: [], regras_negocio: [], interacoes_entidades_dados: [],
+            criterios_aceite: [{texto: "c", fontes: ["NFR-001"]}], historias_propostas: [], dependencias_integridade: [],
+            dependencias_sistema: [], gaps: [], questoes_abertas: [],
+        }
+        var second = feature
+        second["titulo"] = "Consumo"
+        var result = ArtifactCommit.features(id, {data: {features: [feature, second], dependencias: mapa}, tokens_in: 1, tokens_out: 2})
+        are_equal(result.written, ["FT001-base", "FT002-consumo"])
+        is_true(fs.read(Paths.artifact(id, "dependencias.html")).contains("usa a base"))
+        are_equal(json.parse(fs.read(Paths.artifact(id, "dependencias.json"))).ordem_execucao[1].feature_codigo, "FT002")
+        ArtifactCommit.features(id, {data: {features: [feature]}, tokens_in: 1, tokens_out: 2})
+        is_false(fs.exists(Paths.artifact(id, "dependencias.html")))
+        is_false(fs.exists(Paths.artifact(id, "dependencias.json")))
         Fixture.drop(id)
     }
 

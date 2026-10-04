@@ -19,6 +19,23 @@ const RELATIVE_TIME_UNITS = [
 ];
 const relativeTimeFormatter = new Intl.RelativeTimeFormat('pt-BR', { numeric: 'auto' });
 
+// formatAgeShort: a compact "how long ago" for tight spots like the sidebar
+// — "agora", "12min", "3h", "5d", "2sem", "4m", "1a". Same epoch-ms input as
+// formatRelativeTime; empty string when unknown (nothing to show).
+export function formatAgeShort(ms) {
+  if (ms === null || ms === undefined || Number.isNaN(ms)) return '';
+  const minutes = Math.max(0, Math.floor((Date.now() - ms) / 60000));
+  if (minutes < 1) return 'agora';
+  if (minutes < 60) return `${minutes}min`;
+  const hours = Math.floor(minutes / 60);
+  if (hours < 24) return `${hours}h`;
+  const days = Math.floor(hours / 24);
+  if (days < 7) return `${days}d`;
+  if (days < 30) return `${Math.floor(days / 7)}sem`;
+  if (days < 365) return `${Math.floor(days / 30)}m`;
+  return `${Math.floor(days / 365)}a`;
+}
+
 // formatDurationShort: a compact pt-BR duration for summary figures —
 // "45s", "12min", "1h 05min", "2d 3h". Seconds only show below one minute;
 // finer detail stops mattering at that scale.

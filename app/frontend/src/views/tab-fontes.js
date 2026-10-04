@@ -8,6 +8,7 @@ import {
   markRawIngested,
 } from '../api.js';
 import { openAddTextSourceModal } from './add-text-source-modal.js';
+import { openAddUrlSourceModal } from './add-url-source-modal.js';
 import { createRunTracker } from '../run-tracker.js';
 import { icon } from '../icons.js';
 import { getActiveRun, clearActiveRun } from '../active-runs.js';
@@ -52,6 +53,7 @@ export async function renderFontesTab(container, project, { onChanged }) {
       </div>
       <div class="collection-map-actions">
         <button class="button tertiary small" data-ingest-pending disabled>${icon('inbox', 14)} Ingerir pendentes</button>
+        <button class="button secondary small" data-add-url>${icon('link', 14)} Inserir link</button>
         <button class="button secondary small" data-add-text>${icon('plus', 14)} Inserir texto</button>
         <button class="button primary small" data-add>${icon('plus', 14)} Adicionar fontes</button>
         <div class="view-toggle" data-view-toggle>
@@ -71,6 +73,7 @@ export async function renderFontesTab(container, project, { onChanged }) {
   const sourcesEl = container.querySelector('[data-sources]');
   const addButton = container.querySelector('[data-add]');
   const addTextButton = container.querySelector('[data-add-text]');
+  const addUrlButton = container.querySelector('[data-add-url]');
   const ingestPendingButton = container.querySelector('[data-ingest-pending]');
   const sourceCountEl = container.querySelector('[data-source-count]');
   const filterButtons = [...container.querySelectorAll('[data-source-filter]')];
@@ -355,6 +358,14 @@ export async function renderFontesTab(container, project, { onChanged }) {
 
   addTextButton.addEventListener('click', async () => {
     const result = await openAddTextSourceModal(project);
+    if (!result) return;
+    await refresh();
+    onChanged();
+    if (result.ingest) enqueueIngest(project.id, [result.name]);
+  });
+
+  addUrlButton.addEventListener('click', async () => {
+    const result = await openAddUrlSourceModal(project);
     if (!result) return;
     await refresh();
     onChanged();

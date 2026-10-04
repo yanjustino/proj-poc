@@ -10,6 +10,10 @@ export function AddRawText(arg1, arg2, arg3) {
   return window['go']['main']['App']['AddRawText'](arg1, arg2, arg3);
 }
 
+export function AddRawURL(arg1, arg2, arg3) {
+  return window['go']['main']['App']['AddRawURL'](arg1, arg2, arg3);
+}
+
 export function AppVersion() {
   return window['go']['main']['App']['AppVersion']();
 }
@@ -132,6 +136,10 @@ export function MarkRawIngested(arg1, arg2) {
 
 export function OpenHTMLInBrowser(arg1) {
   return window['go']['main']['App']['OpenHTMLInBrowser'](arg1);
+}
+
+export function ProjectsActivity() {
+  return window['go']['main']['App']['ProjectsActivity']();
 }
 
 export function ReadPersistedRunLogs(arg1, arg2) {

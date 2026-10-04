@@ -3,10 +3,13 @@ package main
 import (
 	"encoding/json"
 	"fmt"
+	"io/fs"
 	"log"
 	"os"
 	"path/filepath"
 	"sort"
+	"strings"
+	"time"
 )
 
 // LocalProjects lists the work-items straight from <dataDir>/projects, without
@@ -79,4 +82,76 @@ func (a *App) resolvedDataDir() (string, error) {
 		return "", fmt.Errorf("data dir nao resolvido: %w", err)
 	}
 	return dir, nil
+}
+
+// projectActivity is what the sidebar shows next to each work-item: when
+// anything under projects/<id>/ last changed (the "recent first" ordering)
+// and how many raw/ sources are still waiting for ingest.
+type projectActivity struct {
+	LastActivity   string `json:"lastActivity"`
+	PendingSources int    `json:"pendingSources"`
+}
+
+// ProjectsActivity returns, as JSON {project_id: projectActivity}, the
+// activity summary of every local work-item — the same set LocalProjects
+// lists. Read-only, computed from disk on each call: project.json has no
+// updated_at, and the newest file mtime under the project is the honest
+// answer to "what did I touch last" (wiki pages, artifacts, raw sources).
+func (a *App) ProjectsActivity() (string, error) {
+	dataDir, err := a.resolvedDataDir()
+	if err != nil {
+		return "", err
+	}
+	root := filepath.Join(dataDir, "projects")
+	entries, err := os.ReadDir(root)
+	if err != nil && !os.IsNotExist(err) {
+		return "", fmt.Errorf("list projects: %w", err)
+	}
+	result := map[string]projectActivity{}
+	for _, entry := range entries {
+		if !entry.IsDir() || validateProjectID(entry.Name()) != nil {
+			continue
+		}
+		result[entry.Name()] = readProjectActivity(filepath.Join(root, entry.Name()))
+	}
+	body, err := json.Marshal(result)
+	if err != nil {
+		return "", err
+	}
+	return string(body), nil
+}
+
+func readProjectActivity(projectDir string) projectActivity {
+	var latest time.Time
+	_ = filepath.WalkDir(projectDir, func(path string, d fs.DirEntry, err error) error {
+		if err != nil {
+			return nil
+		}
+		if info, infoErr := d.Info(); infoErr == nil && info.ModTime().After(latest) {
+			latest = info.ModTime()
+		}
+		return nil
+	})
+
+	pending := 0
+	rawDir := filepath.Join(projectDir, "raw")
+	if rawEntries, err := os.ReadDir(rawDir); err == nil {
+		ingested, _ := readIngestedRaw(rawDir)
+		done := make(map[string]bool, len(ingested))
+		for _, name := range ingested {
+			done[name] = true
+		}
+		for _, raw := range rawEntries {
+			if raw.IsDir() || strings.HasPrefix(raw.Name(), ".") || done[raw.Name()] {
+				continue
+			}
+			pending++
+		}
+	}
+
+	activity := projectActivity{PendingSources: pending}
+	if !latest.IsZero() {
+		activity.LastActivity = latest.UTC().Format(time.RFC3339)
+	}
+	return activity
 }

@@ -9,7 +9,7 @@ import { DiscoveryCommits } from "discovery_artifacts.mh"
 
 // `mode` e do Delivery; fixado aqui so para sair do contrato do Discovery.
 workflow Discovery = ArtifactFlow with { level: Level.discovery, mode: "feature" } {
-    description: "Artefatos de nivel Oportunidade: brief, atributos, requisitos, adr, der, diagramas, features, dependencias, historias, plano."
+    description: "Artefatos de nivel Oportunidade: brief, atributos, requisitos, adr, der, diagramas, features (com o mapa de dependencias), historias, plano."
 }
 
 // Cobre o que e deterministico: validacao de entrada, a cadeia de
@@ -25,7 +25,7 @@ test DiscoveryWorkflowSpec {
     describe rejects_an_artifact_of_another_level_listing_its_own {
         var run = Discovery.run(inputs: {project_id: "spec-test-project", artifact: "feature"})
         is_false(run.ok)
-        is_true(run.error.contains("\"feature\" is not a variant of enum DiscoveryArtifact (use brief | atributos | requisitos | adr | der | diagramas | features | dependencias | historias | plano)"))
+        is_true(run.error.contains("\"feature\" is not a variant of enum DiscoveryArtifact (use brief | atributos | requisitos | adr | der | diagramas | features | historias | plano)"))
     }
 
     describe atributos_and_requisitos_require_brief_first {
@@ -57,9 +57,11 @@ test DiscoveryWorkflowSpec {
         Fixture.drop(id)
     }
 
-    describe dependencias_requires_features_first {
-        var run = Discovery.run(inputs: {project_id: "spec-test-project", artifact: "dependencias"})
-        is_true(run.error.contains("gere 'features' antes de 'dependencias'"))
+    // O mapa de dependencias e gerado junto com as features, nunca sozinho.
+    describe dependencias_is_not_an_artifact_of_its_own {
+        var raised = ""
+        try { Discovery.run(inputs: {project_id: "spec-test-project", artifact: "dependencias"}) } catch (e) { raised = "${e}" }
+        is_true(raised.contains("\"dependencias\" is not a variant of enum Artifact"))
     }
 
     describe historias_requires_a_feature_id {
@@ -79,11 +81,11 @@ test DiscoveryWorkflowSpec {
 
     describe approving_a_document_writes_it_without_calling_the_llm {
         var id = Fixture.project("spec-test-discovery-approve")
-        var data = {features: [], ordem_execucao: [], diagrama_mermaid: "graph TD", gaps: []}
-        var run = Discovery.run(inputs: {project_id: id, artifact: "dependencias", approved: true, approval_data: data, approval_tokens_in: 3, approval_tokens_out: 4})
+        var mapa = {features: [], ordem_execucao: [], diagrama_mermaid: "graph LR", gaps: []}
+        var run = Discovery.run(inputs: {project_id: id, artifact: "features", approved: true, approval_data: {features: [], dependencias: mapa}, approval_tokens_in: 3, approval_tokens_out: 4})
         is_true(run.ok)
         are_equal(run.executed, ["Dispatch", "Commit"])
-        are_equal(run.vars.result.path, "artifacts/dependencias.html")
+        are_equal(run.vars.result.artifact, "features")
         is_true(fs.read(Paths.artifact(id, "dependencias.html")).contains("3 → 4 tokens"))
         Fixture.drop(id)
     }

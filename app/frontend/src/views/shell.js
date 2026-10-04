@@ -21,16 +21,71 @@ import {
   setClaudeModel,
   appVersion,
   importProject,
+  projectsActivity,
 } from '../api.js';
+import { listActiveRunsForProject } from '../active-runs.js';
+import { llmJobsForProject } from '../llm-queue.js';
+import { ingestQueueSnapshot } from '../ingest-queue.js';
+import { formatAgeShort } from '../time-format.js';
 import { openNewWorkItemModal } from './new-workitem.js';
 import { renderWorkItemView } from './workitem-view.js';
 import { getState, setState, subscribe } from '../state.js';
 import { mountReadingPane } from '../reading-pane.js';
 import { icon } from '../icons.js';
 import { getPaneWidth, setPaneWidth } from '../preferences.js';
+import { visualScale, subscribeZoom } from '../zoom.js';
 import brandSymbol from '../assets/images/senpai-symbol.png';
 
 const LEVEL_SHORT = { discovery: 'Discovery', delivery: 'Delivery' };
+
+// NAV_GROUP_ORDER: sidebar sections, in pipeline order. A level outside it
+// (older or future project.json) still gets its own section, after these.
+const NAV_GROUP_ORDER = ['discovery', 'delivery'];
+const NAV_GROUPS_KEY = 'senpai-nav-collapsed-groups';
+// How often the sidebar re-checks the in-memory run registries for its
+// status dots (cheap: no backend call) and re-reads disk activity (one Go
+// call that walks the project folders).
+const NAV_STATUS_INTERVAL_MS = 3000;
+const NAV_ACTIVITY_INTERVAL_MS = 30000;
+
+function readCollapsedGroups() {
+  try {
+    return new Set(JSON.parse(localStorage.getItem(NAV_GROUPS_KEY)) || []);
+  } catch {
+    return new Set();
+  }
+}
+
+function writeCollapsedGroups(groups) {
+  try {
+    localStorage.setItem(NAV_GROUPS_KEY, JSON.stringify([...groups]));
+  } catch {
+    // Not persisted — still applies for this session.
+  }
+}
+
+// projectRunState: 'running' when something tied to the project is in
+// flight or paused waiting for review (active-runs.js survives restarts;
+// llm-queue/ingest-queue hold what hasn't got a runId yet), 'pending' when
+// raw/ has sources not ingested yet, '' otherwise.
+function projectRunState(projectId, activity) {
+  const ingest = ingestQueueSnapshot(projectId);
+  if (
+    listActiveRunsForProject(projectId).length > 0 ||
+    llmJobsForProject(projectId).length > 0 ||
+    ingest.running ||
+    ingest.queued.length > 0
+  ) {
+    return 'running';
+  }
+  return activity?.pendingSources > 0 ? 'pending' : '';
+}
+
+function lastActivityMs(project, activity) {
+  const stamp = activity?.lastActivity || project.created_at;
+  const ms = stamp ? Date.parse(stamp) : NaN;
+  return Number.isNaN(ms) ? 0 : ms;
+}
 
 // AGENT_OPTIONS mirrors workflows/shared/agents/agents.mh's AgentSelector —
 // the 3 backends Writer.generate can pick. "" (mhl's own default) isn't
@@ -70,7 +125,6 @@ export async function mountShell(root) {
           </div>
         </div>
         <div class="nav-search">${icon('search', 14)}<input placeholder="Buscar work-item..." data-filter /></div>
-        <div class="nav-section">Work-items</div>
         <div class="nav-list" data-nav-list></div>
         <div class="sidebar-agent">
           <label for="agent-select">Agente</label>
@@ -439,6 +493,9 @@ export async function mountShell(root) {
 
   let projects = [];
   let filterText = '';
+  let activityById = {};
+  let navStatusSignature = '';
+  const collapsedGroups = readCollapsedGroups();
 
   async function loadProjects() {
     try {
@@ -448,6 +505,7 @@ export async function mountShell(root) {
       // tell "the call never ran"/"it ran and returned 0" apart from a
       // rendering-only bug once this is the packaged app, with no console.
       LogFrontendError(`loadProjects: ok, ${projects.length} project(s)`).catch(() => {});
+      loadActivity();
     } catch (err) {
       navError = `Erro ao listar work-items: ${String(err)}`;
       LogFrontendError(`loadProjects: failed: ${err && err.stack ? err.stack : err}`).catch(() => {});
@@ -463,6 +521,7 @@ export async function mountShell(root) {
   async function loadLocalProjects() {
     try {
       projects = await localProjectList();
+      loadActivity();
       LogFrontendError(`loadLocalProjects: ok, ${projects.length} project(s)`).catch(() => {});
     } catch (err) {
       LogFrontendError(`loadLocalProjects: failed: ${err && err.stack ? err.stack : err}`).catch(() => {});
@@ -530,23 +589,111 @@ export async function mountShell(root) {
       : active;
 
     if (filtered.length === 0) {
-      navList.innerHTML = '<p class="empty-nav">Nenhum work-item ainda.</p>';
+      navList.innerHTML = `<p class="empty-nav">${filterText ? 'Nenhum work-item encontrado.' : 'Nenhum work-item ainda.'}</p>`;
+      navStatusSignature = '';
       return;
     }
-    navList.innerHTML = filtered
-      .map(
-        (p) => `
-        <button class="work ${p.id === state.projectId ? 'active' : ''}" data-id="${p.id}" title="${escapeHtml(p.name)}">
-          <span class="work-icon">${icon('fileText', 13)}</span>
-          <span class="work-copy"><strong>${escapeHtml(p.name)}</strong><span>${LEVEL_SHORT[p.level] || p.level}</span></span>
-        </button>
-      `,
-      )
+
+    const byGroup = new Map();
+    for (const p of filtered) {
+      const level = p.level || 'outros';
+      if (!byGroup.has(level)) byGroup.set(level, []);
+      byGroup.get(level).push(p);
+    }
+    const levels = [...byGroup.keys()].sort((a, b) => {
+      const ia = NAV_GROUP_ORDER.indexOf(a);
+      const ib = NAV_GROUP_ORDER.indexOf(b);
+      return (ia === -1 ? NAV_GROUP_ORDER.length : ia) - (ib === -1 ? NAV_GROUP_ORDER.length : ib) || a.localeCompare(b);
+    });
+
+    navList.innerHTML = levels
+      .map((level) => {
+        const items = byGroup.get(level).sort((a, b) => lastActivityMs(b, activityById[b.id]) - lastActivityMs(a, activityById[a.id]));
+        // A search shows every match, collapsed section or not; so does the
+        // section holding the open work-item.
+        const collapsed = !filterText && collapsedGroups.has(level) && !items.some((p) => p.id === state.projectId);
+        return `
+          <section class="nav-group ${collapsed ? 'collapsed' : ''}">
+            <button class="nav-group-head" data-nav-group="${escapeAttribute(level)}" aria-expanded="${!collapsed}">
+              <span class="nav-group-chevron">${icon('chevronRight', 14)}</span>
+              <span class="nav-group-folder">${icon(collapsed ? 'folder' : 'folderOpen', 15)}</span>
+              <span class="nav-group-name">${escapeHtml(LEVEL_SHORT[level] || level)}</span>
+              <span class="nav-group-count">${items.length}</span>
+            </button>
+            <div class="nav-group-items">${items.map((p) => workItemHtml(p, state.projectId)).join('')}</div>
+          </section>
+        `;
+      })
       .join('');
+    navStatusSignature = computeNavStatusSignature();
     navList.querySelectorAll('.work').forEach((button) => {
       button.addEventListener('click', () => openWorkItem(button.dataset.id));
     });
+    navList.querySelectorAll('[data-nav-group]').forEach((button) => {
+      button.addEventListener('click', () => {
+        const level = button.dataset.navGroup;
+        if (collapsedGroups.has(level)) collapsedGroups.delete(level);
+        else collapsedGroups.add(level);
+        writeCollapsedGroups(collapsedGroups);
+        renderNav();
+      });
+    });
   }
+
+  function workItemHtml(p, selectedId) {
+    const activity = activityById[p.id];
+    const runState = projectRunState(p.id, activity);
+    const pending = activity?.pendingSources || 0;
+    const statusTitle =
+      runState === 'running'
+        ? 'Em execução ou aguardando revisão'
+        : runState === 'pending'
+          ? `${pending} ${pending === 1 ? 'fonte pendente' : 'fontes pendentes'} de ingestão`
+          : '';
+    const lastMs = lastActivityMs(p, activity);
+    const age = formatAgeShort(lastMs || null);
+    const tooltip = [p.name, LEVEL_SHORT[p.level] || p.level, statusTitle, lastMs ? `Última atividade: ${new Date(lastMs).toLocaleString('pt-BR')}` : '']
+      .filter(Boolean)
+      .join('\n');
+    const initial = (p.name.trim()[0] || '?').toUpperCase();
+    return `
+      <button class="work ${p.id === selectedId ? 'active' : ''}" data-id="${p.id}" title="${escapeAttribute(tooltip)}">
+        <span class="work-icon ${runState}">${icon('fileText', 14)}</span>
+        <span class="work-badge"><span class="work-initial">${escapeHtml(initial)}</span><span class="work-status ${runState}"></span></span>
+        <span class="work-copy"><strong>${escapeHtml(p.name)}</strong></span>
+        <span class="work-age">${escapeHtml(age)}</span>
+        ${runState === 'running' ? '<span class="work-deco running" aria-hidden="true"></span>' : ''}
+        ${runState === 'pending' ? `<span class="work-deco pending">${pending}</span>` : ''}
+      </button>
+    `;
+  }
+
+  // The status dots change without any sidebar event (a run finishing in
+  // some tab, an ingest queue draining) — re-render only when one of them
+  // actually changed, so a hover or a click mid-poll isn't disturbed.
+  function computeNavStatusSignature() {
+    return projects
+      .filter((p) => !p.archived)
+      .map((p) => `${p.id}:${projectRunState(p.id, activityById[p.id])}`)
+      .join('|');
+  }
+
+  async function loadActivity() {
+    try {
+      activityById = await projectsActivity();
+    } catch (err) {
+      LogFrontendError(`loadActivity: failed: ${err && err.stack ? err.stack : err}`).catch(() => {});
+      return;
+    }
+    if (!navError) renderNav();
+  }
+
+  setInterval(() => {
+    if (navError || projects.length === 0) return;
+    if (computeNavStatusSignature() !== navStatusSignature) renderNav();
+  }, NAV_STATUS_INTERVAL_MS);
+  setInterval(loadActivity, NAV_ACTIVITY_INTERVAL_MS);
+  window.addEventListener('focus', loadActivity);
 
   function openWorkItem(projectId, initialTab) {
     setState({ view: 'workitem', projectId });
@@ -609,6 +756,13 @@ export async function mountShell(root) {
   // theme below. `max` is a function, not a fixed number — it's evaluated
   // fresh on every move/apply so a window resize between drags is reflected
   // without this needing its own resize listener.
+  // pageWidth: an element's width in the page's own px — what flex-basis
+  // takes. getBoundingClientRect/clientX are screen px, which differ from
+  // page px once the interface is zoomed (zoom.js).
+  function pageWidth(el) {
+    return el.getBoundingClientRect().width / visualScale();
+  }
+
   function initPaneResizer(name, { resizerEl, paneEl, side, min, max }) {
     function applyWidth(px) {
       if (px == null) {
@@ -624,7 +778,7 @@ export async function mountShell(root) {
 
     function onMouseMove(event) {
       if (!dragging) return;
-      applyWidth(startWidth + (event.clientX - startX) * side);
+      applyWidth(startWidth + ((event.clientX - startX) / visualScale()) * side);
     }
 
     function stopDragging() {
@@ -634,14 +788,14 @@ export async function mountShell(root) {
       document.body.classList.remove('pane-resizing');
       document.removeEventListener('mousemove', onMouseMove);
       document.removeEventListener('mouseup', stopDragging);
-      setPaneWidth(name, paneEl.getBoundingClientRect().width);
+      setPaneWidth(name, pageWidth(paneEl));
     }
 
     resizerEl.addEventListener('mousedown', (event) => {
       event.preventDefault();
       dragging = true;
       startX = event.clientX;
-      startWidth = paneEl.getBoundingClientRect().width;
+      startWidth = pageWidth(paneEl);
       resizerEl.classList.add('resizing');
       document.body.classList.add('pane-resizing');
       document.addEventListener('mousemove', onMouseMove);
@@ -657,9 +811,9 @@ export async function mountShell(root) {
       else if (event.key === 'ArrowRight') steps = 1;
       else return;
       event.preventDefault();
-      const width = paneEl.getBoundingClientRect().width + steps * STEP * side;
+      const width = pageWidth(paneEl) + steps * STEP * side;
       applyWidth(width);
-      setPaneWidth(name, paneEl.getBoundingClientRect().width);
+      setPaneWidth(name, pageWidth(paneEl));
     });
 
     return { applyWidth };
@@ -670,16 +824,19 @@ export async function mountShell(root) {
     paneEl: sidebarEl,
     side: 1,
     min: 180,
-    max: () => Math.min(480, shellEl.clientWidth - 320 - 12),
+    max: () => Math.min(480, pageWidth(shellEl) - 320 - 12),
   });
   const readingPaneResizer = initPaneResizer('reading-pane', {
     resizerEl: root.querySelector('[data-pane-resizer="reading-pane"]'),
     paneEl: readingPaneEl,
     side: -1,
     min: 380,
-    max: () => Math.round(shellEl.clientWidth * 0.7),
+    max: () => Math.round(pageWidth(shellEl) * 0.7),
   });
   readingPaneResizer.applyWidth(getPaneWidth('reading-pane'));
+  // Zooming in shrinks the window's width in page px — re-clamp the saved
+  // width against the new max instead of letting it crowd out .main.
+  subscribeZoom(() => readingPaneResizer.applyWidth(getPaneWidth('reading-pane')));
 
   // Collapsed sidebar: a narrow rail with the brand, the action buttons and
   // each work-item as an icon (name in its tooltip), so navigating still

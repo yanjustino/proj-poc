@@ -73,6 +73,13 @@ export async function localProjectList() {
   return parseJSON(await App.LocalProjects(), 'LocalProjects');
 }
 
+// projectsActivity: {project_id: {lastActivity, pendingSources}} read from
+// disk (App.ProjectsActivity) — the sidebar's "recent first" ordering and its
+// pending-sources dot. No mhl involved, so it works at launch too.
+export async function projectsActivity() {
+  return parseJSON(await App.ProjectsActivity(), 'ProjectsActivity');
+}
+
 // retryStartup refaz a inicialização quando ela falhou (sem bridge de pé);
 // com o bridge já pronto, não faz nada — quem precisa só recarregar a
 // lista não deve derrubar uma conexão que funciona.
@@ -219,6 +226,10 @@ export async function addRawFile(projectId, sourcePath) {
 
 export async function addRawText(projectId, title, content) {
   return App.AddRawText(projectId, title, content);
+}
+
+export async function addRawURL(projectId, url, title) {
+  return App.AddRawURL(projectId, url, title);
 }
 
 export async function listIngestedRaw(projectId) {
