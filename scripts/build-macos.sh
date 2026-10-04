@@ -73,7 +73,7 @@ fi
 step() { printf '\n== %s ==\n' "$1"; }
 
 step "sincronizando workflows e runtimes embutidos"
-"$APP_DIR/embedded/sync.sh" "$ROOT/dist"
+"$APP_DIR/embedded/sync.sh" "$ROOT/dist" darwin-arm64
 
 step "compilando Senpai $APP_VERSION para $TARGET ($mode)"
 build_args=(

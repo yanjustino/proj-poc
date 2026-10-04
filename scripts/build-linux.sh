@@ -219,7 +219,7 @@ if [ ! -f "$APP_DIR/embedded/bin/pdftotext-linux-$ARCH" ]; then
 fi
 
 step "sincronizando workflows e runtimes embutidos"
-"$APP_DIR/embedded/sync.sh" "$ROOT/dist"
+"$APP_DIR/embedded/sync.sh" "$ROOT/dist" "linux-$ARCH"
 
 step "compilando Senpai $APP_VERSION para $TARGET ($mode)"
 build_args=(

@@ -12,10 +12,47 @@
 # matching the layout mhl-runtime's own build.sh release target produces
 # (dist/<goos>-<arch>/mhl[.exe]) — copy or rsync that tree into DIST_DIR
 # first (see README.md in this directory for the full refresh procedure).
+#
+# Usage: sync.sh [DIST_DIR] [PLATFORM...]
+#   No PLATFORM: every binary in bin_targets is required (release refresh,
+#   scripts/build-all.sh) — any one missing from DIST_DIR fails the script.
+#   With PLATFORM(s) (e.g. "windows-amd64"): a per-platform build only embeds
+#   its own mhl (embedded_mhl_<goos>_<goarch>.go is build-tagged), so only
+#   those are required, and only to the extent that bin/ has *some* copy —
+#   missing from DIST_DIR but present in bin/ warns that the embedded copy
+#   may be stale and carries on (same rule as build-linux.sh's precheck).
+#   Every other platform missing from DIST_DIR is just a warning. Before
+#   this, one absent dist/linux-arm64/mhl failed the Windows, macOS and every
+#   Linux build alike.
 set -euo pipefail
 cd "$(dirname "${BASH_SOURCE[0]}")"
 
 DIST_DIR="${1:-../../dist}"
+shift || true
+required_platforms=" $* "
+
+# sha256 / byte comparison that also work in minimal containers: Rocky
+# Linux 8 (linux-rhel-build.Dockerfile) ships neither `cmp` (diffutils) nor
+# `shasum` (perl), which left the log printing an empty "sha256 ()".
+sha256_of() {
+  if command -v shasum >/dev/null 2>&1; then
+    shasum -a 256 "$1" | cut -d' ' -f1
+  elif command -v sha256sum >/dev/null 2>&1; then
+    sha256sum "$1" | cut -d' ' -f1
+  else
+    echo "?"
+  fi
+}
+same_file() {
+  if command -v cmp >/dev/null 2>&1; then
+    cmp -s "$1" "$2"
+  else
+    [ "$(sha256_of "$1")" != "?" ] && [ "$(sha256_of "$1")" = "$(sha256_of "$2")" ]
+  fi
+}
+is_required() {
+  [ "$required_platforms" = "  " ] || [[ "$required_platforms" == *" $1 "* ]]
+}
 
 rm -rf workflows
 cp -R ../../workflows ./workflows
@@ -46,13 +83,22 @@ for target in "${bin_targets[@]}"; do
   dest="bin/$embedded_name"
 
   if [ ! -f "$src" ]; then
-    echo "warning: $src not found — bin/$embedded_name left unchanged" >&2
-    bin_failed=1
+    if [ "$required_platforms" = "  " ]; then
+      echo "warning: $src not found — bin/$embedded_name left unchanged" >&2
+      bin_failed=1
+    elif ! is_required "$platform_dir"; then
+      echo "note: $src not found — bin/$embedded_name left unchanged (not needed for this build)"
+    elif [ -f "$dest" ]; then
+      echo "warning: $src not found — building with the existing bin/$embedded_name, which may be stale (sha256 $(sha256_of "$dest"))" >&2
+    else
+      echo "error: $src not found and there is no bin/$embedded_name to fall back on" >&2
+      bin_failed=1
+    fi
     continue
   fi
 
-  if [ -f "$dest" ] && cmp -s "$src" "$dest"; then
-    echo "bin/$embedded_name already up to date (sha256 $(shasum -a 256 "$dest" | cut -d' ' -f1))"
+  if [ -f "$dest" ] && same_file "$src" "$dest"; then
+    echo "bin/$embedded_name already up to date (sha256 $(sha256_of "$dest"))"
     continue
   fi
 
@@ -60,7 +106,7 @@ for target in "${bin_targets[@]}"; do
   cp "$src" "$dest.tmp"
   chmod 755 "$dest.tmp"
   mv -f "$dest.tmp" "$dest"
-  echo "synced $src -> bin/$embedded_name (sha256 $(shasum -a 256 "$dest" | cut -d' ' -f1))"
+  echo "synced $src -> bin/$embedded_name (sha256 $(sha256_of "$dest"))"
 done
 
 if [ "$bin_failed" -ne 0 ]; then
