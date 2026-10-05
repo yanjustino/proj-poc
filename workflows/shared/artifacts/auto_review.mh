@@ -37,12 +37,15 @@ export tool AutoReview {
         var revisao = {tentada: false, aplicada: false, avisos_antes: avisos.size(), avisos_depois: avisos.size()}
 
         if (enabled && !avisos.is_empty()) {
-            var second = call(prompt + self.block(avisos, first.content))
-            tokens_in = tokens_in + second.tokens_in
-            tokens_out = tokens_out + second.tokens_out
             var revised = null
             var avisos_revisados = avisos
+            // A propria chamada fica no try: a revisao pede a resposta
+            // completa de novo (e maior), entao pode estourar o limite de
+            // saida do modelo — isso nao deve descartar a primeira versao.
             try {
+                var second = call(prompt + self.block(avisos, first.content))
+                tokens_in = tokens_in + second.tokens_in
+                tokens_out = tokens_out + second.tokens_out
                 revised = prepare(second.content)
                 avisos_revisados = check(revised)
             } catch (err) {
@@ -154,6 +157,23 @@ test AutoReviewSpec {
         )
         are_equal(result.data.v, 1)
         is_true(!result.revisao.aplicada)
+    }
+
+    // Ex.: o Devin sai com "Response truncated: model hit max output token
+    // limit" na revisao — a primeira versao, valida, e mantida.
+    describe a_failed_revision_call_keeps_the_original {
+        var result = AutoReview.execute(
+            (p) -> {
+                if (p.contains("Revisão automática")) fail("Response truncated: model hit max output token limit")
+                return {content: "{\"v\": 1}", tokens_in: 3, tokens_out: 4}
+            },
+            true, "gere", (raw) -> json.parse(raw), (data) -> ["a"]
+        )
+        are_equal(result.data.v, 1)
+        is_true(result.revisao.tentada)
+        is_true(!result.revisao.aplicada)
+        are_equal(result.tokens_in, 3)
+        are_equal(result.tokens_out, 4)
     }
 
     describe block_lists_unique_warnings_and_the_previous_answer {
