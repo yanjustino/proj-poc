@@ -97,6 +97,43 @@ func TestExtractIfChanged_ReplacesTheFileInsteadOfRewritingIt(t *testing.T) {
 	}
 }
 
+// On Windows renaming over an mhl.exe that a leftover process still runs
+// fails with "Acesso negado", but renaming the running file itself works:
+// replaceFile must move the old file aside and then install the new one.
+func TestReplaceFile_SidelinesALockedDestination(t *testing.T) {
+	dir := t.TempDir()
+	dest := filepath.Join(dir, "mhl.exe")
+	src := filepath.Join(dir, ".mhl.exe.tmp-1")
+	if err := os.WriteFile(dest, []byte("v1"), 0o755); err != nil {
+		t.Fatal(err)
+	}
+	if err := os.WriteFile(src, []byte("v2"), 0o755); err != nil {
+		t.Fatal(err)
+	}
+	// Simulates Windows: replacing an existing dest is refused.
+	renameFile = func(from, to string) error {
+		if to == dest {
+			if _, err := os.Stat(dest); err == nil {
+				return &os.LinkError{Op: "rename", Old: from, New: to, Err: os.ErrPermission}
+			}
+		}
+		return os.Rename(from, to)
+	}
+	t.Cleanup(func() { renameFile = os.Rename })
+
+	if err := replaceFile(src, dest, true); err != nil {
+		t.Fatalf("replaceFile: %v", err)
+	}
+	if got, _ := os.ReadFile(dest); string(got) != "v2" {
+		t.Fatalf("content = %q, want v2", got)
+	}
+	removeSidelined(dest)
+	entries, _ := os.ReadDir(dir)
+	if len(entries) != 1 {
+		t.Fatalf("leftover files in %s: %v", dir, entries)
+	}
+}
+
 // Guards the build itself: app/embedded/bin/mhl-<goos>-<goarch> must be the
 // real mhl executable, not an empty placeholder — an empty one only shows up
 // at startup as "exec format error".

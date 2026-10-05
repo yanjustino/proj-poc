@@ -10,6 +10,7 @@ import (
 	"path/filepath"
 	"runtime"
 	"strings"
+	"time"
 )
 
 // workflowsMarker is a file that only exists inside a real workflows/ tree —
@@ -30,6 +31,9 @@ const workflowsMarker = "work_item/work_item.mh"
 // startup fails. A rename gives the new binary its own inode, so the
 // leftover process keeps the old one and both run.
 func extractIfChanged(dest string, content []byte, perm os.FileMode) error {
+	if runtime.GOOS == "windows" {
+		removeSidelined(dest)
+	}
 	if existing, err := os.ReadFile(dest); err == nil {
 		if sha256.Sum256(existing) == sha256.Sum256(content) {
 			return nil
@@ -50,11 +54,57 @@ func extractIfChanged(dest string, content []byte, perm os.FileMode) error {
 		os.Remove(tmpPath)
 		return err
 	}
-	if err := os.Rename(tmpPath, dest); err != nil {
+	if err := replaceFile(tmpPath, dest, runtime.GOOS == "windows"); err != nil {
 		os.Remove(tmpPath)
 		return err
 	}
 	return nil
+}
+
+// renameFile is os.Rename, swappable in tests to simulate Windows refusing
+// to replace a file.
+var renameFile = os.Rename
+
+// replaceFile renames src over dest. On Windows (sideline=true) that
+// rename fails with "Acesso negado" when dest is an .exe still running — an
+// mhl.exe left over from a previous app run, after an update changed the
+// embedded binary — or while an antivirus still holds the freshly written
+// src. Windows does allow renaming a running image, so on failure dest is
+// moved aside to a ".<name>.old-*" file (deleted by removeSidelined on a
+// later extraction, once nothing runs it) and the rename is retried, with a
+// short backoff for transient antivirus locks.
+func replaceFile(src, dest string, sideline bool) error {
+	err := renameFile(src, dest)
+	if err == nil || !sideline {
+		return err
+	}
+	for attempt := 1; ; attempt++ {
+		aside := filepath.Join(filepath.Dir(dest), fmt.Sprintf(".%s.old-%d", filepath.Base(dest), time.Now().UnixNano()))
+		if asideErr := renameFile(dest, aside); asideErr == nil || errors.Is(asideErr, fs.ErrNotExist) {
+			if err = renameFile(src, dest); err == nil {
+				return nil
+			}
+			if asideErr == nil {
+				renameFile(aside, dest)
+			}
+		} else if err = renameFile(src, dest); err == nil {
+			return nil
+		}
+		if attempt == 5 {
+			return err
+		}
+		time.Sleep(time.Duration(attempt) * 200 * time.Millisecond)
+	}
+}
+
+// removeSidelined deletes the ".<name>.old-*" copies replaceFile moved
+// aside. Best-effort: a copy whose process is still alive stays locked and
+// is retried on the next extraction.
+func removeSidelined(dest string) {
+	matches, _ := filepath.Glob(filepath.Join(filepath.Dir(dest), "."+filepath.Base(dest)+".old-*"))
+	for _, path := range matches {
+		os.Remove(path)
+	}
 }
 
 // ensureVendoredMHL extracts this build's embedded mhl binary to
