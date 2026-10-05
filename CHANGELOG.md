@@ -6,6 +6,17 @@ O formato segue o [Keep a Changelog](https://keepachangelog.com/pt-BR/1.1.0/). C
 
 ## [Não lançado]
 
+### 2026-10-05
+
+#### Adicionado
+- Artefato **Modelo arquitetural** (`modelo`), entre as ADRs e os diagramas, em Discovery e Delivery: os diagramas C4 de contexto e de contêiner descritos como dados (elementos e relações próprios de cada um), revisados em tabelas antes dos demais diagramas (`workflows/shared/artifacts/arch_model.mh`).
+- Edição manual do modelo no editor guiado (`ArtifactSave`), com uma aba por diagrama (Contexto, Contêineres, Lacunas), tabelas por linha e prévia da visão da aba: ao salvar, os diagramas de contexto e de contêiner são redesenhados na hora, sem LLM, e o lote de diagramas é reanotado.
+
+#### Alterado
+- Os diagramas C4 de contexto e de contêiner passam a vir do modelo aprovado, desenhados por código; nomes divergentes entre os dois níveis viram aviso. A geração de diagramas passa a exigir o modelo e produz só os tipos opcionais (componente, implantação, fluxos, sequência, estado), com o modelo como vocabulário fixo.
+- O diagrama de contêiner aceita mais de uma fronteira de sistema de software (`fronteiras` e `fronteira` por elemento), com um subgrafo por fronteira e avisos para contêiner fora de fronteira e fronteira vazia; no editor do modelo, cada fronteira tem sua própria tabela de elementos.
+- A autorrevisão dos diagramas ignora os avisos de regra C4 das visões derivadas, que só o modelo pode corrigir.
+
 ### 2026-10-04
 
 #### Adicionado

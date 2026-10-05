@@ -15,7 +15,7 @@ export enum Level { discovery, delivery }
 
 // Todo artefato de algum nivel. A entrada recusa qualquer outro nome; cada
 // nivel aceita so os seus (DiscoveryArtifact / DeliveryArtifact).
-export enum Artifact { brief, atributos, requisitos, adr, der, diagramas, features, feature, historia, historias, plano }
+export enum Artifact { brief, atributos, requisitos, adr, der, modelo, diagramas, features, feature, historia, historias, plano }
 
 export tool ArtifactLevels {
     // Valida a combinacao de entradas do nivel antes de qualquer geracao.

@@ -216,6 +216,43 @@ export tool C4Diagram {
         return false
     }
 
+    // Fronteiras explicitas (`fronteiras` + `fronteira` em cada elemento): um
+    // diagrama de conteiner pode mostrar mais de um sistema de software. Sem
+    // elas, vale a fronteira unica do escopo, decidida pelo tipo
+    // (inside_boundary) — o formato dos diagramas gerados antes delas.
+    internal fronteiras(data: any): any[] ->
+        if (data.diagram_type == "c4-container") data?.fronteiras ?? [] else []
+
+    internal boundary_line(b: int, nome: string, kind: string, inside: string): string ->
+        "    subgraph b${b}[\"<b>" + self.mm(nome) + "</b><br/>[" + kind + "]\"]\n" +
+            inside +
+            "    end\n" +
+            "    style b${b} fill:none,stroke:#444444,stroke-dasharray:6 4,color:#444444\n"
+
+    internal explicit_boundaries(data: any): string -> {
+        var elementos = data.elementos
+        var fronteiras = self.fronteiras(data)
+        var ids = fronteiras.map((f) -> f.id)
+        var out = ""
+        var i = 0
+        for (var el in elementos) {
+            if (!ids.contains(el?.fronteira ?? "")) out = out + self.node_line(el, i) + "\n"
+            i = i + 1
+        }
+        var b = 0
+        for (var f in fronteiras) {
+            var inside = ""
+            var j = 0
+            for (var el in elementos) {
+                if ((el?.fronteira ?? "") == f.id) inside = inside + "    " + self.node_line(el, j) + "\n"
+                j = j + 1
+            }
+            out = out + self.boundary_line(b, f?.nome ?? "", "Sistema de software", inside)
+            b = b + 1
+        }
+        return out
+    }
+
     internal relation_line(elementos: any[], rel: any): string -> {
         var de = self.index_of_id(elementos, rel.de)
         var para = self.index_of_id(elementos, rel.para)
@@ -242,6 +279,8 @@ export tool C4Diagram {
 
         if (t == "c4-deployment") {
             out = out + self.deployment_nodes(elementos, "")
+        } else if (!self.fronteiras(data).is_empty()) {
+            out = out + self.explicit_boundaries(data)
         } else {
             var outside = ""
             var inside = ""
@@ -255,10 +294,7 @@ export tool C4Diagram {
             if (!inside.is_empty()) {
                 var escopo_nome = data?.escopo?.nome ?? ""
                 var escopo_kind = if (t == "c4-container") "Sistema de software" else "Contêiner"
-                out = out + "    subgraph b0[\"<b>" + self.mm(escopo_nome) + "</b><br/>[" + escopo_kind + "]\"]\n" +
-                    inside +
-                    "    end\n" +
-                    "    style b0 fill:none,stroke:#444444,stroke-dasharray:6 4,color:#444444\n"
+                out = out + self.boundary_line(0, escopo_nome, escopo_kind, inside)
             }
         }
 
@@ -295,7 +331,7 @@ export tool C4Diagram {
         }
         var t = data.diagram_type
         if (t == "c4-container" || t == "c4-component") {
-            var boundary = if (t == "c4-container") "Fronteira do sistema em escopo" else "Fronteira do contêiner em escopo"
+            var boundary = if (t == "c4-component") "Fronteira do contêiner em escopo" else if (self.fronteiras(data).size() > 1) "Fronteira de um sistema de software" else "Fronteira do sistema em escopo"
             items = items + "<li><span class=\"c4-swatch c4-swatch-boundary\"></span>" + boundary + "</li>"
         }
         if (!(data?.relacoes ?? []).is_empty()) items = items + "<li><span class=\"c4-swatch c4-swatch-relation\"></span>Relação (descrição e, quando houver, tecnologia)</li>"
@@ -323,18 +359,28 @@ export tool C4Diagram {
     elements_table(data: any): string -> {
         if (!self.is_structured(data)) return ""
         var deployment = data.diagram_type == "c4-deployment"
+        var fronteiras = self.fronteiras(data)
+        var dentro = deployment || !fronteiras.is_empty()
         var elementos = data.elementos
-        var head = "<tr><th>Elemento</th><th>Tipo</th><th>Tecnologia</th>" + (if (deployment) "<th>Dentro de</th>" else "") + "<th>Descrição</th><th>Fontes</th></tr>"
+        var head = "<tr><th>Elemento</th><th>Tipo</th><th>Tecnologia</th>" + (if (dentro) "<th>Dentro de</th>" else "") + "<th>Descrição</th><th>Fontes</th></tr>"
         var rows = ""
         for (var el in elementos) {
             var tecnologia = el?.tecnologia ?? ""
-            var parent = self.effective_parent(elementos, el)
+            var parent = if (deployment) self.effective_parent(elementos, el) else ""
+            var pai_nome = if (deployment) (if (parent.is_empty()) "" else self.name_of(elementos, parent)) else self.boundary_name(fronteiras, el?.fronteira ?? "")
             rows = rows + "<tr><td>" + html.escape(el.nome) + "</td><td>" + html.escape(self.element_type_label(el.tipo)) + "</td><td>" +
                 (if (tecnologia.is_empty()) "—" else html.escape(tecnologia)) + "</td>" +
-                (if (deployment) "<td>" + (if (parent.is_empty()) "—" else html.escape(self.name_of(elementos, parent))) + "</td>" else "") +
+                (if (dentro) "<td>" + (if (pai_nome.is_empty()) "—" else html.escape(pai_nome)) + "</td>" else "") +
                 "<td>" + html.escape(el?.descricao ?? "") + "</td><td>" + Cite.badges(el?.fontes ?? []) + "</td></tr>"
         }
         return "<h2>Elementos</h2><table><thead>" + head + "</thead><tbody>" + rows + "</tbody></table>"
+    }
+
+    internal boundary_name(fronteiras: any[], id: string): string -> {
+        for (var f in fronteiras) {
+            if (f.id == id) return f?.nome ?? ""
+        }
+        return ""
     }
 
     relations_table(data: any): string -> {
@@ -389,6 +435,7 @@ export tool C4Diagram {
             if (!fora.is_empty()) out += ["Diagrama de contêiner não deve incluir o próprio sistema como elemento (ele é a fronteira), componentes nem nós de implantação: " + fora + "."]
             var sem_tecnologia = elementos.filter((el) -> (el.tipo == "container" || el.tipo == "banco_dados") && (el?.tecnologia ?? "").is_empty()).map((el) -> el.nome).join(", ")
             if (!sem_tecnologia.is_empty()) out += ["Contêiner sem tecnologia definida: " + sem_tecnologia + "."]
+            out += self.boundary_warnings(data)
             for (var rel in relacoes) {
                 var de = self.index_of_id(elementos, rel.de)
                 var para = self.index_of_id(elementos, rel.para)
@@ -435,6 +482,25 @@ export tool C4Diagram {
         var conectados = relacoes.map((r) -> r.de) + relacoes.map((r) -> r.para)
         var isolados = elementos.filter((el) -> el.tipo != "no_implantacao" && !conectados.contains(el.id)).map((el) -> el.nome).join(", ")
         if (!isolados.is_empty()) out += ["Elemento sem nenhuma relação no diagrama: " + isolados + "."]
+        return out
+    }
+
+    // Fronteiras explicitas de um diagrama de conteiner (nada sem elas).
+    internal boundary_warnings(data: any): string[] -> {
+        var fronteiras = self.fronteiras(data)
+        if (fronteiras.is_empty()) return []
+        var out = []
+        var ids = []
+        for (var f in fronteiras) {
+            if (ids.contains(f.id)) out += ["Id de fronteira repetido: " + f.id + "."]
+            else ids += [f.id]
+            if ((f?.nome ?? "").trim().is_empty()) out += ["Fronteira sem nome: " + f.id + "."]
+            if (!data.elementos.any((el) -> (el?.fronteira ?? "") == f.id)) out += ["Fronteira sem nenhum elemento: " + (f?.nome ?? f.id) + "."]
+        }
+        var inexistente = data.elementos.filter((el) -> !(el?.fronteira ?? "").is_empty() && !ids.contains(el.fronteira)).map((el) -> el.nome).join(", ")
+        if (!inexistente.is_empty()) out += ["Elemento numa fronteira inexistente: " + inexistente + "."]
+        var fora = data.elementos.filter((el) -> (el.tipo == "container" || el.tipo == "banco_dados") && (el?.fronteira ?? "").is_empty()).map((el) -> el.nome).join(", ")
+        if (!fora.is_empty()) out += ["Contêiner fora de qualquer fronteira: " + fora + "."]
         return out
     }
 
@@ -506,11 +572,6 @@ export tool C4Diagram {
         return out
     }
 
-    // annotate: o que DiagramasGenerate guarda em pending_data — o lote da
-    // LLM com os avisos de lote anexados a cada item (avisos_lote), para que
-    // o preview de UM item (ArtifactPreview.Diagrama) e o arquivo final
-    // mostrem a mesma coisa sem precisar do lote inteiro. mhl nao tem spread
-    // nem atribuicao de campo, dai a reconstrucao campo a campo.
     // infra_hint: se as ADRs do work-item mencionam infraestrutura de
     // implantacao (termos como cluster, kubernetes, eks, regiao) — ai o lote
     // precisa de um c4-deployment (ver diagramas.prompt.md).
@@ -519,6 +580,14 @@ export tool C4Diagram {
         return ["kubernetes", "eks", "aks", "gke", "cluster", "zonas de disponibilidade", "availability zone", "região", "ecs", "fargate", "máquina virtual"].any((k) -> t.contains(k))
     }
 
+    // annotate: o que DiagramasGenerate guarda em pending_data — o lote da
+    // LLM com os avisos de lote anexados a cada item (avisos_lote), para que
+    // o preview de UM item (ArtifactPreview.Diagrama) e o arquivo final
+    // mostrem a mesma coisa sem precisar do lote inteiro. mhl nao tem spread
+    // nem atribuicao de campo, dai a reconstrucao campo a campo.
+    // derivado_do_modelo marca as visoes de contexto e conteiner projetadas
+    // do modelo arquitetural (ArchModel) — e por ele que
+    // ArtifactCommit.model_views as encontra para redesenhar.
     annotate(data: any, infra: bool = false): any -> {
         var diagramas = data.diagramas
         var avisos = self.batch_warnings(diagramas)
@@ -538,6 +607,8 @@ export tool C4Diagram {
                 elementos: d?.elementos ?? [],
                 relacoes: d?.relacoes ?? [],
                 diagrama_mermaid: d?.diagrama_mermaid ?? "",
+                fronteiras: d?.fronteiras ?? [],
+                derivado_do_modelo: d?.derivado_do_modelo ?? false,
                 avisos_lote: avisos[i],
             }]
             i = i + 1
@@ -772,5 +843,40 @@ test C4DiagramSpec {
     describe warnings_html_escapes_llm_names {
         var d = {diagram_type: "c4-context", escopo: {nome: "", descricao: "", fontes: []}, elementos: [{id: "x", nome: "<Solto>", tipo: "sistema", tecnologia: "", descricao: "", no_pai: "", fontes: []}], relacoes: []}
         is_true(C4Diagram.warnings_html(d).contains("&lt;Solto&gt;"))
+    }
+
+    describe container_with_explicit_boundaries_draws_one_subgraph_each {
+        var d = {
+            titulo: "Contêineres",
+            diagram_type: "c4-container",
+            descricao: "",
+            descricao_fontes: [],
+            escopo: {nome: "Loja", descricao: "", fontes: []},
+            fronteiras: [{id: "loja", nome: "Loja", descricao: "", fontes: []}, {id: "pag", nome: "Pagamentos", descricao: "", fontes: []}, {id: "vazia", nome: "Vazia", descricao: "", fontes: []}],
+            elementos: [
+                {id: "cliente", nome: "Cliente", tipo: "pessoa", tecnologia: "", descricao: "", no_pai: "", fronteira: "", fontes: []},
+                {id: "api", nome: "API", tipo: "container", tecnologia: "Java", descricao: "", no_pai: "", fronteira: "loja", fontes: []},
+                {id: "psp", nome: "Gateway", tipo: "container", tecnologia: "Go", descricao: "", no_pai: "", fronteira: "pag", fontes: []},
+                {id: "solto", nome: "Solto", tipo: "banco_dados", tecnologia: "PG", descricao: "", no_pai: "", fronteira: "", fontes: []},
+                {id: "x", nome: "Perdido", tipo: "container", tecnologia: "Go", descricao: "", no_pai: "", fronteira: "zzz", fontes: []},
+            ],
+            relacoes: [
+                {de: "cliente", para: "api", descricao: "Usa", tecnologia: "HTTPS", fontes: []},
+                {de: "api", para: "psp", descricao: "Cobra via", tecnologia: "gRPC", fontes: []},
+                {de: "api", para: "solto", descricao: "Grava", tecnologia: "JDBC", fontes: []},
+                {de: "api", para: "x", descricao: "Chama", tecnologia: "HTTP", fontes: []},
+            ],
+        }
+        var m = C4Diagram.mermaid_source(d)
+        is_true(m.contains("subgraph b0[\"<b>Loja</b><br/>[Sistema de software]\"]\n        n1["))
+        is_true(m.contains("subgraph b1[\"<b>Pagamentos</b><br/>[Sistema de software]\"]\n        n2["))
+        is_true(m.contains("subgraph b2[\"<b>Vazia</b>"))
+        var avisos = C4Diagram.check(d).join(" | ")
+        is_true(avisos.contains("Fronteira sem nenhum elemento: Vazia"))
+        is_true(avisos.contains("Elemento numa fronteira inexistente: Perdido"))
+        is_true(avisos.contains("Contêiner fora de qualquer fronteira: Solto"))
+        is_true(C4Diagram.elements_table(d).contains("<td>Pagamentos</td>"))
+        is_true(C4Diagram.legend(d).contains("Fronteira de um sistema de software"))
+        are_equal(C4Diagram.annotate({diagramas: [d]}).diagramas[0].fronteiras.size(), 3)
     }
 }

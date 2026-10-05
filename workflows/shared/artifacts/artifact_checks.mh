@@ -4,6 +4,7 @@
 // cada pagina mostra na sua secao de conformidade (ArtifactBody).
 
 import { C4Diagram } from "c4_diagram.mh"
+import { ArchModel } from "arch_model.mh"
 import { DerModel } from "der_model.mh"
 import { StoryRules, FeatureRules } from "backlog_rules.mh"
 import { Contracts, Scenarios } from "historia_spec.mh"
@@ -11,12 +12,21 @@ import { PlanoModel } from "plano_model.mh"
 import { RadahnModel } from "../radahn/radahn_model.mh"
 
 export tool ArtifactChecks {
-    // Lote de diagramas ja anotado (C4Diagram.annotate: avisos_lote).
+    // Lote de diagramas ja anotado (C4Diagram.annotate: avisos_lote). As
+    // visoes derivadas do modelo nao entram no C4Diagram.check: a LLM dos
+    // diagramas nao as escreve e nao pode corrigi-las (os avisos delas sao
+    // os do proprio modelo, ver modelo abaixo) — so os avisos de lote
+    // pendurados nelas (ex.: falta o diagrama de implantacao) contam.
     diagramas(data: any): string[] -> {
         var out = []
-        for (var d in (data?.diagramas ?? [])) out = out + C4Diagram.check(d) + (d?.avisos_lote ?? [])
+        for (var d in (data?.diagramas ?? [])) {
+            if (!(d?.derivado_do_modelo ?? false)) out = out + C4Diagram.check(d)
+            out = out + (d?.avisos_lote ?? [])
+        }
         return out
     }
+
+    modelo(data: any): string[] -> ArchModel.check(data)
 
     der(data: any): string[] -> DerModel.check(data)
 
@@ -40,4 +50,21 @@ export tool ArtifactChecks {
 
     // Plano ja anotado (avisos_contexto, criterios_total).
     plano(data: any): string[] -> PlanoModel.check(data) + (data?.avisos_contexto ?? []) + RadahnModel.check(data)
+}
+
+test ArtifactChecksSpec {
+    // A autorrevisao dos diagramas so pede a LLM o que ela pode corrigir: uma
+    // visao derivada do modelo com problema e problema do modelo.
+    describe derived_views_only_count_their_batch_warnings {
+        var quebrada = {diagram_type: "c4-container", derivado_do_modelo: true, escopo: {nome: "", descricao: "", fontes: []}, elementos: [{id: "a", nome: "A", tipo: "container", tecnologia: "", descricao: "", no_pai: "", fontes: []}], relacoes: [], avisos_lote: ["falta implantação"]}
+        are_equal(ArtifactChecks.diagramas({diagramas: [quebrada]}), ["falta implantação"])
+        var gerada = {diagram_type: "c4-container", escopo: {nome: "", descricao: "", fontes: []}, elementos: [{id: "a", nome: "A", tipo: "container", tecnologia: "", descricao: "", no_pai: "", fontes: []}], relacoes: [], avisos_lote: []}
+        is_true(ArtifactChecks.diagramas({diagramas: [gerada]}).size() > 0)
+    }
+
+    describe annotate_keeps_the_derived_marker {
+        var lote = C4Diagram.annotate({diagramas: [{titulo: "C", diagram_type: "c4-context", descricao: "", descricao_fontes: [], derivado_do_modelo: true}, {titulo: "S", diagram_type: "sequence", descricao: "", descricao_fontes: []}]})
+        is_true(lote.diagramas[0].derivado_do_modelo)
+        is_false(lote.diagramas[1].derivado_do_modelo)
+    }
 }

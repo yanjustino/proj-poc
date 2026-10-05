@@ -23,7 +23,7 @@ import { Traceability, SpecFiles } from "../shared/artifacts/historia_spec.mh"
 import { ArtifactSchema, SpecConventions } from "../shared/artifacts/artifacts_common.mh"
 
 export enum DeliveryMode { feature, historia }
-export enum DeliveryArtifact { brief, requisitos, adr, der, diagramas, feature, historia, historias, plano }
+export enum DeliveryArtifact { brief, requisitos, adr, der, modelo, diagramas, feature, historia, historias, plano }
 
 export tool DeliveryKinds {
     // O artefato final e o proprio modo; `historias` quebra a feature final.
@@ -66,7 +66,7 @@ prompt HistoriaInstruction(
 schema FeatureSchema from "schemas/feature.schema.json"
 schema HistoriaSchema from "schemas/historia.schema.json"
 
-// Predecessores: brief -> requisitos -> adr -> der | diagramas -> feature |
+// Predecessores: brief -> requisitos -> adr -> der | modelo -> diagramas -> feature |
 // historia -> historias. historias e plano recebem o contexto recortado pelo
 // que o item cita, com texto fixo no lugar do que nao foi gerado.
 export tool DeliveryDrafts {
@@ -75,6 +75,7 @@ export tool DeliveryDrafts {
         DeliveryArtifact.requisitos -> self.requisitos(project_id)
         DeliveryArtifact.adr        -> self.adr(project_id)
         DeliveryArtifact.der        -> self.der(project_id, autorrevisao)
+        DeliveryArtifact.modelo     -> self.modelo(project_id, autorrevisao)
         DeliveryArtifact.diagramas  -> self.diagramas(project_id, autorrevisao)
         DeliveryArtifact.feature    -> self.feature(project_id, autorrevisao)
         DeliveryArtifact.historia   -> self.historia(project_id, autorrevisao)
@@ -97,9 +98,15 @@ export tool DeliveryDrafts {
         return CommonDrafts.der(project_id, autorrevisao, requisitos, NoAtributos.text(), Require.adr(project_id, "der"))
     }
 
+    internal modelo(project_id: string, autorrevisao: bool): Draft -> {
+        var requisitos = Require.artifact(project_id, "requisitos", "modelo")
+        return CommonDrafts.modelo(project_id, autorrevisao, requisitos, NoAtributos.text(), Require.adr(project_id, "modelo"))
+    }
+
     internal diagramas(project_id: string, autorrevisao: bool): Draft -> {
         var requisitos = Require.artifact(project_id, "requisitos", "diagramas")
-        return CommonDrafts.diagramas(project_id, autorrevisao, requisitos, NoAtributos.text(), Require.adr(project_id, "diagramas"))
+        var adr = Require.adr(project_id, "diagramas")
+        return CommonDrafts.diagramas(project_id, autorrevisao, requisitos, NoAtributos.text(), adr, Require.artifact(project_id, "modelo", "diagramas"))
     }
 
     // O artefato final exige todos os predecessores.
@@ -197,6 +204,7 @@ export tool DeliveryCommits {
         DeliveryArtifact.requisitos -> ArtifactCommit.requisitos(project_id, draft)
         DeliveryArtifact.adr        -> ArtifactCommit.adr(project_id, draft)
         DeliveryArtifact.der        -> ArtifactCommit.der(project_id, draft)
+        DeliveryArtifact.modelo     -> ArtifactCommit.modelo(project_id, draft)
         DeliveryArtifact.diagramas  -> ArtifactCommit.diagramas(project_id, draft)
         DeliveryArtifact.feature    -> self.feature(project_id, draft)
         DeliveryArtifact.historia   -> self.historia(project_id, draft)

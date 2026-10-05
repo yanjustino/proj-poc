@@ -5,6 +5,10 @@
 // ArtifactData: JSON primeiro, HTML por ultimo (o HTML e o marcador de
 // disponibilidade que Context usa).
 //
+// modelo (o modelo arquitetural, ArchModel) e o caminho sem LLM para mudar
+// os diagramas de contexto e de conteiner: gravar o modelo redesenha as duas
+// visoes em diagramas/ na hora (ArtifactCommit.model_views).
+//
 // O editor so altera valores de texto e adiciona/remove itens de listas; a
 // estrutura (chaves de topo) precisa ser exatamente a do arquivo atual, o que
 // impede um cliente de gravar um JSON que os templates nao saberiam renderizar.
@@ -14,14 +18,17 @@ import { ArtifactData } from "../shared/artifacts/artifact_data.mh"
 import { ArtifactBody } from "../shared/artifacts/artifact_body.mh"
 import { PageShell } from "../shared/artifacts/page_shell.mh"
 import { ChangesLog } from "../shared/artifacts/changes_log.mh"
+import { ArtifactCommit } from "../shared/artifacts/artifact_commit.mh"
+import { Fixture } from "../shared/core/fixture.mh"
 
-enum EditableArtifact { brief, atributos, requisitos }
+enum EditableArtifact { brief, atributos, requisitos, modelo }
 
 tool ArtifactEdit {
     title_for(kind: EditableArtifact): string -> match kind {
         EditableArtifact.brief      -> "Brief"
         EditableArtifact.atributos  -> "Atributos de Qualidade"
         EditableArtifact.requisitos -> "Requisitos"
+        EditableArtifact.modelo     -> "Modelo arquitetural"
     }
 
     // Mesmas chaves de topo, sem faltar nem sobrar nenhuma.
@@ -51,11 +58,12 @@ tool ArtifactEdit {
         EditableArtifact.brief      -> ArtifactBody.brief(data)
         EditableArtifact.atributos  -> ArtifactBody.atributos(data)
         EditableArtifact.requisitos -> ArtifactBody.requisitos(data)
+        EditableArtifact.modelo     -> ArtifactBody.modelo(data)
     }
 }
 
 workflow ArtifactSave {
-    description: "Grava a edicao manual de um artefato de documento unico (brief | atributos | requisitos): JSON e HTML re-renderizado."
+    description: "Grava a edicao manual de um artefato de documento unico (brief | atributos | requisitos | modelo): JSON e HTML re-renderizado; o modelo redesenha os diagramas de contexto e conteiner."
 
     input project_id: string
     input artifact: EditableArtifact
@@ -63,9 +71,11 @@ workflow ArtifactSave {
     input sections: any = [] // [{titulo, conteudo}] das secoes alteradas, montado pelo editor
 
     var saved_path = ""
+    var redrawn = []
 
     output: {
         path: saved_path,
+        redrawn,
     }
 
     step Save {
@@ -88,6 +98,7 @@ workflow ArtifactSave {
         ArtifactData.write(project_id, html_relative, data)
         fs.write(html_path, rendered)
         self.saved_path = html_relative
+        if (artifact == EditableArtifact.modelo) self.redrawn = ArtifactCommit.model_views(project_id, data)
         if (!sections.is_empty()) {
             ChangesLog.append({
                 artifact,
@@ -128,13 +139,49 @@ test ArtifactSaveSpec {
     describe rejects_a_non_editable_artifact_before_running {
         var raised = ""
         try { ArtifactSave.run(inputs: {project_id: "spec-nao-existe", artifact: "adr", data: {}}) } catch (e) { raised = "${e}" }
-        is_true(raised.contains("\"adr\" is not a variant of enum EditableArtifact (use brief | atributos | requisitos)"))
+        is_true(raised.contains("\"adr\" is not a variant of enum EditableArtifact (use brief | atributos | requisitos | modelo)"))
     }
 
     describe fails_when_the_artifact_was_never_generated {
         var run = ArtifactSave.run(inputs: {project_id: "spec-nao-existe", artifact: "brief", data: {}})
         is_false(run.ok)
         is_true(run.error.contains("ainda nao foi gerado"))
+    }
+
+    describe saving_the_model_redraws_the_context_and_container_diagrams {
+        var id = Fixture.project("spec-test-save-modelo")
+        var modelo = {
+            sistema: {nome: "Loja", descricao: "", fontes: ["brief"]},
+            contexto: {
+                elementos: [{id: "cliente", nome: "Cliente", tipo: "pessoa", tecnologia: "", descricao: "", fontes: ["gap"]}],
+                relacoes: [{de: "cliente", para: "sistema", descricao: "Usa", tecnologia: "", fontes: ["gap"]}],
+            },
+            conteineres: {
+                elementos: [
+                    {id: "cliente", nome: "Cliente", tipo: "pessoa", tecnologia: "", descricao: "", fontes: ["gap"]},
+                    {id: "api", nome: "API", tipo: "container", tecnologia: "Java", descricao: "", fontes: ["gap"]},
+                ],
+                relacoes: [{de: "cliente", para: "api", descricao: "Usa", tecnologia: "HTTPS", fontes: ["gap"]}],
+            },
+            gaps: [],
+        }
+        ArtifactData.write(id, "modelo.html", modelo)
+        fs.write(Paths.artifact(id, "modelo.html"), "<html></html>")
+        dir.create(Paths.artifact(id, "diagramas"))
+        ArtifactData.write(id, "diagramas/x.html", {diagram_type: "c4-container", titulo: "x", derivado_do_modelo: true})
+        fs.write(Paths.artifact(id, "diagramas/x.html"), "<html></html>")
+
+        var editado = modelo
+        var conteineres = modelo.conteineres
+        conteineres["elementos"] = [conteineres.elementos[0], {id: "api", nome: "API de Pedidos", tipo: "container", tecnologia: "Java", descricao: "", fontes: ["gap"]}]
+        editado["conteineres"] = conteineres
+        var run = ArtifactSave.run(inputs: {project_id: id, artifact: "modelo", data: editado})
+        is_true(run.ok)
+        are_equal(run.vars.redrawn, ["contexto-de-sistema-loja", "conteineres-loja"])
+        is_true(fs.read(Paths.artifact(id, "modelo.html")).contains("API de Pedidos"))
+        is_true(fs.read(Paths.artifact(id, "diagramas/conteineres-loja.html")).contains("API de Pedidos"))
+        is_false(fs.exists(Paths.artifact(id, "diagramas/x.html")))
+        Fixture.drop(id)
     }
 
     describe rejects_a_path_traversal_project_id {

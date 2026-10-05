@@ -1,0 +1,288 @@
+// tool ArchModel — o modelo arquitetural: os diagramas C4 de contexto e de
+// conteiner do sistema em escopo, descritos como dados (elementos e
+// relacoes) e revisados e aprovados ANTES do lote de diagramas. A LLM gera o
+// modelo; o desenho, a legenda e as tabelas sao codigo (C4Diagram).
+//
+// Por que: cada geracao de diagramas recriava do zero contexto, conteiner e
+// os opcionais juntos — um pedido de mudanca num diagrama perturbava os
+// outros, e o usuario so descobria o que a LLM entendeu olhando o desenho.
+// Com o modelo como artefato proprio:
+//   - a revisao acontece em tabelas, uma por diagrama, baratas de julgar;
+//   - as tabelas podem ser editadas a mao (ArtifactSave), sem LLM nenhuma, e
+//     os dois diagramas sao redesenhados na hora (ArtifactCommit.model_views);
+//   - a LLM dos diagramas so gera os tipos opcionais (componente,
+//     implantacao, fluxos), tendo o modelo como vocabulario fixo.
+//
+// Cada diagrama e independente: tem os proprios elementos e relacoes, com
+// ids proprios — uma pessoa que aparece nos dois e simplesmente repetida, e
+// as relacoes de cada nivel sao escritas para aquele nivel. Uma tentativa
+// anterior derivava o contexto do conteiner (conteineres colapsados no
+// sistema); na pratica o usuario queria editar as relacoes do contexto
+// diretamente, e uma relacao derivada nao se edita. A coerencia entre os
+// niveis (mesmas pessoas e sistemas externos, mesmo sistema em escopo) vira
+// aviso, nao regra: C4Diagram.annotate ja compara os nomes.
+//
+// No contexto, o sistema em escopo nao e um elemento: e `sistema` (nome e
+// descricao) e as relacoes o citam pelo id reservado "sistema".
+//
+// No conteiner, `fronteiras` lista as fronteiras de sistema de software (uma
+// ou mais) e cada elemento diz em qual esta (`fronteira`, vazio = fora de
+// todas). Um modelo sem fronteiras usa a fronteira unica do escopo.
+//
+// Fora do modelo: componentes e nos de implantacao. Os dois sao opcionais e
+// dependem de evidencia nos artefatos; continuam no lote de diagramas.
+
+import { C4Diagram } from "c4_diagram.mh"
+import { Cite } from "cite.mh"
+
+export tool ArchModel {
+    // Id do sistema em escopo nas relacoes do contexto. Reservado: nenhum
+    // elemento pode usa-lo (check).
+    internal sistema_id(): string -> "sistema"
+
+    internal sistema(data: any): any -> data?.sistema ?? {nome: "", descricao: "", fontes: []}
+
+    internal vazio(): any -> {elementos: [], relacoes: []}
+
+    // --- Visoes -----------------------------------------------------------
+
+    // Elemento no formato de um diagrama (diagramas.schema.json).
+    internal element(el: any): any -> {
+        id: el?.id ?? "",
+        nome: el?.nome ?? "",
+        tipo: el?.tipo ?? "",
+        tecnologia: el?.tecnologia ?? "",
+        descricao: el?.descricao ?? "",
+        no_pai: "",
+        fronteira: el?.fronteira ?? "",
+        fontes: el?.fontes ?? [],
+    }
+
+    internal relation(r: any): any ->
+        {de: r?.de ?? "", para: r?.para ?? "", descricao: r?.descricao ?? "", tecnologia: r?.tecnologia ?? "", fontes: r?.fontes ?? []}
+
+    internal view(data: any, diagram_type: string, titulo: string, descricao: string, elementos: any[], relacoes: any[]): any -> {
+        var s = self.sistema(data)
+        var nome = (s?.nome ?? "").trim()
+        return {
+            titulo: if (nome.is_empty()) titulo else titulo + " — " + nome,
+            diagram_type,
+            descricao,
+            descricao_fontes: ["modelo"],
+            escopo: {nome: s?.nome ?? "", descricao: s?.descricao ?? "", fontes: s?.fontes ?? []},
+            ambiente: "",
+            elementos,
+            relacoes,
+            diagrama_mermaid: "",
+            derivado_do_modelo: true,
+        }
+    }
+
+    // context: os elementos do contexto com o sistema em escopo como caixa
+    // central, logo depois das pessoas (a ordem guia o layout do Mermaid).
+    context(data: any): any -> {
+        var contexto = data?.contexto ?? self.vazio()
+        var s = self.sistema(data)
+        var sistema_el = {id: self.sistema_id(), nome: s?.nome ?? "", tipo: "sistema", tecnologia: "", descricao: s?.descricao ?? "", no_pai: "", fontes: s?.fontes ?? []}
+        var elementos = contexto?.elementos ?? []
+        var pessoas = elementos.filter((el) -> el.tipo == "pessoa").map((el) -> self.element(el))
+        var demais = elementos.filter((el) -> el.tipo != "pessoa").map((el) -> self.element(el))
+        return self.view(data, "c4-context", "Contexto de sistema",
+            "Pessoas e sistemas externos que interagem com o sistema.",
+            pessoas + [sistema_el] + demais, (contexto?.relacoes ?? []).map((r) -> self.relation(r)))
+    }
+
+    container(data: any): any -> {
+        var conteineres = data?.conteineres ?? self.vazio()
+        var v = self.view(data, "c4-container", "Contêineres",
+            "Aplicações e armazenamentos de dados do sistema e como se comunicam.",
+            (conteineres?.elementos ?? []).map((el) -> self.element(el)), (conteineres?.relacoes ?? []).map((r) -> self.relation(r)))
+        v["fronteiras"] = (conteineres?.fronteiras ?? []).map((f) -> {id: f?.id ?? "", nome: f?.nome ?? "", descricao: f?.descricao ?? "", fontes: f?.fontes ?? []})
+        return v
+    }
+
+    views(data: any): any[] -> [self.context(data), self.container(data)]
+
+    // Diagramas que a LLM pode devolver no lote: contexto e conteiner vem
+    // sempre do modelo, mesmo que a resposta traga um (o schema ja nao
+    // aceita esses tipos; isto protege contra um checkpoint antigo).
+    optional_diagrams(diagramas: any[]): any[] ->
+        diagramas.filter((d) -> d.diagram_type != "c4-context" && d.diagram_type != "c4-container")
+
+    // --- Conformidade -----------------------------------------------------
+
+    // check: as regras C4 de cada visao (C4Diagram.check), a coerencia entre
+    // as duas (os avisos de lote de C4Diagram.annotate) e o que so o modelo
+    // tem — o id reservado. Texto cru; warnings_html escapa.
+    check(data: any): string[] -> {
+        var out = []
+        if ((self.sistema(data)?.nome ?? "").trim().is_empty()) out += ["Informe o nome do sistema de software em escopo."]
+        var reservado = (data?.contexto?.elementos ?? []).filter((el) -> el.id == self.sistema_id()).map((el) -> el.nome).join(", ")
+        if (!reservado.is_empty()) out += ["Contexto: o id “sistema” é reservado para o sistema em escopo — use outro id em " + reservado + "."]
+        var lote = C4Diagram.annotate({diagramas: self.views(data)}).diagramas
+        out += C4Diagram.check(lote[0]).map((a) -> "Contexto: " + a) + lote[0].avisos_lote
+        out += C4Diagram.check(lote[1]).map((a) -> "Contêineres: " + a) + lote[1].avisos_lote
+        return out
+    }
+
+    warnings_html(data: any): string -> {
+        var avisos = self.check(data)
+        if (avisos.is_empty()) return ""
+        return "<h2>Conformidade do modelo</h2><ul class=\"c4-warnings\">" + avisos.map((a) -> "<li>" + html.escape(a) + "</li>").join("") + "</ul>"
+    }
+
+    // --- Pagina do modelo ---------------------------------------------------
+
+    scope_html(data: any): string -> {
+        var s = self.sistema(data)
+        var descricao = s?.descricao ?? ""
+        return "<p><strong>Sistema em escopo:</strong> " + html.escape(s?.nome ?? "") +
+            (if (descricao.is_empty()) "" else " — " + html.escape(descricao)) + " " + Cite.badges(s?.fontes ?? []) + "</p>"
+    }
+
+    // Legenda unica das duas visoes: os tipos presentes em qualquer uma.
+    legend(data: any): string -> {
+        var ctx = self.context(data)
+        var cont = self.container(data)
+        return C4Diagram.legend({diagram_type: "c4-container", elementos: ctx.elementos + cont.elementos, relacoes: ctx.relacoes + cont.relacoes})
+    }
+}
+
+tool ArchModelFixtures {
+    internal loja(): any -> {
+        sistema: {nome: "Loja", descricao: "Vende online", fontes: ["brief"]},
+        contexto: {
+            elementos: [
+                {id: "erp", nome: "ERP", tipo: "sistema_externo", tecnologia: "", descricao: "Faturamento", fontes: ["requisitos/IR-001"]},
+                {id: "cliente", nome: "Cliente", tipo: "pessoa", tecnologia: "", descricao: "Compra produtos", fontes: ["requisitos/FR-001"]},
+            ],
+            relacoes: [
+                {de: "cliente", para: "sistema", descricao: "Compra produtos em", tecnologia: "", fontes: ["requisitos/FR-001"]},
+                {de: "sistema", para: "erp", descricao: "Envia faturas para", tecnologia: "", fontes: ["requisitos/IR-001"]},
+            ],
+        },
+        conteineres: {
+            fronteiras: [{id: "loja", nome: "Loja", descricao: "", fontes: ["brief"]}],
+            elementos: [
+                {id: "cliente", nome: "Cliente", tipo: "pessoa", tecnologia: "", descricao: "Compra produtos", fronteira: "", fontes: ["requisitos/FR-001"]},
+                {id: "web", nome: "Loja Web", tipo: "container", tecnologia: "React", descricao: "Vitrine e carrinho", fronteira: "loja", fontes: ["adr/ADR-001-front"]},
+                {id: "api", nome: "API de Pedidos", tipo: "container", tecnologia: "Java/Quarkus", descricao: "Recebe pedidos", fronteira: "loja", fontes: ["adr/ADR-002-java"]},
+                {id: "db", nome: "Banco de Pedidos", tipo: "banco_dados", tecnologia: "PostgreSQL", descricao: "Guarda pedidos", fronteira: "loja", fontes: ["adr/ADR-003-banco"]},
+                {id: "erp", nome: "ERP", tipo: "sistema_externo", tecnologia: "", descricao: "Faturamento", fronteira: "", fontes: ["requisitos/IR-001"]},
+            ],
+            relacoes: [
+                {de: "cliente", para: "web", descricao: "Faz pedidos em", tecnologia: "HTTPS", fontes: ["requisitos/FR-001"]},
+                {de: "web", para: "api", descricao: "Envia pedidos para", tecnologia: "HTTPS/JSON", fontes: ["inferência"]},
+                {de: "api", para: "db", descricao: "Lê e grava pedidos em", tecnologia: "JDBC", fontes: ["inferência"]},
+                {de: "api", para: "erp", descricao: "Envia faturas para", tecnologia: "REST", fontes: ["requisitos/IR-001"]},
+            ],
+        },
+        gaps: [],
+    }
+}
+
+test ArchModelSpec {
+    describe a_clean_model_has_no_warnings {
+        are_equal(ArchModel.check(ArchModelFixtures.loja()), [])
+    }
+
+    describe context_puts_the_system_after_the_people_and_keeps_its_own_relations {
+        var ctx = ArchModel.context(ArchModelFixtures.loja())
+        are_equal(ctx.diagram_type, "c4-context")
+        are_equal(ctx.titulo, "Contexto de sistema — Loja")
+        is_true(ctx.derivado_do_modelo)
+        are_equal(ctx.elementos.map((el) -> el.id), ["cliente", "sistema", "erp"])
+        are_equal(ctx.elementos[1].tipo, "sistema")
+        are_equal(ctx.elementos[1].descricao, "Vende online")
+        are_equal(ctx.relacoes.map((r) -> r.descricao), ["Compra produtos em", "Envia faturas para"])
+        is_true(C4Diagram.mermaid_source(ctx).contains("n0 -->|\"Compra produtos em\"| n1"))
+    }
+
+    describe a_model_without_boundaries_keeps_the_single_scope_boundary {
+        var m = ArchModelFixtures.loja()
+        var conteineres = m.conteineres
+        conteineres["fronteiras"] = []
+        m["conteineres"] = conteineres
+        var cont = ArchModel.container(m)
+        is_true(C4Diagram.mermaid_source(cont).contains("subgraph b0[\"<b>Loja</b><br/>[Sistema de software]\"]"))
+        are_equal(ArchModel.check(m), [])
+    }
+
+    describe container_is_the_container_diagram_as_written {
+        var cont = ArchModel.container(ArchModelFixtures.loja())
+        are_equal(cont.titulo, "Contêineres — Loja")
+        are_equal(cont.escopo.nome, "Loja")
+        are_equal(cont.elementos.size(), 5)
+        are_equal(cont.relacoes.size(), 4)
+        is_true(C4Diagram.mermaid_source(cont).contains("subgraph b0[\"<b>Loja</b><br/>[Sistema de software]\"]"))
+    }
+
+    describe each_view_is_checked_against_its_c4_rules {
+        var m = ArchModelFixtures.loja()
+        m["contexto"] = {
+            elementos: [
+                {id: "sistema", nome: "Reservado", tipo: "pessoa", tecnologia: "", descricao: "", fontes: []},
+                {id: "erp", nome: "ERP", tipo: "sistema_externo", tecnologia: "SAP", descricao: "", fontes: []},
+            ],
+            relacoes: [{de: "sistema", para: "zzz", descricao: "Usa", tecnologia: "", fontes: []}],
+        }
+        m["conteineres"] = {
+            elementos: [
+                {id: "api", nome: "API", tipo: "container", tecnologia: "", descricao: "", fontes: []},
+                {id: "db", nome: "Banco", tipo: "banco_dados", tecnologia: "PG", descricao: "", fontes: []},
+            ],
+            relacoes: [{de: "api", para: "db", descricao: "Grava em", tecnologia: "", fontes: []}],
+        }
+        var avisos = ArchModel.check(m).join(" | ")
+        is_true(avisos.contains("Contexto: o id “sistema” é reservado"))
+        is_true(avisos.contains("Contexto: Contexto não deve mostrar tecnologias: ERP"))
+        is_true(avisos.contains("Contexto: Relação aponta para um elemento inexistente: sistema → zzz"))
+        is_true(avisos.contains("Contêineres: Contêiner sem tecnologia definida: API"))
+        is_true(avisos.contains("Contêineres: Comunicação entre contêineres sem tecnologia/protocolo: API → Banco"))
+    }
+
+    // Elementos repetidos entre os niveis sao esperados; nomes que nao batem
+    // viram aviso, nunca bloqueio.
+    describe levels_that_disagree_only_warn {
+        var m = ArchModelFixtures.loja()
+        var conteineres = m.conteineres
+        conteineres["elementos"] = conteineres.elementos + [{id: "banco-central", nome: "Banco Central", tipo: "sistema_externo", tecnologia: "", descricao: "", fronteira: "", fontes: []}]
+        conteineres["relacoes"] = conteineres.relacoes + [{de: "api", para: "banco-central", descricao: "Reporta a", tecnologia: "REST", fontes: []}]
+        m["conteineres"] = conteineres
+        are_equal(ArchModel.check(m), ["“Banco Central” aparece aqui mas não no diagrama de contexto."])
+    }
+
+    describe the_system_name_is_required {
+        var m = ArchModelFixtures.loja()
+        m["sistema"] = {nome: "", descricao: "", fontes: []}
+        is_true(ArchModel.check(m).join(" ").contains("Informe o nome do sistema"))
+    }
+
+    describe a_model_without_views_renders_empty_views {
+        var vazio = {sistema: {nome: "X", descricao: "", fontes: []}, gaps: []}
+        are_equal(ArchModel.context(vazio).elementos.size(), 1)
+        are_equal(ArchModel.container(vazio).elementos.size(), 0)
+    }
+
+    describe optional_diagrams_drops_context_and_container {
+        var lote = [{diagram_type: "c4-context"}, {diagram_type: "sequence"}, {diagram_type: "c4-container"}, {diagram_type: "c4-deployment"}]
+        are_equal(ArchModel.optional_diagrams(lote).map((d) -> d.diagram_type), ["sequence", "c4-deployment"])
+    }
+
+    describe legend_covers_both_views {
+        var legenda = ArchModel.legend(ArchModelFixtures.loja())
+        is_true(legenda.contains("Sistema de software"))
+        is_true(legenda.contains("Contêiner: banco de dados"))
+        is_true(legenda.contains("Fronteira do sistema em escopo"))
+    }
+
+    describe warnings_and_scope_escape_names {
+        var m = ArchModelFixtures.loja()
+        m["sistema"] = {nome: "<x>", descricao: "", fontes: []}
+        is_true(ArchModel.scope_html(m).contains("&lt;x&gt;"))
+        var conteineres = m.conteineres
+        conteineres["elementos"] = conteineres.elementos + [{id: "solto", nome: "<Solto>", tipo: "container", tecnologia: "Go", descricao: "", fronteira: "loja", fontes: []}]
+        m["conteineres"] = conteineres
+        is_true(ArchModel.warnings_html(m).contains("Elemento sem nenhuma relação no diagrama: &lt;Solto&gt;"))
+    }
+}

@@ -16,7 +16,8 @@ O Senpai organiza o trabalho por **Oportunidade**, **Feature** ou **História**,
 - Cada fonte ingerida é classificada quanto à `natureza`: descreve o sistema atual, um pedido novo, ou ambos — visível na página da fonte e no índice da wiki, e usada pelos artefatos gerados para distinguir o que já existe do que é novo.
 - Wiki incremental organizada em fontes, entidades, conceitos e respostas arquivadas.
 - Consulta e verificação de consistência da wiki com apoio de LLM.
-- Geração guiada de brief, requisitos, ADRs, DER, diagramas, features de negócio, enablers e histórias.
+- Geração guiada de brief, requisitos, ADRs, DER, modelo arquitetural, diagramas, features de negócio, enablers e histórias.
+- Modelo arquitetural revisável e editável: os diagramas C4 de contexto e de contêiner são desenhados a partir dele, sem nova chamada ao LLM.
 - Revisão dos artefatos, solicitação de alterações e aprovação antes da gravação, inclusive após reiniciar o app ou atualizar a definição do pipeline.
 - Rastreabilidade por fonte, incluindo marcações explícitas de `gap` e `inferência`.
 - Diagramas Mermaid renderizados também fora do aplicativo, sem dependência de rede.
@@ -39,11 +40,11 @@ O Senpai organiza o trabalho por **Oportunidade**, **Feature** ou **História**,
 
 | Tipo | Pipeline |
 | --- | --- |
-| Oportunidade | Brief → Atributos de qualidade → Requisitos → ADRs → DER / Diagramas → Backlog da solução (features e enablers) → Dependências → Histórias |
-| Feature | Brief → Requisitos → ADRs → DER / Diagramas → Detalhamento da feature ou enabler → Histórias |
-| História | Brief → Requisitos → ADRs → DER / Diagramas → Detalhamento da história |
+| Oportunidade | Brief → Atributos de qualidade → Requisitos → ADRs → DER / Modelo arquitetural → Diagramas → Backlog da solução (features e enablers) → Dependências → Histórias |
+| Feature | Brief → Requisitos → ADRs → DER / Modelo arquitetural → Diagramas → Detalhamento da feature ou enabler → Histórias |
+| História | Brief → Requisitos → ADRs → DER / Modelo arquitetural → Diagramas → Detalhamento da história |
 
-Em ambos os níveis a sequência é totalmente encadeada: cada artefato exige que seu predecessor direto já exista (brief antes de requisitos, requisitos antes de ADR, ADR antes de DER/Diagramas, e assim até o detalhamento final). A interface bloqueia a geração e indica qual predecessor falta antes de cada etapa.
+Em ambos os níveis a sequência é totalmente encadeada: cada artefato exige que seu predecessor direto já exista (brief antes de requisitos, requisitos antes de ADR, ADR antes de DER e do modelo arquitetural, modelo antes dos diagramas, e assim até o detalhamento final). A interface bloqueia a geração e indica qual predecessor falta antes de cada etapa.
 
 Como Delivery normalmente parte de um sistema existente, o brief e os requisitos devem descrever o que já existe hoje (comportamento, entidades, integrações) sempre que as fontes sustentarem isso — não apenas o que está sendo adicionado. Essa distinção alimenta o campo `mudanca` do detalhamento final e do DER.
 

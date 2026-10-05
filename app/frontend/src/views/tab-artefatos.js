@@ -33,6 +33,7 @@ const LABELS = {
   requisitos: 'Requisitos',
   adr: 'ADRs',
   der: 'DER',
+  modelo: 'Modelo arquitetural',
   diagramas: 'Diagramas C4',
   features: 'Backlog da solução',
   dependencias: 'Mapa de dependências',
@@ -65,6 +66,7 @@ const ARTIFACT_DESCRIPTIONS = {
   requisitos: 'Necessidades funcionais, regras de negócio e resultados esperados.',
   adr: 'Escolhas arquiteturais registradas com contexto e consequências.',
   der: 'Entidades, atributos e relacionamentos essenciais do domínio.',
+  modelo: 'Pessoas, sistemas externos, contêineres e relações — a fonte dos diagramas de contexto e de contêiner. Edite para redesenhá-los.',
   diagramas: 'Visões dos componentes, limites e principais fluxos do sistema.',
   features: 'Features de negócio e enablers conectados aos requisitos e objetivos.',
   dependencias: 'Grafo de dependências entre itens do backlog e ordem de execução sugerida, gerado junto com o Backlog da solução.',
@@ -81,11 +83,11 @@ const ARTIFACT_DESCRIPTIONS = {
 // description covers accurately.
 const GROUP_DESCRIPTIONS = {
   'Decisões e modelos': 'Decisões arquiteturais (ADRs) e o modelo de entidades e relacionamentos (DER) da solução.',
-  Diagramas: 'Visões dos componentes, limites e principais fluxos do sistema.',
+  Diagramas: 'O modelo arquitetural e as visões dos componentes, limites e principais fluxos do sistema.',
 };
 
 const ARTIFACT_ICONS = {
-  brief: 'zap', atributos: 'checkCircle', requisitos: 'fileText', adr: 'layers', der: 'inbox',
+  brief: 'zap', atributos: 'checkCircle', requisitos: 'fileText', adr: 'layers', der: 'inbox', modelo: 'grid',
   diagramas: 'maximize', features: 'layers', dependencias: 'layers', historias: 'fileText', feature: 'layers', historia: 'fileText', plano: 'list',
 };
 
@@ -1087,7 +1089,7 @@ export async function renderArtefatosTab(container, project, { onChanged }) {
     const artifactName = row.entry.artifact;
     const kindClass = ['adr', 'der'].includes(artifactName)
       ? 'decision'
-      : artifactName === 'diagramas'
+      : ['modelo', 'diagramas'].includes(artifactName)
         ? 'diagram'
         : ['features', 'feature', 'historias', 'historia'].includes(artifactName)
           ? 'feature'

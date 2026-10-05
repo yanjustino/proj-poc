@@ -19,7 +19,11 @@ export prompt AdrInstruction(schema_conventions: prompt, requisitos_content: str
 // uma ADR escolheu o banco, e as tecnologias dos conteineres e a
 // infraestrutura de implantacao sao decisoes registradas nelas.
 export prompt DerInstruction(schema_conventions: prompt, requisitos_content: string, atributos_content: string, adr_content: string, feedback_content: string) from "prompts/der.prompt.md"
-export prompt DiagramasInstruction(schema_conventions: prompt, requisitos_content: string, atributos_content: string, adr_content: string, feedback_content: string) from "prompts/diagramas.prompt.md"
+// O modelo arquitetural (ArchModel) vem antes dos diagramas: contexto e
+// conteiner sao projecoes dele, e os diagramas opcionais o recebem como
+// vocabulario fixo (modelo_content).
+export prompt ModeloInstruction(schema_conventions: prompt, requisitos_content: string, atributos_content: string, adr_content: string, feedback_content: string) from "prompts/modelo.prompt.md"
+export prompt DiagramasInstruction(schema_conventions: prompt, modelo_content: string, requisitos_content: string, atributos_content: string, adr_content: string, feedback_content: string) from "prompts/diagramas.prompt.md"
 
 // Historias de uma feature e plano de uma historia recebem todo o contexto
 // tecnico (TechContext em common_drafts.mh): sem ele a historia nao sabe que
@@ -36,6 +40,7 @@ export schema AtributosSchema from "schemas/atributos.schema.json"
 export schema RequisitosSchema from "schemas/requisitos.schema.json"
 export schema AdrSchema from "schemas/adr.schema.json"
 export schema DerSchema from "schemas/der.schema.json"
+export schema ModeloSchema from "schemas/modelo.schema.json"
 export schema DiagramasSchema from "schemas/diagramas.schema.json"
 export schema HistoriasSchema from "schemas/historias.schema.json"
 export schema PlanoSchema from "schemas/plano.schema.json"
@@ -57,6 +62,7 @@ export prompt DerBody(modo: string, nivel: string, contexto: string, contexto_fo
 // DER gravado antes do modelo estruturado (DerModel) — Mermaid livre e
 // relacionamentos em texto; so renderiza, com um aviso pedindo regeneracao.
 export prompt DerLegacyBody(modo: string, contexto: string, contexto_fontes: string, diagrama_mermaid: string, entidades_tabela: string, confirmados_tabela: string, inferidos_tabela: string, atributos_tabela: string, delta_lista: string, gaps_lista: string, questoes_lista: string) from "templates/der_legacy_body.html"
+export prompt ModeloBody(escopo_html: string, avisos_html: string, contexto_mermaid: string, contexto_tabelas: string, container_mermaid: string, container_tabelas: string, legenda_html: string, gaps_lista: string) from "templates/modelo_body.html"
 export prompt DiagramaBody(tipo_label: string, hierarchy_level: string, escopo_html: string, descricao: string, descricao_fontes: string, avisos_html: string, diagrama_mermaid: string, legenda_html: string, elementos_html: string, relacoes_html: string) from "templates/diagrama_body.html"
 
 // FeatureBody/HistoriaBody sao o corpo de UM item de feature/historia — o

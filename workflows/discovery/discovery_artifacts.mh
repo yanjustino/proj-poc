@@ -15,7 +15,7 @@ import { CommonDrafts, TechContext } from "../shared/artifacts/common_drafts.mh"
 import { Drafts, Draft } from "../shared/artifacts/draft.mh"
 import { ArtifactSchema, AtributosInstruction, AtributosSchema } from "../shared/artifacts/artifacts_common.mh"
 
-export enum DiscoveryArtifact { brief, atributos, requisitos, adr, der, diagramas, features, historias, plano }
+export enum DiscoveryArtifact { brief, atributos, requisitos, adr, der, modelo, diagramas, features, historias, plano }
 
 export tool DiscoveryKinds {
     // historias sao uma colecao por feature; o plano e de uma historia.
@@ -70,8 +70,8 @@ schema FeaturesSchema from "schemas/features.schema.json"
 schema FeaturesRoteiroSchema from "schemas/features_roteiro.schema.json"
 schema DependenciasSchema from "schemas/dependencias.schema.json"
 
-// Predecessores: brief -> atributos | requisitos -> adr -> der | diagramas
-// -> features -> historias -> plano. O DER e o unico opcional.
+// Predecessores: brief -> atributos | requisitos -> adr -> der | modelo ->
+// diagramas -> features -> historias -> plano. O DER e o unico opcional.
 export tool DiscoveryDrafts {
     of(kind: DiscoveryArtifact, project_id: string, feature_id: string, historia_id: string, autorrevisao: bool): Draft -> match kind {
         DiscoveryArtifact.brief        -> CommonDrafts.brief(project_id)
@@ -79,6 +79,7 @@ export tool DiscoveryDrafts {
         DiscoveryArtifact.requisitos   -> CommonDrafts.requisitos(project_id, Require.artifact(project_id, "brief", "requisitos"))
         DiscoveryArtifact.adr          -> self.adr(project_id)
         DiscoveryArtifact.der          -> self.der(project_id, autorrevisao)
+        DiscoveryArtifact.modelo       -> self.modelo(project_id, autorrevisao)
         DiscoveryArtifact.diagramas    -> self.diagramas(project_id, autorrevisao)
         DiscoveryArtifact.features     -> self.features(project_id, autorrevisao)
         DiscoveryArtifact.historias    -> self.historias(project_id, feature_id, autorrevisao)
@@ -115,9 +116,15 @@ export tool DiscoveryDrafts {
         return CommonDrafts.der(project_id, autorrevisao, q.requisitos, q.atributos, Require.adr(project_id, "der"))
     }
 
+    internal modelo(project_id: string, autorrevisao: bool): Draft -> {
+        var q = self.quality(project_id, "modelo")
+        return CommonDrafts.modelo(project_id, autorrevisao, q.requisitos, q.atributos, Require.adr(project_id, "modelo"))
+    }
+
     internal diagramas(project_id: string, autorrevisao: bool): Draft -> {
         var q = self.quality(project_id, "diagramas")
-        return CommonDrafts.diagramas(project_id, autorrevisao, q.requisitos, q.atributos, Require.adr(project_id, "diagramas"))
+        var adr = Require.adr(project_id, "diagramas")
+        return CommonDrafts.diagramas(project_id, autorrevisao, q.requisitos, q.atributos, adr, Require.artifact(project_id, "modelo", "diagramas"))
     }
 
     // O backlog inteiro numa resposta so passa do limite de tokens de saida
@@ -286,6 +293,7 @@ export tool DiscoveryCommits {
         DiscoveryArtifact.requisitos   -> ArtifactCommit.requisitos(project_id, draft)
         DiscoveryArtifact.adr          -> ArtifactCommit.adr(project_id, draft)
         DiscoveryArtifact.der          -> ArtifactCommit.der(project_id, draft)
+        DiscoveryArtifact.modelo       -> ArtifactCommit.modelo(project_id, draft)
         DiscoveryArtifact.diagramas    -> ArtifactCommit.diagramas(project_id, draft)
         DiscoveryArtifact.features     -> ArtifactCommit.features(project_id, draft)
         DiscoveryArtifact.historias    -> self.historias(project_id, feature_id, draft)

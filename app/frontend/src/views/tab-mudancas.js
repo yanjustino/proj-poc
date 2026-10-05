@@ -11,6 +11,7 @@ const LABELS = {
   requisitos: 'Requisitos',
   adr: 'ADRs',
   der: 'DER',
+  modelo: 'Modelo arquitetural',
   diagramas: 'Diagramas C4',
   features: 'Backlog da solução',
   dependencias: 'Mapa de dependências',
