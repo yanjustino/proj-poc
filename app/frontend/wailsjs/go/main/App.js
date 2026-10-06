@@ -18,6 +18,10 @@ export function AppVersion() {
   return window['go']['main']['App']['AppVersion']();
 }
 
+export function AttachHistoriaFiles(arg1, arg2) {
+  return window['go']['main']['App']['AttachHistoriaFiles'](arg1, arg2);
+}
+
 export function CancelRun(arg1) {
   return window['go']['main']['App']['CancelRun'](arg1);
 }
@@ -152,6 +156,10 @@ export function ReadProjectFile(arg1, arg2, arg3) {
 
 export function ReconnectMCP() {
   return window['go']['main']['App']['ReconnectMCP']();
+}
+
+export function RemoveHistoriaAttachment(arg1, arg2, arg3) {
+  return window['go']['main']['App']['RemoveHistoriaAttachment'](arg1, arg2, arg3);
 }
 
 export function ResumeRun(arg1, arg2) {

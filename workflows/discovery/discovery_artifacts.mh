@@ -11,6 +11,7 @@ import { ArtifactChecks } from "../shared/artifacts/artifact_checks.mh"
 import { ArtifactCommit } from "../shared/artifacts/artifact_commit.mh"
 import { AutoReview } from "../shared/artifacts/auto_review.mh"
 import { ChangesBlock } from "../shared/artifacts/changes_log.mh"
+import { FeatureReview } from "../shared/artifacts/feature_review.mh"
 import { CommonDrafts, TechContext } from "../shared/artifacts/common_drafts.mh"
 import { Drafts, Draft } from "../shared/artifacts/draft.mh"
 import { ArtifactSchema, AtributosInstruction, AtributosSchema } from "../shared/artifacts/artifacts_common.mh"
@@ -255,6 +256,7 @@ export tool DiscoveryDrafts {
 
     internal historias(project_id: string, feature_id: string, autorrevisao: bool): Draft -> {
         var feature_dir = ArtifactId.find_feature_dir(project_id, feature_id)
+        FeatureReview.ensure_not_rejected(project_id, feature_dir)
         var feature = Context.artifact(project_id, "features/${feature_dir}/feature.html")
         var feature_data = ContextSlice.read(project_id, "features/${feature_dir}/feature.json")
         var draft = CommonDrafts.historias(project_id, autorrevisao, feature, self.tech(project_id, ContextSlice.refs(feature_data)), feature_data?.historias_propostas ?? [], feature_id)
@@ -270,6 +272,7 @@ export tool DiscoveryDrafts {
     // Gravado ao lado da historia: historias/<feature>/<USxxx>/plano.html.
     internal plano(project_id: string, feature_id: string, historia_id: string, autorrevisao: bool): Draft -> {
         var feature_dir = ArtifactId.find_feature_dir(project_id, feature_id)
+        FeatureReview.ensure_not_rejected(project_id, feature_dir)
         var historia_rel = self.historia_rel(project_id, feature_id, historia_id)
         var historia_json = Paths.artifact(project_id, "${historia_rel}/historia.json")
         if (!fs.exists(historia_json)) fail("gere as historias de '${feature_id}' antes do plano de '${historia_id}'")
@@ -307,8 +310,11 @@ export tool DiscoveryCommits {
         return if (saved == null) ArtifactId.find_feature_dir(project_id, feature_id) else saved
     }
 
+    // Rejeitada enquanto o rascunho esperava aprovacao: nao grava.
     internal historias(project_id: string, feature_id: string, draft: Draft): any -> {
-        var result = ArtifactCommit.historias(project_id, self.feature_dir(project_id, feature_id, draft), draft)
+        var feature_dir = self.feature_dir(project_id, feature_id, draft)
+        FeatureReview.ensure_not_rejected(project_id, feature_dir)
+        var result = ArtifactCommit.historias(project_id, feature_dir, draft)
         result["feature_id"] = feature_id
         return result
     }
@@ -316,6 +322,7 @@ export tool DiscoveryCommits {
     internal plano(project_id: string, feature_id: string, historia_id: string, draft: Draft): any -> {
         var saved = draft.data?.historia_dir
         var historia_rel = if (saved == null) DiscoveryDrafts.historia_rel(project_id, feature_id, historia_id) else saved
+        FeatureReview.ensure_not_rejected(project_id, historia_rel.split("/")[1])
         var result = ArtifactCommit.plano(project_id, "${historia_rel}/plano.html", "../../../", draft)
         result["feature_id"] = feature_id
         result["historia_id"] = historia_id

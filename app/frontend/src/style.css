@@ -513,6 +513,13 @@ html[data-theme='light'] .combo-option.selected { color: var(--vermilion); }
 .radahn-badge { display: inline-flex; align-items: center; gap: 4px; margin: 4px 0 0 6px; padding: 2px 8px; border-radius: 999px; font: 600 10px var(--sans); white-space: nowrap; background: #fff1e0; color: #a34f00; }
 .dev-files-bar .dor-badge, .dev-files-bar .radahn-badge { margin: 0; }
 .dev-files-empty { font-size: 11px; color: var(--muted); }
+.dev-files-bar-row + .dev-files-bar-row { margin-top: 8px; }
+/* Complementos anexados a uma história (app/historia_attachments.go). */
+.dev-attachment { display: inline-flex; align-items: center; gap: 2px; }
+.dev-attachment-remove { border: 0; background: transparent; color: var(--muted); padding: 3px 4px; display: inline-flex; align-items: center; font: 600 10px var(--sans); border-radius: 6px; }
+.dev-attachment-remove:hover { color: var(--red); }
+.dev-attachment-remove.confirming { color: var(--red); }
+.dev-attachment-remove:disabled { opacity: .5; cursor: wait; }
 .dor-reasons { margin: 0; padding: 0; list-style: none; display: flex; flex-direction: column; gap: 4px; }
 .dor-reasons li { position: relative; padding-left: 16px; font-size: 11px; line-height: 1.5; }
 .dor-reasons li::before { position: absolute; left: 0; }
@@ -555,6 +562,36 @@ html[data-theme='light'] .combo-option.selected { color: var(--vermilion); }
 .artifact-card-approve:hover { color: var(--ink); }
 .artifact-card-approve:disabled { opacity: .6; cursor: wait; }
 .data-row-actions .artifact-card-approve { color: var(--green); display: inline-flex; gap: 4px; }
+
+/* Revisão de features do Discovery (feature_review.mh): cabeçalhos dos
+   grupos de status no backlog, ações Rejeitar/Reabrir e a barra de revisão
+   no painel de leitura. */
+.feature-review-dot { display: inline-block; width: 8px; height: 8px; border-radius: 50%; margin-right: 8px; background: var(--muted); flex: none; }
+.feature-review-dot.em_aprovacao { background: var(--amber); }
+.feature-review-dot.aprovada { background: var(--green); }
+.feature-review-dot.rejeitada { background: var(--red); }
+.data-row.feature-status-header td { padding: 12px 10px 6px; border-bottom: 1px solid var(--line); color: var(--muted); font: 600 11px var(--sans); text-transform: uppercase; letter-spacing: .07em; background: transparent; cursor: default; }
+.artifact-status-header { grid-column: 1 / -1; display: flex; align-items: center; margin: 6px 0 -3px; color: var(--muted); font: 600 10px var(--sans); text-transform: uppercase; letter-spacing: .07em; }
+.artifact-card-reject, .artifact-card-reopen { border: 0; background: transparent; padding: 3px 0 3px 6px; display: inline-flex; align-items: center; gap: 5px; font: 600 10px var(--sans); }
+.artifact-card-reject { color: var(--red); }
+.artifact-card-reopen { color: var(--muted); }
+.artifact-card-reject:hover, .artifact-card-reopen:hover { color: var(--ink); }
+.artifact-card-reject:disabled, .artifact-card-reopen:disabled { opacity: .6; cursor: wait; }
+.data-row-actions .artifact-card-reject { color: var(--red); display: inline-flex; gap: 4px; }
+.data-row-actions .artifact-card-reopen { color: var(--muted); display: inline-flex; gap: 4px; }
+.feature-review-badge { display: inline-flex; align-items: center; margin: 4px 0 0 4px; padding: 2px 8px; border-radius: 999px; font: 600 10px var(--sans); }
+.feature-review-badge.rejeitada { background: rgba(222, 53, 11, .12); color: var(--red); }
+.feature-review-bar { border: 1px solid var(--line); border-radius: 12px; background: var(--surface); padding: 10px 12px; margin-bottom: 10px; }
+.feature-review-head { display: flex; flex-wrap: wrap; align-items: center; gap: 4px 10px; font-size: 12px; }
+.feature-review-head .feature-review-dot { margin-right: 0; }
+.feature-review-reason { color: var(--ink); }
+.feature-review-note { color: var(--muted); font-size: 11px; }
+.feature-review-actions { margin-left: auto; display: flex; gap: 6px; }
+.feature-review-actions button { font-size: 11px; }
+.feature-review-form { margin-top: 10px; display: flex; flex-direction: column; gap: 8px; }
+.feature-review-form[hidden] { display: none; }
+.feature-review-form textarea { width: 100%; box-sizing: border-box; resize: vertical; }
+.feature-review-form-actions { display: flex; justify-content: flex-end; gap: 6px; }
 .artifact-card-toggle { border: 0; background: transparent; color: var(--muted); padding: 3px 0; display: inline-flex; align-items: center; gap: 4px; font: 600 10px var(--sans); }
 .artifact-card-toggle:hover { color: var(--ink); }
 .artifact-card.nested { min-height: 0; background: var(--surface-2); }

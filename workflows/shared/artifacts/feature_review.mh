@@ -1,0 +1,160 @@
+// tool FeatureReview — revisao de cada item do backlog do Discovery, depois
+// que o lote de features ja foi aprovado e gravado: o PO aprova, rejeita
+// (com motivo) ou reabre cada feature. Deterministico (C3), sem LLM.
+//
+// O status fica em artifacts/features/<FT00N-slug>/status.json. Sem o
+// arquivo, a feature esta "pendente" — e assim que todo backlog novo nasce:
+// ArtifactCommit.features limpa features/ inteiro, entao regenerar o backlog
+// devolve tudo para revisao. "Em aprovacao" nao e gravado aqui: e um run
+// desta feature pausado esperando aprovacao, e so o app conhece os runs.
+//
+// Rejeicao e reabertura entram no ChangesLog (aba Mudancas) com o
+// feature_id da feature. ChangesBlock.for_artifact("features", "") so le
+// entradas com feature_id vazio, entao o motivo nao vira diretiva da
+// proxima regeneracao do backlog.
+
+import { Paths } from "../core/paths.mh"
+import { Fixture } from "../core/fixture.mh"
+import { ArtifactId } from "artifact_id.mh"
+import { ChangesLog, ChangesBlock } from "changes_log.mh"
+import { Readiness } from "readiness.mh"
+
+export tool FeatureReview {
+    internal status_path(project_id: string, feature_dir: string): string ->
+        Paths.artifact(project_id, "features/" + feature_dir + "/status.json")
+
+    // status_of: "pendente" | "aprovada" | "rejeitada", pela pasta da
+    // feature ("FT001-slug").
+    status_of(project_id: string, feature_dir: string): string -> {
+        var data = Readiness.read_json(self.status_path(project_id, feature_dir))
+        var status = data?.status ?? ""
+        if (status == "aprovada" || status == "rejeitada") return status
+        return "pendente"
+    }
+
+    is_rejected(project_id: string, feature_dir: string): bool ->
+        !feature_dir.is_empty() && self.status_of(project_id, feature_dir) == "rejeitada"
+
+    // Gate das historias e do plano de uma feature (gerar e aprovar): uma
+    // feature rejeitada nao avanca ate ser reaberta.
+    ensure_not_rejected(project_id: string, feature_dir: string) -> {
+        if (self.is_rejected(project_id, feature_dir)) {
+            fail("a feature '" + feature_dir.split("-")[0] + "' foi rejeitada — reabra-a antes de gerar histórias ou planos")
+        }
+    }
+
+    // decide aplica `decisao` ("aprovar" | "rejeitar" | "reabrir") a uma
+    // feature e devolve o novo status. Rejeitar exige motivo; reabrir volta
+    // a feature para "pendente".
+    decide(project_id: string, feature_id: string, decisao: string, motivo: string): any -> {
+        project_id = Paths.ensure_valid(project_id)
+        if (!feature_id.matches("^FT[0-9]+$")) fail("'feature_id' invalido: '" + feature_id + "'")
+        var feature_dir = ArtifactId.find_feature_dir(project_id, feature_id)
+        var path = self.status_path(project_id, feature_dir)
+        var texto = motivo.trim()
+        if (decisao == "aprovar") {
+            fs.write(path, json.stringify({status: "aprovada"}))
+        } else if (decisao == "rejeitar") {
+            if (texto.is_empty()) fail("informe o motivo da rejeicao de '" + feature_id + "'")
+            fs.write(path, json.stringify({status: "rejeitada", motivo: texto}))
+            ChangesLog.append({artifact: "features", feature_id, origem: "rejeicao", feedback: "Feature rejeitada: " + texto})
+        } else if (decisao == "reabrir") {
+            var anterior = self.status_of(project_id, feature_dir)
+            if (fs.exists(path)) fs.delete(path)
+            if (anterior == "rejeitada") {
+                ChangesLog.append({artifact: "features", feature_id, origem: "reabertura", feedback: "Feature reaberta para revisão."})
+            }
+        } else {
+            fail("'decisao' invalida: '" + decisao + "' (use aprovar | rejeitar | reabrir)")
+        }
+        return self.read(project_id, feature_dir)
+    }
+
+    // read: {feature_id, feature_dir, status, motivo} de uma feature.
+    read(project_id: string, feature_dir: string): any -> {
+        var data = Readiness.read_json(self.status_path(project_id, feature_dir))
+        return {
+            feature_id: feature_dir.split("-")[0],
+            feature_dir,
+            status: self.status_of(project_id, feature_dir),
+            motivo: data?.motivo ?? "",
+        }
+    }
+}
+
+test FeatureReviewSpec {
+    describe a_feature_without_status_file_is_pending {
+        var id = Fixture.project("spec-test-feature-review-pending")
+        Fixture.artifact(id, "features/FT001-a/feature.json", "{}")
+        are_equal(FeatureReview.status_of(id, "FT001-a"), "pendente")
+        is_false(FeatureReview.is_rejected(id, "FT001-a"))
+        Fixture.drop(id)
+    }
+
+    describe approve_reject_and_reopen_round_trip {
+        var id = Fixture.project("spec-test-feature-review-cycle")
+        Fixture.artifact(id, "features/FT001-a/feature.json", "{}")
+
+        are_equal(FeatureReview.decide(id, "FT001", "aprovar", "").status, "aprovada")
+
+        var rejeitada = FeatureReview.decide(id, "FT001", "rejeitar", "  fora do escopo  ")
+        are_equal(rejeitada.status, "rejeitada")
+        are_equal(rejeitada.motivo, "fora do escopo")
+        is_true(FeatureReview.is_rejected(id, "FT001-a"))
+
+        var reaberta = FeatureReview.decide(id, "FT001", "reabrir", "")
+        are_equal(reaberta.status, "pendente")
+        are_equal(reaberta.motivo, "")
+
+        var log = json.parse_lines(fs.read(Paths.changes_file(id)))
+        are_equal(log.size(), 2)
+        are_equal(log[0].value.origem, "rejeicao")
+        are_equal(log[0].value.feature_id, "FT001")
+        is_true(log[0].value.feedback.contains("fora do escopo"))
+        are_equal(log[1].value.origem, "reabertura")
+        Fixture.drop(id)
+    }
+
+    describe a_rejected_feature_fails_the_gate_until_reopened {
+        var id = Fixture.project("spec-test-feature-review-gate")
+        Fixture.artifact(id, "features/FT001-a/feature.json", "{}")
+        FeatureReview.ensure_not_rejected(id, "FT001-a")
+        FeatureReview.decide(id, "FT001", "rejeitar", "duplicada")
+        var raised = ""
+        try { FeatureReview.ensure_not_rejected(id, "FT001-a") } catch (e) { raised = "${e}" }
+        is_true(raised.contains("foi rejeitada"))
+        FeatureReview.decide(id, "FT001", "reabrir", "")
+        FeatureReview.ensure_not_rejected(id, "FT001-a")
+        Fixture.drop(id)
+    }
+
+    describe rejecting_requires_a_reason {
+        var id = Fixture.project("spec-test-feature-review-reason")
+        Fixture.artifact(id, "features/FT001-a/feature.json", "{}")
+        var raised = ""
+        try { FeatureReview.decide(id, "FT001", "rejeitar", "   ") } catch (e) { raised = "${e}" }
+        is_true(raised.contains("informe o motivo"))
+        are_equal(FeatureReview.status_of(id, "FT001-a"), "pendente")
+        Fixture.drop(id)
+    }
+
+    describe rejects_a_malformed_feature_id_or_decision {
+        var id = Fixture.project("spec-test-feature-review-invalid")
+        Fixture.artifact(id, "features/FT001-a/feature.json", "{}")
+        var raised = ""
+        try { FeatureReview.decide(id, "../FT001", "aprovar", "") } catch (e) { raised = "${e}" }
+        is_true(raised.contains("'feature_id' invalido"))
+        raised = ""
+        try { FeatureReview.decide(id, "FT001", "arquivar", "") } catch (e) { raised = "${e}" }
+        is_true(raised.contains("'decisao' invalida"))
+        Fixture.drop(id)
+    }
+
+    describe the_rejection_reason_never_reaches_the_backlog_prompt {
+        var id = Fixture.project("spec-test-feature-review-prompt")
+        Fixture.artifact(id, "features/FT001-a/feature.json", "{}")
+        FeatureReview.decide(id, "FT001", "rejeitar", "duplicada")
+        are_equal(ChangesBlock.for_artifact(id, "features", ""), "")
+        Fixture.drop(id)
+    }
+}

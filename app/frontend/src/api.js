@@ -266,6 +266,19 @@ export async function exportProjectFile(projectId, root, relative) {
   return App.ExportProjectFile(projectId, root, relative);
 }
 
+// attachHistoriaFiles opens the native picker and copies the chosen files
+// into the história's anexos/ (app/historia_attachments.go) — the
+// complements that travel with it in the handoff package. `historiaPath` is
+// the história folder relative to artifacts/ ("" for Delivery's single story
+// at the root). Returns the stored names ([] if the user cancels).
+export async function attachHistoriaFiles(projectId, historiaPath) {
+  return parseJSON(await App.AttachHistoriaFiles(projectId, historiaPath), 'AttachHistoriaFiles');
+}
+
+export async function removeHistoriaAttachment(projectId, historiaPath, name) {
+  return App.RemoveHistoriaAttachment(projectId, historiaPath, name);
+}
+
 // wikiSyncHtml regenerates wiki/html/ (WikiHtmlExport.sync, no LLM call) —
 // called before a wiki page is opened so the HTML shown is always current,
 // even for a work-item whose wiki existed before this action did.
@@ -422,6 +435,15 @@ export async function buildHandoff(projectId) {
 
 export async function exportHandoff(projectId) {
   return App.ExportHandoff(projectId);
+}
+
+// workItemFeatureReview approves, rejects (motivo required) or reopens one
+// Discovery feature (workflows/shared/artifacts/feature_review.mh) and
+// returns {feature_id, feature_dir, status, motivo}. `decisao` is
+// "aprovar" | "rejeitar" | "reabrir".
+export async function workItemFeatureReview(projectId, featureId, decisao, motivo = '') {
+  const result = await callWorkflowOnce('WorkItem', { action: 'feature_review', project_id: projectId, feature_id: featureId, decisao, motivo });
+  return result.feature_review;
 }
 
 export async function workItemProductivity(projectId) {

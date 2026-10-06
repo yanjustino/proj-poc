@@ -5,17 +5,21 @@ import { WorkItemActions } from "actions.mh"
 import { Paths } from "../shared/core/paths.mh"
 import { Readiness } from "../shared/artifacts/readiness.mh"
 import { Handoff } from "../shared/artifacts/handoff.mh"
+import { FeatureReview } from "../shared/artifacts/feature_review.mh"
 
-enum WorkItemAction { create, list, get, archive, usage, prompt_log, changes, productivity, readiness, handoff }
+enum WorkItemAction { create, list, get, archive, usage, prompt_log, changes, productivity, readiness, handoff, feature_review }
 
 workflow WorkItem {
-    description: "Ciclo de vida de um work-item do Senpai: create, list, get, archive, usage, prompt_log, changes, productivity, readiness, handoff."
+    description: "Ciclo de vida de um work-item do Senpai: create, list, get, archive, usage, prompt_log, changes, productivity, readiness, handoff, feature_review."
 
     input action: WorkItemAction
     input name: string = ""          // obrigatorio (valor) so para action:"create"
     input item_type: string = ""     // "oportunidade" | "feature" | "historia"; so para action:"create"
     input continuidade_de: string = "" // opcional, so para action:"create" — sistema existente que este item evolui
     input project_id: string = ""    // obrigatorio (valor) para get/archive/usage/prompt_log/changes
+    input feature_id: string = ""    // so para action:"feature_review" — "FT001"
+    input decisao: string = ""       // so para action:"feature_review" — "aprovar" | "rejeitar" | "reabrir"
+    input motivo: string = ""        // so para action:"feature_review" — obrigatorio ao rejeitar
 
     var project = null
     var projects = []
@@ -25,6 +29,7 @@ workflow WorkItem {
     var productivity = null
     var readiness = []
     var handoff = null
+    var feature_review = null
     var error_message = ""
 
     output: {
@@ -37,6 +42,7 @@ workflow WorkItem {
         productivity,
         readiness,
         handoff,
+        feature_review,
         error: error_message,
     }
 
@@ -51,6 +57,7 @@ workflow WorkItem {
         WorkItemAction.productivity -> Productivity
         WorkItemAction.readiness    -> Readiness
         WorkItemAction.handoff      -> Handoff
+        WorkItemAction.feature_review -> FeatureReviewStep
     }
 
     step Dispatch {
@@ -110,6 +117,13 @@ workflow WorkItem {
         goto Done
     }
 
+    // Aprova, rejeita (com motivo) ou reabre uma feature do backlog do
+    // Discovery (feature_review.mh).
+    step FeatureReviewStep {
+        self.feature_review = FeatureReview.decide(project_id, feature_id, decisao, motivo)
+        goto Done
+    }
+
     step Done { complete() }
 }
 
@@ -119,7 +133,7 @@ test WorkItemWorkflowSpec {
     // O lint nao exige que um route cubra todo o enum; este teste exige.
     // handoff fica de fora porque grava projects/<id>/handoff/.
     describe every_action_reaches_its_own_step {
-        for (var name in ["create", "list", "get", "archive", "usage", "prompt_log", "changes", "productivity", "readiness"]) {
+        for (var name in ["create", "list", "get", "archive", "usage", "prompt_log", "changes", "productivity", "readiness", "feature_review"]) {
             var run = WorkItem.run(inputs: {action: name, project_id: "spec-nao-existe-de-verdade"})
             is_false((run.error ?? "").contains("no arm matched"))
             are_equal(run.executed.size() > 1, true)
@@ -129,7 +143,13 @@ test WorkItemWorkflowSpec {
     describe rejects_an_unknown_action_before_running {
         var raised = ""
         try { WorkItem.run(inputs: {action: "bogus"}) } catch (e) { raised = "${e}" }
-        is_true(raised.contains("\"bogus\" is not a variant of enum WorkItemAction (use create | list | get | archive | usage | prompt_log | changes | productivity | readiness | handoff)"))
+        is_true(raised.contains("\"bogus\" is not a variant of enum WorkItemAction (use create | list | get | archive | usage | prompt_log | changes | productivity | readiness | handoff | feature_review)"))
+    }
+
+    describe feature_review_rejects_a_malformed_feature_id_before_touching_disk {
+        var run = WorkItem.run(inputs: {action: "feature_review", project_id: "spec-nao-existe-de-verdade", feature_id: "../x", decisao: "aprovar"})
+        is_false(run.ok)
+        is_true(run.error.contains("'feature_id' invalido"))
     }
 
     describe create_rejects_an_empty_name_before_touching_disk {

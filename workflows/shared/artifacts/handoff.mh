@@ -17,11 +17,14 @@
 
 import { Paths } from "../core/paths.mh"
 import { Readiness } from "readiness.mh"
+import { FeatureReview } from "feature_review.mh"
+import { HistoriaAnexos } from "historia_anexos.mh"
 import { C4Diagram } from "c4_diagram.mh"
 import { DerModel } from "der_model.mh"
 import { PlanoModel } from "plano_model.mh"
 import { RadahnModel } from "../radahn/radahn_model.mh"
 import { BacklogHtml } from "backlog_rules.mh"
+import { Fixture } from "../core/fixture.mh"
 
 export tool HandoffMd {
     // Texto de uma celula de tabela Markdown: sem quebra de linha, "|" escapado.
@@ -191,6 +194,20 @@ export tool HandoffMd {
         return out
     }
 
+    // anexos: secao do spec.md que aponta os complementos anexados pelo
+    // usuario (historia_anexos.mh), copiados para anexos/ ao lado dele.
+    anexos(names: string[]): string -> {
+        if (names.is_empty()) return ""
+        return "\n## Complementos anexados\n\n" +
+            "Arquivos anexados a esta história para cobrir dependências da feature que esta spec pode não refletir por completo. Eles fazem parte da especificação: leia-os antes de implementar e, se contradisserem a spec, pergunte a quem refinou.\n\n" +
+            names.map((n) -> "- [`anexos/" + n + "`](anexos/" + self.link(n) + ")").join("\n") + "\n"
+    }
+
+    // link: o nome do arquivo como destino de link Markdown (espaco e
+    // parenteses quebram o link).
+    internal link(name: string): string ->
+        name.replace("%", "%25").replace(" ", "%20").replace("(", "%28").replace(")", "%29")
+
     agents(nome: string): string ->
         "# Instruções para agentes de código — " + nome + "\n\n" +
         "Este pacote foi gerado pelo Senpai a partir do refinamento do work-item. Ele é a especificação: implemente a partir dele, não reinterprete.\n\n" +
@@ -201,7 +218,8 @@ export tool HandoffMd {
         "4. Os cenários de `historia.feature` (Gherkin, tags `@CAn`) precisam passar — são os testes de aceitação.\n" +
         "5. Respeite as decisões em `docs/adr/` e os contêineres e entidades de `docs/arquitetura.md`.\n" +
         "6. Uma história de API Gateway e a de Backend do mesmo endpoint expõem o mesmo contrato; implemente a de Backend primeiro.\n" +
-        "7. Se a pasta da história tem um `radahn.yaml`, o assessment do `plan.md` concluiu que o Radahn (motor low-code de APIs REST configurado por YAML) implementa a história: use esse arquivo como base em vez de escrever código. Ele é um rascunho — revise-o contra os contratos e os critérios de aceite, feche as lacunas listadas no `plan.md` e nunca coloque segredos nele (só `FROM_ENV(NOME)`).\n\n" +
+        "7. Se a pasta da história tem um `radahn.yaml`, o assessment do `plan.md` concluiu que o Radahn (motor low-code de APIs REST configurado por YAML) implementa a história: use esse arquivo como base em vez de escrever código. Ele é um rascunho — revise-o contra os contratos e os critérios de aceite, feche as lacunas listadas no `plan.md` e nunca coloque segredos nele (só `FROM_ENV(NOME)`).\n" +
+        "8. Se a pasta da história tem `anexos/`, são complementos que quem refinou anexou para cobrir dependências que a spec pode não refletir por completo (a seção \"Complementos anexados\" do `spec.md` lista cada um). Leia-os junto com a spec — fazem parte dela.\n\n" +
         "## O que não fazer\n\n" +
         "- Toda história do backlog está em `specs/`, pronta ou não — confira a **Definition of Ready** no topo de cada `spec.md`. Se estiver marcada **Não pronta**, leia \"Bloqueios da Definition of Ready\" antes de implementar: a decisão de seguir mesmo assim é de quem está te orientando, não sua — não implemente uma história bloqueada sem essa confirmação.\n" +
         "- Não invente comportamento fora dos critérios de aceite; lacunas e questões em aberto de cada `spec.md` precisam de resposta de quem refinou.\n"
@@ -270,8 +288,10 @@ export tool Handoff {
         var project = Readiness.read_json(Paths.project_file(project_id))
         var nome = project?.name ?? project_id
 
+        // As historias de uma feature rejeitada (feature_review.mh) ficam
+        // fora do pacote — a rejeicao e a unica exclusao.
         var items = []
-        for (var it in Readiness.batch(project_id)) {
+        for (var it in Readiness.batch(project_id).filter((x) -> !FeatureReview.is_rejected(project_id, x.feature_dir))) {
             var folder = if (it.path.is_empty()) "historia" else it.path.split("/")[it.path.split("/").size() - 1]
             var feature = if (it.feature_dir.is_empty()) "" else it.feature_dir
             it["spec_dir"] = "specs/" + (if (feature.is_empty()) folder else feature + "/" + folder)
@@ -295,7 +315,7 @@ export tool Handoff {
             }
         }
 
-        // Toda historia e exportada, pronta ou nao — nao ha mais gate por
+        // Toda historia (de feature nao rejeitada) e exportada, pronta ou nao — nao ha mais gate por
         // `status`. Quem decide se uma historia "nao pronta" e implementada
         // mesmo assim e quem le o pacote (dev ou agente de codigo via
         // AGENTS.md), nao o Senpai: o pacote so marca, nunca bloqueia. Ver
@@ -316,7 +336,8 @@ export tool Handoff {
             }
             var codigo = if (it.historia_id.is_empty()) "História" else (if (it.feature_dir.is_empty()) "" else it.feature_dir.split("-")[0] + "-") + it.historia_id
             var r = {status: it.status, bloqueios: it.bloqueios, ressalvas: it.ressalvas}
-            fs.write(dest + "/spec.md", HandoffMd.spec(h, codigo, feature_titulo, r))
+            var anexos = HistoriaAnexos.copy_to(project_id, it.path, dest)
+            fs.write(dest + "/spec.md", HandoffMd.spec(h, codigo, feature_titulo, r) + HandoffMd.anexos(anexos))
             if (p != null) {
                 fs.write(dest + "/plan.md", HandoffMd.plan(p, codigo))
                 fs.write(dest + "/tasks.md", HandoffMd.tasks(p, codigo))
@@ -332,6 +353,36 @@ export tool Handoff {
 }
 
 test HandoffSpec {
+    describe build_ships_each_story_attachments_next_to_its_spec {
+        var id = Fixture.project("spec-test-handoff-anexos")
+        Fixture.artifact(id, "features/FT001-a/feature.json", "{}")
+        Fixture.artifact(id, "historias/FT001-a/US001-x/historia.json", json.stringify({titulo: "X"}))
+        Fixture.artifact(id, "historias/FT001-a/US001-x/anexos/dependencias extras.md", "use a fila de pagamentos")
+        Fixture.artifact(id, "historias/FT001-a/US002-y/historia.json", json.stringify({titulo: "Y"}))
+        Handoff.build(id)
+        var spec_dir = Paths.root(id) + "/handoff/specs/FT001-a/US001-x"
+        are_equal(fs.read(spec_dir + "/anexos/dependencias extras.md"), "use a fila de pagamentos")
+        is_true(fs.read(spec_dir + "/spec.md").contains("## Complementos anexados"))
+        is_true(fs.read(spec_dir + "/spec.md").contains("(anexos/dependencias%20extras.md)"))
+        is_false(fs.read(Paths.root(id) + "/handoff/specs/FT001-a/US002-y/spec.md").contains("Complementos anexados"))
+        is_false(dir.exists(Paths.root(id) + "/handoff/specs/FT001-a/US002-y/anexos"))
+        Fixture.drop(id)
+    }
+
+    describe build_leaves_out_the_stories_of_a_rejected_feature {
+        var id = Fixture.project("spec-test-handoff-rejected")
+        Fixture.artifact(id, "features/FT001-a/feature.json", "{}")
+        Fixture.artifact(id, "features/FT002-b/feature.json", "{}")
+        Fixture.artifact(id, "historias/FT001-a/US001-x/historia.json", json.stringify({titulo: "X"}))
+        Fixture.artifact(id, "historias/FT002-b/US001-y/historia.json", json.stringify({titulo: "Y"}))
+        FeatureReview.decide(id, "FT002", "rejeitar", "fora do escopo")
+        var result = Handoff.build(id)
+        are_equal(result.total, 1)
+        is_true(dir.exists(Paths.root(id) + "/handoff/specs/FT001-a/US001-x"))
+        is_false(dir.exists(Paths.root(id) + "/handoff/specs/FT002-b"))
+        Fixture.drop(id)
+    }
+
     describe tasks_are_an_ordered_checklist_with_criteria_and_dependencies {
         var md = HandoffMd.tasks({tarefas: [
             {id: "T1", titulo: "Teste do endpoint", tipo: "teste", criterios: ["CA1"], depende_de: [], descricao: ""},

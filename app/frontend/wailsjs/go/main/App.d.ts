@@ -9,6 +9,8 @@ export function AddRawURL(arg1:string,arg2:string,arg3:string):Promise<string>;
 
 export function AppVersion():Promise<string>;
 
+export function AttachHistoriaFiles(arg1:string,arg2:string):Promise<string>;
+
 export function CancelRun(arg1:string):Promise<string>;
 
 export function DataDir():Promise<string>;
@@ -76,6 +78,8 @@ export function ReadPersistedRunLogs(arg1:string,arg2:string):Promise<string>;
 export function ReadProjectFile(arg1:string,arg2:string,arg3:string):Promise<string>;
 
 export function ReconnectMCP():Promise<string>;
+
+export function RemoveHistoriaAttachment(arg1:string,arg2:string,arg3:string):Promise<void>;
 
 export function ResumeRun(arg1:string,arg2:string):Promise<string>;
 

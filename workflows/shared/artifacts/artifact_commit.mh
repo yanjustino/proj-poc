@@ -17,6 +17,7 @@ import { C4Diagram } from "c4_diagram.mh"
 import { Context } from "context.mh"
 import { PageShell, ArtifactMeta } from "page_shell.mh"
 import { SpecFiles } from "historia_spec.mh"
+import { HistoriaAnexos } from "historia_anexos.mh"
 import { Draft } from "draft.mh"
 import { RadahnModel } from "../radahn/radahn_model.mh"
 
@@ -164,9 +165,12 @@ export tool ArtifactCommit {
     }
 
     // `feature_dir` vazio: historias da feature implicita de um projeto de
-    // Delivery, gravadas direto em historias/.
+    // Delivery, gravadas direto em historias/. Os anexos do usuario
+    // (historia_anexos.mh) nao sao regeraveis: sobrevivem ao lote novo na
+    // historia de mesmo codigo (US001 -> US001).
     historias(project_id: string, feature_dir: string, draft: Draft): any -> {
         var base = if (feature_dir.is_empty()) "historias" else "historias/${feature_dir}"
+        var anexos = HistoriaAnexos.snapshot(project_id, base)
         self.reset(project_id, base)
         var written = []
         for (var historia in draft.data.historias) {
@@ -174,6 +178,7 @@ export tool ArtifactCommit {
             var folder = ArtifactId.folder_name(id, historia.titulo)
             dir.create(Paths.artifact(project_id, "${base}/${folder}"))
             SpecFiles.write(project_id, "${base}/${folder}", historia)
+            HistoriaAnexos.restore(project_id, anexos, id, "${base}/${folder}")
             self.page(project_id, "${base}/${folder}/historia.html", html.escape("${id} — ${historia.titulo}"), ArtifactBody.historia(historia), historia, draft)
             written += [folder]
         }

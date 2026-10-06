@@ -3,9 +3,12 @@ import {
   workItemChangesLog,
   exportProject,
   exportProjectFile,
+  attachHistoriaFiles,
+  removeHistoriaAttachment,
   exportHandoff,
   buildHandoff,
   workItemReadiness,
+  workItemFeatureReview,
   getRunStatus,
   isFullyTerminal,
   listProjectDir,
@@ -315,6 +318,9 @@ export async function renderArtefatosTab(container, project, { onChanged }) {
   // current filters — recomputed by renderList() before each render, read
   // by rowViewModel to decide whether a feature row gets its toggle.
   let childCounts = new Map();
+  // statusHeaderCounts: status header key -> how many of its features the
+  // current filters show (renderList).
+  let statusHeaderCounts = new Map();
   // staleness: artifacts.js's computeStaleness() output — artifact name ->
   // { stale, staleDeps } — real mtimes, not "does a downstream artifact
   // merely exist" (see that function's own comment). Drives both the
@@ -342,6 +348,20 @@ export async function renderArtefatosTab(container, project, { onChanged }) {
   // fire-and-forget, instead of blocking refreshDoneState() on N extra
   // reads every time it runs.
   let featureClassifications = new Map();
+  // featureReviews: Discovery feature folder name ("FT001-checkout") ->
+  // {status: 'pendente'|'aprovada'|'rejeitada', motivo} — read from each
+  // feature's own status.json (workflows/shared/artifacts/feature_review.mh;
+  // no file means "pendente") by loadFeatureReviews(). Awaited inside
+  // refreshDoneState(), unlike featureClassifications: the backlog rows are
+  // grouped by this status, so rendering before it lands would show every
+  // feature under "Pendentes" and then jump.
+  let featureReviews = new Map();
+  // reviewBusy: feature folder names with an approve/reject/reopen call in
+  // flight — disables that feature's review buttons until it settles.
+  const reviewBusy = new Set();
+  // rejectingKey: the feature row whose reading pane should open with the
+  // rejection form already expanded (set by the list's "Rejeitar").
+  let rejectingKey = null;
   // readiness: Definition of Ready per história, keyed by its folder path
   // relative to artifacts/ ("" for Delivery's single story) — loaded like
   // featureClassifications, fire-and-forget after each refreshDoneState().
@@ -624,6 +644,9 @@ export async function renderArtefatosTab(container, project, { onChanged }) {
     for (const entry of sequence) {
       if (entry.artifact === 'historias' && project.level === 'discovery') continue;
       if (entry.collectionKind && doneNames.has(entry.artifact) && !hasActiveGroupRegeneration(entry.artifact)) {
+        // Discovery's features are collected as blocks (feature + its nested
+        // rows) and emitted grouped by review status below.
+        const featureBlocks = project.level === 'discovery' && entry.artifact === 'features' ? [] : null;
         for (const itemRow of buildItemRows(entry)) {
           // Delivery's histórias: each one can have its implementation plan,
           // nested under the história itself.
@@ -639,12 +662,15 @@ export async function renderArtefatosTab(container, project, { onChanged }) {
               deep: false,
             });
           }
-          rows.push(itemRow);
           // Nested rows always follow their parent directly — renderList's
           // filtering and both renderers rely on that order.
-          if (project.level === 'discovery' && entry.artifact === 'features') rows.push(...historiasChildRowsFor(itemRow));
-          else rows.push(...planChildRows(itemRow));
+          if (featureBlocks) {
+            featureBlocks.push([itemRow, ...historiasChildRowsFor(itemRow)]);
+            continue;
+          }
+          rows.push(itemRow, ...planChildRows(itemRow));
         }
+        if (featureBlocks) rows.push(...groupFeaturesByStatus(featureBlocks));
         continue;
       }
       const row = { key: entry.artifact, label: labelFor(entry.artifact), entry, category: entry.category };
@@ -658,6 +684,40 @@ export async function renderArtefatosTab(container, project, { onChanged }) {
       rows.push(row, ...planChildRows(row));
     }
     return groupCategories(rows);
+  }
+
+  // FEATURE_STATUS_GROUPS: the order Discovery's backlog rows are grouped
+  // in (featureStatusOf). Within a group the features keep the dependency
+  // map's execution order (orderFeaturesByExecution).
+  const FEATURE_STATUS_GROUPS = [
+    { status: 'pendente', label: 'Pendentes' },
+    { status: 'em_aprovacao', label: 'Em aprovação' },
+    { status: 'aprovada', label: 'Aprovadas' },
+    { status: 'rejeitada', label: 'Rejeitadas' },
+  ];
+
+  // groupFeaturesByStatus emits one header row (isStatusHeader) per
+  // non-empty status group, followed by that group's feature blocks. The
+  // header is only a divider, not a parent: feature rows stay top-level
+  // (no parentKey), so their own histórias/plan nesting, the status filters
+  // and expand/collapse all keep working exactly as before. renderList drops
+  // a header whose features were all filtered out.
+  function groupFeaturesByStatus(blocks) {
+    const out = [];
+    for (const group of FEATURE_STATUS_GROUPS) {
+      const members = blocks.filter(([featureRow]) => featureStatusOf(featureRow) === group.status);
+      if (members.length === 0) continue;
+      out.push({
+        key: 'feature-status:' + group.status,
+        label: group.label,
+        status: group.status,
+        category: members[0][0].category,
+        entry: { artifact: 'features', deps: [] },
+        isStatusHeader: true,
+      });
+      for (const block of members) out.push(...block);
+    }
+    return out;
   }
 
   // GROUPED_CATEGORIES: categories whose flat, top-level rows collapse
@@ -792,6 +852,7 @@ export async function renderArtefatosTab(container, project, { onChanged }) {
     if (project.level === 'discovery' && collectionChildren.features && doneNames.has('dependencias')) {
       collectionChildren.features = await orderFeaturesByExecution(collectionChildren.features);
     }
+    featureReviews = project.level === 'discovery' ? await loadFeatureReviews(collectionChildren.features || []) : new Map();
     const historiasNode = byName.historias;
     historiasDoneFeatureIds = new Set();
     historiasByFeatureId = new Map();
@@ -854,6 +915,79 @@ export async function renderArtefatosTab(container, project, { onChanged }) {
     const position = new Map(ordem.map((item, index) => [item?.feature_codigo, index]));
     const rank = (folder) => position.get(featureIdOf(folder.name)) ?? Infinity;
     return [...folders].sort((a, b) => rank(a) - rank(b));
+  }
+
+  // loadFeatureReviews reads every feature's status.json in parallel. A
+  // missing or unreadable file is simply "pendente" — that's how every
+  // freshly generated backlog starts (ArtifactCommit.features clears
+  // features/ entirely, status files included).
+  async function loadFeatureReviews(folders) {
+    const entries = await Promise.all(
+      folders.map((folder) =>
+        readProjectFile(project.id, 'artifacts', `features/${folder.name}/status.json`)
+          .then((raw) => {
+            const data = JSON.parse(raw);
+            const status = ['aprovada', 'rejeitada'].includes(data?.status) ? data.status : 'pendente';
+            return [folder.name, { status, motivo: data?.motivo ?? '' }];
+          })
+          .catch(() => [folder.name, { status: 'pendente', motivo: '' }]),
+      ),
+    );
+    return new Map(entries);
+  }
+
+  // hasPausedRunFor: a histórias or plan generation of this feature (short
+  // id, "FT001") waiting for approval — what puts the feature under "Em
+  // aprovação". Only the app knows about runs, so this status is never
+  // written to disk.
+  function hasPausedRunFor(featureId) {
+    for (const [key, tracker] of trackers) {
+      if (tracker?.status?.state !== 'paused') continue;
+      if (key === 'historias:' + featureId || key.startsWith(`plano:${featureId}:`)) return true;
+    }
+    return false;
+  }
+
+  // featureStatusOf: the review status a Discovery feature row is grouped
+  // under. Rejected wins over a paused run (the run can no longer be
+  // approved — DiscoveryCommits refuses it); otherwise a paused run means
+  // "em_aprovacao" whatever was recorded.
+  function featureStatusOf(featureRow) {
+    const review = featureReviews.get(featureRow.folderName);
+    if (review?.status === 'rejeitada') return 'rejeitada';
+    if (hasPausedRunFor(featureIdOf(featureRow.folderName))) return 'em_aprovacao';
+    return review?.status === 'aprovada' ? 'aprovada' : 'pendente';
+  }
+
+  // isFeatureRejected: by short feature id ("FT001") — what the nested
+  // histórias/plan rows carry (row.featureId / row.plan.featureId).
+  function isFeatureRejected(featureId) {
+    if (!featureId) return false;
+    for (const [folderName, review] of featureReviews) {
+      if (review.status === 'rejeitada' && featureIdOf(folderName) === featureId) return true;
+    }
+    return false;
+  }
+
+  // reviewFeature runs one approve/reject/reopen decision, then reloads the
+  // tree so the row moves to its new status group right away.
+  async function reviewFeature(folderName, decisao, motivo = '') {
+    if (reviewBusy.has(folderName)) return;
+    reviewBusy.add(folderName);
+    renderList();
+    try {
+      await workItemFeatureReview(project.id, featureIdOf(folderName), decisao, motivo);
+      if (decisao !== 'aprovar') onChanged();
+    } catch (err) {
+      showExportStatus(`Não foi possível atualizar ${featureIdOf(folderName)}: ${String(err.message || err)}`, 'error');
+    } finally {
+      reviewBusy.delete(folderName);
+    }
+    if (!active) return;
+    await refreshDoneState();
+    if (!active) return;
+    renderList();
+    renderDetail();
   }
 
   async function loadReadiness() {
@@ -1069,7 +1203,13 @@ export async function renderArtefatosTab(container, project, { onChanged }) {
   // though the feature document itself is done, since that's where the
   // "Gerar histórias" action now lives.
   function hasPendingHistorias(row) {
-    return project.level === 'discovery' && row.groupKey === 'features' && Boolean(row.folderName) && !historiasDoneFeatureIds.has(featureIdOf(row.folderName));
+    return (
+      project.level === 'discovery' &&
+      row.groupKey === 'features' &&
+      Boolean(row.folderName) &&
+      !historiasDoneFeatureIds.has(featureIdOf(row.folderName)) &&
+      featureReviews.get(row.folderName)?.status !== 'rejeitada'
+    );
   }
 
   // rowViewModel computes every derived value a rendered row needs (status
@@ -1100,7 +1240,10 @@ export async function renderArtefatosTab(container, project, { onChanged }) {
     // continuar), right next to the content that explains why.
     // A row generated as part of another artifact (generatedWith) never
     // gets its own "Gerar" — it comes from that artifact's run.
-    const showGenerate = ready && !done && !state && !generatedWith;
+    // A rejected feature's own histórias/plan rows never offer generation
+    // (FeatureReview.ensure_not_rejected refuses it server-side too).
+    const parentRejected = isFeatureRejected(row.featureId || row.plan?.featureId || row.historiasRow?.featureId);
+    const showGenerate = ready && !done && !state && !generatedWith && !parentRejected;
     // A category group is never itself openable — it has no document of its
     // own, only children (see groupRowFor) — clicking it should just toggle
     // expand/collapse (data-toggle), wired independently of data-key/
@@ -1140,6 +1283,22 @@ export async function renderArtefatosTab(container, project, { onChanged }) {
       canGenerateHistorias = !historiasDoneFeatureIds.has(featureId) && (!historiasTracker || ['failed', 'canceled'].includes(historiasState));
       historiasCount = historiasByFeatureId.get(featureId)?.folders.length ?? 0;
     }
+    // review: Discovery feature rows only — their approve/reject/reopen
+    // actions (feature_review.mh). Reopen undoes either decision.
+    let review = null;
+    if (project.level === 'discovery' && row.groupKey === 'features' && row.folderName) {
+      const status = featureStatusOf(row);
+      const recorded = featureReviews.get(row.folderName)?.status ?? 'pendente';
+      review = {
+        status,
+        motivo: featureReviews.get(row.folderName)?.motivo ?? '',
+        busy: reviewBusy.has(row.folderName),
+        canApprove: recorded === 'pendente',
+        canReject: recorded !== 'rejeitada',
+        canReopen: recorded !== 'pendente',
+      };
+      if (recorded === 'rejeitada') canGenerateHistorias = false;
+    }
     // Aprovar straight from the list — the same tracker.approve() the
     // reading pane's own toolbar button calls, so the two can't disagree
     // about an approval already in flight (tracker.busyAction).
@@ -1151,11 +1310,11 @@ export async function renderArtefatosTab(container, project, { onChanged }) {
     if (row.planRow && !row.planRow.planDone) {
       const planTracker = trackers.get(row.planRow.key);
       const planState = planTracker && planTracker.status ? planTracker.status.state : null;
-      canGeneratePlan = !planTracker || ['failed', 'canceled'].includes(planState);
+      canGeneratePlan = (!planTracker || ['failed', 'canceled'].includes(planState)) && !isFeatureRejected(row.planRow.plan.featureId);
     }
     const childCount = childCounts.get(row.key) || 0;
     const expanded = expandedFeatures.has(row.key);
-    return { done, ready, state, dot, statusText, showGenerate, clickable, exportPath, artifactName, kindClass, stale, staleTitle, updateTarget, classification, classificationLabel, canGenerateHistorias, canGeneratePlan, historiasCount, childCount, expanded, showApprove, approving };
+    return { done, ready, state, dot, statusText, showGenerate, clickable, exportPath, artifactName, kindClass, stale, staleTitle, updateTarget, classification, classificationLabel, canGenerateHistorias, canGeneratePlan, historiasCount, childCount, expanded, showApprove, approving, review };
   }
 
   function historiasCountLabel(count) {
@@ -1174,6 +1333,26 @@ export async function renderArtefatosTab(container, project, { onChanged }) {
     return `<button class="artifact-card-generate" data-generate-historias="${escapeAttribute(row.key)}" title="Gerar as histórias de ${escapeAttribute(row.label)}">Gerar histórias →</button>`;
   }
 
+  // featureReviewButtonsHtml: a Discovery feature row's own approve/reject/
+  // reopen buttons. "Rejeitar" only opens the feature in the reading pane,
+  // where the reason is typed (buildFeatureReviewBar).
+  function featureReviewButtonsHtml(row, vm) {
+    const review = vm.review;
+    if (!review) return '';
+    const disabled = review.busy ? 'disabled' : '';
+    const folder = escapeAttribute(row.folderName);
+    return [
+      review.canApprove ? `<button class="artifact-card-approve" data-feature-approve="${folder}" title="Aprovar a feature ${escapeAttribute(row.label)}" ${disabled}>${icon('checkCircle', 12)} Aprovar</button>` : '',
+      review.canReject ? `<button class="artifact-card-reject" data-feature-reject="${escapeAttribute(row.key)}" title="Rejeitar a feature ${escapeAttribute(row.label)} (pede um motivo)" ${disabled}>${icon('x', 12)} Rejeitar</button>` : '',
+      review.canReopen ? `<button class="artifact-card-reopen" data-feature-reopen="${folder}" title="Voltar ${escapeAttribute(row.label)} para Pendente" ${disabled}>${icon('refreshCw', 12)} Reabrir</button>` : '',
+    ].join('');
+  }
+
+  function rejectedBadgeHtml(vm) {
+    if (vm.review?.status !== 'rejeitada') return '';
+    return `<span class="feature-review-badge rejeitada" title="${escapeAttribute(vm.review.motivo ? `Motivo: ${vm.review.motivo}` : 'Feature rejeitada')}">Rejeitada</span>`;
+  }
+
   function approveButtonHtml(row, vm) {
     return `<button class="artifact-card-approve" data-approve="${escapeAttribute(row.key)}" title="Aprovar ${escapeAttribute(row.label)}" ${vm.approving ? 'disabled' : ''}>${icon('checkCircle', 12)} ${vm.approving ? 'Aplicando…' : 'Aprovar'}</button>`;
   }
@@ -1185,7 +1364,7 @@ export async function renderArtefatosTab(container, project, { onChanged }) {
           <span class="artifact-card-kind"><i>${icon(ARTIFACT_ICONS[vm.artifactName] || 'fileText', 14)}</i>${escapeHtml(row.category || labelFor(vm.artifactName))}</span>
           <strong>${escapeHtml(row.parentKey ? row.nestedLabel || row.label : row.label)}</strong>
           ${vm.classificationLabel ? `<span class="artifact-card-classification ${vm.classification.tipoItem === 'enabler' ? 'enabler' : 'business'}">${escapeHtml(vm.classificationLabel)}</span>` : ''}
-          ${dorBadgeHtml(readinessFor(row))}${radahnBadgeHtml(row)}
+          ${dorBadgeHtml(readinessFor(row))}${radahnBadgeHtml(row)}${rejectedBadgeHtml(vm)}
           <span class="artifact-card-description">${escapeHtml(descriptionFor(row))}</span>
           ${vm.stale?.stale ? `<span class="artifact-card-stale" title="${escapeAttribute(vm.staleTitle)}">${icon('alertCircle', 12)} Desatualizado</span>` : ''}
         </button>
@@ -1196,6 +1375,7 @@ export async function renderArtefatosTab(container, project, { onChanged }) {
             ${vm.canGenerateHistorias ? generateHistoriasButtonHtml(row) : ''}
             ${vm.canGeneratePlan ? generatePlanButtonHtml(row) : ''}
             ${vm.showApprove ? approveButtonHtml(row, vm) : ''}
+            ${featureReviewButtonsHtml(row, vm)}
             ${vm.exportPath ? `<button class="artifact-card-export" data-export-file="${escapeAttribute(vm.exportPath)}" title="Exportar ${escapeAttribute(row.label)}">${icon('download', 12)} Exportar</button>` : ''}
             ${vm.updateTarget ? `<button class="artifact-card-update" data-update="${escapeHtml(row.key)}" title="Regenerar ${escapeAttribute(row.label)} a partir da versão atual da dependência">${icon('refreshCw', 12)} Atualizar</button>` : ''}
             ${vm.showGenerate ? `<button class="artifact-card-generate" data-generate="${escapeHtml(row.key)}" title="Gerar ${escapeHtml(row.label)}">Gerar →</button>` : ''}
@@ -1230,7 +1410,7 @@ export async function renderArtefatosTab(container, project, { onChanged }) {
           ${row.isCategoryGroup ? `<span class="data-row-count">${escapeHtml(itemCountLabel(vm.childCount))}</span>` : vm.historiasCount ? `<span class="data-row-count">${escapeHtml(historiasCountLabel(vm.historiasCount))}</span>` : ''}
           ${vm.stale?.stale ? `<span class="artifact-card-stale" title="${escapeAttribute(vm.staleTitle)}">${icon('alertCircle', 12)} Desatualizado</span>` : ''}
         </td>
-        <td class="data-row-classification">${vm.classificationLabel ? `<span class="artifact-card-classification ${vm.classification.tipoItem === 'enabler' ? 'enabler' : 'business'}">${escapeHtml(vm.classificationLabel)}</span>` : ''}${dorBadgeHtml(readinessFor(row))}${radahnBadgeHtml(row)}</td>
+        <td class="data-row-classification">${vm.classificationLabel ? `<span class="artifact-card-classification ${vm.classification.tipoItem === 'enabler' ? 'enabler' : 'business'}">${escapeHtml(vm.classificationLabel)}</span>` : ''}${dorBadgeHtml(readinessFor(row))}${radahnBadgeHtml(row)}${rejectedBadgeHtml(vm)}</td>
         <td class="data-row-category">${escapeHtml(row.category || labelFor(vm.artifactName))}</td>
         <td class="data-row-status">${escapeHtml(vm.statusText)}</td>
         <td class="data-row-when">${escapeHtml(when)}</td>
@@ -1238,12 +1418,28 @@ export async function renderArtefatosTab(container, project, { onChanged }) {
           ${vm.canGenerateHistorias ? generateHistoriasButtonHtml(row) : ''}
           ${vm.canGeneratePlan ? generatePlanButtonHtml(row) : ''}
           ${vm.showApprove ? approveButtonHtml(row, vm) : ''}
+          ${featureReviewButtonsHtml(row, vm)}
           ${vm.exportPath ? `<button class="artifact-card-export" data-export-file="${escapeAttribute(vm.exportPath)}" title="Exportar ${escapeAttribute(row.label)}">${icon('download', 12)}</button>` : ''}
           ${vm.updateTarget ? `<button class="artifact-card-update" data-update="${escapeHtml(row.key)}" title="Regenerar ${escapeAttribute(row.label)} a partir da versão atual da dependência">${icon('refreshCw', 12)} Atualizar</button>` : ''}
           ${vm.showGenerate ? `<button class="artifact-card-generate" data-generate="${escapeHtml(row.key)}" title="Gerar ${escapeHtml(row.label)}">Gerar →</button>` : ''}
         </td>
       </tr>
     `;
+  }
+
+  // statusHeaderRowHtml/statusHeaderCardHtml: the divider above one review
+  // status group of Discovery's backlog (groupFeaturesByStatus).
+  function statusHeaderLabel(row) {
+    const count = statusHeaderCounts.get(row.key) || 0;
+    return `${row.label} · ${count} ${count === 1 ? 'feature' : 'features'}`;
+  }
+
+  function statusHeaderRowHtml(row) {
+    return `<tr class="data-row feature-status-header ${escapeAttribute(row.status)}"><td colspan="7"><span class="feature-review-dot ${escapeAttribute(row.status)}"></span>${escapeHtml(statusHeaderLabel(row))}</td></tr>`;
+  }
+
+  function statusHeaderCardHtml(row) {
+    return `<div class="artifact-status-header ${escapeAttribute(row.status)}"><span class="feature-review-dot ${escapeAttribute(row.status)}"></span>${escapeHtml(statusHeaderLabel(row))}</div>`;
   }
 
   function renderCards(visibleRows) {
@@ -1260,6 +1456,7 @@ export async function renderArtefatosTab(container, project, { onChanged }) {
           index === 0 || row.category !== visibleRows[index - 1].category
             ? `<div class="artifact-group-header"><h3>${escapeHtml(row.category || labelFor(row.entry.artifact))}</h3></div>`
             : '';
+        if (row.isStatusHeader) return headerHtml + statusHeaderCardHtml(row);
         return headerHtml + cardHtml(row, rowViewModel(row));
       })
       .join('');
@@ -1281,7 +1478,7 @@ export async function renderArtefatosTab(container, project, { onChanged }) {
           </tr>
         </thead>
         <tbody>
-          ${visibleRows.map((row) => tableRowHtml(row, rowViewModel(row))).join('')}
+          ${visibleRows.map((row) => (row.isStatusHeader ? statusHeaderRowHtml(row) : tableRowHtml(row, rowViewModel(row)))).join('')}
         </tbody>
       </table>
     `;
@@ -1301,12 +1498,24 @@ export async function renderArtefatosTab(container, project, { onChanged }) {
     // rowsToRender() always emits a parent before its children, so one pass
     // is enough.
     const shownParents = new Set();
-    const filteredRows = rows.filter((row) => {
+    const passedRows = rows.filter((row) => {
+      if (row.isStatusHeader) return true;
       if (row.parentKey) return shownParents.has(row.parentKey);
       if (!passesFilter(row)) return false;
       shownParents.add(row.key);
       return true;
     });
+    // A status header (groupFeaturesByStatus) survives only if at least one
+    // of its features did; statusHeaderCounts is how many did.
+    statusHeaderCounts = new Map();
+    let currentHeader = null;
+    for (const row of passedRows) {
+      if (row.isStatusHeader) currentHeader = row.key;
+      else if (row.parentKey) continue;
+      else if (currentHeader && row.groupKey === 'features') statusHeaderCounts.set(currentHeader, (statusHeaderCounts.get(currentHeader) || 0) + 1);
+      else currentHeader = null;
+    }
+    const filteredRows = passedRows.filter((row) => !row.isStatusHeader || statusHeaderCounts.has(row.key));
     childCounts = new Map();
     for (const row of filteredRows) {
       if (row.parentKey) childCounts.set(row.parentKey, (childCounts.get(row.parentKey) || 0) + 1);
@@ -1319,9 +1528,9 @@ export async function renderArtefatosTab(container, project, { onChanged }) {
     // clickable either (rowViewModel), so this is the only other path that
     // could otherwise assign it to selectedKey.
     if (!selectedKey || !filteredRows.some((r) => r.key === selectedKey)) {
-      selectedKey = visibleRows.find((r) => !r.isCategoryGroup)?.key ?? null;
+      selectedKey = visibleRows.find((r) => !r.isCategoryGroup && !r.isStatusHeader)?.key ?? null;
     }
-    const topLevelCount = rows.filter((row) => !row.parentKey).length;
+    const topLevelCount = rows.filter((row) => !row.parentKey && !row.isStatusHeader).length;
     countEl.textContent = `${topLevelCount} ${topLevelCount === 1 ? 'item' : 'itens'}`;
     updateHandoffControls();
 
@@ -1395,6 +1604,33 @@ export async function renderArtefatosTab(container, project, { onChanged }) {
         if (!active) return;
         renderList();
         if (selectedKey === key) renderDetail();
+      });
+    });
+
+    listEl.querySelectorAll('[data-feature-approve]').forEach((button) => {
+      button.addEventListener('click', (event) => {
+        event.stopPropagation();
+        reviewFeature(button.dataset.featureApprove, 'aprovar');
+      });
+    });
+
+    listEl.querySelectorAll('[data-feature-reopen]').forEach((button) => {
+      button.addEventListener('click', (event) => {
+        event.stopPropagation();
+        reviewFeature(button.dataset.featureReopen, 'reabrir');
+      });
+    });
+
+    // "Rejeitar" opens the feature with the reason form already showing —
+    // the reason lives in the reading pane, which renderList's frequent
+    // repaints never touch, so a half-typed reason isn't lost.
+    listEl.querySelectorAll('[data-feature-reject]').forEach((button) => {
+      button.addEventListener('click', (event) => {
+        event.stopPropagation();
+        selectedKey = button.dataset.featureReject;
+        rejectingKey = selectedKey;
+        renderList();
+        renderDetail();
       });
     });
 
@@ -2030,7 +2266,7 @@ export async function renderArtefatosTab(container, project, { onChanged }) {
       // história of that feature in one call.
       footer = buildRequestChangesComposer(row, {
         targetRow: row.historiasRow,
-        note: `Isto regenera todas as histórias de ${row.historiasRow.featureId}, não só esta.`,
+        note: `Isto regenera todas as histórias de ${row.historiasRow.featureId}, não só esta. Os complementos anexados ficam na história de mesmo código.`,
       });
     } else if (canRequestChanges(row)) {
       footer = buildRequestChangesComposer(row, { note: [manualEditNoteFor(row.key), downstreamWarningFor(row.key)].filter(Boolean).join(' ') });
@@ -2059,12 +2295,76 @@ export async function renderArtefatosTab(container, project, { onChanged }) {
     // A história também mostra o que vai para o desenvolvimento: a Definition
     // of Ready e os arquivos gerados ao lado dela (contratos, cenários, plano).
     const devBar = storyDir(row) !== null ? buildDevFilesBar(row) : null;
-    if (devBar || footer) {
+    const reviewBar = project.level === 'discovery' && row.groupKey === 'features' && row.folderName ? buildFeatureReviewBar(row) : null;
+    if (devBar || reviewBar || footer) {
       const wrap = document.createElement('div');
+      if (reviewBar) wrap.appendChild(reviewBar);
       if (devBar) wrap.appendChild(devBar);
       if (footer) wrap.appendChild(footer);
       setFooter(wrap);
     }
+  }
+
+  // FEATURE_STATUS_LABELS: singular labels for one feature's own status, as
+  // the reading pane's review bar shows it.
+  const FEATURE_STATUS_LABELS = { pendente: 'Pendente', em_aprovacao: 'Em aprovação', aprovada: 'Aprovada', rejeitada: 'Rejeitada' };
+
+  // buildFeatureReviewBar: a Discovery feature's review status and its
+  // approve/reject/reopen actions, above the reading pane's composer.
+  // Rejecting needs a reason (FeatureReview.decide refuses an empty one), so
+  // "Rejeitar" first expands a textarea; the list's own "Rejeitar" opens the
+  // pane with it already expanded (rejectingKey).
+  function buildFeatureReviewBar(row) {
+    const vm = rowViewModel(row);
+    const review = vm.review;
+    const bar = document.createElement('div');
+    bar.className = 'feature-review-bar';
+    bar.innerHTML = `
+      <div class="feature-review-head">
+        <span class="feature-review-dot ${escapeAttribute(review.status)}"></span>
+        <strong>${escapeHtml(FEATURE_STATUS_LABELS[review.status])}</strong>
+        ${review.status === 'rejeitada' && review.motivo ? `<span class="feature-review-reason">Motivo: ${escapeHtml(review.motivo)}</span>` : ''}
+        ${review.status === 'rejeitada' ? '<span class="feature-review-note">Sem histórias nem planos e fora do pacote de handoff até ser reaberta.</span>' : ''}
+        <div class="feature-review-actions">${featureReviewButtonsHtml(row, vm)}</div>
+      </div>
+      <div class="feature-review-form" hidden>
+        <textarea class="run-feedback-input" rows="2" placeholder="Motivo da rejeição (obrigatório)…"></textarea>
+        <div class="feature-review-form-actions">
+          <button class="button secondary small" data-cancel>Cancelar</button>
+          <button class="button small danger" data-confirm disabled>Rejeitar feature</button>
+        </div>
+      </div>
+    `;
+    const form = bar.querySelector('.feature-review-form');
+    const textarea = form.querySelector('textarea');
+    const confirm = form.querySelector('[data-confirm]');
+    function openForm() {
+      form.hidden = false;
+      textarea.focus();
+    }
+    bar.querySelector('[data-feature-approve]')?.addEventListener('click', () => reviewFeature(row.folderName, 'aprovar'));
+    bar.querySelector('[data-feature-reopen]')?.addEventListener('click', () => reviewFeature(row.folderName, 'reabrir'));
+    bar.querySelector('[data-feature-reject]')?.addEventListener('click', openForm);
+    textarea.addEventListener('input', () => {
+      confirm.disabled = !textarea.value.trim();
+    });
+    form.querySelector('[data-cancel]').addEventListener('click', () => {
+      form.hidden = true;
+      textarea.value = '';
+      confirm.disabled = true;
+    });
+    confirm.addEventListener('click', () => {
+      const motivo = textarea.value.trim();
+      if (!motivo) return;
+      confirm.disabled = true;
+      textarea.disabled = true;
+      reviewFeature(row.folderName, 'rejeitar', motivo);
+    });
+    if (rejectingKey === row.key && review.canReject) {
+      rejectingKey = null;
+      setTimeout(openForm, 0);
+    }
+    return bar;
   }
 
   // buildDevFilesBar: "Arquivos para desenvolvimento" of a história — each
@@ -2073,6 +2373,28 @@ export async function renderArtefatosTab(container, project, { onChanged }) {
   // full package — every story, ready or not, each one's own spec.md
   // showing its Definition of Ready and (if blocked) why — comes from
   // "Pacote de handoff".
+  // anexosOf: the attachment names under <história>/anexos/, read from the
+  // last listProjectDir() tree (refreshDoneState) — `dir` relative to
+  // artifacts/, "" for Delivery's single story at the root.
+  function anexosOf(dir) {
+    let nodes = Object.values(lastByName);
+    for (const segment of [...(dir ? dir.split('/') : []), 'anexos']) {
+      const node = nodes.find((n) => n.isDir && n.name === segment);
+      if (!node) return [];
+      nodes = node.children || [];
+    }
+    return nodes.filter((n) => !n.isDir).map((n) => n.name);
+  }
+
+  // reloadAfterAttachmentChange: the bar is rebuilt from the tree, so a
+  // fresh listing must land before the pane is redrawn.
+  async function reloadAfterAttachmentChange() {
+    await refreshDoneState();
+    if (!active) return;
+    renderList();
+    renderDetail();
+  }
+
   function buildDevFilesBar(row) {
     const dir = storyDir(row);
     const bar = document.createElement('div');
@@ -2080,14 +2402,80 @@ export async function renderArtefatosTab(container, project, { onChanged }) {
     const r = readinessFor(row);
     const files = ['openapi.json', 'asyncapi.json', 'historia.feature', 'plano.html', 'radahn.yaml'];
     const present = files.filter((f) => (row.devFiles || []).includes(f));
+    const anexos = anexosOf(dir);
     bar.innerHTML = `
       <div class="dev-files-bar-row">
         <span class="dev-files-title">Arquivos para desenvolvimento</span>
         ${dorBadgeHtml(r)}${radahnBadgeHtml(row)}
         ${present.length ? present.map((f) => `<button class="button tertiary small" data-dev-file="${escapeAttribute(f)}">${icon('download', 12)} ${escapeHtml(f)}</button>`).join('') : '<span class="dev-files-empty">Nenhum arquivo gerado — regere a história (e gere o plano).</span>'}
       </div>
+      <div class="dev-files-bar-row">
+        <span class="dev-files-title" title="Arquivos que cobrem dependências da feature que a história pode não refletir por completo. Vão junto com a história no pacote de handoff e são mantidos ao regerar as histórias (na história de mesmo código).">Complementos anexados</span>
+        ${
+          anexos.length
+            ? anexos
+                .map(
+                  (name) => `<span class="dev-attachment"><button class="button tertiary small" data-anexo-export="${escapeAttribute(name)}" title="Exportar ${escapeAttribute(name)}">${icon('download', 12)} ${escapeHtml(name)}</button><button class="dev-attachment-remove" data-anexo-remove="${escapeAttribute(name)}" title="Remover ${escapeAttribute(name)}" aria-label="Remover ${escapeAttribute(name)}">${icon('x', 12)}</button></span>`,
+                )
+                .join('')
+            : '<span class="dev-files-empty">Nenhum — anexe o que a história não cobre das dependências da feature; vai junto no handoff.</span>'
+        }
+        <button class="button secondary small" data-anexo-add>${icon('plus', 12)} Anexar arquivo</button>
+      </div>
       ${dorReasonsHtml(r)}
     `;
+    bar.querySelector('[data-anexo-add]').addEventListener('click', async (event) => {
+      const button = event.currentTarget;
+      button.disabled = true;
+      try {
+        const names = await attachHistoriaFiles(project.id, dir);
+        if (names.length) showExportStatus(`${names.length === 1 ? 'Arquivo anexado' : `${names.length} arquivos anexados`} à história: ${names.join(', ')}`);
+      } catch (err) {
+        showExportStatus(`Não foi possível anexar: ${String(err.message || err)}`, 'error');
+      } finally {
+        button.disabled = false;
+      }
+      await reloadAfterAttachmentChange();
+    });
+    bar.querySelectorAll('[data-anexo-export]').forEach((button) => {
+      button.addEventListener('click', async () => {
+        button.disabled = true;
+        try {
+          const path = `${dir ? `${dir}/` : ''}anexos/${button.dataset.anexoExport}`;
+          const destination = await exportProjectFile(project.id, 'artifacts', path);
+          if (destination) showExportStatus(`Arquivo exportado para ${destination}`);
+        } catch (err) {
+          showExportStatus(`Não foi possível exportar: ${String(err.message || err)}`, 'error');
+        } finally {
+          button.disabled = false;
+        }
+      });
+    });
+    // Remover pede confirmação no próprio botão (sem diálogo), como o
+    // "Atualizar" com edições manuais: o anexo não pode ser regerado.
+    bar.querySelectorAll('[data-anexo-remove]').forEach((button) => {
+      button.addEventListener('click', async () => {
+        if (button.dataset.confirming !== 'true') {
+          button.dataset.confirming = 'true';
+          button.classList.add('confirming');
+          button.textContent = 'Remover?';
+          setTimeout(() => {
+            if (!button.isConnected) return;
+            delete button.dataset.confirming;
+            button.classList.remove('confirming');
+            button.innerHTML = icon('x', 12);
+          }, 4000);
+          return;
+        }
+        button.disabled = true;
+        try {
+          await removeHistoriaAttachment(project.id, dir, button.dataset.anexoRemove);
+        } catch (err) {
+          showExportStatus(`Não foi possível remover: ${String(err.message || err)}`, 'error');
+        }
+        await reloadAfterAttachmentChange();
+      });
+    });
     bar.querySelectorAll('[data-dev-file]').forEach((button) => {
       button.addEventListener('click', async () => {
         button.disabled = true;
