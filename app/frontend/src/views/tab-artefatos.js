@@ -29,6 +29,7 @@ import { isEditable, isEditorOpen, mountArtifactEditor } from '../artifact-edito
 import { approvalRecoveryArgs, waitForRecoveryTerminal } from '../checkpoint-recovery.js';
 import { enqueueLlmRun, llmJob, cancelQueuedLlmJob, subscribeLlmJobs } from '../llm-queue.js';
 import { formatRelativeTime } from '../time-format.js';
+import { perfStart, perfLog, perfTime } from '../perf-log.js';
 
 const LABELS = {
   brief: 'Brief',
@@ -808,7 +809,7 @@ export async function renderArtefatosTab(container, project, { onChanged }) {
   async function refreshDoneState() {
     let nodes;
     try {
-      nodes = await listProjectDir(project.id, 'artifacts', '');
+      nodes = await perfTime('artefatos listProjectDir', listProjectDir(project.id, 'artifacts', ''));
     } catch {
       nodes = [];
     }
@@ -850,9 +851,9 @@ export async function renderArtefatosTab(container, project, { onChanged }) {
           : children.filter((c) => !c.isDir && c.name.endsWith('.html'));
     }
     if (project.level === 'discovery' && collectionChildren.features && doneNames.has('dependencias')) {
-      collectionChildren.features = await orderFeaturesByExecution(collectionChildren.features);
+      collectionChildren.features = await perfTime('artefatos orderFeatures', orderFeaturesByExecution(collectionChildren.features));
     }
-    featureReviews = project.level === 'discovery' ? await loadFeatureReviews(collectionChildren.features || []) : new Map();
+    featureReviews = project.level === 'discovery' ? await perfTime('artefatos featureReviews', loadFeatureReviews(collectionChildren.features || [])) : new Map();
     const historiasNode = byName.historias;
     historiasDoneFeatureIds = new Set();
     historiasByFeatureId = new Map();
@@ -875,26 +876,38 @@ export async function renderArtefatosTab(container, project, { onChanged }) {
         historiasByFeatureId.set(featureIdOf(child.name), { dir: child.name, folders: storyFolders });
       }
     }
-    staleness = computeStaleness(sequence, doneNames, byName, await wikiMtime());
+    staleness = computeStaleness(sequence, doneNames, byName, await perfTime('artefatos wikiMtime', wikiMtime()));
     staleHistoriaFeatures = staleHistoriaFeatureIds(
       sequence.find((entry) => entry.artifact === 'features'),
       byName,
       historiasByFeatureId,
     );
-    try {
-      const log = await workItemChangesLog(project.id);
-      manualEdits = new Map();
-      for (const entry of log) {
-        if (entry.origem === 'edicao_manual') manualEdits.set(entry.artifact, (manualEdits.get(entry.artifact) ?? 0) + 1);
-      }
-    } catch {
-      // Sem o historico a tela so deixa de avisar; nada mais depende disto.
-    }
     // Fire-and-forget, deliberately not awaited by refreshDoneState() itself
     // — see loadFeatureClassifications' own comment for why this needs its
-    // own reads instead of piggybacking on the tree above.
+    // own reads instead of piggybacking on the tree above. loadManualEdits
+    // and loadReadiness go through mhl: awaiting them held the whole tab
+    // while the mhl bridge was still starting (~5s on a cold app launch).
     loadFeatureClassifications();
+    loadManualEdits();
     loadReadiness();
+  }
+
+  // loadManualEdits: artefato -> quantas edicoes manuais constam em
+  // changes.jsonl (so os avisos de "Atualizar"/regenerar dependem disto). O
+  // valor anterior fica valendo ate a leitura nova chegar.
+  async function loadManualEdits() {
+    let log;
+    try {
+      log = await perfTime('artefatos changesLog', workItemChangesLog(project.id));
+    } catch {
+      return; // Sem o historico a tela so deixa de avisar; nada mais depende disto.
+    }
+    if (!active) return;
+    const next = new Map();
+    for (const entry of log) {
+      if (entry.origem === 'edicao_manual') next.set(entry.artifact, (next.get(entry.artifact) ?? 0) + 1);
+    }
+    manualEdits = next;
   }
 
   // orderFeaturesByExecution sorts Discovery's feature folders by the
@@ -1484,6 +1497,41 @@ export async function renderArtefatosTab(container, project, { onChanged }) {
     `;
   }
 
+  // selectRow: a click on a row only moves the "selected" highlight in place
+  // and redraws the reading pane — rebuilding the whole list (renderList)
+  // for that replaced the clicked element, so it lost focus and the scroll
+  // position could jump away from it.
+  function selectRow(key) {
+    selectedKey = key;
+    listEl.querySelectorAll('.selected').forEach((el) => el.classList.remove('selected'));
+    const target = [...listEl.querySelectorAll('[data-key]')].find((el) => el.dataset.key === key);
+    // Card view: data-key sits on the inner button, the highlight on the card.
+    (target?.closest('.artifact-card') ?? target)?.classList.add('selected');
+    renderDetail();
+  }
+
+  // preservingListPosition runs a list repaint (innerHTML replaced) without
+  // moving the view: it keeps the scroll offset of every scrolled ancestor
+  // (the list itself doesn't scroll, its container does) and puts focus back
+  // on the same row/button when the focused element was inside the list.
+  function preservingListPosition(paint) {
+    const scrolled = [];
+    for (let el = listEl; el; el = el.parentElement) {
+      if (el.scrollTop || el.scrollLeft) scrolled.push([el, el.scrollTop, el.scrollLeft]);
+    }
+    const focused = listEl.contains(document.activeElement) ? document.activeElement : null;
+    const focusAttr = focused && [...focused.attributes].find((a) => a.name.startsWith('data-') && a.value);
+    paint();
+    for (const [el, top, left] of scrolled) {
+      el.scrollTop = top;
+      el.scrollLeft = left;
+    }
+    if (focusAttr) {
+      const again = [...listEl.querySelectorAll(`[${focusAttr.name}]`)].find((el) => el.getAttribute(focusAttr.name) === focusAttr.value);
+      again?.focus({ preventScroll: true });
+    }
+  }
+
   function renderList() {
     const rows = rowsToRender();
     function passesFilter(row) {
@@ -1540,8 +1588,10 @@ export async function renderArtefatosTab(container, project, { onChanged }) {
       return;
     }
 
-    if (viewMode === 'table') renderTable(visibleRows);
-    else renderCards(visibleRows);
+    preservingListPosition(() => {
+      if (viewMode === 'table') renderTable(visibleRows);
+      else renderCards(visibleRows);
+    });
 
     // [data-key] is the row's own click target — cardHtml's <button> or
     // tableRowHtml's <tr> — so this one listener covers both views; a
@@ -1549,11 +1599,7 @@ export async function renderArtefatosTab(container, project, { onChanged }) {
     // no data-key at all in table mode, or a real `disabled` button in card
     // mode, so neither ever reaches here.
     listEl.querySelectorAll('[data-key]').forEach((el) => {
-      el.addEventListener('click', () => {
-        selectedKey = el.dataset.key;
-        renderList();
-        renderDetail();
-      });
+      el.addEventListener('click', () => selectRow(el.dataset.key));
     });
 
     listEl.querySelectorAll('[data-toggle]').forEach((button) => {
@@ -2881,10 +2927,18 @@ export async function renderArtefatosTab(container, project, { onChanged }) {
     }
   }
 
+  let perfPhase = perfStart();
   await refreshDoneState();
+  perfLog('artefatos refreshDoneState', perfPhase);
+  perfPhase = perfStart();
   reattachActiveRuns();
+  perfLog('artefatos reattachActiveRuns', perfPhase);
+  perfPhase = perfStart();
   renderList();
+  perfLog('artefatos renderList', perfPhase);
+  perfPhase = perfStart();
   await renderDetail();
+  perfLog(`artefatos renderDetail (${selectedKey})`, perfPhase);
 
   return () => {
     active = false;

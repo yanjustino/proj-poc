@@ -3,6 +3,7 @@ import { computeCategoryProgress } from '../artifacts.js';
 import { renderFontesTab } from './tab-fontes.js';
 import { renderWikiTab } from './tab-wiki.js';
 import { renderArtefatosTab } from './tab-artefatos.js';
+import { perfStart, perfLog } from '../perf-log.js';
 import { renderLogsTab } from './tab-logs.js';
 import { renderMudancasTab } from './tab-mudancas.js';
 import { showEmpty as showEmptyReadingPane } from '../reading-pane.js';
@@ -48,9 +49,14 @@ function failureNote(result, lastGood, what) {
   };
 }
 
+// LOADING_NOTE: what a mhl-backed source shows while the mhl bridge is
+// still starting (about 5s on a cold app start) — the summary paints from
+// disk first and fills these in once mhl answers (refreshSummary).
+const LOADING_NOTE = { text: 'carregando…', reason: 'Aguardando o mhl iniciar', loading: true };
+
 function failureRowHtml(failure) {
   if (!failure) return '';
-  return `<div class="summary-tokens-row summary-unavailable" title="${escapeHtml(failure.reason)}">${icon('alertCircle', 13)}<span>${escapeHtml(failure.text)}</span></div>`;
+  return `<div class="summary-tokens-row summary-unavailable" title="${escapeHtml(failure.reason)}">${icon(failure.loading ? 'clock' : 'alertCircle', 13)}<span>${escapeHtml(failure.text)}</span></div>`;
 }
 
 function productivityCardHtml(p, failure = null) {
@@ -194,33 +200,58 @@ export async function renderWorkItemView(container, project, { initialTab = 'art
   let lastUsage = null;
   let lastProductivity = null;
 
+  // refreshSummary paints in two passes. Each source fails on its own (a
+  // single Promise.all used to drop even the local numbers to zero when mhl
+  // was down). The local sources (Go file reads) are fast; usage,
+  // productivity and the pipeline stage go through mhl, whose bridge takes
+  // ~5s to start on a cold app launch — waiting for them used to hold the
+  // whole project screen. Now the summary paints from disk first (mhl cards
+  // "carregando…") and repaints once mhl answers; a bridge that's already
+  // warm answers within REMOTE_GRACE_MS, so the common case paints once.
+  // `summaryVersion` drops a stale pass when refreshes overlap.
+  const REMOTE_GRACE_MS = 120;
+  let summaryVersion = 0;
   async function refreshSummary() {
-    const emptyUsage = { total_tokens_in: 0, total_tokens_out: 0, total_cache_creation_tokens: 0, total_cache_read_tokens: 0, total_cost_usd: 0 };
-    // Each source fails on its own. This used to be one Promise.all whose
-    // single catch kept every default — so when mhl was down (the usage and
-    // productivity queries run through it), even the purely local numbers
-    // (fontes, artefatos) dropped to zero and the whole summary read as if
-    // the project's history had been erased. Now a failed source shows as
-    // unavailable, and only that source.
-    const results = await Promise.allSettled([
+    const version = ++summaryVersion;
+    const localPromise = Promise.allSettled([
       listProjectDir(project.id, 'artifacts', ''),
       listProjectDir(project.id, 'raw', ''),
       listIngestedRaw(project.id),
-      workItemUsage(project.id),
-      pipelineStage(),
-      workItemProductivity(project.id),
     ]);
-    const valueOf = (i, fallback) => (results[i].status === 'fulfilled' ? results[i].value : fallback);
-    const artifactNodes = valueOf(0, []);
-    const rawNodes = valueOf(1, []);
-    const ingestedNames = valueOf(2, []);
-    const stage = valueOf(4, { state: null, count: 0 });
-    if (results[3].status === 'fulfilled') lastUsage = results[3].value;
-    if (results[5].status === 'fulfilled') lastProductivity = results[5].value;
+    const remotePromise = Promise.allSettled([workItemUsage(project.id), pipelineStage(), workItemProductivity(project.id)]);
+    const local = await localPromise;
+    const quick = await Promise.race([remotePromise, new Promise((resolve) => setTimeout(() => resolve(null), REMOTE_GRACE_MS))]);
+    if (!quick) {
+      if (version !== summaryVersion || !container.isConnected) return;
+      paintSummary(local, null);
+    }
+    const remote = quick ?? (await remotePromise);
+    if (version !== summaryVersion || !container.isConnected) return;
+    paintSummary(local, remote);
+  }
+
+  // paintSummary: `remote` null means mhl hasn't answered yet — the last
+  // good reading (if any) or a "carregando…" note stands in for it.
+  function paintSummary(local, remote) {
+    const emptyUsage = { total_tokens_in: 0, total_tokens_out: 0, total_cache_creation_tokens: 0, total_cache_read_tokens: 0, total_cost_usd: 0 };
+    const valueOf = (results, i, fallback) => (results[i].status === 'fulfilled' ? results[i].value : fallback);
+    const artifactNodes = valueOf(local, 0, []);
+    const rawNodes = valueOf(local, 1, []);
+    const ingestedNames = valueOf(local, 2, []);
+    let stage = remote ? valueOf(remote, 1, { state: null, count: 0 }) : null;
+    let usageFailure = null;
+    let productivityFailure = null;
+    if (remote) {
+      if (remote[0].status === 'fulfilled') lastUsage = remote[0].value;
+      if (remote[2].status === 'fulfilled') lastProductivity = remote[2].value;
+      usageFailure = failureNote(remote[0], lastUsage, 'uso de tokens');
+      productivityFailure = failureNote(remote[2], lastProductivity, 'produtividade');
+    } else {
+      if (!lastUsage) usageFailure = LOADING_NOTE;
+      if (!lastProductivity) productivityFailure = LOADING_NOTE;
+    }
     const usage = lastUsage ?? emptyUsage;
     const productivity = lastProductivity;
-    const usageFailure = failureNote(results[3], lastUsage, 'uso de tokens');
-    const productivityFailure = failureNote(results[5], lastProductivity, 'produtividade');
 
     const { byCategory, doneCount, totalCount } = computeCategoryProgress(project, artifactNodes);
 
@@ -252,7 +283,8 @@ export async function renderWorkItemView(container, project, { initialTab = 'art
     const ingestedCount = rawNodes.filter((n) => ingestedNames.includes(n.name)).length;
     const lastActivity = productivity?.last_activity_at ? formatRelativeTime(Date.parse(productivity.last_activity_at)) : '—';
 
-    const { label: stageLabel, sub: stageSub } = stageText(stage);
+    const { label: stageLabel, sub: stageSub } = stage ? stageText(stage) : { label: 'Carregando…', sub: 'aguardando o mhl iniciar' };
+    stage = stage ?? { state: null, count: 0 };
 
     summaryEl.innerHTML = `
       <div class="summary-card summary-card-progress">
@@ -282,7 +314,7 @@ export async function renderWorkItemView(container, project, { initialTab = 'art
         </div>
         <div class="summary-tokens-stack">
           <div class="summary-tokens-row">${icon('inbox', 13)}<b>${ingestedCount} de ${rawNodes.length}</b><span>fontes ingeridas</span></div>
-          <div class="summary-tokens-row">${icon('refreshCw', 13)}<b>${productivity ? productivity.change_requests : 0}</b><span>pedidos de mudança</span></div>
+          <div class="summary-tokens-row">${icon('refreshCw', 13)}<b>${productivity ? productivity.change_requests : remote ? 0 : '…'}</b><span>pedidos de mudança</span></div>
           <div class="summary-tokens-row">${icon('zap', 13)}<b>${escapeHtml(lastActivity)}</b><span>última atividade</span></div>
         </div>
       </div>
@@ -291,7 +323,9 @@ export async function renderWorkItemView(container, project, { initialTab = 'art
 
     // Token usage lives only in this hero pill (it replaced the "Uso de
     // tokens" summary card): cache share, input, output, cost.
-    tokenPillEl.hidden = false;
+    // Nothing to show until mhl answers once — a row of zeros would read as
+    // "this project never used any tokens".
+    tokenPillEl.hidden = !lastUsage && !remote;
     tokenPillEl.title = `${tokensTitle} · US$: ${cost.label}${usageFailure ? ` · ${usageFailure.text}` : ''}`;
     tokenPillEl.classList.toggle('token-pill-stale', Boolean(usageFailure));
     tokenPillEl.innerHTML = `
@@ -344,8 +378,15 @@ export async function renderWorkItemView(container, project, { initialTab = 'art
     button.addEventListener('click', () => showTab(button.dataset.tab));
   });
 
-  await refreshSummary();
+  // The summary is not awaited: the tab only needs disk reads, and holding it
+  // behind the summary's mhl queries is what made a project take ~5s to open
+  // while the mhl bridge was still starting.
+  const perfMount = perfStart();
+  refreshSummary()
+    .then(() => perfLog(`workitem ${project.id} summary (mhl)`, perfMount))
+    .catch(() => {});
   await showTab(initialTab);
+  perfLog(`workitem ${project.id} TOTAL (tab ${initialTab})`, perfMount);
 
   return () => {
     disposeTab?.();
