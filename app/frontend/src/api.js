@@ -29,9 +29,9 @@ function parseJSON(raw, context) {
 // StartupStatus separa "ainda iniciando" de "falhou": uma falha aparece na
 // hora, com a causa real (vinda do Go), em vez de virar um "não ficou pronto"
 // genérico depois do prazo. O prazo cobre a espera do próprio bridge pelo
-// mhl (30s, mhlbridge.readyTimeout) mais a extração dos arquivos.
+// mhl (120s, mhlbridge.readyTimeout) mais a extração dos arquivos.
 const READY_POLL_INTERVAL_MS = 100;
-const READY_TIMEOUT_MS = 60000;
+const READY_TIMEOUT_MS = 150000;
 
 export async function waitUntilReady() {
   const deadline = Date.now() + READY_TIMEOUT_MS;

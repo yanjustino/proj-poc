@@ -303,9 +303,8 @@ func Start(ctx context.Context, mhlPath, workflowsDir, stateDir, dataDir, codexC
 		}
 	}()
 
-	// 30s, não 10s: numa partida a frio (logo após ligar a máquina, ou com o
-	// binário recém-extraído sendo verificado pelo macOS) o mhl pode passar
-	// bem dos ~4s habituais, e estourar aqui derruba a inicialização inteira.
+	// Ver readyTimeout: o mhl só responde depois de validar todos os
+	// workflows, e um mhl vivo que ainda está carregando não é derrubado cedo.
 	if err := c.waitReady(ctx, readyTimeout); err != nil {
 		c.killQuietly()
 		return nil, fmt.Errorf("mhlbridge: mhl did not become ready: %w (stderr: %s)", err, stderr.String())
@@ -332,22 +331,50 @@ func freeLoopbackAddr() (string, error) {
 	return l.Addr().String(), nil
 }
 
-const readyTimeout = 30 * time.Second
+// readyTimeout: o mhl só passa a responder (e só escreve algo no stderr)
+// depois de validar todos os workflows — ~5s num Mac, e várias vezes isso
+// numa máquina Windows mais lenta ou com o antivírus examinando o mhl.exe
+// recém-extraído e cada arquivo que ele lê. Com 30s, um mhl vivo e ainda
+// carregando era morto no Windows ("timed out after 30s (stderr: )") e o
+// "Tentar novamente" repetia a mesma espera curta. Um mhl que morre é
+// detectado na hora (c.exited), então o prazo longo só pesa num mhl
+// travado de verdade. Mantenha api.js READY_TIMEOUT_MS acima deste valor.
+const readyTimeout = 120 * time.Second
+
+// readySlowLogAfter: a partir daqui cada espera vai para o app.log, para que
+// uma inicialização lenta deixe o tempo real registrado.
+const readySlowLogAfter = 10 * time.Second
 
 func (c *Client) waitReady(ctx context.Context, timeout time.Duration) error {
-	deadline := time.Now().Add(timeout)
+	began := time.Now()
+	deadline := began.Add(timeout)
+	// Short per-probe timeout: c.http's 30s would let a single probe to a
+	// listener that accepts but doesn't answer yet eat most of the wait.
+	probe := &http.Client{Timeout: 2 * time.Second, Transport: &http.Transport{DisableKeepAlives: true}}
+	nextLog := began.Add(readySlowLogAfter)
 	for time.Now().Before(deadline) {
 		req, err := http.NewRequestWithContext(ctx, http.MethodGet, c.baseURL+"/healthz", nil)
 		if err == nil {
-			if resp, err := c.http.Do(req); err == nil {
+			if resp, err := probe.Do(req); err == nil {
 				resp.Body.Close()
 				if resp.StatusCode == http.StatusOK {
+					if waited := time.Since(began); waited >= readySlowLogAfter {
+						log.Printf("mhl bridge: mhl respondeu depois de %s (inicialização lenta)", waited.Round(time.Second))
+					}
 					return nil
 				}
 			}
 		}
-		if c.cmd.ProcessState != nil {
-			return fmt.Errorf("mhl exited early: %s", c.cmd.ProcessState.String())
+		select {
+		case <-c.exited:
+			return fmt.Errorf("mhl exited early: %v", c.exitErr)
+		case <-ctx.Done():
+			return ctx.Err()
+		default:
+		}
+		if time.Now().After(nextLog) {
+			log.Printf("mhl bridge: aguardando o mhl ficar pronto há %s (pid %d)", time.Since(began).Round(time.Second), c.cmd.Process.Pid)
+			nextLog = nextLog.Add(readySlowLogAfter)
 		}
 		time.Sleep(100 * time.Millisecond)
 	}

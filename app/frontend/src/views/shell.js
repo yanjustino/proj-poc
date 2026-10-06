@@ -561,8 +561,14 @@ export async function mountShell(root) {
     retrying = true;
     renderNav();
     try {
+      // The open work-item was mounted while mhl was down, so its summary
+      // and tabs hold failed mhl reads; once mhl is up it must be mounted
+      // again — before, a successful retry only refreshed the sidebar and
+      // the project on screen stayed stale.
+      const wasMounted = mainStarted;
       await retryStartup();
       await startShell();
+      if (wasMounted) await renderMain();
     } catch (err) {
       navError = `Erro ao iniciar: ${String(err)}`;
       LogFrontendError(`retryProjects: failed: ${err && err.stack ? err.stack : err}`).catch(() => {});
@@ -573,17 +579,25 @@ export async function mountShell(root) {
     }
   }
 
-  function renderNavError() {
-    navList.innerHTML = `
+  function navErrorHtml() {
+    return `
       <div class="empty-nav nav-error">
         <p>${escapeHtml(navError)}</p>
         <button class="button secondary small" data-nav-retry ${retrying ? 'disabled' : ''}>${icon('refreshCw', 13)} ${retrying ? 'Tentando…' : 'Tentar novamente'}</button>
       </div>`;
+  }
+
+  function renderNavError() {
+    navList.innerHTML = navErrorHtml();
     navList.querySelector('[data-nav-retry]').addEventListener('click', retryProjects);
   }
 
+  // A failed mhl start only replaces the list when there is no list at all:
+  // the work-items read from disk (loadLocalProjects) stay usable — opening
+  // one and reading its documents needs no mhl — with the error and its
+  // "Tentar novamente" above them.
   function renderNav() {
-    if (navError) {
+    if (navError && projects.length === 0) {
       renderNavError();
       return;
     }
@@ -630,6 +644,10 @@ export async function mountShell(root) {
         `;
       })
       .join('');
+    if (navError) {
+      navList.insertAdjacentHTML('afterbegin', navErrorHtml());
+      navList.querySelector('[data-nav-retry]').addEventListener('click', retryProjects);
+    }
     navStatusSignature = computeNavStatusSignature();
     navList.querySelectorAll('.work').forEach((button) => {
       button.addEventListener('click', () => openWorkItem(button.dataset.id));
