@@ -1,8 +1,14 @@
 ${schema_conventions}
 
-Com base nos requisitos, nos atributos de qualidade e nas decisões arquiteturais abaixo, produza os diagramas de arquitetura do sistema. Tipos disponíveis: `c4-context`, `c4-container`, `c4-component`, `c4-deployment`, `process-flow`, `data-flow`, `sequence` e `state`.
+Com base no modelo arquitetural aprovado, nos requisitos, nos atributos de qualidade e nas decisões arquiteturais abaixo, produza os diagramas **opcionais** de arquitetura do sistema. Tipos disponíveis: `c4-component`, `c4-deployment`, `process-flow`, `data-flow`, `sequence` e `state`.
 
-**Produza sempre um `c4-context` e um `c4-container`** — o modelo C4 recomenda os dois para todo sistema. Os demais tipos são opcionais: inclua-os apenas quando houver evidência nos artefatos que justifique o diagrama.
+**Os diagramas de contexto (`c4-context`) e de contêiner (`c4-container`) não são seus**: eles são o modelo arquitetural abaixo, que uma pessoa já revisou e aprovou. Não os produza. Inclua um diagrama opcional apenas quando houver evidência nos artefatos que o justifique; uma lista vazia é uma resposta válida.
+
+## O modelo arquitetural é o vocabulário fixo
+
+- Pessoas, sistemas externos, contêineres e bancos de dados que aparecem em qualquer diagrama são **os do diagrama de contêiner do modelo** (`conteineres`), com o **mesmo `id` e o mesmo `nome`** — nunca renomeie, funda ou desdobre um elemento do modelo.
+- Não crie pessoa, sistema externo ou contêiner que não esteja no modelo. Se um diagrama precisar de um, deixe-o de fora e registre a lacuna na `descricao` do diagrama citando `gap`.
+- Use as tecnologias que o modelo dá a cada contêiner.
 
 ## Como descrever um diagrama C4
 
@@ -10,41 +16,20 @@ Para os tipos `c4-*`, você **não** escreve Mermaid (`diagrama_mermaid` fica va
 
 - Cada elemento tem um `id` curto e único no diagrama, um `nome`, um `tipo`, a `tecnologia` (quando o nível pede), uma `descricao` e as `fontes`.
 - Cada relação liga dois elementos por `id` (`de` → `para`) e tem uma `descricao` com verbo que diga o que a origem faz com o destino (ex.: "Envia pedidos para", "Lê e grava dados de clientes em"), mais `tecnologia` quando o nível pede.
-- **Textos curtos — eles aparecem dentro das caixas e setas do desenho**, como nos exemplos de https://c4model.com:
-  - `nome`: poucas palavras (ex.: "Worker de Conciliação").
-  - `descricao` do elemento: **uma frase curta, até ~80 caracteres**, só com a responsabilidade principal (ex.: "Concilia a conta IVP e aloca os recursos nos planos."). Sem códigos de transação, nomes de tabela, listas de casos ou justificativas — esse detalhe fica nos requisitos e nas ADRs.
-  - `tecnologia`: só o nome, até ~30 caracteres (ex.: "Java/Quarkus", "Amazon S3", "Kafka"). Alternativas, ressalvas e "a confirmar" não entram aqui — pertencem a uma ADR.
-  - `descricao` da relação: até ~45 caracteres (ex.: "Consome mensagens de", "Grava resultados em").
-  - Tecnologia ou protocolo desconhecido: deixe `tecnologia` **vazia** e cite `gap` nas `fontes` — nunca escreva "não definido nas fontes" ou equivalente no texto.
+- **Textos curtos — eles aparecem dentro das caixas e setas do desenho**: `nome` com poucas palavras, `descricao` do elemento em uma frase de até ~80 caracteres, `tecnologia` só com o nome (até ~30 caracteres), `descricao` da relação com até ~45 caracteres. Tecnologia ou protocolo desconhecido: deixe `tecnologia` **vazia** e cite `gap` nas `fontes`.
 - Inclua somente elementos **diretamente conectados** ao escopo: todo elemento precisa aparecer em ao menos uma relação.
-- Use os **mesmos nomes** entre os níveis: as pessoas e os sistemas externos do diagrama de contêiner são os mesmos do contexto; o contêiner em escopo de um diagrama de componente é um contêiner do diagrama de contêiner.
-- Tecnologia que não esteja nos artefatos abaixo (em especial nas ADRs) deve ser citada como `gap` em vez de inventada. Uma dedução razoável usa `inferência`.
-
-### `c4-context` — contexto de sistema
-
-- Escopo: **um** sistema de software (`escopo.nome` é o nome dele).
-- Elementos: exatamente **um** `sistema` (o sistema em escopo), mais as `pessoa` (usuários, papéis, personas) e os `sistema_externo` com que ele interage diretamente — sistemas que normalmente estão fora da responsabilidade do time.
-- **Sem tecnologia, protocolo ou detalhe de implementação**: `tecnologia` vazia em todos os elementos e relações. É o diagrama para mostrar a pessoas não técnicas.
-- Não mostre contêineres, componentes nem infraestrutura.
-
-### `c4-container` — contêineres
-
-- Escopo: o mesmo sistema de software do contexto. Ele é a **fronteira** do diagrama, não um elemento (não use o tipo `sistema` aqui).
-- Elementos principais: os contêineres dentro do sistema — `container` para uma aplicação (API, aplicação web, SPA, app mobile, worker, função) e `banco_dados` para um armazenamento de dados (banco, schema, bucket, fila persistida). Cada um **com tecnologia**.
-- Elementos de apoio: as pessoas e os sistemas externos diretamente conectados aos contêineres.
-- Relações entre contêineres **com tecnologia/protocolo** (ex.: HTTPS/JSON, gRPC, JDBC, AMQP).
-- **Não mostre implantação**: cluster, balanceador de carga, replicação, failover, região, Kubernetes/EKS e afins variam por ambiente e pertencem a um `c4-deployment`.
+- Tecnologia que não esteja nos artefatos abaixo (em especial nas ADRs e no modelo) deve ser citada como `gap` em vez de inventada. Uma dedução razoável usa `inferência`.
 
 ### `c4-component` — componentes (opcional)
 
 - Só produza se agregar valor real ao entendimento — em Discovery normalmente ainda não há código, então prefira não gerar, a menos que requisitos, atributos ou ADRs já determinem a decomposição interna de um contêiner.
-- Escopo: **um único contêiner** (`escopo.nome` igual ao nome dele no diagrama de contêiner). Um diagrama por contêiner.
-- Elementos principais: os `componente` dentro desse contêiner, cada um com responsabilidade e tecnologia/implementação. Elementos de apoio: outros contêineres do mesmo sistema, pessoas e sistemas externos ligados diretamente aos componentes.
+- Escopo: **um único contêiner do modelo** (`escopo.nome` igual ao `nome` dele em `conteineres`). Um diagrama por contêiner.
+- Elementos principais: os `componente` dentro desse contêiner, cada um com responsabilidade e tecnologia/implementação. Elementos de apoio: outros contêineres do mesmo sistema, pessoas e sistemas externos ligados diretamente aos componentes — todos do modelo, com o mesmo `id` e `nome`.
 
 ### `c4-deployment` — implantação
 
 - **Obrigatório quando uma ADR ou um atributo de qualidade definir infraestrutura** (nuvem, cluster, região, zonas, ambientes) — as histórias de infraestrutura e os planos referenciam esses nós. Um diagrama **por ambiente** (preencha `ambiente`; ao menos "Produção"). Sem nenhuma definição de infraestrutura, não produza.
-- Elementos: `no_implantacao` (nuvem, região, cluster, máquina, serviço gerenciado — com a tecnologia) e as instâncias dos contêineres do diagrama de contêiner, com `no_pai` apontando para o nó onde rodam. Nós podem ser aninhados via `no_pai`.
+- Elementos: `no_implantacao` (nuvem, região, cluster, máquina, serviço gerenciado — com a tecnologia) e as instâncias dos contêineres do modelo (mesmo `id`, `nome` e `tecnologia`), com `no_pai` apontando para o nó onde rodam. Nós podem ser aninhados via `no_pai`.
 
 ### Campos que não se aplicam
 
@@ -52,7 +37,11 @@ Fora do tipo em que são pedidos, use string vazia (`tecnologia`, `no_pai`, `amb
 
 ## Demais tipos (`process-flow`, `data-flow`, `sequence`, `state`)
 
-Escreva o Mermaid em `diagrama_mermaid`: `flowchart` para processo e dados, `sequenceDiagram` para sequência e `stateDiagram-v2` para estado.
+Escreva o Mermaid em `diagrama_mermaid`: `flowchart` para processo e dados, `sequenceDiagram` para sequência e `stateDiagram-v2` para estado. Participantes e nós que representam um elemento do modelo usam o `nome` dele.
+
+## Modelo arquitetural aprovado
+
+${modelo_content}
 
 ## Requisitos já gerados
 

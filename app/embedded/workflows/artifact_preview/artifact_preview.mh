@@ -9,8 +9,9 @@
 
 import { ArtifactBody } from "../shared/artifacts/artifact_body.mh"
 import { PageShell } from "../shared/artifacts/page_shell.mh"
+import { ArchModel } from "../shared/artifacts/arch_model.mh"
 
-enum PreviewArtifact { brief, atributos, requisitos, der, feature, historia, decisao, diagrama, adr, diagramas, features, dependencias, historias, plano }
+enum PreviewArtifact { brief, atributos, requisitos, der, modelo, modelo_contexto, modelo_conteineres, feature, historia, decisao, diagrama, adr, diagramas, features, dependencias, historias, plano }
 
 tool PreviewPages {
     // O caminho dos assets do plano nao importa: o app injeta o mermaid.
@@ -19,6 +20,11 @@ tool PreviewPages {
         PreviewArtifact.atributos    -> self.page("Atributos de qualidade", ArtifactBody.atributos(data))
         PreviewArtifact.requisitos   -> self.page("Requisitos", ArtifactBody.requisitos(data))
         PreviewArtifact.der          -> self.page("DER", ArtifactBody.der(data))
+        PreviewArtifact.modelo       -> self.page("Modelo arquitetural", ArtifactBody.modelo(data))
+        // Uma visao do modelo como diagramas/ vai mostra-la — a previa de
+        // cada aba do editor do modelo (artifact-editor.js).
+        PreviewArtifact.modelo_contexto    -> self.view(ArchModel.context(data))
+        PreviewArtifact.modelo_conteineres -> self.view(ArchModel.container(data))
         PreviewArtifact.feature      -> self.page("Detalhamento do item de backlog", ArtifactBody.feature(data))
         PreviewArtifact.historia     -> self.page("Detalhamento da história", ArtifactBody.historia(data))
         PreviewArtifact.decisao      -> self.page(html.escape(data.titulo), ArtifactBody.adr(data))
@@ -32,6 +38,8 @@ tool PreviewPages {
     }
 
     internal page(title: string, body: string): string -> PageShell(title:, body:, meta: "Rascunho — ainda não gravado")
+
+    internal view(diagrama: any): string -> self.page(html.escape(diagrama.titulo), ArtifactBody.diagrama(diagrama))
 
     internal batch(title: string, items: any[], render: any): string ->
         self.page(title, items.map((item) -> "<h2>${html.escape(item.titulo)}</h2>${render(item)}").join(""))
@@ -434,5 +442,58 @@ test ArtifactPreviewSpec {
         var raised = ""
         try { ArtifactPreview.run(inputs: {artifact: "bogus", data: {}}) } catch (e) { raised = "${e}" }
         is_true(raised.contains("\"bogus\" is not a variant of enum PreviewArtifact"))
+    }
+
+    describe modelo_renders_both_derived_views_and_the_tables {
+        var run = ArtifactPreview.run(inputs: {
+            artifact: "modelo",
+            data: {
+                sistema: {nome: "Checkout", descricao: "Fecha pedidos", fontes: ["brief"]},
+                contexto: {
+                    elementos: [{id: "cliente", nome: "Cliente", tipo: "pessoa", tecnologia: "", descricao: "", fontes: ["gap"]}],
+                    relacoes: [{de: "cliente", para: "sistema", descricao: "Compra em", tecnologia: "", fontes: ["gap"]}],
+                },
+                conteineres: {
+                    elementos: [
+                        {id: "cliente", nome: "Cliente", tipo: "pessoa", tecnologia: "", descricao: "", fontes: ["gap"]},
+                        {id: "api", nome: "API de Pedidos", tipo: "container", tecnologia: "Go", descricao: "", fontes: ["gap"]},
+                    ],
+                    relacoes: [{de: "cliente", para: "api", descricao: "Faz pedidos em", tecnologia: "HTTPS", fontes: ["gap"]}],
+                },
+                gaps: [{texto: "Banco não decidido", fontes: ["gap"]}],
+            }
+        })
+        is_true(run.ok)
+        var page = run.vars.preview_html
+        is_true(page.contains("Visão de contexto"))
+        is_true(page.contains("Visão de contêineres"))
+        is_true(page.contains("[Sistema de software]"))
+        is_true(page.contains("[Contêiner: Go]"))
+        is_true(page.contains("Banco não decidido"))
+        is_true(!page.contains("Conformidade do modelo"))
+    }
+
+    describe each_model_view_renders_alone_as_its_diagram_page {
+        var modelo = {
+            sistema: {nome: "Checkout", descricao: "", fontes: ["brief"]},
+            contexto: {
+                elementos: [{id: "cliente", nome: "Cliente", tipo: "pessoa", tecnologia: "", descricao: "", fontes: ["gap"]}],
+                relacoes: [{de: "cliente", para: "sistema", descricao: "Compra em", tecnologia: "", fontes: ["gap"]}],
+            },
+            conteineres: {
+                elementos: [
+                    {id: "cliente", nome: "Cliente", tipo: "pessoa", tecnologia: "", descricao: "", fontes: ["gap"]},
+                    {id: "api", nome: "API de Pedidos", tipo: "container", tecnologia: "Go", descricao: "", fontes: ["gap"]},
+                ],
+                relacoes: [{de: "cliente", para: "api", descricao: "Faz pedidos em", tecnologia: "HTTPS", fontes: ["gap"]}],
+            },
+            gaps: [],
+        }
+        var ctx = ArtifactPreview.run(inputs: {artifact: "modelo_contexto", data: modelo}).vars.preview_html
+        is_true(ctx.contains("Contexto de sistema — Checkout"))
+        is_true(!ctx.contains("API de Pedidos"))
+        var cont = ArtifactPreview.run(inputs: {artifact: "modelo_conteineres", data: modelo}).vars.preview_html
+        is_true(cont.contains("Contêineres — Checkout"))
+        is_true(cont.contains("[Contêiner: Go]"))
     }
 }

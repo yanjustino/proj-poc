@@ -1,0 +1,108 @@
+// tool HistoriaAnexos — complementos que o usuario anexa a uma historia
+// (arquivos quaisquer: PDF, Markdown, imagem...) para cobrir dependencias
+// da feature que a historia gerada pode nao refletir por completo. O app
+// copia o arquivo (AttachHistoriaFiles, app.go); aqui so se le, preserva e
+// leva ao pacote de handoff. Nenhuma chamada de LLM (C3).
+//
+// Ficam em <pasta da historia>/anexos/ — historias/<feature>/<USxxx>/anexos/
+// no Discovery, historias/<USxxx>/anexos/ no Delivery em lote e anexos/ na
+// raiz de artifacts/ para a historia unica do Delivery. fs.read/fs.write
+// preservam bytes, entao copiar um binario por eles e seguro.
+
+import { Paths } from "../core/paths.mh"
+import { Fixture } from "../core/fixture.mh"
+
+export tool HistoriaAnexos {
+    // `historia_rel`: pasta da historia relativa a artifacts/ ("" para a
+    // historia unica do Delivery, na raiz).
+    dir_of(project_id: string, historia_rel: string): string ->
+        if (historia_rel.is_empty()) Paths.artifact(project_id, "anexos") else Paths.artifact(project_id, historia_rel + "/anexos")
+
+    internal base_name(entry: string, parent: string): string ->
+        entry.replace(parent + "/", "").replace(parent + "\\", "")
+
+    // list: nomes dos anexos, em ordem alfabetica. Arquivos ocultos (".x")
+    // ficam de fora — sao do sistema operacional, nao do usuario.
+    list(project_id: string, historia_rel: string): string[] -> {
+        var anexos_dir = self.dir_of(project_id, historia_rel)
+        if (!dir.exists(anexos_dir)) return []
+        var names = []
+        for (var entry in dir.list(anexos_dir)) {
+            var name = self.base_name(entry, anexos_dir)
+            if (!dir.exists(entry) && !name.starts_with(".")) names += [name]
+        }
+        return names.sort_by((n) -> n)
+    }
+
+    // copy_to copia os anexos para `dest_dir`/anexos/ e devolve os nomes.
+    copy_to(project_id: string, historia_rel: string, dest_dir: string): string[] -> {
+        var names = self.list(project_id, historia_rel)
+        if (names.is_empty()) return []
+        var source = self.dir_of(project_id, historia_rel)
+        dir.create(dest_dir + "/anexos")
+        for (var name in names) fs.write(dest_dir + "/anexos/" + name, fs.read(source + "/" + name))
+        return names
+    }
+
+    // snapshot guarda em memoria os anexos de cada historia sob `base`
+    // ("historias/<feature>" ou "historias"), por codigo ("US001"), antes de
+    // ArtifactCommit.historias limpar a pasta para gravar o lote novo.
+    snapshot(project_id: string, base: string): any[] -> {
+        var base_dir = Paths.artifact(project_id, base)
+        if (!dir.exists(base_dir)) return []
+        var out = []
+        for (var entry in dir.list(base_dir).filter((e) -> dir.exists(e))) {
+            var folder = self.base_name(entry, base_dir)
+            var anexos_dir = self.dir_of(project_id, base + "/" + folder)
+            var names = self.list(project_id, base + "/" + folder)
+            if (!names.is_empty()) {
+                out += [{codigo: folder.split("-")[0], files: names.map((n) -> {name: n, content: fs.read(anexos_dir + "/" + n)})}]
+            }
+        }
+        return out
+    }
+
+    // restore devolve os anexos guardados por snapshot a historia nova de
+    // mesmo codigo. Uma historia que deixou de existir perde os seus.
+    restore(project_id: string, saved: any[], codigo: string, historia_rel: string) -> {
+        var match = saved.filter((s) -> s.codigo == codigo)
+        if (match.is_empty()) { return }
+        var anexos_dir = self.dir_of(project_id, historia_rel)
+        dir.create(anexos_dir)
+        for (var file in match[0].files) fs.write(anexos_dir + "/" + file.name, file.content)
+    }
+}
+
+test HistoriaAnexosSpec {
+    describe list_skips_hidden_files_and_directories {
+        var id = Fixture.project("spec-test-anexos-list")
+        Fixture.artifact(id, "historias/FT001-a/US001-x/anexos/b.pdf", "pdf")
+        Fixture.artifact(id, "historias/FT001-a/US001-x/anexos/a.md", "md")
+        Fixture.artifact(id, "historias/FT001-a/US001-x/anexos/.DS_Store", "x")
+        are_equal(HistoriaAnexos.list(id, "historias/FT001-a/US001-x"), ["a.md", "b.pdf"])
+        are_equal(HistoriaAnexos.list(id, "historias/FT001-a/US002-y"), [])
+        Fixture.drop(id)
+    }
+
+    describe the_single_delivery_story_keeps_its_attachments_at_the_root {
+        var id = Fixture.project("spec-test-anexos-root")
+        Fixture.artifact(id, "anexos/contrato.md", "c")
+        are_equal(HistoriaAnexos.list(id, ""), ["contrato.md"])
+        Fixture.drop(id)
+    }
+
+    describe snapshot_and_restore_carry_attachments_by_story_code {
+        var id = Fixture.project("spec-test-anexos-snapshot")
+        Fixture.artifact(id, "historias/FT001-a/US001-velho/anexos/dep.md", "dependencia")
+        Fixture.artifact(id, "historias/FT001-a/US002-sem/historia.json", "{}")
+        var saved = HistoriaAnexos.snapshot(id, "historias/FT001-a")
+        are_equal(saved.size(), 1)
+        dir.clear(Paths.artifact(id, "historias/FT001-a"))
+        dir.create(Paths.artifact(id, "historias/FT001-a/US001-novo"))
+        HistoriaAnexos.restore(id, saved, "US001", "historias/FT001-a/US001-novo")
+        HistoriaAnexos.restore(id, saved, "US002", "historias/FT001-a/US002-outro")
+        are_equal(fs.read(Paths.artifact(id, "historias/FT001-a/US001-novo/anexos/dep.md")), "dependencia")
+        is_false(dir.exists(Paths.artifact(id, "historias/FT001-a/US002-outro")))
+        Fixture.drop(id)
+    }
+}

@@ -12,14 +12,20 @@ import { Slug } from "../core/slug.mh"
 import { ArtifactData } from "artifact_data.mh"
 import { ArtifactBody } from "artifact_body.mh"
 import { ArtifactId } from "artifact_id.mh"
+import { ArchModel } from "arch_model.mh"
+import { C4Diagram } from "c4_diagram.mh"
+import { Context } from "context.mh"
 import { PageShell, ArtifactMeta } from "page_shell.mh"
 import { SpecFiles } from "historia_spec.mh"
+import { HistoriaAnexos } from "historia_anexos.mh"
 import { Draft } from "draft.mh"
 import { RadahnModel } from "../radahn/radahn_model.mh"
 
 export tool ArtifactCommit {
-    page(project_id: string, relative: string, title: string, body: string, data: any, draft: Draft) -> {
-        var meta = ArtifactMeta.line("artifacts/${relative}", draft.tokens_in, draft.tokens_out)
+    page(project_id: string, relative: string, title: string, body: string, data: any, draft: Draft) ->
+        self.page_with_meta(project_id, relative, title, body, data, ArtifactMeta.line("artifacts/${relative}", draft.tokens_in, draft.tokens_out))
+
+    internal page_with_meta(project_id: string, relative: string, title: string, body: string, data: any, meta: string) -> {
         ArtifactData.write(project_id, relative, data)
         fs.write(Paths.artifact(project_id, relative), PageShell(title:, body:, meta:))
     }
@@ -44,6 +50,69 @@ export tool ArtifactCommit {
 
     der(project_id: string, draft: Draft): any ->
         self.single(project_id, "der", "DER", ArtifactBody.der(draft.data), draft)
+
+    // O modelo aprovado redesenha na hora as visoes que projeta (model_views).
+    modelo(project_id: string, draft: Draft): any -> {
+        var result = self.single(project_id, "modelo", "Modelo arquitetural", ArtifactBody.modelo(draft.data), draft)
+        result["diagramas"] = self.model_views(project_id, draft.data)
+        return result
+    }
+
+    // model_views: contexto e conteiner sempre espelham o modelo gravado.
+    // Gravar o modelo (geracao aprovada ou edicao manual, ArtifactSave)
+    // substitui as duas visoes em diagramas/ e reanota o lote inteiro — um
+    // diagrama opcional que cite um nome que saiu do modelo ganha o aviso na
+    // hora. Um contexto/conteiner legado (sintetizado pela LLM antes do
+    // modelo existir) tambem e substituido. Sem nenhum diagrama gravado
+    // ainda, nada a fazer: o primeiro lote ja nasce do modelo.
+    model_views(project_id: string, modelo: any): string[] -> {
+        var base = Paths.artifact(project_id, "diagramas")
+        if (!dir.exists(base)) return []
+        var existia = false
+        var outros = []
+        var slugs = []
+        for (var file_path in dir.list(base)) {
+            if (file_path.ends_with(".json")) {
+                var html_path = file_path.substring(0, file_path.size() - 5) + ".html"
+                if (fs.exists(html_path)) {
+                    existia = true
+                    var data = json.parse(fs.read(file_path))
+                    if ((data?.derivado_do_modelo ?? false) || ArchModel.optional_diagrams([data]).is_empty()) {
+                        fs.delete(file_path)
+                        fs.delete(html_path)
+                    } else {
+                        outros += [data]
+                        slugs += [file_path.substring(base.size() + 1, file_path.size() - 5)]
+                    }
+                }
+            }
+        }
+        if (!existia) return []
+
+        var views = ArchModel.views(modelo)
+        var lote = C4Diagram.annotate({diagramas: views + outros}, C4Diagram.infra_hint(Context.adr_context(project_id))).diagramas
+        var meta_time = time.format(time.now(), "yyyy-MM-dd HH:mm")
+        var written = []
+        var i = 0
+        for (var d in lote) {
+            var item = d
+            var slug = ""
+            if (i < views.size()) {
+                slug = Slug.from_title(d.titulo)
+            } else {
+                slug = slugs[i - views.size()]
+                // annotate reconstroi o item campo a campo; o registro da
+                // autorrevisao da geracao original volta aqui.
+                var revisao = outros[i - views.size()]?.autorrevisao
+                if (revisao != null) item["autorrevisao"] = revisao
+            }
+            self.page_with_meta(project_id, "diagramas/${slug}.html", html.escape(d.titulo), ArtifactBody.diagrama(item), item,
+                "redesenhado a partir do modelo em ${meta_time} · artifacts/diagramas/${slug}.html")
+            written += [slug]
+            i = i + 1
+        }
+        return written
+    }
 
     adr(project_id: string, draft: Draft): any -> {
         self.reset(project_id, "adr")
@@ -96,9 +165,12 @@ export tool ArtifactCommit {
     }
 
     // `feature_dir` vazio: historias da feature implicita de um projeto de
-    // Delivery, gravadas direto em historias/.
+    // Delivery, gravadas direto em historias/. Os anexos do usuario
+    // (historia_anexos.mh) nao sao regeraveis: sobrevivem ao lote novo na
+    // historia de mesmo codigo (US001 -> US001).
     historias(project_id: string, feature_dir: string, draft: Draft): any -> {
         var base = if (feature_dir.is_empty()) "historias" else "historias/${feature_dir}"
+        var anexos = HistoriaAnexos.snapshot(project_id, base)
         self.reset(project_id, base)
         var written = []
         for (var historia in draft.data.historias) {
@@ -106,6 +178,7 @@ export tool ArtifactCommit {
             var folder = ArtifactId.folder_name(id, historia.titulo)
             dir.create(Paths.artifact(project_id, "${base}/${folder}"))
             SpecFiles.write(project_id, "${base}/${folder}", historia)
+            HistoriaAnexos.restore(project_id, anexos, id, "${base}/${folder}")
             self.page(project_id, "${base}/${folder}/historia.html", html.escape("${id} — ${historia.titulo}"), ArtifactBody.historia(historia), historia, draft)
             written += [folder]
         }
@@ -123,7 +196,55 @@ export tool ArtifactCommit {
 
 import { Fixture } from "../core/fixture.mh"
 
+tool ModelViewsFixtures {
+    internal modelo(sistema: string, api: string): any -> {
+        sistema: {nome: sistema, descricao: "", fontes: ["brief"]},
+        contexto: {
+            elementos: [{id: "cliente", nome: "Cliente", tipo: "pessoa", tecnologia: "", descricao: "", fontes: ["gap"]}],
+            relacoes: [{de: "cliente", para: "sistema", descricao: "Usa", tecnologia: "", fontes: ["gap"]}],
+        },
+        conteineres: {
+            elementos: [
+                {id: "cliente", nome: "Cliente", tipo: "pessoa", tecnologia: "", descricao: "", fontes: ["gap"]},
+                {id: "api", nome: api, tipo: "container", tecnologia: "Java", descricao: "", fontes: ["gap"]},
+            ],
+            relacoes: [{de: "cliente", para: "api", descricao: "Usa", tecnologia: "HTTPS", fontes: ["gap"]}],
+        },
+        gaps: [],
+    }
+}
+
 test ArtifactCommitSpec {
+    describe model_views_is_a_no_op_before_any_diagram_exists {
+        var id = Fixture.project("spec-test-model-views-empty")
+        are_equal(ArtifactCommit.model_views(id, ModelViewsFixtures.modelo("Loja", "API")), [])
+        is_false(dir.exists(Paths.artifact(id, "diagramas")))
+        Fixture.drop(id)
+    }
+
+    describe model_views_replaces_derived_and_legacy_views_and_keeps_optional_ones {
+        var id = Fixture.project("spec-test-model-views")
+        dir.create(Paths.artifact(id, "diagramas"))
+        var seq = {titulo: "Login", diagram_type: "sequence", descricao: "", descricao_fontes: ["gap"], escopo: {nome: "", descricao: "", fontes: []}, ambiente: "", elementos: [], relacoes: [], diagrama_mermaid: "sequenceDiagram", autorrevisao: {tentada: true, aplicada: false, avisos_antes: 1, avisos_depois: 1}}
+        var legado = {titulo: "Contexto antigo", diagram_type: "c4-context", descricao: "", descricao_fontes: ["gap"], diagrama_mermaid: "flowchart LR"}
+        ArtifactData.write(id, "diagramas/login.html", seq)
+        fs.write(Paths.artifact(id, "diagramas/login.html"), "<html></html>")
+        ArtifactData.write(id, "diagramas/contexto-antigo.html", legado)
+        fs.write(Paths.artifact(id, "diagramas/contexto-antigo.html"), "<html></html>")
+
+        are_equal(ArtifactCommit.model_views(id, ModelViewsFixtures.modelo("Loja", "API")), ["contexto-de-sistema-loja", "conteineres-loja", "login"])
+        is_false(fs.exists(Paths.artifact(id, "diagramas/contexto-antigo.html")))
+        is_true(json.parse(fs.read(Paths.artifact(id, "diagramas/conteineres-loja.json"))).derivado_do_modelo)
+        is_true(json.parse(fs.read(Paths.artifact(id, "diagramas/login.json"))).autorrevisao.tentada)
+
+        // Renomear o sistema troca o slug das visoes: as antigas saem.
+        ArtifactCommit.model_views(id, ModelViewsFixtures.modelo("Mercado", "API de Pedidos"))
+        is_false(fs.exists(Paths.artifact(id, "diagramas/conteineres-loja.html")))
+        is_true(fs.read(Paths.artifact(id, "diagramas/conteineres-mercado.html")).contains("API de Pedidos"))
+        are_equal(dir.list(Paths.artifact(id, "diagramas")).filter((p) -> p.ends_with(".html")).size(), 3)
+        Fixture.drop(id)
+    }
+
     describe regenerating_adrs_replaces_the_previous_batch {
         var id = Fixture.project("spec-test-commit-adr")
         var decision = {

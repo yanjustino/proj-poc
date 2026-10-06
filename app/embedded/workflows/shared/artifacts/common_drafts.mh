@@ -9,12 +9,13 @@ import { Drafts, Draft } from "draft.mh"
 import { AutoReview } from "auto_review.mh"
 import { ArtifactChecks } from "artifact_checks.mh"
 import { C4Diagram } from "c4_diagram.mh"
+import { ArchModel } from "arch_model.mh"
 import { Traceability } from "historia_spec.mh"
 import { PlanoPrep } from "plano_model.mh"
 import { RadahnAssess } from "../radahn/radahn_assess.mh"
 import {
-    ArtifactSchema, SpecConventions, BriefSchema, RequisitosSchema, AdrSchema, DerSchema, DiagramasSchema, HistoriasSchema, PlanoSchema,
-    BriefInstruction, RequisitosInstruction, AdrInstruction, DerInstruction, DiagramasInstruction,
+    ArtifactSchema, SpecConventions, BriefSchema, RequisitosSchema, AdrSchema, DerSchema, ModeloSchema, DiagramasSchema, HistoriasSchema, PlanoSchema,
+    BriefInstruction, RequisitosInstruction, AdrInstruction, DerInstruction, ModeloInstruction, DiagramasInstruction,
     HistoriasInstruction, PlanoInstruction
 } from "artifacts_common.mh"
 
@@ -66,22 +67,44 @@ export tool CommonDrafts {
         check: (d) -> ArtifactChecks.der(d)
     ))
 
-    // C4Diagram.annotate anexa a cada diagrama os avisos que so o lote
-    // inteiro revela (niveis ausentes, nomes divergentes, falta de
-    // implantacao).
-    diagramas(project_id: string, autorrevisao: bool, requisitos: string, atributos: string, adr: string): Draft -> Drafts.reviewed_items(AutoReview.generate(
+    // Modelo arquitetural: o catalogo que contexto e conteiner projetam
+    // (ArchModel). Revisado e aprovado antes dos diagramas.
+    modelo(project_id: string, autorrevisao: bool, requisitos: string, atributos: string, adr: string): Draft -> Drafts.reviewed(AutoReview.generate(
         enabled: autorrevisao,
-        prompt: DiagramasInstruction(
+        prompt: ModeloInstruction(
             schema_conventions: ArtifactSchema(),
             requisitos_content: requisitos,
             atributos_content: atributos,
             adr_content: adr,
-            feedback_content: ChangesBlock.for_artifact(project_id, "diagramas", "")
+            feedback_content: ChangesBlock.for_artifact(project_id, "modelo", "")
         ),
-        schema_file: DiagramasSchema, project_id:, artifact: "diagramas",
-        prepare: (raw) -> C4Diagram.annotate(json.parse(raw), C4Diagram.infra_hint(adr)),
-        check: (d) -> ArtifactChecks.diagramas(d)
-    ), "diagramas")
+        schema_file: ModeloSchema, project_id:, artifact: "modelo",
+        prepare: (raw) -> json.parse(raw),
+        check: (d) -> ArtifactChecks.modelo(d)
+    ))
+
+    // `modelo` e o JSON do modelo aprovado (modelo.json). Contexto e
+    // conteiner abrem o lote, projetados dele por codigo; a LLM so gera os
+    // diagramas opcionais. C4Diagram.annotate anexa a cada diagrama os avisos
+    // que so o lote inteiro revela (nomes divergentes do modelo, falta de
+    // implantacao).
+    diagramas(project_id: string, autorrevisao: bool, requisitos: string, atributos: string, adr: string, modelo: string): Draft -> {
+        var views = ArchModel.views(json.parse(modelo))
+        return Drafts.reviewed_items(AutoReview.generate(
+            enabled: autorrevisao,
+            prompt: DiagramasInstruction(
+                schema_conventions: ArtifactSchema(),
+                modelo_content: modelo,
+                requisitos_content: requisitos,
+                atributos_content: atributos,
+                adr_content: adr,
+                feedback_content: ChangesBlock.for_artifact(project_id, "diagramas", "")
+            ),
+            schema_file: DiagramasSchema, project_id:, artifact: "diagramas",
+            prepare: (raw) -> C4Diagram.annotate({diagramas: views + ArchModel.optional_diagrams(json.parse(raw)?.diagramas ?? [])}, C4Diagram.infra_hint(adr)),
+            check: (d) -> ArtifactChecks.diagramas(d)
+        ), "diagramas")
+    }
 
     // `scope` separa o historico de pedidos de mudanca de cada feature.
     // `propostas` sao as historias_propostas do item ({tipo, titulo,

@@ -11,7 +11,7 @@ import { ArtifactFlow, Level } from "../artifact_flow/artifact_flow.mh"
 
 // `feature_id` e do Discovery; fixado aqui so para sair do contrato do Delivery.
 workflow Delivery = ArtifactFlow with { level: Level.delivery, feature_id: "" } {
-    description: "Gera brief, requisitos, ADR, DER, diagramas, detalhamento final e histórias para Feature ou Historia standalone."
+    description: "Gera brief, requisitos, ADR, DER, modelo arquitetural, diagramas, detalhamento final e histórias para Feature ou Historia standalone."
 }
 
 // Cobre o que e deterministico: validacao de entrada, a cadeia de
@@ -45,7 +45,7 @@ test DeliveryWorkflowSpec {
     describe rejects_an_artifact_of_another_level_listing_its_own {
         var run = Delivery.run(inputs: {project_id: "spec-test-project", mode: "feature", artifact: "atributos"})
         is_false(run.ok)
-        is_true(run.error.contains("\"atributos\" is not a variant of enum DeliveryArtifact (use brief | requisitos | adr | der | diagramas | feature | historia | historias | plano)"))
+        is_true(run.error.contains("\"atributos\" is not a variant of enum DeliveryArtifact (use brief | requisitos | adr | der | modelo | diagramas | feature | historia | historias | plano)"))
     }
 
     describe the_approval_path_validates_the_artifact_too {
@@ -64,17 +64,20 @@ test DeliveryWorkflowSpec {
         Fixture.drop(id)
     }
 
-    describe der_and_diagramas_require_requisitos_then_adr {
+    describe der_modelo_and_diagramas_require_requisitos_then_adr {
         var id = Fixture.project("spec-test-delivery-der")
-        for (var artifact in ["der", "diagramas"]) {
+        for (var artifact in ["der", "modelo", "diagramas"]) {
             var run = Delivery.run(inputs: {project_id: id, mode: "feature", artifact})
             is_true(run.error.contains("gere 'requisitos' antes de '${artifact}'"))
         }
         Fixture.artifact(id, "requisitos.html", "<html><body>FR-001</body></html>")
-        for (var artifact in ["der", "diagramas"]) {
+        for (var artifact in ["der", "modelo", "diagramas"]) {
             var run = Delivery.run(inputs: {project_id: id, mode: "feature", artifact})
             is_true(run.error.contains("gere 'adr' antes de '${artifact}'"))
         }
+        Fixture.artifact(id, "adr/ADR-001-titulo.html", "<html><body>ADR-001</body></html>")
+        var diagramas = Delivery.run(inputs: {project_id: id, mode: "feature", artifact: "diagramas"})
+        is_true(diagramas.error.contains("gere 'modelo' antes de 'diagramas'"))
         Fixture.drop(id)
     }
 

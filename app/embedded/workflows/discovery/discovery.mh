@@ -9,7 +9,7 @@ import { DiscoveryCommits } from "discovery_artifacts.mh"
 
 // `mode` e do Delivery; fixado aqui so para sair do contrato do Discovery.
 workflow Discovery = ArtifactFlow with { level: Level.discovery, mode: "feature" } {
-    description: "Artefatos de nivel Oportunidade: brief, atributos, requisitos, adr, der, diagramas, features (com o mapa de dependencias), historias, plano."
+    description: "Artefatos de nivel Oportunidade: brief, atributos, requisitos, adr, der, modelo (arquitetural), diagramas, features (com o mapa de dependencias), historias, plano."
 }
 
 // Cobre o que e deterministico: validacao de entrada, a cadeia de
@@ -25,7 +25,7 @@ test DiscoveryWorkflowSpec {
     describe rejects_an_artifact_of_another_level_listing_its_own {
         var run = Discovery.run(inputs: {project_id: "spec-test-project", artifact: "feature"})
         is_false(run.ok)
-        is_true(run.error.contains("\"feature\" is not a variant of enum DiscoveryArtifact (use brief | atributos | requisitos | adr | der | diagramas | features | historias | plano)"))
+        is_true(run.error.contains("\"feature\" is not a variant of enum DiscoveryArtifact (use brief | atributos | requisitos | adr | der | modelo | diagramas | features | historias | plano)"))
     }
 
     describe atributos_and_requisitos_require_brief_first {
@@ -35,23 +35,27 @@ test DiscoveryWorkflowSpec {
         }
     }
 
-    describe technical_artifacts_require_requisitos_then_atributos_then_adr {
+    describe technical_artifacts_require_requisitos_then_atributos_then_adr_then_modelo {
         var id = Fixture.project("spec-test-discovery-tecnicos")
-        for (var artifact in ["adr", "der", "diagramas", "features"]) {
+        for (var artifact in ["adr", "der", "modelo", "diagramas", "features"]) {
             var run = Discovery.run(inputs: {project_id: id, artifact})
             is_true(run.error.contains("gere 'requisitos' antes de '${artifact}'"))
         }
         Fixture.artifact(id, "requisitos.html", "<html><body>FR-001</body></html>")
-        for (var artifact in ["adr", "der", "diagramas", "features"]) {
+        for (var artifact in ["adr", "der", "modelo", "diagramas", "features"]) {
             var run = Discovery.run(inputs: {project_id: id, artifact})
             is_true(run.error.contains("gere 'atributos' antes de '${artifact}'"))
         }
         Fixture.artifact(id, "atributos.html", "<html><body>NFR-001</body></html>")
-        for (var artifact in ["der", "diagramas", "features"]) {
+        for (var artifact in ["der", "modelo", "diagramas", "features"]) {
             var run = Discovery.run(inputs: {project_id: id, artifact})
             is_true(run.error.contains("gere 'adr' antes de '${artifact}'"))
         }
         Fixture.artifact(id, "adr/ADR-001-titulo.html", "<html><body>ADR-001</body></html>")
+        // Contexto e conteiner sao projecoes do modelo aprovado: sem ele nao
+        // ha diagramas.
+        var diagramas = Discovery.run(inputs: {project_id: id, artifact: "diagramas"})
+        is_true(diagramas.error.contains("gere 'modelo' antes de 'diagramas'"))
         var features = Discovery.run(inputs: {project_id: id, artifact: "features"})
         is_true(features.error.contains("gere 'diagramas' antes de 'features'"))
         Fixture.drop(id)

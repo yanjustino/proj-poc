@@ -13,6 +13,7 @@
 import { Cite } from "cite.mh"
 import { ArtifactHtml } from "artifact_html.mh"
 import { C4Diagram } from "c4_diagram.mh"
+import { ArchModel } from "arch_model.mh"
 import { DerModel } from "der_model.mh"
 import { Traceability, Contracts, Scenarios, SpikeSpec } from "historia_spec.mh"
 import { PlanoModel } from "plano_model.mh"
@@ -20,7 +21,7 @@ import { RadahnModel } from "../radahn/radahn_model.mh"
 import { StoryRules, FeatureRules, BacklogHtml } from "backlog_rules.mh"
 import { AutoReview } from "auto_review.mh"
 import {
-    BriefBody, AtributosBody, RequisitosBody, AdrBody, DerBody, DerLegacyBody, DiagramaBody,
+    BriefBody, AtributosBody, RequisitosBody, AdrBody, DerBody, DerLegacyBody, ModeloBody, DiagramaBody,
     FeatureBody, HistoriaBody, DependenciasBody, PlanoBody
 } from "artifacts_common.mh"
 
@@ -114,6 +115,28 @@ export tool ArtifactBody {
         ))
     }
 
+    // Modelo arquitetural (ArchModel): as duas visoes, cada uma com as suas
+    // tabelas, saem das mesmas funcoes dos diagramas C4 — o que se ve aqui e
+    // exatamente o que diagramas/ vai mostrar.
+    modelo(data: any): string -> {
+        var contexto = ArchModel.context(data)
+        var conteineres = ArchModel.container(data)
+        return Cite.finalize(ModeloBody(
+            escopo_html: ArchModel.scope_html(data),
+            avisos_html: AutoReview.note_html(data) + ArchModel.warnings_html(data),
+            contexto_mermaid: html.escape(C4Diagram.mermaid_source(contexto)),
+            contexto_tabelas: self.view_tables(contexto),
+            container_mermaid: html.escape(C4Diagram.mermaid_source(conteineres)),
+            container_tabelas: self.view_tables(conteineres),
+            legenda_html: ArchModel.legend(data),
+            gaps_lista: Cite.list(data?.gaps ?? [])
+        ))
+    }
+
+    // Tabelas de uma visao um nivel abaixo do titulo dela.
+    internal view_tables(diagrama: any): string ->
+        (C4Diagram.elements_table(diagrama) + C4Diagram.relations_table(diagrama)).replace("<h2>", "<h3>").replace("</h2>", "</h3>")
+
     // Um C4 estruturado (escopo/elementos/relacoes) tem Mermaid, legenda,
     // tabelas e conformidade gerados por C4Diagram; os demais tipos — e um
     // C4 legado, gravado antes desse modelo — usam o Mermaid da propria LLM.
@@ -123,12 +146,19 @@ export tool ArtifactBody {
         escopo_html: C4Diagram.scope(data),
         descricao: html.escape(data.descricao),
         descricao_fontes: Cite.note(data.descricao_fontes),
-        avisos_html: AutoReview.note_html(data) + C4Diagram.warnings_html(data),
+        avisos_html: self.diagram_origin(data) + C4Diagram.warnings_html(data),
         diagrama_mermaid: html.escape(C4Diagram.mermaid_source(data)),
         legenda_html: C4Diagram.legend(data),
         elementos_html: C4Diagram.elements_table(data),
         relacoes_html: C4Diagram.relations_table(data)
     ))
+
+    // Uma visao derivada do modelo nao passou pela LLM dos diagramas: no
+    // lugar da nota de autorrevisao, diz onde muda-la.
+    internal diagram_origin(data: any): string -> {
+        if (data?.derivado_do_modelo ?? false) return "<p class=\"autorrevisao\">Visão derivada do modelo arquitetural — para mudar este diagrama, edite o modelo.</p>"
+        return AutoReview.note_html(data)
+    }
 
     internal feature_warnings(data: any): string -> {
         var avisos = FeatureRules.check(data)
