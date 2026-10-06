@@ -72,6 +72,10 @@ function runTitle(entry) {
   };
 }
 
+// LLM_CALL_SLACK_MS: started_at is second-precision and the log's mtime
+// trails its last write by up to one tail tick (tailRunLogsInterval, 2s).
+const LLM_CALL_SLACK_MS = 5000;
+
 function formatDate(iso) {
   if (!iso) return '';
   try {
@@ -279,7 +283,7 @@ export async function renderLogsTab(container, project) {
     }
 
     const artifact = detail.status?.vars?.artifact ?? detail.status?.vars?.current_artifact ?? null;
-    const calls = artifact ? llmCalls.filter((entry) => entry.artifact === artifact) : llmCalls;
+    const calls = runLlmCalls(entries.find((entry) => entry.runId === runId), artifact);
 
     body.innerHTML = `
       <div class="logs-detail-head">
@@ -297,14 +301,31 @@ export async function renderLogsTab(container, project) {
     wireLlmCallCopyButtons(body, runId, calls);
   }
 
+  // runLlmCalls: prompt_log.jsonl has no runId, so a run's calls are the
+  // ones recorded between its start (meta.started_at) and its log's last
+  // write (modifiedAt) — narrowed to the run's artifact when the live status
+  // still knows it. Without that window every row showed the whole
+  // project's history (old ingests, other days) whenever the status was
+  // gone, i.e. for any run from a previous mhl session.
+  function runLlmCalls(entry, artifact) {
+    const startedAt = Date.parse(entry?.meta?.started_at ?? '');
+    const endedAt = Date.parse(entry?.modifiedAt ?? '');
+    if (Number.isNaN(startedAt) || Number.isNaN(endedAt)) return []; // log antigo, sem meta: nada vincula chamada à execução
+    return llmCalls.filter((call) => {
+      const at = new Date(call.at).getTime();
+      if (Number.isNaN(at) || at < startedAt - LLM_CALL_SLACK_MS || at > endedAt + LLM_CALL_SLACK_MS) return false;
+      return !artifact || call.artifact === artifact;
+    });
+  }
+
   function llmCallsHtml(runId, calls, artifact) {
     if (llmCalls.length === 0) return '';
     if (calls.length === 0) {
-      return `<h4>Chamadas de LLM${artifact ? ` · ${escapeHtml(artifact)}` : ''}</h4><p class="empty-nav">Nenhuma chamada registrada ainda para este artefato.</p>`;
+      return `<h4>Chamadas de LLM${artifact ? ` · ${escapeHtml(artifact)}` : ''}</h4><p class="empty-nav">Nenhuma chamada de LLM registrada durante esta execução.</p>`;
     }
     const lastIndex = calls.length - 1;
     return `
-      <h4>Chamadas de LLM${artifact ? ` · ${escapeHtml(artifact)}` : ' · todo o projeto (sem status ao vivo pra filtrar por artefato)'}</h4>
+      <h4>Chamadas de LLM${artifact ? ` · ${escapeHtml(artifact)}` : ''}</h4>
       ${calls
         .map((entry, index) => {
           const costNote = callCostNote(entry);
