@@ -44,13 +44,17 @@ export const DISCOVERY_SEQUENCE = [
   { artifact: 'diagramas', deps: ['requisitos', 'atributos', 'adr', 'modelo'], dir: 'diagramas', collectionKind: 'files', category: 'Diagramas' },
   // der is real context for features when present, but never blocks it —
   // deliberately left out of `deps` (see discovery.mh's FeaturesGenerate).
-  { artifact: 'features', deps: ['atributos', 'requisitos', 'adr', 'diagramas'], dir: 'features', collectionKind: 'folders', itemFile: 'feature.html', category: 'Backlog da solução' },
   // dependencias is written by the features run itself (the map is the last
   // step of DiscoveryDrafts.features, committed by ArtifactCommit.features)
   // — `generatedWith` makes it a read-only row: no "Gerar" of its own, and
   // "Solicitar mudança"/"Atualizar" regenerate features instead. The
-  // workflow no longer accepts artifact: "dependencias".
+  // workflow no longer accepts artifact: "dependencias". Listed BEFORE
+  // features even though it depends on them: the map is what tells the dev
+  // team the implementation order, and the feature rows below it follow its
+  // ordem_execucao (tab-artefatos.js's orderFeaturesByExecution).
+  // computeStaleness/isReady don't care about position, only `deps`.
   { artifact: 'dependencias', deps: ['features'], generatedWith: 'features', path: 'dependencias.html', category: 'Backlog da solução' },
+  { artifact: 'features', deps: ['atributos', 'requisitos', 'adr', 'diagramas'], dir: 'features', collectionKind: 'folders', itemFile: 'feature.html', category: 'Backlog da solução' },
   // historias has no fixed `deps` entry here — it's per-feature and only
   // exists once `features` produced at least one folder; see
   // artifactsForProject()/listFeatureIds() below.

@@ -789,6 +789,9 @@ export async function renderArtefatosTab(container, project, { onChanged }) {
             )
           : children.filter((c) => !c.isDir && c.name.endsWith('.html'));
     }
+    if (project.level === 'discovery' && collectionChildren.features && doneNames.has('dependencias')) {
+      collectionChildren.features = await orderFeaturesByExecution(collectionChildren.features);
+    }
     const historiasNode = byName.historias;
     historiasDoneFeatureIds = new Set();
     historiasByFeatureId = new Map();
@@ -831,6 +834,26 @@ export async function renderArtefatosTab(container, project, { onChanged }) {
     // own reads instead of piggybacking on the tree above.
     loadFeatureClassifications();
     loadReadiness();
+  }
+
+  // orderFeaturesByExecution sorts Discovery's feature folders by the
+  // ordem_execucao in dependencias.json (the topological order the map
+  // suggests), so the backlog rows read in implementation order instead of
+  // by code. Awaited, unlike loadFeatureClassifications: it's a single read,
+  // and rendering first would make the rows visibly jump. Features the map
+  // doesn't list (or an unreadable/old dependencias.json) keep their
+  // original relative order, after the ones it does.
+  async function orderFeaturesByExecution(folders) {
+    let ordem;
+    try {
+      ordem = JSON.parse(await readProjectFile(project.id, 'artifacts', 'dependencias.json'))?.ordem_execucao;
+    } catch {
+      return folders;
+    }
+    if (!Array.isArray(ordem)) return folders;
+    const position = new Map(ordem.map((item, index) => [item?.feature_codigo, index]));
+    const rank = (folder) => position.get(featureIdOf(folder.name)) ?? Infinity;
+    return [...folders].sort((a, b) => rank(a) - rank(b));
   }
 
   async function loadReadiness() {
