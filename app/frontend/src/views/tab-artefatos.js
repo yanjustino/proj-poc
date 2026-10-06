@@ -2695,10 +2695,10 @@ export async function renderArtefatosTab(container, project, { onChanged }) {
   // the plain "pronto para gerar" / "Gerar" state — exactly like the draft,
   // and the pending_data it lived in, never existed.
   function onRunCancel(row, key) {
-    cancelQueuedLlmJob(key);
     clearActiveRun(key);
     trackers.get(row.key)?.dispose();
     trackers.delete(row.key);
+    cancelQueuedLlmJob(key);
     if (!active) return;
     renderList();
     if (selectedKey === row.key) renderDetail();
@@ -2854,6 +2854,9 @@ export async function renderArtefatosTab(container, project, { onChanged }) {
     if (!row) return;
     let tracker = trackers.get(row.key);
     if (!tracker) {
+      // The queue's final "canceled" for a job onRunCancel just dropped —
+      // recreating a tracker here would leave a "cancelado" row behind.
+      if (status.state === 'canceled') return;
       tracker = createArtifactTracker(row, key);
       trackers.set(row.key, tracker);
     }

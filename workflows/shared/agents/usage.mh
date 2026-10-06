@@ -50,18 +50,15 @@ export tool UsageParser {
     // modelo; telemetria ausente ou invalida nao pode invalidar uma resposta
     // de geracao correta.
     //
-    // A CLI pode envolver a resposta em uma cerca Markdown mesmo quando
-    // instruida a nao faze-lo; removemos somente a cerca externa, preservando
-    // backticks que facam parte de campos internos.
+    // A CLI pode envolver a resposta em uma cerca Markdown — ou abri-la com
+    // prosa ("I'll ...") — mesmo quando instruida a nao faze-lo; ver
+    // devin_json.
     extract_devin(raw: string, exported: string): {
         tokens_in: number, tokens_out: number, content: string,
         cache_creation_tokens: number, cache_read_tokens: number,
         usage_available: bool, cost_usd: number, cost_source: string
     } -> {
-        var content = raw.trim()
-        if (content.starts_with("```json")) content = content.substring(7, content.size()).trim()
-        else if (content.starts_with("```")) content = content.substring(3, content.size()).trim()
-        if (content.ends_with("```")) content = content.substring(0, content.size() - 3).trim()
+        var content = self.devin_json(raw)
 
         var tokens_in = 0
         var tokens_out = 0
@@ -98,6 +95,37 @@ export tool UsageParser {
             cache_creation_tokens: 0, cache_read_tokens,
             usage_available, cost_usd, cost_source
         }
+    }
+
+    // Recorta do primeiro "{" ao ultimo "}" da resposta do Devin. Mesmo com
+    // "Responda somente com um objeto JSON" no prompt, ele as vezes cerca o
+    // objeto com prosa ou Markdown — e o json.parse de StructuredOutput
+    // falhava com o opaco "invalid character 'I' looking for beginning of
+    // value". O recorte remove so o que esta fora do objeto externo,
+    // preservando chaves e backticks dentro dos campos. Sem objeto JSON
+    // recuperavel (ex.: uma recusa em texto), falha mostrando o inicio da
+    // resposta, que e o que se precisa ver para entender o que o modelo fez.
+    internal devin_json(raw: string): string -> {
+        var content = raw.trim()
+        var start = content.split("{")[0].size()
+        var closing = content.split("}")
+        var end = content.size() - closing[closing.size() - 1].size()
+        var candidate = ""
+        if (start < end) candidate = content.substring(start, end)
+        var valid = !candidate.is_empty()
+        if (valid) {
+            try {
+                json.parse(candidate)
+            } catch (err) {
+                valid = false
+            }
+        }
+        if (!valid) {
+            var preview = content
+            if (preview.size() > 300) preview = preview.substring(0, 300) + "…"
+            fail("o Devin respondeu sem um objeto JSON valido (tente gerar novamente). Inicio da resposta: " + preview)
+        }
+        return candidate
     }
 
     // usage.cache_creation_input_tokens/cache_read_input_tokens e
@@ -258,6 +286,21 @@ test UsageParserSpec {
         are_equal(parsed.cost_usd, 0)
         are_equal(parsed.usage_available, false)
         are_equal(parsed.cost_source, "unavailable")
+    }
+
+    describe strips_prose_around_devins_json_object {
+        var parsed = UsageParser.extract_devin("I'll return the stories now.\n```json\n{\"titulo\":\"história {1}\"}\n```\nDone.", "")
+        are_equal(parsed.content, "{\"titulo\":\"história {1}\"}")
+    }
+
+    describe fails_with_the_response_start_when_devin_returns_no_json {
+        var message = ""
+        try {
+            UsageParser.extract_devin("I cannot help with that.", "")
+        } catch (err) {
+            message = "${err}"
+        }
+        are_equal(message.contains("I cannot help with that."), true)
     }
 
     describe removes_only_devins_outer_markdown_fence {

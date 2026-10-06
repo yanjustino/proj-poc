@@ -1,4 +1,4 @@
-import { startAndWatch, isFullyTerminal } from './api.js';
+import { startAndWatch, isFullyTerminal, cancelRun } from './api.js';
 
 // App-wide limit on runs that call an LLM (artifact generations, wiki
 // ingest). mhl itself caps concurrent executions (mhlbridge.go's
@@ -108,14 +108,32 @@ export function llmJobsForProject(projectId) {
   return [...jobs.entries()].filter(([key]) => key.startsWith(prefix)).map(([key, job]) => ({ key, status: job.status }));
 }
 
-// cancelQueuedLlmJob drops a job that hasn't started yet. Returns false when
-// the job already has a run in mhl — that one is canceled through mhl.
+// cancelQueuedLlmJob drops a job from the queue when the host's "Cancelar"
+// fires. Three cases:
+//   - still waiting for a slot: nothing exists in mhl yet, just forget it;
+//   - started, runId already known: the caller (run-tracker.js's doCancel)
+//     has already canceled it in mhl, so the slot is released right away
+//     instead of waiting for the next WatchRun poll to report "canceled";
+//   - started, runId NOT known yet (StartRun still in flight — the tracker
+//     shows "working" with runId ''): the run is about to exist in mhl, so
+//     update() below cancels it as soon as the runId arrives.
+// Real bug the last case fixes: canceling in that window only flagged the
+// job, but the run started anyway, kept its LLM slot (released only on
+// paused/terminal) and kept notifying listeners — the tracker reappeared as
+// "Gerando…" and every other generation for the pipeline stayed "queued"
+// behind it until it reached its review pause minutes later.
+// Either way, a canceled job never notifies again besides the final
+// "canceled" below, so a stale "working" poll can't resurrect its tracker.
 export function cancelQueuedLlmJob(key) {
   const job = jobs.get(key);
-  if (!job || job.status.runId) return false;
+  if (!job) return;
   job.canceled = true;
   jobs.delete(key);
-  return true;
+  if (job.status.runId) {
+    job.cancelSent = true;
+    job.release?.();
+  }
+  notify(key, { runId: job.status.runId || '', state: 'canceled' });
 }
 
 // enqueueLlmRun starts `workflow` with `args` once an LLM slot is free,
@@ -124,20 +142,29 @@ export function cancelQueuedLlmJob(key) {
 // the status it just received) or reaches a terminal state.
 export function enqueueLlmRun(key, workflow, args) {
   if (jobs.has(key)) return;
-  const job = { status: { runId: '', state: 'queued' }, canceled: false };
+  const job = { status: { runId: '', state: 'queued' }, canceled: false, cancelSent: false, release: null };
   jobs.set(key, job);
   notify(key, job.status);
 
   acquireLlmSlot(workflow).then((release) => {
+    job.release = release;
     if (job.canceled) {
       release();
       return;
     }
     const update = (status) => {
       job.status = status;
-      if (status.state === 'paused' || isFullyTerminal(status)) {
+      const settled = status.state === 'paused' || isFullyTerminal(status);
+      if (settled) {
         release();
         if (jobs.get(key) === job) jobs.delete(key);
+      }
+      if (job.canceled) {
+        if (status.runId && !isFullyTerminal(status) && !job.cancelSent) {
+          job.cancelSent = true;
+          cancelRun(status.runId).then(release, (err) => console.error('llm-queue cancelRun', err));
+        }
+        return;
       }
       notify(key, status);
     };
