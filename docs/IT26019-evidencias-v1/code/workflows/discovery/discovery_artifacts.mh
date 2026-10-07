@@ -1,0 +1,380 @@
+// O que muda por artefato no Discovery: quais predecessores cada um exige,
+// como e gerado e onde e gravado. O fluxo (pausa, aprovacao, pedido de
+// mudanca) fica em discovery.mh.
+
+import { Paths } from "../shared/core/paths.mh"
+import { Context } from "../shared/artifacts/context.mh"
+import { ContextSlice } from "../shared/artifacts/context_slice.mh"
+import { Require } from "../shared/artifacts/require.mh"
+import { ArtifactId } from "../shared/artifacts/artifact_id.mh"
+import { ArtifactChecks } from "../shared/artifacts/artifact_checks.mh"
+import { ArtifactCommit } from "../shared/artifacts/artifact_commit.mh"
+import { AutoReview } from "../shared/artifacts/auto_review.mh"
+import { ChangesBlock } from "../shared/artifacts/changes_log.mh"
+import { FeatureReview } from "../shared/artifacts/feature_review.mh"
+import { ArchConformance } from "../shared/artifacts/arch_conformance.mh"
+import { Traceability } from "../shared/artifacts/historia_spec.mh"
+import { CommonDrafts, TechContext } from "../shared/artifacts/common_drafts.mh"
+import { Drafts, Draft } from "../shared/artifacts/draft.mh"
+import { ArtifactSchema, AtributosInstruction, AtributosSchema } from "../shared/artifacts/artifacts_common.mh"
+
+export enum DiscoveryArtifact { brief, atributos, requisitos, adr, der, modelo, diagramas, features, historias, plano }
+
+export tool DiscoveryKinds {
+    // historias sao uma colecao por feature; o plano e de uma historia.
+    check(artifact: DiscoveryArtifact, feature_id: string, historia_id: string) -> {
+        if (artifact == DiscoveryArtifact.historias && feature_id.is_empty()) fail("'feature_id' e obrigatorio para artifact: \"historias\"")
+        if (artifact == DiscoveryArtifact.plano && (feature_id.is_empty() || historia_id.is_empty())) fail("'feature_id' e 'historia_id' sao obrigatorios para artifact: \"plano\"")
+    }
+
+    // Chave que separa o historico (ChangesLog, ActivityLog) de cada item.
+    scope(artifact: DiscoveryArtifact, feature_id: string, historia_id: string): string -> match artifact {
+        DiscoveryArtifact.historias -> feature_id
+        DiscoveryArtifact.plano     -> "${feature_id}/${historia_id}"
+        _                           -> ""
+    }
+}
+
+// features (o backlog inteiro, com o mapa de dependencias entre os itens) so
+// existe no Discovery. Deriva dos artefatos ja sintetizados, nao da wiki.
+prompt FeaturesInstruction(
+    schema_conventions: prompt,
+    atributos_content: string,
+    requisitos_content: string,
+    adr_content: string,
+    der_content: string,
+    diagramas_content: string,
+    lote_content: string,
+    feedback_content: string
+) from "prompts/features.prompt.md"
+
+// Primeira etapa das features: so a quebra (titulo, tipo, resumo, cobertura,
+// quem habilita quem) — pequena o bastante para nunca estourar a saida.
+prompt FeaturesRoteiroInstruction(
+    schema_conventions: prompt,
+    atributos_content: string,
+    requisitos_content: string,
+    adr_content: string,
+    der_content: string,
+    diagramas_content: string,
+    feedback_content: string
+) from "prompts/features_roteiro.prompt.md"
+
+// Ultima etapa das features: o mapa de dependencias entre os itens ja
+// detalhados. `features_content` traz o codigo FT00N que cada item recebe no
+// Commit, para o mapa citar o id real.
+prompt DependenciasInstruction(
+    schema_conventions: prompt,
+    features_content: string,
+    feedback_content: string
+) from "prompts/dependencias.prompt.md"
+
+schema FeaturesSchema from "schemas/features.schema.json"
+schema FeaturesRoteiroSchema from "schemas/features_roteiro.schema.json"
+schema DependenciasSchema from "schemas/dependencias.schema.json"
+
+// Predecessores: brief -> atributos | requisitos -> adr -> der | modelo ->
+// diagramas -> features -> historias -> plano. O DER e o unico opcional.
+export tool DiscoveryDrafts {
+    of(kind: DiscoveryArtifact, project_id: string, feature_id: string, historia_id: string, autorrevisao: bool): Draft -> match kind {
+        DiscoveryArtifact.brief        -> CommonDrafts.brief(project_id)
+        DiscoveryArtifact.atributos    -> self.atributos(project_id)
+        DiscoveryArtifact.requisitos   -> CommonDrafts.requisitos(project_id, Require.artifact(project_id, "brief", "requisitos"))
+        DiscoveryArtifact.adr          -> self.adr(project_id)
+        DiscoveryArtifact.der          -> self.der(project_id, autorrevisao)
+        DiscoveryArtifact.modelo       -> self.modelo(project_id, autorrevisao)
+        DiscoveryArtifact.diagramas    -> self.diagramas(project_id, autorrevisao)
+        DiscoveryArtifact.features     -> self.features(project_id, autorrevisao)
+        DiscoveryArtifact.historias    -> self.historias(project_id, feature_id, autorrevisao)
+        DiscoveryArtifact.plano        -> self.plano(project_id, feature_id, historia_id, autorrevisao)
+    }
+
+    internal atributos(project_id: string): Draft -> Drafts.generate(
+        AtributosInstruction(
+            schema_conventions: ArtifactSchema(),
+            brief_content: Require.artifact(project_id, "brief", "atributos"),
+            wiki_content: Context.wiki(project_id),
+            feedback_content: ChangesBlock.for_artifact(project_id, "atributos", "")
+        ),
+        AtributosSchema, project_id, "atributos"
+    )
+
+    // Requisitos e atributos obrigatorios, sem os campos que os dois repetem
+    // (Context.dedupe_shared_fields).
+    internal quality(project_id: string, before: string): any -> {
+        var requisitos = Require.artifact(project_id, "requisitos", before)
+        var atributos = Require.artifact(project_id, "atributos", before)
+        return {requisitos: Context.dedupe_shared_fields(atributos, requisitos), atributos}
+    }
+
+    internal adr(project_id: string): Draft -> {
+        var q = self.quality(project_id, "adr")
+        return CommonDrafts.adr(project_id, q.requisitos, q.atributos)
+    }
+
+    // O nivel do DER (fisico so com banco escolhido) e as tecnologias dos
+    // diagramas saem das ADRs, por isso elas sao obrigatorias aqui.
+    internal der(project_id: string, autorrevisao: bool): Draft -> {
+        var q = self.quality(project_id, "der")
+        return CommonDrafts.der(project_id, autorrevisao, q.requisitos, q.atributos, Require.adr(project_id, "der"))
+    }
+
+    internal modelo(project_id: string, autorrevisao: bool): Draft -> {
+        var q = self.quality(project_id, "modelo")
+        return CommonDrafts.modelo(project_id, autorrevisao, q.requisitos, q.atributos, Require.adr(project_id, "modelo"))
+    }
+
+    internal diagramas(project_id: string, autorrevisao: bool): Draft -> {
+        var q = self.quality(project_id, "diagramas")
+        var adr = Require.adr(project_id, "diagramas")
+        return CommonDrafts.diagramas(project_id, autorrevisao, q.requisitos, q.atributos, adr, Require.artifact(project_id, "modelo", "diagramas"))
+    }
+
+    // O backlog inteiro numa resposta so passa do limite de tokens de saida
+    // do modelo em oportunidades grandes (cada feature preenche ~20 secoes
+    // com fontes) — o Devin corta a resposta no meio. Duas etapas, como nas
+    // historias com propostas: um roteiro curto decide a quebra inteira, e
+    // cada chamada seguinte detalha no maximo features_por_pagina itens dele,
+    // vendo o roteiro todo para manter cobertura e dependencias coerentes.
+    // As verificacoes (FeatureRules) sao por item, entao a autorrevisao de
+    // cada pagina continua valendo. Por fim, uma chamada monta o mapa de
+    // dependencias entre os itens detalhados; o Commit grava os dois juntos.
+    internal features(project_id: string, autorrevisao: bool): Draft -> {
+        var q = self.quality(project_id, "features")
+        var adr = Require.adr(project_id, "features")
+        var der = Require.optional(Context.artifact(project_id, "der.html"), "esta oportunidade")
+        var diagramas = Require.diagramas(project_id, "features")
+        var feedback = ChangesBlock.for_artifact(project_id, "features", "")
+        var known = Traceability.known(project_id)
+        var roteiro = Drafts.generate(
+            FeaturesRoteiroInstruction(
+                schema_conventions: ArtifactSchema(),
+                atributos_content: q.atributos,
+                requisitos_content: q.requisitos,
+                adr_content: adr,
+                der_content: der,
+                diagramas_content: diagramas,
+                feedback_content: feedback
+            ),
+            FeaturesRoteiroSchema, project_id, "features"
+        )
+        var itens = roteiro.data?.features ?? []
+        if (itens.is_empty()) fail("o roteiro de features veio vazio — regenere as features")
+        var detalhe = self.paginate_features(itens, (pagina) -> Drafts.reviewed_items(AutoReview.generate(
+            enabled: autorrevisao,
+            prompt: FeaturesInstruction(
+                schema_conventions: ArtifactSchema(),
+                atributos_content: q.atributos,
+                requisitos_content: q.requisitos,
+                adr_content: adr,
+                der_content: der,
+                diagramas_content: diagramas,
+                lote_content: self.features_lote(itens, pagina),
+                feedback_content: feedback
+            ),
+            schema_file: FeaturesSchema, project_id:, artifact: "features",
+            prepare: (raw) -> ArchConformance.annotate(json.parse(raw), known),
+            check: (d) -> ArtifactChecks.features(d)
+        ), "features"))
+        var mapa = Drafts.generate(
+            DependenciasInstruction(
+                schema_conventions: ArtifactSchema(),
+                features_content: self.dependencias_content(detalhe.data.features),
+                feedback_content: feedback
+            ),
+            DependenciasSchema, project_id, "features"
+        )
+        // Cobertura so existe com o lote inteiro: vai no mapa, sem autorrevisao.
+        var dependencias = mapa.data
+        dependencias["avisos_cobertura"] = ArchConformance.coverage(detalhe.data.features, known)
+        return {
+            data: {features: detalhe.data.features, dependencias},
+            tokens_in: roteiro.tokens_in + detalhe.tokens_in + mapa.tokens_in,
+            tokens_out: roteiro.tokens_out + detalhe.tokens_out + mapa.tokens_out,
+        }
+    }
+
+    internal features_por_pagina(): number -> 3
+
+    // `fetch(pagina)` detalha uma fatia do roteiro; junta as features na
+    // ordem e soma o consumo de todas as chamadas.
+    internal paginate_features(itens: any[], fetch: any): Draft -> {
+        var features = []
+        var tokens_in = 0
+        var tokens_out = 0
+        var inicio = 0
+        while (inicio < itens.size()) {
+            var fim = inicio + self.features_por_pagina()
+            if (fim > itens.size()) fim = itens.size()
+            var draft = fetch(itens[inicio..fim])
+            features += draft.data?.features ?? []
+            tokens_in += draft.tokens_in
+            tokens_out += draft.tokens_out
+            inicio = fim
+        }
+        return {data: {features}, tokens_in, tokens_out}
+    }
+
+    // Bloco do prompt de cada pagina: o roteiro inteiro (para citar os
+    // outros itens pelo titulo exato) e os itens que esta resposta detalha.
+    internal features_lote(itens: any[], pagina: any[]): string -> {
+        var roteiro = itens.map((f) -> {
+            var tipo = if ((f?.subtipo_enabler ?? "nao_aplicavel") == "nao_aplicavel") f?.tipo_item ?? "" else "${f?.tipo_item ?? ""}/${f.subtipo_enabler}"
+            var cobre = f?.requisitos ?? []
+            var habilita = f?.habilita ?? []
+            return "- ${f?.titulo ?? ""} (${tipo}) — ${f?.resumo ?? ""}" +
+                (if (cobre.is_empty()) "" else " · cobre: ${cobre.join(", ")}") +
+                (if (habilita.is_empty()) "" else " · habilita: ${habilita.join("; ")}")
+        }).join("\n")
+        var lista = pagina.map((f) -> "- ${f?.titulo ?? ""}").join("\n")
+        return "## Roteiro da quebra (todos os itens da oportunidade)\n\nA quebra já está decidida: não crie, remova nem renomeie itens. Em `itens_habilitados` e `dependencias_integridade`, cite os outros itens pelo título exato daqui. Cada requisito pertence ao item que o cobre neste roteiro.\n\n${roteiro}\n\n" +
+            "## Itens a detalhar nesta resposta\n\nDetalhe exatamente estes ${pagina.size()} itens, um para cada, com o mesmo título, `tipo_item` e `subtipo_enabler` do roteiro; os demais são detalhados em outras respostas. Se a fonte mostrar que um item não se sustenta, registre isso em `gaps`/`questoes_abertas` dele em vez de trocá-lo.\n\n${lista}"
+    }
+
+    // Bloco do prompt do mapa: cada item com o codigo que o Commit vai cunhar
+    // (ArtifactCommit.features grava na ordem, a partir de FT001) e so as
+    // secoes que dizem quem depende de quem.
+    internal dependencias_content(features: any[]): string -> {
+        var blocos = []
+        var n = 1
+        for (var f in features) {
+            blocos += ["# ${ArtifactId.feature_id_at(n)} — ${f?.titulo ?? ""}\n\n" + json.stringify({
+                tipo_item: f?.tipo_item ?? "",
+                subtipo_enabler: f?.subtipo_enabler ?? "",
+                resumo: f?.resumo ?? "",
+                itens_habilitados: f?.itens_habilitados ?? [],
+                dependencias_integridade: f?.dependencias_integridade ?? [],
+            })]
+            n = n + 1
+        }
+        return blocos.join("\n\n")
+    }
+
+    // Contexto recortado pelo que o item cita. Tudo ja existe quando ha
+    // features (que o exigem), exceto o DER.
+    internal tech(project_id: string, refs: string[]): TechContext -> {
+        requisitos: ContextSlice.requisitos(project_id, refs),
+        atributos: ContextSlice.atributos(project_id, refs),
+        adr: ContextSlice.adrs(project_id, refs),
+        der: Require.optional(Context.artifact(project_id, "der.html"), "esta oportunidade"),
+        diagramas: ContextSlice.diagramas(project_id, refs),
+    }
+
+    internal historias(project_id: string, feature_id: string, autorrevisao: bool): Draft -> {
+        var feature_dir = ArtifactId.find_feature_dir(project_id, feature_id)
+        FeatureReview.ensure_not_rejected(project_id, feature_dir)
+        var feature = Context.artifact(project_id, "features/${feature_dir}/feature.html")
+        var feature_data = ContextSlice.read(project_id, "features/${feature_dir}/feature.json")
+        var draft = CommonDrafts.historias(project_id, autorrevisao, feature, self.tech(project_id, ContextSlice.refs(feature_data)), feature_data?.historias_propostas ?? [], feature_id)
+        return Drafts.with(draft, {feature_dir})
+    }
+
+    // Pasta da historia (historias/<feature>/<USxxx>), onde o plano e gravado.
+    historia_rel(project_id: string, feature_id: string, historia_id: string): string -> {
+        var historias_rel = "historias/${ArtifactId.find_feature_dir(project_id, feature_id)}"
+        return "${historias_rel}/${ArtifactId.find_historia_dir(project_id, historias_rel, historia_id)}"
+    }
+
+    // Gravado ao lado da historia: historias/<feature>/<USxxx>/plano.html.
+    internal plano(project_id: string, feature_id: string, historia_id: string, autorrevisao: bool): Draft -> {
+        var feature_dir = ArtifactId.find_feature_dir(project_id, feature_id)
+        FeatureReview.ensure_not_rejected(project_id, feature_dir)
+        var historia_rel = self.historia_rel(project_id, feature_id, historia_id)
+        var historia_json = Paths.artifact(project_id, "${historia_rel}/historia.json")
+        if (!fs.exists(historia_json)) fail("gere as historias de '${feature_id}' antes do plano de '${historia_id}'")
+        var historia = json.parse(fs.read(historia_json))
+        var draft = CommonDrafts.plano(
+            project_id, autorrevisao, historia,
+            Context.artifact(project_id, "${historia_rel}/historia.html"),
+            Context.artifact(project_id, "features/${feature_dir}/feature.html"),
+            "${historia_id} — ${historia.titulo}",
+            self.tech(project_id, ContextSlice.refs(historia)),
+            "${feature_id}/${historia_id}"
+        )
+        return Drafts.with(draft, {historia_dir: historia_rel})
+    }
+}
+
+export tool DiscoveryCommits {
+    of(kind: DiscoveryArtifact, project_id: string, feature_id: string, historia_id: string, draft: Draft): any -> match kind {
+        DiscoveryArtifact.brief        -> ArtifactCommit.brief(project_id, draft)
+        DiscoveryArtifact.atributos    -> ArtifactCommit.atributos(project_id, draft)
+        DiscoveryArtifact.requisitos   -> ArtifactCommit.requisitos(project_id, draft)
+        DiscoveryArtifact.adr          -> ArtifactCommit.adr(project_id, draft)
+        DiscoveryArtifact.der          -> ArtifactCommit.der(project_id, draft)
+        DiscoveryArtifact.modelo       -> ArtifactCommit.modelo(project_id, draft)
+        DiscoveryArtifact.diagramas    -> ArtifactCommit.diagramas(project_id, draft)
+        DiscoveryArtifact.features     -> ArtifactCommit.features(project_id, draft)
+        DiscoveryArtifact.historias    -> self.historias(project_id, feature_id, draft)
+        DiscoveryArtifact.plano        -> self.plano(project_id, feature_id, historia_id, draft)
+    }
+
+    // Os caminhos vem do rascunho quando ele os traz; senao sao recalculados
+    // a partir dos ids — um rascunho gerado sem eles ainda pode ser aprovado.
+    feature_dir(project_id: string, feature_id: string, draft: Draft): string -> {
+        var saved = draft.data?.feature_dir
+        return if (saved == null) ArtifactId.find_feature_dir(project_id, feature_id) else saved
+    }
+
+    // Rejeitada enquanto o rascunho esperava aprovacao: nao grava.
+    internal historias(project_id: string, feature_id: string, draft: Draft): any -> {
+        var feature_dir = self.feature_dir(project_id, feature_id, draft)
+        FeatureReview.ensure_not_rejected(project_id, feature_dir)
+        var result = ArtifactCommit.historias(project_id, feature_dir, draft)
+        result["feature_id"] = feature_id
+        return result
+    }
+
+    internal plano(project_id: string, feature_id: string, historia_id: string, draft: Draft): any -> {
+        var saved = draft.data?.historia_dir
+        var historia_rel = if (saved == null) DiscoveryDrafts.historia_rel(project_id, feature_id, historia_id) else saved
+        FeatureReview.ensure_not_rejected(project_id, historia_rel.split("/")[1])
+        var result = ArtifactCommit.plano(project_id, "${historia_rel}/plano.html", "../../../", draft)
+        result["feature_id"] = feature_id
+        result["historia_id"] = historia_id
+        return result
+    }
+}
+
+test DiscoveryFeaturesSpec {
+    // Cada pagina detalha a sua fatia do roteiro, na ordem; o consumo de
+    // todas as chamadas e somado. O falso modelo registra cada chamada num
+    // arquivo (lambdas nao alteram variaveis de fora).
+    describe each_page_details_its_own_slice_of_the_outline {
+        var log_path = "spec-test-paginate-features.log"
+        if (fs.exists(log_path)) fs.delete(log_path)
+        var itens = ["A", "B", "C", "D", "E", "F", "G"].map((t) -> {titulo: t})
+        var draft = DiscoveryDrafts.paginate_features(itens, (pagina) -> {
+            fs.append(log_path, "${pagina.map((f) -> f.titulo).join("")}\n")
+            return {data: {features: pagina.map((f) -> {titulo: f.titulo})}, tokens_in: 10, tokens_out: 4}
+        })
+        are_equal(draft.data.features.map((f) -> f.titulo), ["A", "B", "C", "D", "E", "F", "G"])
+        are_equal(fs.read(log_path), "ABC\nDEF\nG\n")
+        are_equal(draft.tokens_in, 30)
+        are_equal(draft.tokens_out, 12)
+        fs.delete(log_path)
+    }
+
+    describe lote_lists_the_whole_outline_and_only_the_page_items_to_detail {
+        var itens = [
+            {titulo: "Base de mensageria", tipo_item: "enabler", subtipo_enabler: "infraestrutura", resumo: "Tópico Kafka provisionado", requisitos: ["NFR-002"], habilita: ["Consumir solicitações"]},
+            {titulo: "Consumir solicitações", tipo_item: "feature_negocio", subtipo_enabler: "nao_aplicavel", resumo: "Processa solicitações", requisitos: ["FR-001", "FR-002"], habilita: []},
+        ]
+        var lote = DiscoveryDrafts.features_lote(itens, [itens[1]])
+        is_true(lote.contains("- Base de mensageria (enabler/infraestrutura) — Tópico Kafka provisionado · cobre: NFR-002 · habilita: Consumir solicitações"))
+        is_true(lote.contains("- Consumir solicitações (feature_negocio) — Processa solicitações · cobre: FR-001, FR-002\n"))
+        is_true(lote.contains("Detalhe exatamente estes 1 itens"))
+        is_true(lote.ends_with("\n\n- Consumir solicitações"))
+    }
+
+    // O mapa cita os codigos que o Commit cunha: na ordem, a partir de FT001.
+    describe dependencias_content_numbers_items_as_the_commit_will {
+        var content = DiscoveryDrafts.dependencias_content([
+            {titulo: "Base de mensageria", tipo_item: "enabler", subtipo_enabler: "infraestrutura", resumo: "r", itens_habilitados: [{texto: "Consumir solicitações", fontes: ["NFR-002"]}], dependencias_integridade: []},
+            {titulo: "Consumir solicitações", tipo_item: "feature_negocio", subtipo_enabler: "nao_aplicavel", resumo: "r", itens_habilitados: [], dependencias_integridade: [{texto: "Depende de Base de mensageria", fontes: ["ADR-001"]}]},
+        ])
+        is_true(content.starts_with("# FT001 — Base de mensageria\n\n"))
+        is_true(content.contains("# FT002 — Consumir solicitações\n\n"))
+        is_true(content.contains("Depende de Base de mensageria"))
+    }
+}

@@ -1,0 +1,342 @@
+// ArtifactCommit grava um rascunho aprovado em artifacts/. Cada pagina grava
+// o JSON primeiro e o HTML por ultimo: o HTML e o marcador de
+// disponibilidade que Context usa (ver artifact_data.mh).
+//
+// Colecoes (adr/, diagramas/, features/, historias/) sao sempre o lote
+// inteiro, nunca um delta: `reset` esvazia a pasta antes de gravar, porque
+// os ids sequenciais contam o que ja existe em disco (ArtifactId) e um
+// titulo alterado mudaria o slug do arquivo.
+
+import { Paths } from "../core/paths.mh"
+import { Slug } from "../core/slug.mh"
+import { ArtifactData } from "artifact_data.mh"
+import { ArtifactBody } from "artifact_body.mh"
+import { ArtifactId } from "artifact_id.mh"
+import { ArchModel } from "arch_model.mh"
+import { C4Diagram } from "c4_diagram.mh"
+import { Context } from "context.mh"
+import { PageShell, ArtifactMeta } from "page_shell.mh"
+import { SpecFiles } from "historia_spec.mh"
+import { HistoriaAnexos } from "historia_anexos.mh"
+import { Draft, Drafts } from "draft.mh"
+import { RadahnModel } from "../radahn/radahn_model.mh"
+
+export tool ArtifactCommit {
+    page(project_id: string, relative: string, title: string, body: string, data: any, draft: Draft) ->
+        self.page_with_meta(project_id, relative, title, body, data, ArtifactMeta.line("artifacts/${relative}", draft.tokens_in, draft.tokens_out))
+
+    internal page_with_meta(project_id: string, relative: string, title: string, body: string, data: any, meta: string) -> {
+        ArtifactData.write(project_id, relative, data)
+        fs.write(Paths.artifact(project_id, relative), PageShell(title:, body:, meta:))
+    }
+
+    internal reset(project_id: string, relative_dir: string) -> {
+        dir.clear(Paths.artifact(project_id, relative_dir))
+    }
+
+    internal single(project_id: string, artifact: string, title: string, body: string, draft: Draft): any -> {
+        self.page(project_id, "${artifact}.html", title, body, draft.data, draft)
+        return {artifact, path: "artifacts/${artifact}.html"}
+    }
+
+    brief(project_id: string, draft: Draft): any ->
+        self.single(project_id, "brief", "Brief", ArtifactBody.brief(draft.data), draft)
+
+    atributos(project_id: string, draft: Draft): any ->
+        self.single(project_id, "atributos", "Atributos de Qualidade", ArtifactBody.atributos(draft.data), draft)
+
+    requisitos(project_id: string, draft: Draft): any ->
+        self.single(project_id, "requisitos", "Requisitos", ArtifactBody.requisitos(draft.data), draft)
+
+    der(project_id: string, draft: Draft): any ->
+        self.single(project_id, "der", "DER", ArtifactBody.der(draft.data), draft)
+
+    // O modelo aprovado redesenha na hora as visoes que projeta (model_views).
+    modelo(project_id: string, draft: Draft): any -> {
+        var final = self.keep_details(project_id, draft)
+        var result = self.single(project_id, "modelo", "Modelo arquitetural", ArtifactBody.modelo(final.data), final)
+        result["diagramas"] = self.model_views(project_id, final.data)
+        return result
+    }
+
+    // A LLM do modelo nao escreve visoes detalhadas (ArchModel): regerar o
+    // modelo carrega as do modelo gravado. As que perderam a origem (um id
+    // que a nova geracao nao repetiu) ficam, com o aviso de orfa.
+    internal keep_details(project_id: string, draft: Draft): Draft -> {
+        if (draft.data?.detalhes != null) return draft
+        var path = Paths.artifact(project_id, "modelo.json")
+        var anterior = if (fs.exists(path)) json.parse(fs.read(path)) else null
+        return Drafts.with(draft, {detalhes: anterior?.detalhes ?? []})
+    }
+
+    // Slug unico no lote: duas visoes com o mesmo titulo (dois diagramas de
+    // componente do mesmo conteiner sem titulo proprio) nao se sobrescrevem.
+    internal unique_slug(titulo: string, used: string[]): string -> {
+        var base = Slug.from_title(titulo)
+        var slug = base
+        var n = 2
+        while (used.contains(slug)) {
+            slug = base + "-" + n
+            n = n + 1
+        }
+        return slug
+    }
+
+    // model_views: contexto e conteiner sempre espelham o modelo gravado.
+    // Gravar o modelo (geracao aprovada ou edicao manual, ArtifactSave)
+    // substitui as duas visoes em diagramas/ e reanota o lote inteiro — um
+    // diagrama opcional que cite um nome que saiu do modelo ganha o aviso na
+    // hora. Um contexto/conteiner legado (sintetizado pela LLM antes do
+    // modelo existir) tambem e substituido. Sem nenhum diagrama gravado
+    // ainda, nada a fazer: o primeiro lote ja nasce do modelo.
+    model_views(project_id: string, modelo: any): string[] -> {
+        var base = Paths.artifact(project_id, "diagramas")
+        if (!dir.exists(base)) return []
+        var existia = false
+        var outros = []
+        var slugs = []
+        for (var file_path in dir.list(base)) {
+            if (file_path.ends_with(".json")) {
+                var html_path = file_path.substring(0, file_path.size() - 5) + ".html"
+                if (fs.exists(html_path)) {
+                    existia = true
+                    var data = json.parse(fs.read(file_path))
+                    if ((data?.derivado_do_modelo ?? false) || ArchModel.optional_diagrams([data], modelo).is_empty()) {
+                        fs.delete(file_path)
+                        fs.delete(html_path)
+                    } else {
+                        outros += [data]
+                        slugs += [file_path.substring(base.size() + 1, file_path.size() - 5)]
+                    }
+                }
+            }
+        }
+        if (!existia) return []
+
+        var views = ArchModel.views(modelo)
+        var lote = ArchModel.annotated(modelo, outros, C4Diagram.infra_hint(Context.adr_context(project_id)))
+        var meta_time = time.format(time.now(), "yyyy-MM-dd HH:mm")
+        var written = []
+        var i = 0
+        for (var d in lote) {
+            var item = d
+            var slug = ""
+            if (i < views.size()) {
+                slug = self.unique_slug(d.titulo, written + slugs)
+            } else {
+                slug = slugs[i - views.size()]
+                // annotate reconstroi o item campo a campo; o registro da
+                // autorrevisao da geracao original volta aqui.
+                var revisao = outros[i - views.size()]?.autorrevisao
+                if (revisao != null) item["autorrevisao"] = revisao
+            }
+            self.page_with_meta(project_id, "diagramas/${slug}.html", html.escape(d.titulo), ArtifactBody.diagrama(item), item,
+                "redesenhado a partir do modelo em ${meta_time} · artifacts/diagramas/${slug}.html")
+            written += [slug]
+            i = i + 1
+        }
+        return written
+    }
+
+    adr(project_id: string, draft: Draft): any -> {
+        self.reset(project_id, "adr")
+        var written = []
+        for (var decision in draft.data.decisions) {
+            var id = ArtifactId.next_adr_id(project_id)
+            var folder = ArtifactId.folder_name(id, decision.titulo)
+            self.page(project_id, "adr/${folder}.html", html.escape("${id} — ${decision.titulo}"), ArtifactBody.adr(decision), decision, draft)
+            written += [folder]
+        }
+        return {artifact: "adr", written}
+    }
+
+    diagramas(project_id: string, draft: Draft): any -> {
+        self.reset(project_id, "diagramas")
+        var written = []
+        for (var diagrama in draft.data.diagramas) {
+            var slug = self.unique_slug(diagrama.titulo, written)
+            self.page(project_id, "diagramas/${slug}.html", html.escape(diagrama.titulo), ArtifactBody.diagrama(diagrama), diagrama, draft)
+            written += [slug]
+        }
+        return {artifact: "diagramas", written}
+    }
+
+    // Um backlog novo invalida todas as historias: as de uma feature que
+    // deixou de existir ficariam orfas em disco. O mapa de dependencias vem
+    // no mesmo rascunho e e gravado depois das features; um rascunho sem ele
+    // (gerado por uma versao anterior) apaga o mapa do backlog antigo.
+    features(project_id: string, draft: Draft): any -> {
+        self.reset(project_id, "features")
+        var historias = Paths.artifact(project_id, "historias")
+        if (dir.exists(historias)) dir.clear(historias)
+        var written = []
+        for (var feature in draft.data.features) {
+            var id = ArtifactId.next_feature_id(project_id)
+            var folder = ArtifactId.folder_name(id, feature.titulo)
+            dir.create(Paths.artifact(project_id, "features/${folder}"))
+            self.page(project_id, "features/${folder}/feature.html", html.escape("${id} — ${feature.titulo}"), ArtifactBody.feature(feature), feature, draft)
+            written += [folder]
+        }
+        var mapa = draft.data?.dependencias
+        if (mapa == null) {
+            for (var name in ["dependencias.html", "dependencias.json"]) {
+                if (fs.exists(Paths.artifact(project_id, name))) fs.delete(Paths.artifact(project_id, name))
+            }
+        } else {
+            self.page(project_id, "dependencias.html", "Mapa de Dependências", ArtifactBody.dependencias(mapa), mapa, draft)
+        }
+        return {artifact: "features", written}
+    }
+
+    // `feature_dir` vazio: historias da feature implicita de um projeto de
+    // Delivery, gravadas direto em historias/. Os anexos do usuario
+    // (historia_anexos.mh) nao sao regeraveis: sobrevivem ao lote novo na
+    // historia de mesmo codigo (US001 -> US001).
+    historias(project_id: string, feature_dir: string, draft: Draft): any -> {
+        var base = if (feature_dir.is_empty()) "historias" else "historias/${feature_dir}"
+        var anexos = HistoriaAnexos.snapshot(project_id, base)
+        self.reset(project_id, base)
+        var written = []
+        for (var historia in draft.data.historias) {
+            var id = ArtifactId.next_historia_id(project_id, feature_dir)
+            var folder = ArtifactId.folder_name(id, historia.titulo)
+            dir.create(Paths.artifact(project_id, "${base}/${folder}"))
+            SpecFiles.write(project_id, "${base}/${folder}", historia)
+            HistoriaAnexos.restore(project_id, anexos, id, "${base}/${folder}")
+            self.page(project_id, "${base}/${folder}/historia.html", html.escape("${id} — ${historia.titulo}"), ArtifactBody.historia(historia), historia, draft)
+            written += [folder]
+        }
+        return {artifact: "historias", written}
+    }
+
+    // `assets_prefix` e o caminho de volta ate artifacts/ (mermaid.min.js).
+    plano(project_id: string, relative: string, assets_prefix: string, draft: Draft): any -> {
+        var data = draft.data
+        self.page(project_id, relative, "Plano de implementação — ${html.escape(data.historia_titulo)}", ArtifactBody.plano(data, assets_prefix), data, draft)
+        var radahn_yaml = RadahnModel.persist(project_id, relative, data)
+        return {artifact: "plano", path: "artifacts/${relative}", radahn: !radahn_yaml.is_empty()}
+    }
+}
+
+import { Fixture } from "../core/fixture.mh"
+
+tool ModelViewsFixtures {
+    internal modelo(sistema: string, api: string): any -> {
+        sistema: {nome: sistema, descricao: "", fontes: ["brief"]},
+        contexto: {
+            elementos: [{id: "cliente", nome: "Cliente", tipo: "pessoa", tecnologia: "", descricao: "", fontes: ["gap"]}],
+            relacoes: [{de: "cliente", para: "sistema", descricao: "Usa", tecnologia: "", fontes: ["gap"]}],
+        },
+        conteineres: {
+            elementos: [
+                {id: "cliente", nome: "Cliente", tipo: "pessoa", tecnologia: "", descricao: "", fontes: ["gap"]},
+                {id: "api", nome: api, tipo: "container", tecnologia: "Java", descricao: "", fontes: ["gap"]},
+            ],
+            relacoes: [{de: "cliente", para: "api", descricao: "Usa", tecnologia: "HTTPS", fontes: ["gap"]}],
+        },
+        gaps: [],
+    }
+}
+
+test ArtifactCommitSpec {
+    describe model_views_is_a_no_op_before_any_diagram_exists {
+        var id = Fixture.project("spec-test-model-views-empty")
+        are_equal(ArtifactCommit.model_views(id, ModelViewsFixtures.modelo("Loja", "API")), [])
+        is_false(dir.exists(Paths.artifact(id, "diagramas")))
+        Fixture.drop(id)
+    }
+
+    describe model_views_replaces_derived_and_legacy_views_and_keeps_optional_ones {
+        var id = Fixture.project("spec-test-model-views")
+        dir.create(Paths.artifact(id, "diagramas"))
+        var seq = {titulo: "Login", diagram_type: "sequence", descricao: "", descricao_fontes: ["gap"], escopo: {nome: "", descricao: "", fontes: []}, ambiente: "", elementos: [], relacoes: [], diagrama_mermaid: "sequenceDiagram", autorrevisao: {tentada: true, aplicada: false, avisos_antes: 1, avisos_depois: 1}}
+        var legado = {titulo: "Contexto antigo", diagram_type: "c4-context", descricao: "", descricao_fontes: ["gap"], diagrama_mermaid: "flowchart LR"}
+        ArtifactData.write(id, "diagramas/login.html", seq)
+        fs.write(Paths.artifact(id, "diagramas/login.html"), "<html></html>")
+        ArtifactData.write(id, "diagramas/contexto-antigo.html", legado)
+        fs.write(Paths.artifact(id, "diagramas/contexto-antigo.html"), "<html></html>")
+
+        are_equal(ArtifactCommit.model_views(id, ModelViewsFixtures.modelo("Loja", "API")), ["contexto-de-sistema-loja", "conteineres-loja", "login"])
+        is_false(fs.exists(Paths.artifact(id, "diagramas/contexto-antigo.html")))
+        is_true(json.parse(fs.read(Paths.artifact(id, "diagramas/conteineres-loja.json"))).derivado_do_modelo)
+        is_true(json.parse(fs.read(Paths.artifact(id, "diagramas/login.json"))).autorrevisao.tentada)
+
+        // Renomear o sistema troca o slug das visoes: as antigas saem.
+        ArtifactCommit.model_views(id, ModelViewsFixtures.modelo("Mercado", "API de Pedidos"))
+        is_false(fs.exists(Paths.artifact(id, "diagramas/conteineres-loja.html")))
+        is_true(fs.read(Paths.artifact(id, "diagramas/conteineres-mercado.html")).contains("API de Pedidos"))
+        are_equal(dir.list(Paths.artifact(id, "diagramas")).filter((p) -> p.ends_with(".html")).size(), 3)
+        Fixture.drop(id)
+    }
+
+    describe regenerating_adrs_replaces_the_previous_batch {
+        var id = Fixture.project("spec-test-commit-adr")
+        var decision = {
+            titulo: "Banco", status: "aceita", contexto_e_problema: "y", contexto_fontes: ["gap"],
+            decisao_final: {opcao_escolhida: "x", justificativa: "y", fontes: ["gap"]},
+            consequencias_positivas: [], consequencias_negativas: [],
+            fatores_decisao: [], opcoes_consideradas: [], opcoes_pros_contras: [], links: [],
+        }
+        var draft = {data: {decisions: [decision, decision]}, tokens_in: 1, tokens_out: 2}
+        ArtifactCommit.adr(id, draft)
+        var result = ArtifactCommit.adr(id, draft)
+        are_equal(result.written, ["ADR-001-banco", "ADR-002-banco"])
+        are_equal(dir.list(Paths.artifact(id, "adr")).filter((p) -> p.ends_with(".html")).size(), 2)
+        Fixture.drop(id)
+    }
+
+    // Regerar o modelo (a LLM nao escreve `detalhes`) mantem as visoes
+    // detalhadas do modelo gravado.
+    describe regenerating_the_model_keeps_the_saved_details {
+        var id = Fixture.project("spec-test-commit-modelo-detalhes")
+        ArtifactData.write(id, "modelo.html", {sistema: {nome: "Loja", descricao: "", fontes: ["gap"]}, detalhes: [{id: "DET-001", tipo: "c4-component", titulo: "", descricao: "", fontes: ["gap"], origem: {visao: "conteineres", elemento: "api", nome: "API"}, fronteiras: [], elementos: [], relacoes: []}]})
+        var novo = {sistema: {nome: "Loja", descricao: "", fontes: ["gap"]}, contexto: {elementos: [], relacoes: []}, conteineres: {fronteiras: [], elementos: [], relacoes: []}, gaps: []}
+        ArtifactCommit.modelo(id, {data: novo, tokens_in: 1, tokens_out: 1})
+        var gravado = json.parse(fs.read(Paths.artifact(id, "modelo.json")))
+        are_equal(gravado.detalhes.size(), 1)
+        are_equal(gravado.detalhes[0].id, "DET-001")
+        is_true(fs.read(Paths.artifact(id, "modelo.html")).contains("não existe mais"))
+        Fixture.drop(id)
+    }
+
+    describe features_writes_the_dependency_map_with_the_codes_it_mints {
+        var id = Fixture.project("spec-test-commit-features")
+        var mapa = {
+            features: [
+                {feature_codigo: "FT001", feature_titulo: "Base", depende_de: []},
+                {feature_codigo: "FT002", feature_titulo: "Consumo", depende_de: [{feature_codigo: "FT001", justificativa: "usa a base", fontes: ["ADR-001"]}]},
+            ],
+            ordem_execucao: [{feature_codigo: "FT001", feature_titulo: "Base"}, {feature_codigo: "FT002", feature_titulo: "Consumo"}],
+            diagrama_mermaid: "graph LR\nFT001 --> FT002",
+            gaps: [],
+        }
+        var feature = {
+            titulo: "Base", tipo_item: "enabler", subtipo_enabler: "infraestrutura", classificacao_fontes: ["NFR-001"],
+            hipotese_beneficio: "h", hipotese_beneficio_fontes: ["NFR-001"],
+            medicao_beneficio: {metrica: "m", baseline: "", meta: "x", janela: "30 dias", guardrails: [], fontes: []},
+            itens_habilitados: [], resumo: "r", resumo_fontes: ["NFR-001"], objetivo: "o", objetivo_fontes: ["NFR-001"],
+            personas: [], em_escopo: [], fora_escopo: [], regras_negocio: [], interacoes_entidades_dados: [],
+            criterios_aceite: [{texto: "c", fontes: ["NFR-001"]}], historias_propostas: [], dependencias_integridade: [],
+            dependencias_sistema: [], gaps: [], questoes_abertas: [],
+        }
+        var second = feature
+        second["titulo"] = "Consumo"
+        var result = ArtifactCommit.features(id, {data: {features: [feature, second], dependencias: mapa}, tokens_in: 1, tokens_out: 2})
+        are_equal(result.written, ["FT001-base", "FT002-consumo"])
+        is_true(fs.read(Paths.artifact(id, "dependencias.html")).contains("usa a base"))
+        are_equal(json.parse(fs.read(Paths.artifact(id, "dependencias.json"))).ordem_execucao[1].feature_codigo, "FT002")
+        ArtifactCommit.features(id, {data: {features: [feature]}, tokens_in: 1, tokens_out: 2})
+        is_false(fs.exists(Paths.artifact(id, "dependencias.html")))
+        is_false(fs.exists(Paths.artifact(id, "dependencias.json")))
+        Fixture.drop(id)
+    }
+
+    describe single_writes_json_then_the_page_with_its_footer {
+        var id = Fixture.project("spec-test-commit-single")
+        var result = ArtifactCommit.single(id, "dependencias", "Mapa", "<p>corpo</p>", {data: {x: 1}, tokens_in: 7, tokens_out: 8})
+        are_equal(result.path, "artifacts/dependencias.html")
+        are_equal(json.parse(fs.read(Paths.artifact(id, "dependencias.json"))).x, 1)
+        is_true(fs.read(Paths.artifact(id, "dependencias.html")).contains("7 → 8 tokens"))
+        Fixture.drop(id)
+    }
+}

@@ -1,0 +1,281 @@
+{
+  "data": "2026-10-07",
+  "commit_base": "9c5678c83a9e52f9130d8a00718986cc60c81988",
+  "observacao": "Hashes do conteudo efetivamente analisado; nao sao assinaturas de autoria nem prova de data de invencao. O PDF e o runtime embarcado estavam fora do estado limpo do commit.",
+  "arquivos": [
+    {
+      "arquivo": "AGENTS.md",
+      "bytes": 774,
+      "sha256": "047b9a813a58eae70f066857521dbda6f4dc0bf182edb521852b1a1512315d60",
+      "copia_congelada": "code/AGENTS.md"
+    },
+    {
+      "arquivo": "README.md",
+      "bytes": 10433,
+      "sha256": "558a541e7a1c6316ca005e33b9b3e9115cb1b22f56b15ca6bef596edbf7f75cc",
+      "copia_congelada": "code/README.md"
+    },
+    {
+      "arquivo": "app/app_test.go",
+      "bytes": 16821,
+      "sha256": "2eef98135074b9917c6b7943cb52bac4001107cdae6d54d7ebd571397688150e",
+      "copia_congelada": "code/app/app_test.go"
+    },
+    {
+      "arquivo": "app/embedded/bin/mhl-darwin-arm64",
+      "bytes": 9826914,
+      "sha256": "cdc73e4fe37c49c98974e6d7ae60b7f0d867d6515c5f496e33bca6c5fca63786"
+    },
+    {
+      "arquivo": "app/frontend/src/artifacts.js",
+      "bytes": 18787,
+      "sha256": "8023e01ae759dd84b8cb9dc59d579bb6c512da2e49fd40dd8e6a0c7bedae9679",
+      "copia_congelada": "code/app/frontend/src/artifacts.js"
+    },
+    {
+      "arquivo": "app/frontend/src/checkpoint-recovery.js",
+      "bytes": 2836,
+      "sha256": "0f6d1f7034bfd9570d161fbdfa2dbbf1c1011ce63ef2b8db2a9c7989e103766f",
+      "copia_congelada": "code/app/frontend/src/checkpoint-recovery.js"
+    },
+    {
+      "arquivo": "app/frontend/src/views/tab-artefatos.js",
+      "bytes": 153402,
+      "sha256": "ffcee732025549d7f3f1d80fc437890f6117695440124ac89b5ad801dd5ac5bf",
+      "copia_congelada": "code/app/frontend/src/views/tab-artefatos.js"
+    },
+    {
+      "arquivo": "app/mhlbridge/mhlbridge.go",
+      "bytes": 37958,
+      "sha256": "9174f15d044763d4a06c44e36148ce32738645b4a8948ee4847d1b4c03a2584b",
+      "copia_congelada": "code/app/mhlbridge/mhlbridge.go"
+    },
+    {
+      "arquivo": "app/project_transfer.go",
+      "bytes": 17356,
+      "sha256": "30c98c4b76fae46023c3554fe6f99346faefc5481d7f412e0da283c7d944faa5",
+      "copia_congelada": "code/app/project_transfer.go"
+    },
+    {
+      "arquivo": "app/project_transfer_test.go",
+      "bytes": 10106,
+      "sha256": "31ab63e01e416cd5d07390848a7bb6c57b8865c5974c2be1a5c4c25b2e7069af",
+      "copia_congelada": "code/app/project_transfer_test.go"
+    },
+    {
+      "arquivo": "docs/IT26019 - Argumentos Tecnicos.pdf",
+      "bytes": 348590,
+      "sha256": "81dcc35b704522f8317e0d25c3ac8f5d435f3924806fcaf02918a19a74ca8f97"
+    },
+    {
+      "arquivo": "workflows/artifact_flow/artifact_flow.mh",
+      "bytes": 7277,
+      "sha256": "595766b1a26312dc9c94e3db66118cd4506794da8b49db0061ebba43ee63fca2",
+      "copia_congelada": "code/workflows/artifact_flow/artifact_flow.mh"
+    },
+    {
+      "arquivo": "workflows/delivery/delivery.mh",
+      "bytes": 7225,
+      "sha256": "b3dc612204f5478eb21ff5221631b81287b11efb3b8df832e70c1713241779d7",
+      "copia_congelada": "code/workflows/delivery/delivery.mh"
+    },
+    {
+      "arquivo": "workflows/discovery/discovery.mh",
+      "bytes": 6102,
+      "sha256": "27efdae492cb1e397376519880c559309c34ccccc202d7f1c3af367bf2195200",
+      "copia_congelada": "code/workflows/discovery/discovery.mh"
+    },
+    {
+      "arquivo": "workflows/discovery/discovery_artifacts.mh",
+      "bytes": 21505,
+      "sha256": "01801afb73c88a0645fc3a71dabd365afdb1df182e7ad6a8ebd37817a5c1b0f6",
+      "copia_congelada": "code/workflows/discovery/discovery_artifacts.mh"
+    },
+    {
+      "arquivo": "workflows/shared/agents/agents.mh",
+      "bytes": 17495,
+      "sha256": "bdd55f3a675779b73a8161e99a3432c6663d3ea8c5ac15acfac527b341828270",
+      "copia_congelada": "code/workflows/shared/agents/agents.mh"
+    },
+    {
+      "arquivo": "workflows/shared/artifacts/activity_log.mh",
+      "bytes": 1488,
+      "sha256": "82802f3c270fb43fec5bebe58715253a42ae06994e59fe03e47103d0c39abd2a",
+      "copia_congelada": "code/workflows/shared/artifacts/activity_log.mh"
+    },
+    {
+      "arquivo": "workflows/shared/artifacts/arch_conformance.mh",
+      "bytes": 15540,
+      "sha256": "9738ca35821c6c0dea4c0ad1b73c4f4b91960bbedd821e28a75c21502a6d3d4d",
+      "copia_congelada": "code/workflows/shared/artifacts/arch_conformance.mh"
+    },
+    {
+      "arquivo": "workflows/shared/artifacts/arch_model.mh",
+      "bytes": 29875,
+      "sha256": "a41921596e11d22cf2f8129a170cef1578ef1c9fd443a604b4ba2ab3c6027862",
+      "copia_congelada": "code/workflows/shared/artifacts/arch_model.mh"
+    },
+    {
+      "arquivo": "workflows/shared/artifacts/artifact_checks.mh",
+      "bytes": 3652,
+      "sha256": "9ddabeffe231fb905031946eba73cf89cdcb75bbe8c39bf09c4c6b999e029761",
+      "copia_congelada": "code/workflows/shared/artifacts/artifact_checks.mh"
+    },
+    {
+      "arquivo": "workflows/shared/artifacts/artifact_commit.mh",
+      "bytes": 18860,
+      "sha256": "a88238a50bac0e4d03ca9ed775e02f7e9f503c43a3c241e76ca75f47b8e885e1",
+      "copia_congelada": "code/workflows/shared/artifacts/artifact_commit.mh"
+    },
+    {
+      "arquivo": "workflows/shared/artifacts/artifact_data.mh",
+      "bytes": 1504,
+      "sha256": "d8432af3428c056985a65848eed51e5c2d7d3d360c9caa9b731b7d689ef06e7d",
+      "copia_congelada": "code/workflows/shared/artifacts/artifact_data.mh"
+    },
+    {
+      "arquivo": "workflows/shared/artifacts/artifact_id.mh",
+      "bytes": 4935,
+      "sha256": "b673a9e4dd9249f026c544c9d65f82c75b113d8a96cb7d868251b8096d46367e",
+      "copia_congelada": "code/workflows/shared/artifacts/artifact_id.mh"
+    },
+    {
+      "arquivo": "workflows/shared/artifacts/auto_review.mh",
+      "bytes": 9884,
+      "sha256": "858d3e1e1c421215a427dc51a6e40a821187e3bff5fe506ca1d10e6729d0a0ac",
+      "copia_congelada": "code/workflows/shared/artifacts/auto_review.mh"
+    },
+    {
+      "arquivo": "workflows/shared/artifacts/backlog_rules.mh",
+      "bytes": 21950,
+      "sha256": "8be7f0dfc6f095b9d6223370fa60c084a6f26914ad654dd82589540e75cd092f",
+      "copia_congelada": "code/workflows/shared/artifacts/backlog_rules.mh"
+    },
+    {
+      "arquivo": "workflows/shared/artifacts/changes_log.mh",
+      "bytes": 6366,
+      "sha256": "8bea56376030166bd17f0d991663c71341d441e890c5e4d85c996c1950d15c79",
+      "copia_congelada": "code/workflows/shared/artifacts/changes_log.mh"
+    },
+    {
+      "arquivo": "workflows/shared/artifacts/common_drafts.mh",
+      "bytes": 14490,
+      "sha256": "2b4242de1274afdab50756cc9a9a45ebc10d5b36c75b687801584b45f34f13af",
+      "copia_congelada": "code/workflows/shared/artifacts/common_drafts.mh"
+    },
+    {
+      "arquivo": "workflows/shared/artifacts/context.mh",
+      "bytes": 16511,
+      "sha256": "09a3ab14aac3012d7bb81d107caafc721d61e507d240d1b640fc97b6e26aa0f4",
+      "copia_congelada": "code/workflows/shared/artifacts/context.mh"
+    },
+    {
+      "arquivo": "workflows/shared/artifacts/context_slice.mh",
+      "bytes": 10629,
+      "sha256": "c0f9d282475aee05905936b8d4444b6cca335baaa6d47ff3eab5c4697bfdbc3f",
+      "copia_congelada": "code/workflows/shared/artifacts/context_slice.mh"
+    },
+    {
+      "arquivo": "workflows/shared/artifacts/feature_review.mh",
+      "bytes": 7700,
+      "sha256": "1568491472ff2a1a06a2a28806d3918305124e84e5ed5b0b525ad956e98e0767",
+      "copia_congelada": "code/workflows/shared/artifacts/feature_review.mh"
+    },
+    {
+      "arquivo": "workflows/shared/artifacts/handoff.mh",
+      "bytes": 30908,
+      "sha256": "71be8000c2835a5592bd38f195e6d7618bda9438c6305cddd548b7e1e3c373f6",
+      "copia_congelada": "code/workflows/shared/artifacts/handoff.mh"
+    },
+    {
+      "arquivo": "workflows/shared/artifacts/historia_spec.mh",
+      "bytes": 41616,
+      "sha256": "d220d59a359082ca155096200b4da1884089b989e98f7fc216e94d8ac25eb1c8",
+      "copia_congelada": "code/workflows/shared/artifacts/historia_spec.mh"
+    },
+    {
+      "arquivo": "workflows/shared/artifacts/plano_model.mh",
+      "bytes": 15782,
+      "sha256": "aae96847625b0f2c30b9d0c766d74f62e3ac35e71253aaf320e5cd5ac03f12ab",
+      "copia_congelada": "code/workflows/shared/artifacts/plano_model.mh"
+    },
+    {
+      "arquivo": "workflows/shared/artifacts/readiness.mh",
+      "bytes": 9198,
+      "sha256": "cca81f3dbcd0edcbdff43106d8acd571dd6fac3a31ed14d7bce2d8545663c1ac",
+      "copia_congelada": "code/workflows/shared/artifacts/readiness.mh"
+    },
+    {
+      "arquivo": "workflows/shared/artifacts/require.mh",
+      "bytes": 1703,
+      "sha256": "d1654887d84d8b322ca54afe9c52004ee0e168535610643888591d66cf42e787",
+      "copia_congelada": "code/workflows/shared/artifacts/require.mh"
+    },
+    {
+      "arquivo": "workflows/shared/core/paths.mh",
+      "bytes": 4444,
+      "sha256": "2714ffe001a2ed7a078c6979e3ac4756ef5baaab383f927937f4da4b691fe195",
+      "copia_congelada": "code/workflows/shared/core/paths.mh"
+    },
+    {
+      "arquivo": "workflows/shared/radahn/radahn_assess.mh",
+      "bytes": 3998,
+      "sha256": "4e0a2c8732b76e2c0ad592ee43ba85eae9746ecf0fd9e08a580f46e4e0dd1d9e",
+      "copia_congelada": "code/workflows/shared/radahn/radahn_assess.mh"
+    },
+    {
+      "arquivo": "workflows/shared/radahn/radahn_model.mh",
+      "bytes": 11474,
+      "sha256": "0204e3a7071a128d6bfb35aa96492a72dd19bad7b2e52af8c6c88f682e26b5c5",
+      "copia_congelada": "code/workflows/shared/radahn/radahn_model.mh"
+    },
+    {
+      "arquivo": "workflows/shared/wiki/literal_blocks.mh",
+      "bytes": 2024,
+      "sha256": "dfda04ac554107b161d7621582768158186130e10cc0ad4db3a7ae6f0804799f",
+      "copia_congelada": "code/workflows/shared/wiki/literal_blocks.mh"
+    },
+    {
+      "arquivo": "workflows/shared/wiki/repo_snapshot.mh",
+      "bytes": 30912,
+      "sha256": "53fdfd147c72bdc63428316194dd29b8b1fb9e95b9ebb8ac7fc96614746cb541",
+      "copia_congelada": "code/workflows/shared/wiki/repo_snapshot.mh"
+    },
+    {
+      "arquivo": "workflows/shared/wiki/wiki_pages.mh",
+      "bytes": 5855,
+      "sha256": "f451429087b026c40561239792497fef86f8ba91262a5e75e662af1a6335e2f3",
+      "copia_congelada": "code/workflows/shared/wiki/wiki_pages.mh"
+    },
+    {
+      "arquivo": "workflows/wiki/actions.mh",
+      "bytes": 11542,
+      "sha256": "dcad2ebdb1545c26a35fd024c5333162c9104373506137072734a7aeda452af0",
+      "copia_congelada": "code/workflows/wiki/actions.mh"
+    },
+    {
+      "arquivo": "workflows/wiki/wiki.mh",
+      "bytes": 14932,
+      "sha256": "bcdec65a9058f9b16b73661557b490bd922cc9e63f26b8c476ba42a68471efc8",
+      "copia_congelada": "code/workflows/wiki/wiki.mh"
+    },
+    {
+      "arquivo": "workflows/work_item/actions.mh",
+      "bytes": 27120,
+      "sha256": "0d89fac0b0f06a7c2c216457b60e008fb28a7f26a136cc43b89be2e65c20a655",
+      "copia_congelada": "code/workflows/work_item/actions.mh"
+    }
+  ],
+  "runtime_mhl_cli": {
+    "versao": "1.5.0-alpha.2",
+    "sha256": "cdc73e4fe37c49c98974e6d7ae60b7f0d867d6515c5f496e33bca6c5fca63786"
+  },
+  "congelamento": {
+    "data": "2026-10-07",
+    "diretorio": "code/",
+    "escopo": "42 arquivos citados por links na secao 10, incluindo AGENTS.md e README.md de apoio.",
+    "caminhos": "arquivo e relativo a raiz do repositorio; copia_congelada e relativa a pasta deste manifesto.",
+    "integridade": "Cada copia foi conferida contra o SHA-256 e o tamanho previamente registrados nesta analise.",
+    "arquivos": 42
+  }
+}

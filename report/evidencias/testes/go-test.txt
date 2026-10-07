@@ -1,0 +1,947 @@
+=== RUN   TestAddRawFile_HappyPathAndDedup
+2026/10/07 14:54:58 mhl bridge: usando mhl vendorizado em /var/folders/x0/113y39ld2sz4xqvc814d7k280000gn/T/TestAddRawFile_HappyPathAndDedup3216475517/001/embedded/bin/mhl (sha256 cdc73e4fe37c49c98974e6d7ae60b7f0d867d6515c5f496e33bca6c5fca63786)
+2026/10/07 14:54:59 mhl bridge: usando pdftotext vendorizado em /var/folders/x0/113y39ld2sz4xqvc814d7k280000gn/T/TestAddRawFile_HappyPathAndDedup3216475517/001/embedded/bin/pdftotext (sha256 a96840a35c8a57e3cff578b3e8758bc744a94bed7e288a88309df89de6965261)
+2026/10/07 14:54:59 mhl bridge: arquivos prontos em 15ms
+2026/10/07 14:54:59 mhlbridge: devin resolvido em /Users/yanjustino/.local/bin/devin
+2026/10/07 14:54:59 mhlbridge: codex resolvido em /Users/yanjustino/.local/bin/codex
+2026/10/07 14:54:59 mhlbridge: claude resolvido em /Users/yanjustino/.local/bin/claude
+2026/10/07 14:55:05 mhl stderr: mhl serve mcp --http: 6 tool(s) from /Users/yanjustino/dev/senpai.info.nosync/workflows on http://127.0.0.1:64182/mcp
+2026/10/07 14:55:05 mhl bridge: ready em 6.634s (total 6.65s), serving /Users/yanjustino/dev/senpai.info.nosync/workflows (state-dir: /var/folders/x0/113y39ld2sz4xqvc814d7k280000gn/T/TestAddRawFile_HappyPathAndDedup3216475517/001/state, data-dir: /var/folders/x0/113y39ld2sz4xqvc814d7k280000gn/T/TestAddRawFile_HappyPathAndDedup3216475517/001/data, codex-cwd: /var/folders/x0/113y39ld2sz4xqvc814d7k280000gn/T/TestAddRawFile_HappyPathAndDedup3216475517/001/codex-cwd)
+2026/10/07 14:55:05 mhl stderr: {"time":"2026-10-07T14:55:05.636977-03:00","level":"INFO","msg":"run started","component":"mcpserver","runId":"0221a0388ca100a48524e7e6a7045ed5","owner":"95ff79ffe0d403991803b29628f17f7105837d71cff7f95d9120b5d424a8cfa9","tool":"WorkItem","resume":false}
+2026/10/07 14:55:05 mhl stderr: session: 0221a0388ca100a48524e7e6a7045ed5
+2026/10/07 14:55:05 mhl stderr: step: Dispatch
+2026/10/07 14:55:05 mhl stderr: step: Create
+2026/10/07 14:55:05 mhl stderr: step: Done
+2026/10/07 14:55:05 mhl stderr: {"time":"2026-10-07T14:55:05.73937-03:00","level":"INFO","msg":"run completed","component":"mcpserver","runId":"0221a0388ca100a48524e7e6a7045ed5","owner":"95ff79ffe0d403991803b29628f17f7105837d71cff7f95d9120b5d424a8cfa9","tool":"WorkItem","durationMs":102,"steps":3}
+2026/10/07 14:55:05 mhl stderr: {"time":"2026-10-07T14:55:05.840901-03:00","level":"INFO","msg":"draining","component":"mcpserver","timeout":"0s","cancelImmediately":true}
+--- PASS: TestAddRawFile_HappyPathAndDedup (6.86s)
+=== RUN   TestAddRawFile_RejectsInvalidProjectID
+2026/10/07 14:55:05 mhl bridge: usando mhl vendorizado em /var/folders/x0/113y39ld2sz4xqvc814d7k280000gn/T/TestAddRawFile_RejectsInvalidProjectID501045935/001/embedded/bin/mhl (sha256 cdc73e4fe37c49c98974e6d7ae60b7f0d867d6515c5f496e33bca6c5fca63786)
+2026/10/07 14:55:05 mhl bridge: usando pdftotext vendorizado em /var/folders/x0/113y39ld2sz4xqvc814d7k280000gn/T/TestAddRawFile_RejectsInvalidProjectID501045935/001/embedded/bin/pdftotext (sha256 a96840a35c8a57e3cff578b3e8758bc744a94bed7e288a88309df89de6965261)
+2026/10/07 14:55:05 mhl bridge: arquivos prontos em 10ms
+2026/10/07 14:55:05 mhlbridge: devin resolvido em /Users/yanjustino/.local/bin/devin
+2026/10/07 14:55:05 mhlbridge: codex resolvido em /Users/yanjustino/.local/bin/codex
+2026/10/07 14:55:05 mhlbridge: claude resolvido em /Users/yanjustino/.local/bin/claude
+2026/10/07 14:55:12 mhl stderr: mhl serve mcp --http: 6 tool(s) from /Users/yanjustino/dev/senpai.info.nosync/workflows on http://127.0.0.1:64218/mcp
+2026/10/07 14:55:12 mhl bridge: ready em 6.257s (total 6.267s), serving /Users/yanjustino/dev/senpai.info.nosync/workflows (state-dir: /var/folders/x0/113y39ld2sz4xqvc814d7k280000gn/T/TestAddRawFile_RejectsInvalidProjectID501045935/001/state, data-dir: /var/folders/x0/113y39ld2sz4xqvc814d7k280000gn/T/TestAddRawFile_RejectsInvalidProjectID501045935/001/data, codex-cwd: /var/folders/x0/113y39ld2sz4xqvc814d7k280000gn/T/TestAddRawFile_RejectsInvalidProjectID501045935/001/codex-cwd)
+2026/10/07 14:55:12 mhl stderr: {"time":"2026-10-07T14:55:12.114294-03:00","level":"INFO","msg":"draining","component":"mcpserver","timeout":"0s","cancelImmediately":true}
+--- PASS: TestAddRawFile_RejectsInvalidProjectID (6.27s)
+=== RUN   TestAddRawText_WritesMarkdownAndDedups
+2026/10/07 14:55:12 mhl bridge: usando mhl vendorizado em /var/folders/x0/113y39ld2sz4xqvc814d7k280000gn/T/TestAddRawText_WritesMarkdownAndDedups8059367/001/embedded/bin/mhl (sha256 cdc73e4fe37c49c98974e6d7ae60b7f0d867d6515c5f496e33bca6c5fca63786)
+2026/10/07 14:55:12 mhl bridge: usando pdftotext vendorizado em /var/folders/x0/113y39ld2sz4xqvc814d7k280000gn/T/TestAddRawText_WritesMarkdownAndDedups8059367/001/embedded/bin/pdftotext (sha256 a96840a35c8a57e3cff578b3e8758bc744a94bed7e288a88309df89de6965261)
+2026/10/07 14:55:12 mhl bridge: arquivos prontos em 7ms
+2026/10/07 14:55:12 mhlbridge: devin resolvido em /Users/yanjustino/.local/bin/devin
+2026/10/07 14:55:12 mhlbridge: codex resolvido em /Users/yanjustino/.local/bin/codex
+2026/10/07 14:55:12 mhlbridge: claude resolvido em /Users/yanjustino/.local/bin/claude
+2026/10/07 14:55:18 mhl stderr: mhl serve mcp --http: 6 tool(s) from /Users/yanjustino/dev/senpai.info.nosync/workflows on http://127.0.0.1:64233/mcp
+2026/10/07 14:55:18 mhl bridge: ready em 6.207s (total 6.214s), serving /Users/yanjustino/dev/senpai.info.nosync/workflows (state-dir: /var/folders/x0/113y39ld2sz4xqvc814d7k280000gn/T/TestAddRawText_WritesMarkdownAndDedups8059367/001/state, data-dir: /var/folders/x0/113y39ld2sz4xqvc814d7k280000gn/T/TestAddRawText_WritesMarkdownAndDedups8059367/001/data, codex-cwd: /var/folders/x0/113y39ld2sz4xqvc814d7k280000gn/T/TestAddRawText_WritesMarkdownAndDedups8059367/001/codex-cwd)
+2026/10/07 14:55:18 mhl stderr: {"time":"2026-10-07T14:55:18.331569-03:00","level":"INFO","msg":"run started","component":"mcpserver","runId":"0a0e12b5741a96daa260063cb5e413e6","owner":"ccec3d46d5fc8590e1d2f611a5c7704e539566f5d20d39b5075ca5e03f3a1ea5","tool":"WorkItem","resume":false}
+2026/10/07 14:55:18 mhl stderr: session: 0a0e12b5741a96daa260063cb5e413e6
+2026/10/07 14:55:18 mhl stderr: step: Dispatch
+2026/10/07 14:55:18 mhl stderr: step: Create
+2026/10/07 14:55:18 mhl stderr: step: Done
+2026/10/07 14:55:18 mhl stderr: {"time":"2026-10-07T14:55:18.437562-03:00","level":"INFO","msg":"run completed","component":"mcpserver","runId":"0a0e12b5741a96daa260063cb5e413e6","owner":"ccec3d46d5fc8590e1d2f611a5c7704e539566f5d20d39b5075ca5e03f3a1ea5","tool":"WorkItem","durationMs":106,"steps":3}
+2026/10/07 14:55:18 mhl stderr: {"time":"2026-10-07T14:55:18.535354-03:00","level":"INFO","msg":"draining","component":"mcpserver","timeout":"0s","cancelImmediately":true}
+--- PASS: TestAddRawText_WritesMarkdownAndDedups (6.42s)
+=== RUN   TestAddRawText_RejectsInvalidInput
+2026/10/07 14:55:18 mhl bridge: usando mhl vendorizado em /var/folders/x0/113y39ld2sz4xqvc814d7k280000gn/T/TestAddRawText_RejectsInvalidInput2424657964/001/embedded/bin/mhl (sha256 cdc73e4fe37c49c98974e6d7ae60b7f0d867d6515c5f496e33bca6c5fca63786)
+2026/10/07 14:55:18 mhl bridge: usando pdftotext vendorizado em /var/folders/x0/113y39ld2sz4xqvc814d7k280000gn/T/TestAddRawText_RejectsInvalidInput2424657964/001/embedded/bin/pdftotext (sha256 a96840a35c8a57e3cff578b3e8758bc744a94bed7e288a88309df89de6965261)
+2026/10/07 14:55:18 mhl bridge: arquivos prontos em 8ms
+2026/10/07 14:55:18 mhlbridge: devin resolvido em /Users/yanjustino/.local/bin/devin
+2026/10/07 14:55:18 mhlbridge: codex resolvido em /Users/yanjustino/.local/bin/codex
+2026/10/07 14:55:18 mhlbridge: claude resolvido em /Users/yanjustino/.local/bin/claude
+2026/10/07 14:55:24 mhl stderr: mhl serve mcp --http: 6 tool(s) from /Users/yanjustino/dev/senpai.info.nosync/workflows on http://127.0.0.1:64256/mcp
+2026/10/07 14:55:24 mhl bridge: ready em 6.422s (total 6.43s), serving /Users/yanjustino/dev/senpai.info.nosync/workflows (state-dir: /var/folders/x0/113y39ld2sz4xqvc814d7k280000gn/T/TestAddRawText_RejectsInvalidInput2424657964/001/state, data-dir: /var/folders/x0/113y39ld2sz4xqvc814d7k280000gn/T/TestAddRawText_RejectsInvalidInput2424657964/001/data, codex-cwd: /var/folders/x0/113y39ld2sz4xqvc814d7k280000gn/T/TestAddRawText_RejectsInvalidInput2424657964/001/codex-cwd)
+2026/10/07 14:55:24 mhl stderr: {"time":"2026-10-07T14:55:24.971826-03:00","level":"INFO","msg":"run started","component":"mcpserver","runId":"6857b423212f7e0989f9d89410074c1e","owner":"7ec0b1b499e6bce2ee2a31b47490283965f63feec62e3640f5d2e65b51d9bac3","tool":"WorkItem","resume":false}
+2026/10/07 14:55:24 mhl stderr: session: 6857b423212f7e0989f9d89410074c1e
+2026/10/07 14:55:25 mhl stderr: step: Dispatch
+2026/10/07 14:55:25 mhl stderr: step: Create
+2026/10/07 14:55:25 mhl stderr: step: Done
+2026/10/07 14:55:25 mhl stderr: {"time":"2026-10-07T14:55:25.076351-03:00","level":"INFO","msg":"run completed","component":"mcpserver","runId":"6857b423212f7e0989f9d89410074c1e","owner":"7ec0b1b499e6bce2ee2a31b47490283965f63feec62e3640f5d2e65b51d9bac3","tool":"WorkItem","durationMs":104,"steps":3}
+2026/10/07 14:55:25 mhl stderr: {"time":"2026-10-07T14:55:25.174972-03:00","level":"INFO","msg":"draining","component":"mcpserver","timeout":"0s","cancelImmediately":true}
+--- PASS: TestAddRawText_RejectsInvalidInput (6.64s)
+=== RUN   TestListAndReadProjectDir_HappyPath
+2026/10/07 14:55:25 mhl bridge: usando mhl vendorizado em /var/folders/x0/113y39ld2sz4xqvc814d7k280000gn/T/TestListAndReadProjectDir_HappyPath3689440438/001/embedded/bin/mhl (sha256 cdc73e4fe37c49c98974e6d7ae60b7f0d867d6515c5f496e33bca6c5fca63786)
+2026/10/07 14:55:25 mhl bridge: usando pdftotext vendorizado em /var/folders/x0/113y39ld2sz4xqvc814d7k280000gn/T/TestListAndReadProjectDir_HappyPath3689440438/001/embedded/bin/pdftotext (sha256 a96840a35c8a57e3cff578b3e8758bc744a94bed7e288a88309df89de6965261)
+2026/10/07 14:55:25 mhl bridge: arquivos prontos em 8ms
+2026/10/07 14:55:25 mhlbridge: devin resolvido em /Users/yanjustino/.local/bin/devin
+2026/10/07 14:55:25 mhlbridge: codex resolvido em /Users/yanjustino/.local/bin/codex
+2026/10/07 14:55:25 mhlbridge: claude resolvido em /Users/yanjustino/.local/bin/claude
+2026/10/07 14:55:31 mhl stderr: mhl serve mcp --http: 6 tool(s) from /Users/yanjustino/dev/senpai.info.nosync/workflows on http://127.0.0.1:64273/mcp
+2026/10/07 14:55:31 mhl bridge: ready em 6.445s (total 6.454s), serving /Users/yanjustino/dev/senpai.info.nosync/workflows (state-dir: /var/folders/x0/113y39ld2sz4xqvc814d7k280000gn/T/TestListAndReadProjectDir_HappyPath3689440438/001/state, data-dir: /var/folders/x0/113y39ld2sz4xqvc814d7k280000gn/T/TestListAndReadProjectDir_HappyPath3689440438/001/data, codex-cwd: /var/folders/x0/113y39ld2sz4xqvc814d7k280000gn/T/TestListAndReadProjectDir_HappyPath3689440438/001/codex-cwd)
+2026/10/07 14:55:31 mhl stderr: {"time":"2026-10-07T14:55:31.634128-03:00","level":"INFO","msg":"run started","component":"mcpserver","runId":"b9b64e4ea907f76f5f03006ebe92d100","owner":"7fc32d12da7c295fec762704555fa52b97c30711afd43703aee7405d9d227d24","tool":"WorkItem","resume":false}
+2026/10/07 14:55:31 mhl stderr: session: b9b64e4ea907f76f5f03006ebe92d100
+2026/10/07 14:55:31 mhl stderr: step: Dispatch
+2026/10/07 14:55:31 mhl stderr: step: Create
+2026/10/07 14:55:31 mhl stderr: step: Done
+2026/10/07 14:55:31 mhl stderr: {"time":"2026-10-07T14:55:31.734232-03:00","level":"INFO","msg":"run completed","component":"mcpserver","runId":"b9b64e4ea907f76f5f03006ebe92d100","owner":"7fc32d12da7c295fec762704555fa52b97c30711afd43703aee7405d9d227d24","tool":"WorkItem","durationMs":100,"steps":3}
+2026/10/07 14:55:31 mhl stderr: {"time":"2026-10-07T14:55:31.838014-03:00","level":"INFO","msg":"draining","component":"mcpserver","timeout":"0s","cancelImmediately":true}
+--- PASS: TestListAndReadProjectDir_HappyPath (6.66s)
+=== RUN   TestListProjectDir_MissingDirReturnsEmptyArray
+2026/10/07 14:55:31 mhl bridge: usando mhl vendorizado em /var/folders/x0/113y39ld2sz4xqvc814d7k280000gn/T/TestListProjectDir_MissingDirReturnsEmptyArray1132346006/001/embedded/bin/mhl (sha256 cdc73e4fe37c49c98974e6d7ae60b7f0d867d6515c5f496e33bca6c5fca63786)
+2026/10/07 14:55:31 mhl bridge: usando pdftotext vendorizado em /var/folders/x0/113y39ld2sz4xqvc814d7k280000gn/T/TestListProjectDir_MissingDirReturnsEmptyArray1132346006/001/embedded/bin/pdftotext (sha256 a96840a35c8a57e3cff578b3e8758bc744a94bed7e288a88309df89de6965261)
+2026/10/07 14:55:31 mhl bridge: arquivos prontos em 7ms
+2026/10/07 14:55:31 mhlbridge: devin resolvido em /Users/yanjustino/.local/bin/devin
+2026/10/07 14:55:31 mhlbridge: codex resolvido em /Users/yanjustino/.local/bin/codex
+2026/10/07 14:55:31 mhlbridge: claude resolvido em /Users/yanjustino/.local/bin/claude
+2026/10/07 14:55:38 mhl stderr: mhl serve mcp --http: 6 tool(s) from /Users/yanjustino/dev/senpai.info.nosync/workflows on http://127.0.0.1:64292/mcp
+2026/10/07 14:55:38 mhl bridge: ready em 6.268s (total 6.276s), serving /Users/yanjustino/dev/senpai.info.nosync/workflows (state-dir: /var/folders/x0/113y39ld2sz4xqvc814d7k280000gn/T/TestListProjectDir_MissingDirReturnsEmptyArray1132346006/001/state, data-dir: /var/folders/x0/113y39ld2sz4xqvc814d7k280000gn/T/TestListProjectDir_MissingDirReturnsEmptyArray1132346006/001/data, codex-cwd: /var/folders/x0/113y39ld2sz4xqvc814d7k280000gn/T/TestListProjectDir_MissingDirReturnsEmptyArray1132346006/001/codex-cwd)
+2026/10/07 14:55:38 mhl stderr: {"time":"2026-10-07T14:55:38.119626-03:00","level":"INFO","msg":"run started","component":"mcpserver","runId":"26599e90bac0f7feeead512d8ca08615","owner":"c514e66a27fdf0d86e7bfdd4a54576f2be27bd608ec2c37129462598ce9c2956","tool":"WorkItem","resume":false}
+2026/10/07 14:55:38 mhl stderr: session: 26599e90bac0f7feeead512d8ca08615
+2026/10/07 14:55:38 mhl stderr: step: Dispatch
+2026/10/07 14:55:38 mhl stderr: step: Create
+2026/10/07 14:55:38 mhl stderr: step: Done
+2026/10/07 14:55:38 mhl stderr: {"time":"2026-10-07T14:55:38.220369-03:00","level":"INFO","msg":"run completed","component":"mcpserver","runId":"26599e90bac0f7feeead512d8ca08615","owner":"c514e66a27fdf0d86e7bfdd4a54576f2be27bd608ec2c37129462598ce9c2956","tool":"WorkItem","durationMs":100,"steps":3}
+2026/10/07 14:55:38 mhl stderr: {"time":"2026-10-07T14:55:38.322724-03:00","level":"INFO","msg":"draining","component":"mcpserver","timeout":"0s","cancelImmediately":true}
+--- PASS: TestListProjectDir_MissingDirReturnsEmptyArray (6.48s)
+=== RUN   TestListProjectDir_SeedsMermaidAssetOnFirstArtifactsTouch
+2026/10/07 14:55:38 mhl bridge: usando mhl vendorizado em /var/folders/x0/113y39ld2sz4xqvc814d7k280000gn/T/TestListProjectDir_SeedsMermaidAssetOnFirstArtifactsTouch3085963763/001/embedded/bin/mhl (sha256 cdc73e4fe37c49c98974e6d7ae60b7f0d867d6515c5f496e33bca6c5fca63786)
+2026/10/07 14:55:38 mhl bridge: usando pdftotext vendorizado em /var/folders/x0/113y39ld2sz4xqvc814d7k280000gn/T/TestListProjectDir_SeedsMermaidAssetOnFirstArtifactsTouch3085963763/001/embedded/bin/pdftotext (sha256 a96840a35c8a57e3cff578b3e8758bc744a94bed7e288a88309df89de6965261)
+2026/10/07 14:55:38 mhl bridge: arquivos prontos em 9ms
+2026/10/07 14:55:38 mhlbridge: devin resolvido em /Users/yanjustino/.local/bin/devin
+2026/10/07 14:55:38 mhlbridge: codex resolvido em /Users/yanjustino/.local/bin/codex
+2026/10/07 14:55:38 mhlbridge: claude resolvido em /Users/yanjustino/.local/bin/claude
+2026/10/07 14:55:44 mhl stderr: mhl serve mcp --http: 6 tool(s) from /Users/yanjustino/dev/senpai.info.nosync/workflows on http://127.0.0.1:64314/mcp
+2026/10/07 14:55:44 mhl bridge: ready em 6.312s (total 6.321s), serving /Users/yanjustino/dev/senpai.info.nosync/workflows (state-dir: /var/folders/x0/113y39ld2sz4xqvc814d7k280000gn/T/TestListProjectDir_SeedsMermaidAssetOnFirstArtifactsTouch3085963763/001/state, data-dir: /var/folders/x0/113y39ld2sz4xqvc814d7k280000gn/T/TestListProjectDir_SeedsMermaidAssetOnFirstArtifactsTouch3085963763/001/data, codex-cwd: /var/folders/x0/113y39ld2sz4xqvc814d7k280000gn/T/TestListProjectDir_SeedsMermaidAssetOnFirstArtifactsTouch3085963763/001/codex-cwd)
+2026/10/07 14:55:44 mhl stderr: {"time":"2026-10-07T14:55:44.649279-03:00","level":"INFO","msg":"run started","component":"mcpserver","runId":"f0b70b5b1a3f3b9c1e7b34451f274efa","owner":"fc5bedd17a074616e7490259967c3da6fbcd5e7d70801a9ff689777af2e601e4","tool":"WorkItem","resume":false}
+2026/10/07 14:55:44 mhl stderr: session: f0b70b5b1a3f3b9c1e7b34451f274efa
+2026/10/07 14:55:44 mhl stderr: step: Dispatch
+2026/10/07 14:55:44 mhl stderr: step: Create
+2026/10/07 14:55:44 mhl stderr: step: Done
+2026/10/07 14:55:44 mhl stderr: {"time":"2026-10-07T14:55:44.75495-03:00","level":"INFO","msg":"run completed","component":"mcpserver","runId":"f0b70b5b1a3f3b9c1e7b34451f274efa","owner":"fc5bedd17a074616e7490259967c3da6fbcd5e7d70801a9ff689777af2e601e4","tool":"WorkItem","durationMs":105,"steps":3}
+2026/10/07 14:55:44 mhl stderr: {"time":"2026-10-07T14:55:44.867566-03:00","level":"INFO","msg":"draining","component":"mcpserver","timeout":"0s","cancelImmediately":true}
+--- PASS: TestListProjectDir_SeedsMermaidAssetOnFirstArtifactsTouch (6.54s)
+=== RUN   TestListProjectRunLogs_MissingDirReturnsEmptyArray
+2026/10/07 14:55:44 mhl bridge: usando mhl vendorizado em /var/folders/x0/113y39ld2sz4xqvc814d7k280000gn/T/TestListProjectRunLogs_MissingDirReturnsEmptyArray1022174032/001/embedded/bin/mhl (sha256 cdc73e4fe37c49c98974e6d7ae60b7f0d867d6515c5f496e33bca6c5fca63786)
+2026/10/07 14:55:44 mhl bridge: usando pdftotext vendorizado em /var/folders/x0/113y39ld2sz4xqvc814d7k280000gn/T/TestListProjectRunLogs_MissingDirReturnsEmptyArray1022174032/001/embedded/bin/pdftotext (sha256 a96840a35c8a57e3cff578b3e8758bc744a94bed7e288a88309df89de6965261)
+2026/10/07 14:55:44 mhl bridge: arquivos prontos em 7ms
+2026/10/07 14:55:44 mhlbridge: devin resolvido em /Users/yanjustino/.local/bin/devin
+2026/10/07 14:55:44 mhlbridge: codex resolvido em /Users/yanjustino/.local/bin/codex
+2026/10/07 14:55:44 mhlbridge: claude resolvido em /Users/yanjustino/.local/bin/claude
+2026/10/07 14:55:51 mhl stderr: mhl serve mcp --http: 6 tool(s) from /Users/yanjustino/dev/senpai.info.nosync/workflows on http://127.0.0.1:64332/mcp
+2026/10/07 14:55:51 mhl bridge: ready em 6.352s (total 6.359s), serving /Users/yanjustino/dev/senpai.info.nosync/workflows (state-dir: /var/folders/x0/113y39ld2sz4xqvc814d7k280000gn/T/TestListProjectRunLogs_MissingDirReturnsEmptyArray1022174032/001/state, data-dir: /var/folders/x0/113y39ld2sz4xqvc814d7k280000gn/T/TestListProjectRunLogs_MissingDirReturnsEmptyArray1022174032/001/data, codex-cwd: /var/folders/x0/113y39ld2sz4xqvc814d7k280000gn/T/TestListProjectRunLogs_MissingDirReturnsEmptyArray1022174032/001/codex-cwd)
+2026/10/07 14:55:51 mhl stderr: {"time":"2026-10-07T14:55:51.231164-03:00","level":"INFO","msg":"run started","component":"mcpserver","runId":"0376f2c847918fe4a4bcb45950ac65e4","owner":"c738af5622f7ad59649152faf14dbd0bc665f3384e936b49c1cb03d55cf7d4ff","tool":"WorkItem","resume":false}
+2026/10/07 14:55:51 mhl stderr: session: 0376f2c847918fe4a4bcb45950ac65e4
+2026/10/07 14:55:51 mhl stderr: step: Dispatch
+2026/10/07 14:55:51 mhl stderr: step: Create
+2026/10/07 14:55:51 mhl stderr: step: Done
+2026/10/07 14:55:51 mhl stderr: {"time":"2026-10-07T14:55:51.333862-03:00","level":"INFO","msg":"run completed","component":"mcpserver","runId":"0376f2c847918fe4a4bcb45950ac65e4","owner":"c738af5622f7ad59649152faf14dbd0bc665f3384e936b49c1cb03d55cf7d4ff","tool":"WorkItem","durationMs":102,"steps":3}
+2026/10/07 14:55:51 mhl stderr: {"time":"2026-10-07T14:55:51.433411-03:00","level":"INFO","msg":"draining","component":"mcpserver","timeout":"0s","cancelImmediately":true}
+--- PASS: TestListProjectRunLogs_MissingDirReturnsEmptyArray (6.57s)
+=== RUN   TestListProjectRunLogs_ListsPersistedRunsNewestFirst
+2026/10/07 14:55:51 mhl bridge: usando mhl vendorizado em /var/folders/x0/113y39ld2sz4xqvc814d7k280000gn/T/TestListProjectRunLogs_ListsPersistedRunsNewestFirst2444149239/001/embedded/bin/mhl (sha256 cdc73e4fe37c49c98974e6d7ae60b7f0d867d6515c5f496e33bca6c5fca63786)
+2026/10/07 14:55:51 mhl bridge: usando pdftotext vendorizado em /var/folders/x0/113y39ld2sz4xqvc814d7k280000gn/T/TestListProjectRunLogs_ListsPersistedRunsNewestFirst2444149239/001/embedded/bin/pdftotext (sha256 a96840a35c8a57e3cff578b3e8758bc744a94bed7e288a88309df89de6965261)
+2026/10/07 14:55:51 mhl bridge: arquivos prontos em 8ms
+2026/10/07 14:55:51 mhlbridge: devin resolvido em /Users/yanjustino/.local/bin/devin
+2026/10/07 14:55:51 mhlbridge: codex resolvido em /Users/yanjustino/.local/bin/codex
+2026/10/07 14:55:51 mhlbridge: claude resolvido em /Users/yanjustino/.local/bin/claude
+2026/10/07 14:55:57 mhl stderr: mhl serve mcp --http: 6 tool(s) from /Users/yanjustino/dev/senpai.info.nosync/workflows on http://127.0.0.1:64350/mcp
+2026/10/07 14:55:57 mhl bridge: ready em 6.272s (total 6.28s), serving /Users/yanjustino/dev/senpai.info.nosync/workflows (state-dir: /var/folders/x0/113y39ld2sz4xqvc814d7k280000gn/T/TestListProjectRunLogs_ListsPersistedRunsNewestFirst2444149239/001/state, data-dir: /var/folders/x0/113y39ld2sz4xqvc814d7k280000gn/T/TestListProjectRunLogs_ListsPersistedRunsNewestFirst2444149239/001/data, codex-cwd: /var/folders/x0/113y39ld2sz4xqvc814d7k280000gn/T/TestListProjectRunLogs_ListsPersistedRunsNewestFirst2444149239/001/codex-cwd)
+2026/10/07 14:55:57 mhl stderr: {"time":"2026-10-07T14:55:57.718922-03:00","level":"INFO","msg":"run started","component":"mcpserver","runId":"babd6bce9fe1949a6d0b29a8e70c9f7e","owner":"24dcee0e2217b519c814015bf45d41d9b1a2033ec4a453b9662a877c634bed24","tool":"WorkItem","resume":false}
+2026/10/07 14:55:57 mhl stderr: session: babd6bce9fe1949a6d0b29a8e70c9f7e
+2026/10/07 14:55:57 mhl stderr: step: Dispatch
+2026/10/07 14:55:57 mhl stderr: step: Create
+2026/10/07 14:55:57 mhl stderr: step: Done
+2026/10/07 14:55:57 mhl stderr: {"time":"2026-10-07T14:55:57.823165-03:00","level":"INFO","msg":"run completed","component":"mcpserver","runId":"babd6bce9fe1949a6d0b29a8e70c9f7e","owner":"24dcee0e2217b519c814015bf45d41d9b1a2033ec4a453b9662a877c634bed24","tool":"WorkItem","durationMs":104,"steps":3}
+2026/10/07 14:55:57 mhl stderr: {"time":"2026-10-07T14:55:57.933973-03:00","level":"INFO","msg":"draining","component":"mcpserver","timeout":"0s","cancelImmediately":true}
+--- PASS: TestListProjectRunLogs_ListsPersistedRunsNewestFirst (6.50s)
+=== RUN   TestListProjectRunLogs_RejectsInvalidProjectID
+2026/10/07 14:55:57 mhl bridge: usando mhl vendorizado em /var/folders/x0/113y39ld2sz4xqvc814d7k280000gn/T/TestListProjectRunLogs_RejectsInvalidProjectID3361245193/001/embedded/bin/mhl (sha256 cdc73e4fe37c49c98974e6d7ae60b7f0d867d6515c5f496e33bca6c5fca63786)
+2026/10/07 14:55:57 mhl bridge: usando pdftotext vendorizado em /var/folders/x0/113y39ld2sz4xqvc814d7k280000gn/T/TestListProjectRunLogs_RejectsInvalidProjectID3361245193/001/embedded/bin/pdftotext (sha256 a96840a35c8a57e3cff578b3e8758bc744a94bed7e288a88309df89de6965261)
+2026/10/07 14:55:57 mhl bridge: arquivos prontos em 9ms
+2026/10/07 14:55:58 mhlbridge: devin resolvido em /Users/yanjustino/.local/bin/devin
+2026/10/07 14:55:58 mhlbridge: codex resolvido em /Users/yanjustino/.local/bin/codex
+2026/10/07 14:55:58 mhlbridge: claude resolvido em /Users/yanjustino/.local/bin/claude
+2026/10/07 14:56:04 mhl stderr: mhl serve mcp --http: 6 tool(s) from /Users/yanjustino/dev/senpai.info.nosync/workflows on http://127.0.0.1:64367/mcp
+2026/10/07 14:56:04 mhl bridge: ready em 6.157s (total 6.166s), serving /Users/yanjustino/dev/senpai.info.nosync/workflows (state-dir: /var/folders/x0/113y39ld2sz4xqvc814d7k280000gn/T/TestListProjectRunLogs_RejectsInvalidProjectID3361245193/001/state, data-dir: /var/folders/x0/113y39ld2sz4xqvc814d7k280000gn/T/TestListProjectRunLogs_RejectsInvalidProjectID3361245193/001/data, codex-cwd: /var/folders/x0/113y39ld2sz4xqvc814d7k280000gn/T/TestListProjectRunLogs_RejectsInvalidProjectID3361245193/001/codex-cwd)
+2026/10/07 14:56:04 mhl stderr: {"time":"2026-10-07T14:56:04.106219-03:00","level":"INFO","msg":"draining","component":"mcpserver","timeout":"0s","cancelImmediately":true}
+--- PASS: TestListProjectRunLogs_RejectsInvalidProjectID (6.17s)
+=== RUN   TestProjectFileAccess_RejectsPathTraversal
+2026/10/07 14:56:04 mhl bridge: usando mhl vendorizado em /var/folders/x0/113y39ld2sz4xqvc814d7k280000gn/T/TestProjectFileAccess_RejectsPathTraversal105082493/001/embedded/bin/mhl (sha256 cdc73e4fe37c49c98974e6d7ae60b7f0d867d6515c5f496e33bca6c5fca63786)
+2026/10/07 14:56:04 mhl bridge: usando pdftotext vendorizado em /var/folders/x0/113y39ld2sz4xqvc814d7k280000gn/T/TestProjectFileAccess_RejectsPathTraversal105082493/001/embedded/bin/pdftotext (sha256 a96840a35c8a57e3cff578b3e8758bc744a94bed7e288a88309df89de6965261)
+2026/10/07 14:56:04 mhl bridge: arquivos prontos em 6ms
+2026/10/07 14:56:04 mhlbridge: devin resolvido em /Users/yanjustino/.local/bin/devin
+2026/10/07 14:56:04 mhlbridge: codex resolvido em /Users/yanjustino/.local/bin/codex
+2026/10/07 14:56:04 mhlbridge: claude resolvido em /Users/yanjustino/.local/bin/claude
+2026/10/07 14:56:10 mhl stderr: mhl serve mcp --http: 6 tool(s) from /Users/yanjustino/dev/senpai.info.nosync/workflows on http://127.0.0.1:64382/mcp
+2026/10/07 14:56:10 mhl bridge: ready em 6.161s (total 6.167s), serving /Users/yanjustino/dev/senpai.info.nosync/workflows (state-dir: /var/folders/x0/113y39ld2sz4xqvc814d7k280000gn/T/TestProjectFileAccess_RejectsPathTraversal105082493/001/state, data-dir: /var/folders/x0/113y39ld2sz4xqvc814d7k280000gn/T/TestProjectFileAccess_RejectsPathTraversal105082493/001/data, codex-cwd: /var/folders/x0/113y39ld2sz4xqvc814d7k280000gn/T/TestProjectFileAccess_RejectsPathTraversal105082493/001/codex-cwd)
+2026/10/07 14:56:10 mhl stderr: {"time":"2026-10-07T14:56:10.276836-03:00","level":"INFO","msg":"run started","component":"mcpserver","runId":"78596a60a29665da09ad9040ca8c5319","owner":"52500ffcb38869ea80b82730446263114529e5920a4a4398c0a72eb5be48d23b","tool":"WorkItem","resume":false}
+2026/10/07 14:56:10 mhl stderr: session: 78596a60a29665da09ad9040ca8c5319
+2026/10/07 14:56:10 mhl stderr: step: Dispatch
+2026/10/07 14:56:10 mhl stderr: step: Create
+2026/10/07 14:56:10 mhl stderr: step: Done
+2026/10/07 14:56:10 mhl stderr: {"time":"2026-10-07T14:56:10.38107-03:00","level":"INFO","msg":"run completed","component":"mcpserver","runId":"78596a60a29665da09ad9040ca8c5319","owner":"52500ffcb38869ea80b82730446263114529e5920a4a4398c0a72eb5be48d23b","tool":"WorkItem","durationMs":104,"steps":3}
+2026/10/07 14:56:10 mhl stderr: {"time":"2026-10-07T14:56:10.479869-03:00","level":"INFO","msg":"draining","component":"mcpserver","timeout":"0s","cancelImmediately":true}
+--- PASS: TestProjectFileAccess_RejectsPathTraversal (6.38s)
+=== RUN   TestExportProjectToRejectsDestinationInsideArtifacts
+--- PASS: TestExportProjectToRejectsDestinationInsideArtifacts (0.00s)
+=== RUN   TestExportProjectToRejectsInvalidProjectID
+--- PASS: TestExportProjectToRejectsInvalidProjectID (0.00s)
+=== RUN   TestExportHandoffToCopiesThePackage
+--- PASS: TestExportHandoffToCopiesThePackage (0.00s)
+=== RUN   TestIsReady_FalseBeforeStartupTrueAfter
+2026/10/07 14:56:10 mhl bridge: usando mhl vendorizado em /var/folders/x0/113y39ld2sz4xqvc814d7k280000gn/T/TestIsReady_FalseBeforeStartupTrueAfter2348400726/001/embedded/bin/mhl (sha256 cdc73e4fe37c49c98974e6d7ae60b7f0d867d6515c5f496e33bca6c5fca63786)
+2026/10/07 14:56:10 mhl bridge: usando pdftotext vendorizado em /var/folders/x0/113y39ld2sz4xqvc814d7k280000gn/T/TestIsReady_FalseBeforeStartupTrueAfter2348400726/001/embedded/bin/pdftotext (sha256 a96840a35c8a57e3cff578b3e8758bc744a94bed7e288a88309df89de6965261)
+2026/10/07 14:56:10 mhl bridge: arquivos prontos em 8ms
+2026/10/07 14:56:10 mhlbridge: devin resolvido em /Users/yanjustino/.local/bin/devin
+2026/10/07 14:56:10 mhlbridge: codex resolvido em /Users/yanjustino/.local/bin/codex
+2026/10/07 14:56:10 mhlbridge: claude resolvido em /Users/yanjustino/.local/bin/claude
+2026/10/07 14:56:16 mhl stderr: mhl serve mcp --http: 6 tool(s) from /Users/yanjustino/dev/senpai.info.nosync/workflows on http://127.0.0.1:64400/mcp
+2026/10/07 14:56:16 mhl bridge: ready em 6.146s (total 6.153s), serving /Users/yanjustino/dev/senpai.info.nosync/workflows (state-dir: /var/folders/x0/113y39ld2sz4xqvc814d7k280000gn/T/TestIsReady_FalseBeforeStartupTrueAfter2348400726/001/state, data-dir: /var/folders/x0/113y39ld2sz4xqvc814d7k280000gn/T/TestIsReady_FalseBeforeStartupTrueAfter2348400726/001/data, codex-cwd: /var/folders/x0/113y39ld2sz4xqvc814d7k280000gn/T/TestIsReady_FalseBeforeStartupTrueAfter2348400726/001/codex-cwd)
+2026/10/07 14:56:16 mhl stderr: {"time":"2026-10-07T14:56:16.642822-03:00","level":"INFO","msg":"draining","component":"mcpserver","timeout":"0s","cancelImmediately":true}
+--- PASS: TestIsReady_FalseBeforeStartupTrueAfter (6.16s)
+=== RUN   TestListWorkflowsAndManifest
+2026/10/07 14:56:16 mhl bridge: usando mhl vendorizado em /var/folders/x0/113y39ld2sz4xqvc814d7k280000gn/T/TestListWorkflowsAndManifest1929971054/001/embedded/bin/mhl (sha256 cdc73e4fe37c49c98974e6d7ae60b7f0d867d6515c5f496e33bca6c5fca63786)
+2026/10/07 14:56:16 mhl bridge: usando pdftotext vendorizado em /var/folders/x0/113y39ld2sz4xqvc814d7k280000gn/T/TestListWorkflowsAndManifest1929971054/001/embedded/bin/pdftotext (sha256 a96840a35c8a57e3cff578b3e8758bc744a94bed7e288a88309df89de6965261)
+2026/10/07 14:56:16 mhl bridge: arquivos prontos em 6ms
+2026/10/07 14:56:16 mhlbridge: devin resolvido em /Users/yanjustino/.local/bin/devin
+2026/10/07 14:56:16 mhlbridge: codex resolvido em /Users/yanjustino/.local/bin/codex
+2026/10/07 14:56:16 mhlbridge: claude resolvido em /Users/yanjustino/.local/bin/claude
+2026/10/07 14:56:22 mhl stderr: mhl serve mcp --http: 6 tool(s) from /Users/yanjustino/dev/senpai.info.nosync/workflows on http://127.0.0.1:64415/mcp
+2026/10/07 14:56:22 mhl bridge: ready em 6.145s (total 6.151s), serving /Users/yanjustino/dev/senpai.info.nosync/workflows (state-dir: /var/folders/x0/113y39ld2sz4xqvc814d7k280000gn/T/TestListWorkflowsAndManifest1929971054/001/state, data-dir: /var/folders/x0/113y39ld2sz4xqvc814d7k280000gn/T/TestListWorkflowsAndManifest1929971054/001/data, codex-cwd: /var/folders/x0/113y39ld2sz4xqvc814d7k280000gn/T/TestListWorkflowsAndManifest1929971054/001/codex-cwd)
+2026/10/07 14:56:22 mhl stderr: {"time":"2026-10-07T14:56:22.798691-03:00","level":"INFO","msg":"draining","component":"mcpserver","timeout":"0s","cancelImmediately":true}
+--- PASS: TestListWorkflowsAndManifest (6.16s)
+=== RUN   TestRunLifecycle_WorkItem
+2026/10/07 14:56:22 mhl bridge: usando mhl vendorizado em /var/folders/x0/113y39ld2sz4xqvc814d7k280000gn/T/TestRunLifecycle_WorkItem4201895488/001/embedded/bin/mhl (sha256 cdc73e4fe37c49c98974e6d7ae60b7f0d867d6515c5f496e33bca6c5fca63786)
+2026/10/07 14:56:22 mhl bridge: usando pdftotext vendorizado em /var/folders/x0/113y39ld2sz4xqvc814d7k280000gn/T/TestRunLifecycle_WorkItem4201895488/001/embedded/bin/pdftotext (sha256 a96840a35c8a57e3cff578b3e8758bc744a94bed7e288a88309df89de6965261)
+2026/10/07 14:56:22 mhl bridge: arquivos prontos em 6ms
+2026/10/07 14:56:22 mhlbridge: devin resolvido em /Users/yanjustino/.local/bin/devin
+2026/10/07 14:56:22 mhlbridge: codex resolvido em /Users/yanjustino/.local/bin/codex
+2026/10/07 14:56:22 mhlbridge: claude resolvido em /Users/yanjustino/.local/bin/claude
+2026/10/07 14:56:28 mhl stderr: mhl serve mcp --http: 6 tool(s) from /Users/yanjustino/dev/senpai.info.nosync/workflows on http://127.0.0.1:64432/mcp
+2026/10/07 14:56:28 mhl bridge: ready em 6.187s (total 6.193s), serving /Users/yanjustino/dev/senpai.info.nosync/workflows (state-dir: /var/folders/x0/113y39ld2sz4xqvc814d7k280000gn/T/TestRunLifecycle_WorkItem4201895488/001/state, data-dir: /var/folders/x0/113y39ld2sz4xqvc814d7k280000gn/T/TestRunLifecycle_WorkItem4201895488/001/data, codex-cwd: /var/folders/x0/113y39ld2sz4xqvc814d7k280000gn/T/TestRunLifecycle_WorkItem4201895488/001/codex-cwd)
+2026/10/07 14:56:28 mhl stderr: {"time":"2026-10-07T14:56:28.996051-03:00","level":"INFO","msg":"run started","component":"mcpserver","runId":"2cb03ad4e5cab68b7d08059cb5205e9a","owner":"b0cdeb2a3a8f3db794d2742d7d2b0c1b0df2c25949d91508d3fc550905d749b1","tool":"WorkItem","resume":false}
+2026/10/07 14:56:28 mhl stderr: session: 2cb03ad4e5cab68b7d08059cb5205e9a
+2026/10/07 14:56:29 mhl stderr: step: Dispatch
+2026/10/07 14:56:29 mhl stderr: step: List
+2026/10/07 14:56:29 mhl stderr: step: Done
+2026/10/07 14:56:29 mhl stderr: {"time":"2026-10-07T14:56:29.099498-03:00","level":"INFO","msg":"run completed","component":"mcpserver","runId":"2cb03ad4e5cab68b7d08059cb5205e9a","owner":"b0cdeb2a3a8f3db794d2742d7d2b0c1b0df2c25949d91508d3fc550905d749b1","tool":"WorkItem","durationMs":103,"steps":3}
+2026/10/07 14:56:29 mhl stderr: {"time":"2026-10-07T14:56:29.506071-03:00","level":"INFO","msg":"draining","component":"mcpserver","timeout":"0s","cancelImmediately":true}
+--- PASS: TestRunLifecycle_WorkItem (6.71s)
+=== RUN   TestApprovalRecoveryCommitsPendingDraftWithoutLLM
+2026/10/07 14:56:29 mhl bridge: usando mhl vendorizado em /var/folders/x0/113y39ld2sz4xqvc814d7k280000gn/T/TestApprovalRecoveryCommitsPendingDraftWithoutLLM1803084246/001/embedded/bin/mhl (sha256 cdc73e4fe37c49c98974e6d7ae60b7f0d867d6515c5f496e33bca6c5fca63786)
+2026/10/07 14:56:29 mhl bridge: usando pdftotext vendorizado em /var/folders/x0/113y39ld2sz4xqvc814d7k280000gn/T/TestApprovalRecoveryCommitsPendingDraftWithoutLLM1803084246/001/embedded/bin/pdftotext (sha256 a96840a35c8a57e3cff578b3e8758bc744a94bed7e288a88309df89de6965261)
+2026/10/07 14:56:29 mhl bridge: arquivos prontos em 10ms
+2026/10/07 14:56:29 mhlbridge: devin resolvido em /Users/yanjustino/.local/bin/devin
+2026/10/07 14:56:29 mhlbridge: codex resolvido em /Users/yanjustino/.local/bin/codex
+2026/10/07 14:56:29 mhlbridge: claude resolvido em /Users/yanjustino/.local/bin/claude
+2026/10/07 14:56:35 mhl stderr: mhl serve mcp --http: 6 tool(s) from /Users/yanjustino/dev/senpai.info.nosync/workflows on http://127.0.0.1:64455/mcp
+2026/10/07 14:56:35 mhl bridge: ready em 6.195s (total 6.206s), serving /Users/yanjustino/dev/senpai.info.nosync/workflows (state-dir: /var/folders/x0/113y39ld2sz4xqvc814d7k280000gn/T/TestApprovalRecoveryCommitsPendingDraftWithoutLLM1803084246/001/state, data-dir: /var/folders/x0/113y39ld2sz4xqvc814d7k280000gn/T/TestApprovalRecoveryCommitsPendingDraftWithoutLLM1803084246/001/data, codex-cwd: /var/folders/x0/113y39ld2sz4xqvc814d7k280000gn/T/TestApprovalRecoveryCommitsPendingDraftWithoutLLM1803084246/001/codex-cwd)
+2026/10/07 14:56:35 mhl stderr: {"time":"2026-10-07T14:56:35.71913-03:00","level":"INFO","msg":"run started","component":"mcpserver","runId":"43655efd332d76fa273f96dde36f0bfd","owner":"cc75fe94edf1cc96f29c4ef36841095f06ac86fe94f2f2a7678832a44cff03f5","tool":"WorkItem","resume":false}
+2026/10/07 14:56:35 mhl stderr: session: 43655efd332d76fa273f96dde36f0bfd
+2026/10/07 14:56:35 mhl stderr: step: Dispatch
+2026/10/07 14:56:35 mhl stderr: step: Create
+2026/10/07 14:56:35 mhl stderr: step: Done
+2026/10/07 14:56:35 mhl stderr: {"time":"2026-10-07T14:56:35.820153-03:00","level":"INFO","msg":"run completed","component":"mcpserver","runId":"43655efd332d76fa273f96dde36f0bfd","owner":"cc75fe94edf1cc96f29c4ef36841095f06ac86fe94f2f2a7678832a44cff03f5","tool":"WorkItem","durationMs":101,"steps":3}
+2026/10/07 14:56:35 mhl stderr: {"time":"2026-10-07T14:56:35.922212-03:00","level":"INFO","msg":"run started","component":"mcpserver","runId":"936a4a0844a3a148cceb7c184e6d103c","owner":"cc75fe94edf1cc96f29c4ef36841095f06ac86fe94f2f2a7678832a44cff03f5","tool":"Delivery","resume":false}
+2026/10/07 14:56:35 mhl stderr: session: 936a4a0844a3a148cceb7c184e6d103c
+2026/10/07 14:56:36 mhl stderr: step: Dispatch
+2026/10/07 14:56:36 mhl stderr: step: Commit
+2026/10/07 14:56:36 mhl stderr: {"time":"2026-10-07T14:56:36.069629-03:00","level":"INFO","msg":"run completed","component":"mcpserver","runId":"936a4a0844a3a148cceb7c184e6d103c","owner":"cc75fe94edf1cc96f29c4ef36841095f06ac86fe94f2f2a7678832a44cff03f5","tool":"Delivery","durationMs":147,"steps":2}
+2026/10/07 14:56:36 mhl stderr: {"time":"2026-10-07T14:56:36.125675-03:00","level":"INFO","msg":"run started","component":"mcpserver","runId":"6bb92a7fbec4c6b47cdbae6ccf0a3638","owner":"cc75fe94edf1cc96f29c4ef36841095f06ac86fe94f2f2a7678832a44cff03f5","tool":"WorkItem","resume":false}
+2026/10/07 14:56:36 mhl stderr: session: 6bb92a7fbec4c6b47cdbae6ccf0a3638
+2026/10/07 14:56:36 mhl stderr: step: Dispatch
+2026/10/07 14:56:36 mhl stderr: step: Create
+2026/10/07 14:56:36 mhl stderr: step: Done
+2026/10/07 14:56:36 mhl stderr: {"time":"2026-10-07T14:56:36.232557-03:00","level":"INFO","msg":"run completed","component":"mcpserver","runId":"6bb92a7fbec4c6b47cdbae6ccf0a3638","owner":"cc75fe94edf1cc96f29c4ef36841095f06ac86fe94f2f2a7678832a44cff03f5","tool":"WorkItem","durationMs":106,"steps":3}
+2026/10/07 14:56:36 mhl stderr: {"time":"2026-10-07T14:56:36.329297-03:00","level":"INFO","msg":"run started","component":"mcpserver","runId":"f2b7e6224378068d7cebfc75b3362031","owner":"cc75fe94edf1cc96f29c4ef36841095f06ac86fe94f2f2a7678832a44cff03f5","tool":"Discovery","resume":false}
+2026/10/07 14:56:36 mhl stderr: session: f2b7e6224378068d7cebfc75b3362031
+2026/10/07 14:56:36 mhl stderr: step: Dispatch
+2026/10/07 14:56:36 mhl stderr: step: Commit
+2026/10/07 14:56:36 mhl stderr: {"time":"2026-10-07T14:56:36.481333-03:00","level":"INFO","msg":"run completed","component":"mcpserver","runId":"f2b7e6224378068d7cebfc75b3362031","owner":"cc75fe94edf1cc96f29c4ef36841095f06ac86fe94f2f2a7678832a44cff03f5","tool":"Discovery","durationMs":152,"steps":2}
+2026/10/07 14:56:36 mhl stderr: {"time":"2026-10-07T14:56:36.532453-03:00","level":"INFO","msg":"draining","component":"mcpserver","timeout":"0s","cancelImmediately":true}
+--- PASS: TestApprovalRecoveryCommitsPendingDraftWithoutLLM (7.02s)
+=== RUN   TestModoBuddyPauseResume_WikiIngest
+    app_test.go:309: skipping real-LLM test in -short mode
+--- SKIP: TestModoBuddyPauseResume_WikiIngest (0.00s)
+=== RUN   TestResolveWorkflowsDir_PrefersLiveCheckout
+--- PASS: TestResolveWorkflowsDir_PrefersLiveCheckout (0.00s)
+=== RUN   TestExtractVendoredWorkflows_IsARealRunnableTree
+2026/10/07 14:56:36 mhl bridge: usando workflows vendorizados (embutidos) em /Users/yanjustino/Library/Application Support/senpai/embedded/workflows
+2026/10/07 14:56:36 mhl bridge: usando mhl vendorizado em /Users/yanjustino/Library/Application Support/senpai/embedded/bin/mhl (sha256 cdc73e4fe37c49c98974e6d7ae60b7f0d867d6515c5f496e33bca6c5fca63786)
+2026/10/07 14:56:36 mhlbridge: devin resolvido em /Users/yanjustino/.local/bin/devin
+2026/10/07 14:56:36 mhlbridge: codex resolvido em /Users/yanjustino/.local/bin/codex
+2026/10/07 14:56:36 mhlbridge: claude resolvido em /Users/yanjustino/.local/bin/claude
+2026/10/07 14:56:37 mhl stderr: mhl serve mcp --http: note: no --state-dir/MHL_SERVE_STATE_DIR and no `extension store` — async run state is per-process and lost on restart
+2026/10/07 14:56:42 mhl stderr: mhl serve mcp --http: 6 tool(s) from /Users/yanjustino/Library/Application Support/senpai/embedded/workflows on http://127.0.0.1:64481/mcp
+2026/10/07 14:56:42 mhl stderr: {"time":"2026-10-07T14:56:42.503126-03:00","level":"INFO","msg":"run started","component":"mcpserver","runId":"4452ec789b6cfc9aa9bc2a1dcedeff49","owner":"c1424f53459ad122e13a2f1259a0e85e98bdecc45fff717b8ae23281705aea8f","tool":"WorkItem","resume":false}
+2026/10/07 14:56:42 mhl stderr: session: 4452ec789b6cfc9aa9bc2a1dcedeff49
+2026/10/07 14:56:42 mhl stderr: step: Dispatch
+2026/10/07 14:56:42 mhl stderr: step: List
+2026/10/07 14:56:42 mhl stderr: step: Done
+2026/10/07 14:56:42 mhl stderr: {"time":"2026-10-07T14:56:42.604304-03:00","level":"INFO","msg":"run completed","component":"mcpserver","runId":"4452ec789b6cfc9aa9bc2a1dcedeff49","owner":"c1424f53459ad122e13a2f1259a0e85e98bdecc45fff717b8ae23281705aea8f","tool":"WorkItem","durationMs":101,"steps":3}
+2026/10/07 14:56:42 mhl stderr: {"time":"2026-10-07T14:56:42.705827-03:00","level":"INFO","msg":"draining","component":"mcpserver","timeout":"0s","cancelImmediately":true}
+--- PASS: TestExtractVendoredWorkflows_IsARealRunnableTree (6.17s)
+=== RUN   TestEnsureVendoredPdftotext_ExtractsARunnableBinary
+2026/10/07 14:56:42 mhl bridge: usando pdftotext vendorizado em /var/folders/x0/113y39ld2sz4xqvc814d7k280000gn/T/TestEnsureVendoredPdftotext_ExtractsARunnableBinary3679078898/001/embedded/bin/pdftotext (sha256 a96840a35c8a57e3cff578b3e8758bc744a94bed7e288a88309df89de6965261)
+--- PASS: TestEnsureVendoredPdftotext_ExtractsARunnableBinary (0.32s)
+=== RUN   TestAttachHistoriaFiles_CopiesDedupsAndRemoves
+2026/10/07 14:56:43 mhl bridge: usando mhl vendorizado em /var/folders/x0/113y39ld2sz4xqvc814d7k280000gn/T/TestAttachHistoriaFiles_CopiesDedupsAndRemoves3175744856/001/embedded/bin/mhl (sha256 cdc73e4fe37c49c98974e6d7ae60b7f0d867d6515c5f496e33bca6c5fca63786)
+2026/10/07 14:56:43 mhl bridge: usando pdftotext vendorizado em /var/folders/x0/113y39ld2sz4xqvc814d7k280000gn/T/TestAttachHistoriaFiles_CopiesDedupsAndRemoves3175744856/001/embedded/bin/pdftotext (sha256 a96840a35c8a57e3cff578b3e8758bc744a94bed7e288a88309df89de6965261)
+2026/10/07 14:56:43 mhl bridge: arquivos prontos em 15ms
+2026/10/07 14:56:43 mhlbridge: devin resolvido em /Users/yanjustino/.local/bin/devin
+2026/10/07 14:56:43 mhlbridge: codex resolvido em /Users/yanjustino/.local/bin/codex
+2026/10/07 14:56:43 mhlbridge: claude resolvido em /Users/yanjustino/.local/bin/claude
+2026/10/07 14:56:49 mhl stderr: mhl serve mcp --http: 6 tool(s) from /Users/yanjustino/dev/senpai.info.nosync/workflows on http://127.0.0.1:64497/mcp
+2026/10/07 14:56:49 mhl bridge: ready em 6.231s (total 6.246s), serving /Users/yanjustino/dev/senpai.info.nosync/workflows (state-dir: /var/folders/x0/113y39ld2sz4xqvc814d7k280000gn/T/TestAttachHistoriaFiles_CopiesDedupsAndRemoves3175744856/001/state, data-dir: /var/folders/x0/113y39ld2sz4xqvc814d7k280000gn/T/TestAttachHistoriaFiles_CopiesDedupsAndRemoves3175744856/001/data, codex-cwd: /var/folders/x0/113y39ld2sz4xqvc814d7k280000gn/T/TestAttachHistoriaFiles_CopiesDedupsAndRemoves3175744856/001/codex-cwd)
+2026/10/07 14:56:49 mhl stderr: {"time":"2026-10-07T14:56:49.279203-03:00","level":"INFO","msg":"run started","component":"mcpserver","runId":"debdf58b4640701dc57ebf27464797cb","owner":"dc9ee39c42f609e84cd9c1410e1ca514a67f81a505c8361b96b9b2cc5fc60951","tool":"WorkItem","resume":false}
+2026/10/07 14:56:49 mhl stderr: session: debdf58b4640701dc57ebf27464797cb
+2026/10/07 14:56:49 mhl stderr: step: Dispatch
+2026/10/07 14:56:49 mhl stderr: step: Create
+2026/10/07 14:56:49 mhl stderr: step: Done
+2026/10/07 14:56:49 mhl stderr: {"time":"2026-10-07T14:56:49.384008-03:00","level":"INFO","msg":"run completed","component":"mcpserver","runId":"debdf58b4640701dc57ebf27464797cb","owner":"dc9ee39c42f609e84cd9c1410e1ca514a67f81a505c8361b96b9b2cc5fc60951","tool":"WorkItem","durationMs":104,"steps":3}
+2026/10/07 14:56:49 mhl stderr: {"time":"2026-10-07T14:56:49.497151-03:00","level":"INFO","msg":"draining","component":"mcpserver","timeout":"0s","cancelImmediately":true}
+--- PASS: TestAttachHistoriaFiles_CopiesDedupsAndRemoves (6.47s)
+=== RUN   TestAttachHistoriaFiles_RootStoryOfDelivery
+2026/10/07 14:56:49 mhl bridge: usando mhl vendorizado em /var/folders/x0/113y39ld2sz4xqvc814d7k280000gn/T/TestAttachHistoriaFiles_RootStoryOfDelivery1953788592/001/embedded/bin/mhl (sha256 cdc73e4fe37c49c98974e6d7ae60b7f0d867d6515c5f496e33bca6c5fca63786)
+2026/10/07 14:56:49 mhl bridge: usando pdftotext vendorizado em /var/folders/x0/113y39ld2sz4xqvc814d7k280000gn/T/TestAttachHistoriaFiles_RootStoryOfDelivery1953788592/001/embedded/bin/pdftotext (sha256 a96840a35c8a57e3cff578b3e8758bc744a94bed7e288a88309df89de6965261)
+2026/10/07 14:56:49 mhl bridge: arquivos prontos em 7ms
+2026/10/07 14:56:49 mhlbridge: devin resolvido em /Users/yanjustino/.local/bin/devin
+2026/10/07 14:56:49 mhlbridge: codex resolvido em /Users/yanjustino/.local/bin/codex
+2026/10/07 14:56:49 mhlbridge: claude resolvido em /Users/yanjustino/.local/bin/claude
+2026/10/07 14:56:55 mhl stderr: mhl serve mcp --http: 6 tool(s) from /Users/yanjustino/dev/senpai.info.nosync/workflows on http://127.0.0.1:64516/mcp
+2026/10/07 14:56:55 mhl bridge: ready em 6.164s (total 6.171s), serving /Users/yanjustino/dev/senpai.info.nosync/workflows (state-dir: /var/folders/x0/113y39ld2sz4xqvc814d7k280000gn/T/TestAttachHistoriaFiles_RootStoryOfDelivery1953788592/001/state, data-dir: /var/folders/x0/113y39ld2sz4xqvc814d7k280000gn/T/TestAttachHistoriaFiles_RootStoryOfDelivery1953788592/001/data, codex-cwd: /var/folders/x0/113y39ld2sz4xqvc814d7k280000gn/T/TestAttachHistoriaFiles_RootStoryOfDelivery1953788592/001/codex-cwd)
+2026/10/07 14:56:55 mhl stderr: {"time":"2026-10-07T14:56:55.674705-03:00","level":"INFO","msg":"run started","component":"mcpserver","runId":"eb8c69e09f8167b434a83852968e9a1d","owner":"a1db10d339007f5e8136f4bae7361622bc0245ff74da8a34306917d8d9883a83","tool":"WorkItem","resume":false}
+2026/10/07 14:56:55 mhl stderr: session: eb8c69e09f8167b434a83852968e9a1d
+2026/10/07 14:56:55 mhl stderr: step: Dispatch
+2026/10/07 14:56:55 mhl stderr: step: Create
+2026/10/07 14:56:55 mhl stderr: step: Done
+2026/10/07 14:56:55 mhl stderr: {"time":"2026-10-07T14:56:55.780126-03:00","level":"INFO","msg":"run completed","component":"mcpserver","runId":"eb8c69e09f8167b434a83852968e9a1d","owner":"a1db10d339007f5e8136f4bae7361622bc0245ff74da8a34306917d8d9883a83","tool":"WorkItem","durationMs":105,"steps":3}
+2026/10/07 14:56:55 mhl stderr: {"time":"2026-10-07T14:56:55.879668-03:00","level":"INFO","msg":"draining","component":"mcpserver","timeout":"0s","cancelImmediately":true}
+--- PASS: TestAttachHistoriaFiles_RootStoryOfDelivery (6.38s)
+=== RUN   TestAttachHistoriaFiles_RejectsInvalidTargets
+2026/10/07 14:56:55 mhl bridge: usando mhl vendorizado em /var/folders/x0/113y39ld2sz4xqvc814d7k280000gn/T/TestAttachHistoriaFiles_RejectsInvalidTargets2329954741/001/embedded/bin/mhl (sha256 cdc73e4fe37c49c98974e6d7ae60b7f0d867d6515c5f496e33bca6c5fca63786)
+2026/10/07 14:56:55 mhl bridge: usando pdftotext vendorizado em /var/folders/x0/113y39ld2sz4xqvc814d7k280000gn/T/TestAttachHistoriaFiles_RejectsInvalidTargets2329954741/001/embedded/bin/pdftotext (sha256 a96840a35c8a57e3cff578b3e8758bc744a94bed7e288a88309df89de6965261)
+2026/10/07 14:56:55 mhl bridge: arquivos prontos em 8ms
+2026/10/07 14:56:56 mhlbridge: devin resolvido em /Users/yanjustino/.local/bin/devin
+2026/10/07 14:56:56 mhlbridge: codex resolvido em /Users/yanjustino/.local/bin/codex
+2026/10/07 14:56:56 mhlbridge: claude resolvido em /Users/yanjustino/.local/bin/claude
+2026/10/07 14:57:02 mhl stderr: mhl serve mcp --http: 6 tool(s) from /Users/yanjustino/dev/senpai.info.nosync/workflows on http://127.0.0.1:64533/mcp
+2026/10/07 14:57:02 mhl bridge: ready em 6.166s (total 6.174s), serving /Users/yanjustino/dev/senpai.info.nosync/workflows (state-dir: /var/folders/x0/113y39ld2sz4xqvc814d7k280000gn/T/TestAttachHistoriaFiles_RejectsInvalidTargets2329954741/001/state, data-dir: /var/folders/x0/113y39ld2sz4xqvc814d7k280000gn/T/TestAttachHistoriaFiles_RejectsInvalidTargets2329954741/001/data, codex-cwd: /var/folders/x0/113y39ld2sz4xqvc814d7k280000gn/T/TestAttachHistoriaFiles_RejectsInvalidTargets2329954741/001/codex-cwd)
+2026/10/07 14:57:02 mhl stderr: {"time":"2026-10-07T14:57:02.059151-03:00","level":"INFO","msg":"run started","component":"mcpserver","runId":"6c31f534f60c31c51d77c6763d66ae0e","owner":"e2ef1737d6aac183c119731966be9ab49f3ecf6318bc2ed2b03f45bf5c3c2284","tool":"WorkItem","resume":false}
+2026/10/07 14:57:02 mhl stderr: session: 6c31f534f60c31c51d77c6763d66ae0e
+2026/10/07 14:57:02 mhl stderr: step: Dispatch
+2026/10/07 14:57:02 mhl stderr: step: Create
+2026/10/07 14:57:02 mhl stderr: step: Done
+2026/10/07 14:57:02 mhl stderr: {"time":"2026-10-07T14:57:02.159946-03:00","level":"INFO","msg":"run completed","component":"mcpserver","runId":"6c31f534f60c31c51d77c6763d66ae0e","owner":"e2ef1737d6aac183c119731966be9ab49f3ecf6318bc2ed2b03f45bf5c3c2284","tool":"WorkItem","durationMs":100,"steps":3}
+2026/10/07 14:57:02 mhl stderr: {"time":"2026-10-07T14:57:02.310575-03:00","level":"INFO","msg":"draining","component":"mcpserver","timeout":"0s","cancelImmediately":true}
+--- PASS: TestAttachHistoriaFiles_RejectsInvalidTargets (6.43s)
+=== RUN   TestReadLocalProjects_MirrorsWorkItemList
+2026/10/07 14:57:02 local projects: wi_broken/project.json invalido: invalid character 'n' looking for beginning of object key string
+--- PASS: TestReadLocalProjects_MirrorsWorkItemList (0.00s)
+=== RUN   TestReadLocalProjects_NoProjectsDir
+--- PASS: TestReadLocalProjects_NoProjectsDir (0.00s)
+=== RUN   TestLocalProjects_BeforeStartup
+--- PASS: TestLocalProjects_BeforeStartup (0.00s)
+=== RUN   TestReadProjectActivity_LastChangeAndPendingSources
+--- PASS: TestReadProjectActivity_LastChangeAndPendingSources (0.00s)
+=== RUN   TestMHLBridge_ConcurrentCallsOnTheSharedSessionNeverFail
+2026/10/07 14:57:02 mhl bridge: usando mhl vendorizado em /var/folders/x0/113y39ld2sz4xqvc814d7k280000gn/T/TestMHLBridge_ConcurrentCallsOnTheSharedSessionNeverFail344626527/001/embedded/bin/mhl (sha256 cdc73e4fe37c49c98974e6d7ae60b7f0d867d6515c5f496e33bca6c5fca63786)
+2026/10/07 14:57:02 mhl bridge: usando pdftotext vendorizado em /var/folders/x0/113y39ld2sz4xqvc814d7k280000gn/T/TestMHLBridge_ConcurrentCallsOnTheSharedSessionNeverFail344626527/001/embedded/bin/pdftotext (sha256 a96840a35c8a57e3cff578b3e8758bc744a94bed7e288a88309df89de6965261)
+2026/10/07 14:57:02 mhl bridge: arquivos prontos em 7ms
+2026/10/07 14:57:02 mhlbridge: devin resolvido em /Users/yanjustino/.local/bin/devin
+2026/10/07 14:57:02 mhlbridge: codex resolvido em /Users/yanjustino/.local/bin/codex
+2026/10/07 14:57:02 mhlbridge: claude resolvido em /Users/yanjustino/.local/bin/claude
+2026/10/07 14:57:08 mhl stderr: mhl serve mcp --http: 6 tool(s) from /Users/yanjustino/dev/senpai.info.nosync/workflows on http://127.0.0.1:64553/mcp
+2026/10/07 14:57:08 mhl bridge: ready em 6.171s (total 6.178s), serving /Users/yanjustino/dev/senpai.info.nosync/workflows (state-dir: /var/folders/x0/113y39ld2sz4xqvc814d7k280000gn/T/TestMHLBridge_ConcurrentCallsOnTheSharedSessionNeverFail344626527/001/state, data-dir: /var/folders/x0/113y39ld2sz4xqvc814d7k280000gn/T/TestMHLBridge_ConcurrentCallsOnTheSharedSessionNeverFail344626527/001/data, codex-cwd: /var/folders/x0/113y39ld2sz4xqvc814d7k280000gn/T/TestMHLBridge_ConcurrentCallsOnTheSharedSessionNeverFail344626527/001/codex-cwd)
+2026/10/07 14:57:08 mhl stderr: {"time":"2026-10-07T14:57:08.497454-03:00","level":"INFO","msg":"run started","component":"mcpserver","runId":"955f50ca133ece3b4c2246dfba249696","owner":"6b3d0b899f70acb2ad63868dc6303f6a8bdd96dfa52bffec40d166742e686709","tool":"ArtifactPreview","resume":false}
+2026/10/07 14:57:08 mhl stderr: session: 955f50ca133ece3b4c2246dfba249696
+2026/10/07 14:57:08 mhl stderr: {"time":"2026-10-07T14:57:08.498177-03:00","level":"INFO","msg":"run started","component":"mcpserver","runId":"97de13be09b0b016d9a88fc38160dc0c","owner":"6b3d0b899f70acb2ad63868dc6303f6a8bdd96dfa52bffec40d166742e686709","tool":"ArtifactPreview","resume":false}
+2026/10/07 14:57:08 mhl stderr: session: 97de13be09b0b016d9a88fc38160dc0c
+2026/10/07 14:57:08 mhl stderr: {"time":"2026-10-07T14:57:08.499266-03:00","level":"INFO","msg":"run started","component":"mcpserver","runId":"cd0e789166c636b0e3cf94448ef2bf9d","owner":"6b3d0b899f70acb2ad63868dc6303f6a8bdd96dfa52bffec40d166742e686709","tool":"ArtifactPreview","resume":false}
+2026/10/07 14:57:08 mhl stderr: session: cd0e789166c636b0e3cf94448ef2bf9d
+2026/10/07 14:57:08 mhl stderr: {"time":"2026-10-07T14:57:08.499918-03:00","level":"INFO","msg":"run started","component":"mcpserver","runId":"a1f65f44623d6b7286ef5ddc50102dae","owner":"6b3d0b899f70acb2ad63868dc6303f6a8bdd96dfa52bffec40d166742e686709","tool":"ArtifactPreview","resume":false}
+2026/10/07 14:57:08 mhl stderr: session: a1f65f44623d6b7286ef5ddc50102dae
+2026/10/07 14:57:08 mhl stderr: {"time":"2026-10-07T14:57:08.500912-03:00","level":"INFO","msg":"run started","component":"mcpserver","runId":"b72591c42b8f15fc60a937f53f51b183","owner":"6b3d0b899f70acb2ad63868dc6303f6a8bdd96dfa52bffec40d166742e686709","tool":"ArtifactPreview","resume":false}
+2026/10/07 14:57:08 mhl stderr: session: b72591c42b8f15fc60a937f53f51b183
+2026/10/07 14:57:08 mhl stderr: {"time":"2026-10-07T14:57:08.501685-03:00","level":"INFO","msg":"run started","component":"mcpserver","runId":"eb19d9f34cd579cab02792a3651066cb","owner":"6b3d0b899f70acb2ad63868dc6303f6a8bdd96dfa52bffec40d166742e686709","tool":"ArtifactPreview","resume":false}
+2026/10/07 14:57:08 mhl stderr: session: eb19d9f34cd579cab02792a3651066cb
+2026/10/07 14:57:08 mhl stderr: {"time":"2026-10-07T14:57:08.502806-03:00","level":"INFO","msg":"run started","component":"mcpserver","runId":"225a21fd4f9a608a65efd6d5fd2f5161","owner":"6b3d0b899f70acb2ad63868dc6303f6a8bdd96dfa52bffec40d166742e686709","tool":"ArtifactPreview","resume":false}
+2026/10/07 14:57:08 mhl stderr: session: 225a21fd4f9a608a65efd6d5fd2f5161
+2026/10/07 14:57:08 mhl stderr: {"time":"2026-10-07T14:57:08.504341-03:00","level":"INFO","msg":"run started","component":"mcpserver","runId":"bb4a7bc6af4fba411a0678a1194f3304","owner":"6b3d0b899f70acb2ad63868dc6303f6a8bdd96dfa52bffec40d166742e686709","tool":"ArtifactPreview","resume":false}
+2026/10/07 14:57:08 mhl stderr: session: bb4a7bc6af4fba411a0678a1194f3304
+2026/10/07 14:57:08 mhl stderr: step: Render
+2026/10/07 14:57:08 mhl stderr: {"time":"2026-10-07T14:57:08.641194-03:00","level":"INFO","msg":"run completed","component":"mcpserver","runId":"955f50ca133ece3b4c2246dfba249696","owner":"6b3d0b899f70acb2ad63868dc6303f6a8bdd96dfa52bffec40d166742e686709","tool":"ArtifactPreview","durationMs":143,"steps":1}
+2026/10/07 14:57:08 mhl stderr: step: Render
+2026/10/07 14:57:08 mhl stderr: {"time":"2026-10-07T14:57:08.646821-03:00","level":"INFO","msg":"run completed","component":"mcpserver","runId":"bb4a7bc6af4fba411a0678a1194f3304","owner":"6b3d0b899f70acb2ad63868dc6303f6a8bdd96dfa52bffec40d166742e686709","tool":"ArtifactPreview","durationMs":142,"steps":1}
+2026/10/07 14:57:08 mhl stderr: step: Render
+2026/10/07 14:57:08 mhl stderr: {"time":"2026-10-07T14:57:08.650813-03:00","level":"INFO","msg":"run completed","component":"mcpserver","runId":"cd0e789166c636b0e3cf94448ef2bf9d","owner":"6b3d0b899f70acb2ad63868dc6303f6a8bdd96dfa52bffec40d166742e686709","tool":"ArtifactPreview","durationMs":151,"steps":1}
+2026/10/07 14:57:08 mhl stderr: step: Render
+2026/10/07 14:57:08 mhl stderr: {"time":"2026-10-07T14:57:08.653357-03:00","level":"INFO","msg":"run completed","component":"mcpserver","runId":"b72591c42b8f15fc60a937f53f51b183","owner":"6b3d0b899f70acb2ad63868dc6303f6a8bdd96dfa52bffec40d166742e686709","tool":"ArtifactPreview","durationMs":152,"steps":1}
+2026/10/07 14:57:08 mhl stderr: step: Render
+2026/10/07 14:57:08 mhl stderr: {"time":"2026-10-07T14:57:08.654765-03:00","level":"INFO","msg":"run completed","component":"mcpserver","runId":"97de13be09b0b016d9a88fc38160dc0c","owner":"6b3d0b899f70acb2ad63868dc6303f6a8bdd96dfa52bffec40d166742e686709","tool":"ArtifactPreview","durationMs":156,"steps":1}
+2026/10/07 14:57:08 mhl stderr: step: Render
+2026/10/07 14:57:08 mhl stderr: {"time":"2026-10-07T14:57:08.65842-03:00","level":"INFO","msg":"run completed","component":"mcpserver","runId":"eb19d9f34cd579cab02792a3651066cb","owner":"6b3d0b899f70acb2ad63868dc6303f6a8bdd96dfa52bffec40d166742e686709","tool":"ArtifactPreview","durationMs":156,"steps":1}
+2026/10/07 14:57:08 mhl stderr: step: Render
+2026/10/07 14:57:08 mhl stderr: {"time":"2026-10-07T14:57:08.665365-03:00","level":"INFO","msg":"run completed","component":"mcpserver","runId":"a1f65f44623d6b7286ef5ddc50102dae","owner":"6b3d0b899f70acb2ad63868dc6303f6a8bdd96dfa52bffec40d166742e686709","tool":"ArtifactPreview","durationMs":165,"steps":1}
+2026/10/07 14:57:08 mhl stderr: step: Render
+2026/10/07 14:57:08 mhl stderr: {"time":"2026-10-07T14:57:08.67142-03:00","level":"INFO","msg":"run completed","component":"mcpserver","runId":"225a21fd4f9a608a65efd6d5fd2f5161","owner":"6b3d0b899f70acb2ad63868dc6303f6a8bdd96dfa52bffec40d166742e686709","tool":"ArtifactPreview","durationMs":168,"steps":1}
+2026/10/07 14:57:08 mhl stderr: {"time":"2026-10-07T14:57:08.71944-03:00","level":"INFO","msg":"run started","component":"mcpserver","runId":"f1a004de8ab119acfffd8f39120d9cb4","owner":"6b3d0b899f70acb2ad63868dc6303f6a8bdd96dfa52bffec40d166742e686709","tool":"ArtifactPreview","resume":false}
+2026/10/07 14:57:08 mhl stderr: session: f1a004de8ab119acfffd8f39120d9cb4
+2026/10/07 14:57:08 mhl stderr: {"time":"2026-10-07T14:57:08.720589-03:00","level":"INFO","msg":"run started","component":"mcpserver","runId":"fb8790626cbfd5e4e338313856c5b37f","owner":"6b3d0b899f70acb2ad63868dc6303f6a8bdd96dfa52bffec40d166742e686709","tool":"ArtifactPreview","resume":false}
+2026/10/07 14:57:08 mhl stderr: session: fb8790626cbfd5e4e338313856c5b37f
+2026/10/07 14:57:08 mhl stderr: {"time":"2026-10-07T14:57:08.721558-03:00","level":"INFO","msg":"run started","component":"mcpserver","runId":"24f09b9933cab3f63078daf3ff61a37f","owner":"6b3d0b899f70acb2ad63868dc6303f6a8bdd96dfa52bffec40d166742e686709","tool":"ArtifactPreview","resume":false}
+2026/10/07 14:57:08 mhl stderr: session: 24f09b9933cab3f63078daf3ff61a37f
+2026/10/07 14:57:08 mhl stderr: {"time":"2026-10-07T14:57:08.722271-03:00","level":"INFO","msg":"run started","component":"mcpserver","runId":"3f1abc9e8501cc23998669f58225428c","owner":"6b3d0b899f70acb2ad63868dc6303f6a8bdd96dfa52bffec40d166742e686709","tool":"ArtifactPreview","resume":false}
+2026/10/07 14:57:08 mhl stderr: session: 3f1abc9e8501cc23998669f58225428c
+2026/10/07 14:57:08 mhl stderr: {"time":"2026-10-07T14:57:08.722907-03:00","level":"INFO","msg":"run started","component":"mcpserver","runId":"c48b98f6d3bb66c539c281b919dabc31","owner":"6b3d0b899f70acb2ad63868dc6303f6a8bdd96dfa52bffec40d166742e686709","tool":"ArtifactPreview","resume":false}
+2026/10/07 14:57:08 mhl stderr: session: c48b98f6d3bb66c539c281b919dabc31
+2026/10/07 14:57:08 mhl stderr: {"time":"2026-10-07T14:57:08.724201-03:00","level":"INFO","msg":"run started","component":"mcpserver","runId":"da7ca84a16090cec5e1d1090c1f6271e","owner":"6b3d0b899f70acb2ad63868dc6303f6a8bdd96dfa52bffec40d166742e686709","tool":"ArtifactPreview","resume":false}
+2026/10/07 14:57:08 mhl stderr: session: da7ca84a16090cec5e1d1090c1f6271e
+2026/10/07 14:57:08 mhl stderr: {"time":"2026-10-07T14:57:08.729818-03:00","level":"INFO","msg":"run started","component":"mcpserver","runId":"450e2b94e8500a8309712c656392fb11","owner":"6b3d0b899f70acb2ad63868dc6303f6a8bdd96dfa52bffec40d166742e686709","tool":"ArtifactPreview","resume":false}
+2026/10/07 14:57:08 mhl stderr: session: 450e2b94e8500a8309712c656392fb11
+2026/10/07 14:57:08 mhl stderr: {"time":"2026-10-07T14:57:08.731851-03:00","level":"INFO","msg":"run started","component":"mcpserver","runId":"f421bc8ab8ccfa5bcb44a2072274d14f","owner":"6b3d0b899f70acb2ad63868dc6303f6a8bdd96dfa52bffec40d166742e686709","tool":"ArtifactPreview","resume":false}
+2026/10/07 14:57:08 mhl stderr: session: f421bc8ab8ccfa5bcb44a2072274d14f
+2026/10/07 14:57:08 mhl stderr: step: Render
+2026/10/07 14:57:08 mhl stderr: {"time":"2026-10-07T14:57:08.869231-03:00","level":"INFO","msg":"run completed","component":"mcpserver","runId":"fb8790626cbfd5e4e338313856c5b37f","owner":"6b3d0b899f70acb2ad63868dc6303f6a8bdd96dfa52bffec40d166742e686709","tool":"ArtifactPreview","durationMs":148,"steps":1}
+2026/10/07 14:57:08 mhl stderr: step: Render
+2026/10/07 14:57:08 mhl stderr: step: Render
+2026/10/07 14:57:08 mhl stderr: {"time":"2026-10-07T14:57:08.871951-03:00","level":"INFO","msg":"run completed","component":"mcpserver","runId":"3f1abc9e8501cc23998669f58225428c","owner":"6b3d0b899f70acb2ad63868dc6303f6a8bdd96dfa52bffec40d166742e686709","tool":"ArtifactPreview","durationMs":149,"steps":1}
+2026/10/07 14:57:08 mhl stderr: {"time":"2026-10-07T14:57:08.872788-03:00","level":"INFO","msg":"run completed","component":"mcpserver","runId":"f1a004de8ab119acfffd8f39120d9cb4","owner":"6b3d0b899f70acb2ad63868dc6303f6a8bdd96dfa52bffec40d166742e686709","tool":"ArtifactPreview","durationMs":153,"steps":1}
+2026/10/07 14:57:08 mhl stderr: step: Render
+2026/10/07 14:57:08 mhl stderr: {"time":"2026-10-07T14:57:08.873818-03:00","level":"INFO","msg":"run completed","component":"mcpserver","runId":"24f09b9933cab3f63078daf3ff61a37f","owner":"6b3d0b899f70acb2ad63868dc6303f6a8bdd96dfa52bffec40d166742e686709","tool":"ArtifactPreview","durationMs":152,"steps":1}
+2026/10/07 14:57:08 mhl stderr: step: Render
+2026/10/07 14:57:08 mhl stderr: {"time":"2026-10-07T14:57:08.881301-03:00","level":"INFO","msg":"run completed","component":"mcpserver","runId":"450e2b94e8500a8309712c656392fb11","owner":"6b3d0b899f70acb2ad63868dc6303f6a8bdd96dfa52bffec40d166742e686709","tool":"ArtifactPreview","durationMs":151,"steps":1}
+2026/10/07 14:57:08 mhl stderr: step: Render
+2026/10/07 14:57:08 mhl stderr: {"time":"2026-10-07T14:57:08.885684-03:00","level":"INFO","msg":"run completed","component":"mcpserver","runId":"f421bc8ab8ccfa5bcb44a2072274d14f","owner":"6b3d0b899f70acb2ad63868dc6303f6a8bdd96dfa52bffec40d166742e686709","tool":"ArtifactPreview","durationMs":153,"steps":1}
+2026/10/07 14:57:08 mhl stderr: step: Render
+2026/10/07 14:57:08 mhl stderr: {"time":"2026-10-07T14:57:08.891072-03:00","level":"INFO","msg":"run completed","component":"mcpserver","runId":"da7ca84a16090cec5e1d1090c1f6271e","owner":"6b3d0b899f70acb2ad63868dc6303f6a8bdd96dfa52bffec40d166742e686709","tool":"ArtifactPreview","durationMs":166,"steps":1}
+2026/10/07 14:57:08 mhl stderr: step: Render
+2026/10/07 14:57:08 mhl stderr: {"time":"2026-10-07T14:57:08.89304-03:00","level":"INFO","msg":"run completed","component":"mcpserver","runId":"c48b98f6d3bb66c539c281b919dabc31","owner":"6b3d0b899f70acb2ad63868dc6303f6a8bdd96dfa52bffec40d166742e686709","tool":"ArtifactPreview","durationMs":170,"steps":1}
+2026/10/07 14:57:08 mhl stderr: {"time":"2026-10-07T14:57:08.947094-03:00","level":"INFO","msg":"run started","component":"mcpserver","runId":"2bc1c2013b9dc675960a0fa4d2de4ebc","owner":"6b3d0b899f70acb2ad63868dc6303f6a8bdd96dfa52bffec40d166742e686709","tool":"ArtifactPreview","resume":false}
+2026/10/07 14:57:08 mhl stderr: session: 2bc1c2013b9dc675960a0fa4d2de4ebc
+2026/10/07 14:57:08 mhl stderr: {"time":"2026-10-07T14:57:08.948299-03:00","level":"INFO","msg":"run started","component":"mcpserver","runId":"29beb61a623e7d1150305a3432b19324","owner":"6b3d0b899f70acb2ad63868dc6303f6a8bdd96dfa52bffec40d166742e686709","tool":"ArtifactPreview","resume":false}
+2026/10/07 14:57:08 mhl stderr: session: 29beb61a623e7d1150305a3432b19324
+2026/10/07 14:57:08 mhl stderr: {"time":"2026-10-07T14:57:08.950017-03:00","level":"INFO","msg":"run started","component":"mcpserver","runId":"8f7d9acc1fb64eb15be3c70e4e88091e","owner":"6b3d0b899f70acb2ad63868dc6303f6a8bdd96dfa52bffec40d166742e686709","tool":"ArtifactPreview","resume":false}
+2026/10/07 14:57:08 mhl stderr: session: 8f7d9acc1fb64eb15be3c70e4e88091e
+2026/10/07 14:57:08 mhl stderr: {"time":"2026-10-07T14:57:08.952274-03:00","level":"INFO","msg":"run started","component":"mcpserver","runId":"e66ae62384d065fb7b836a3530e7c59a","owner":"6b3d0b899f70acb2ad63868dc6303f6a8bdd96dfa52bffec40d166742e686709","tool":"ArtifactPreview","resume":false}
+2026/10/07 14:57:08 mhl stderr: session: e66ae62384d065fb7b836a3530e7c59a
+2026/10/07 14:57:08 mhl stderr: {"time":"2026-10-07T14:57:08.953093-03:00","level":"INFO","msg":"run started","component":"mcpserver","runId":"ee9cc4f0d0a33d14f5a61a5a0b2bf831","owner":"6b3d0b899f70acb2ad63868dc6303f6a8bdd96dfa52bffec40d166742e686709","tool":"ArtifactPreview","resume":false}
+2026/10/07 14:57:08 mhl stderr: session: ee9cc4f0d0a33d14f5a61a5a0b2bf831
+2026/10/07 14:57:08 mhl stderr: {"time":"2026-10-07T14:57:08.954457-03:00","level":"INFO","msg":"run started","component":"mcpserver","runId":"4082432d59dcbd4c2e6099f4b9a7058b","owner":"6b3d0b899f70acb2ad63868dc6303f6a8bdd96dfa52bffec40d166742e686709","tool":"ArtifactPreview","resume":false}
+2026/10/07 14:57:08 mhl stderr: session: 4082432d59dcbd4c2e6099f4b9a7058b
+2026/10/07 14:57:08 mhl stderr: {"time":"2026-10-07T14:57:08.955158-03:00","level":"INFO","msg":"run started","component":"mcpserver","runId":"3bf518e5398f90401fcaba8f05a44157","owner":"6b3d0b899f70acb2ad63868dc6303f6a8bdd96dfa52bffec40d166742e686709","tool":"ArtifactPreview","resume":false}
+2026/10/07 14:57:08 mhl stderr: session: 3bf518e5398f90401fcaba8f05a44157
+2026/10/07 14:57:08 mhl stderr: {"time":"2026-10-07T14:57:08.955926-03:00","level":"INFO","msg":"run started","component":"mcpserver","runId":"d968b63c7fda9502e946f27d7403f772","owner":"6b3d0b899f70acb2ad63868dc6303f6a8bdd96dfa52bffec40d166742e686709","tool":"ArtifactPreview","resume":false}
+2026/10/07 14:57:08 mhl stderr: session: d968b63c7fda9502e946f27d7403f772
+2026/10/07 14:57:09 mhl stderr: step: Render
+2026/10/07 14:57:09 mhl stderr: {"time":"2026-10-07T14:57:09.112104-03:00","level":"INFO","msg":"run completed","component":"mcpserver","runId":"e66ae62384d065fb7b836a3530e7c59a","owner":"6b3d0b899f70acb2ad63868dc6303f6a8bdd96dfa52bffec40d166742e686709","tool":"ArtifactPreview","durationMs":159,"steps":1}
+2026/10/07 14:57:09 mhl stderr: step: Render
+2026/10/07 14:57:09 mhl stderr: {"time":"2026-10-07T14:57:09.112985-03:00","level":"INFO","msg":"run completed","component":"mcpserver","runId":"8f7d9acc1fb64eb15be3c70e4e88091e","owner":"6b3d0b899f70acb2ad63868dc6303f6a8bdd96dfa52bffec40d166742e686709","tool":"ArtifactPreview","durationMs":162,"steps":1}
+2026/10/07 14:57:09 mhl stderr: step: Render
+2026/10/07 14:57:09 mhl stderr: step: Render
+2026/10/07 14:57:09 mhl stderr: {"time":"2026-10-07T14:57:09.116062-03:00","level":"INFO","msg":"run completed","component":"mcpserver","runId":"29beb61a623e7d1150305a3432b19324","owner":"6b3d0b899f70acb2ad63868dc6303f6a8bdd96dfa52bffec40d166742e686709","tool":"ArtifactPreview","durationMs":167,"steps":1}
+2026/10/07 14:57:09 mhl stderr: {"time":"2026-10-07T14:57:09.116312-03:00","level":"INFO","msg":"run completed","component":"mcpserver","runId":"ee9cc4f0d0a33d14f5a61a5a0b2bf831","owner":"6b3d0b899f70acb2ad63868dc6303f6a8bdd96dfa52bffec40d166742e686709","tool":"ArtifactPreview","durationMs":163,"steps":1}
+2026/10/07 14:57:09 mhl stderr: step: Render
+2026/10/07 14:57:09 mhl stderr: {"time":"2026-10-07T14:57:09.125526-03:00","level":"INFO","msg":"run completed","component":"mcpserver","runId":"d968b63c7fda9502e946f27d7403f772","owner":"6b3d0b899f70acb2ad63868dc6303f6a8bdd96dfa52bffec40d166742e686709","tool":"ArtifactPreview","durationMs":169,"steps":1}
+2026/10/07 14:57:09 mhl stderr: step: Render
+2026/10/07 14:57:09 mhl stderr: {"time":"2026-10-07T14:57:09.135878-03:00","level":"INFO","msg":"run completed","component":"mcpserver","runId":"3bf518e5398f90401fcaba8f05a44157","owner":"6b3d0b899f70acb2ad63868dc6303f6a8bdd96dfa52bffec40d166742e686709","tool":"ArtifactPreview","durationMs":180,"steps":1}
+2026/10/07 14:57:09 mhl stderr: step: Render
+2026/10/07 14:57:09 mhl stderr: {"time":"2026-10-07T14:57:09.138315-03:00","level":"INFO","msg":"run completed","component":"mcpserver","runId":"2bc1c2013b9dc675960a0fa4d2de4ebc","owner":"6b3d0b899f70acb2ad63868dc6303f6a8bdd96dfa52bffec40d166742e686709","tool":"ArtifactPreview","durationMs":191,"steps":1}
+2026/10/07 14:57:09 mhl stderr: step: Render
+2026/10/07 14:57:09 mhl stderr: {"time":"2026-10-07T14:57:09.144136-03:00","level":"INFO","msg":"run completed","component":"mcpserver","runId":"4082432d59dcbd4c2e6099f4b9a7058b","owner":"6b3d0b899f70acb2ad63868dc6303f6a8bdd96dfa52bffec40d166742e686709","tool":"ArtifactPreview","durationMs":189,"steps":1}
+2026/10/07 14:57:09 mhl stderr: {"time":"2026-10-07T14:57:09.171459-03:00","level":"INFO","msg":"run started","component":"mcpserver","runId":"cdbe2d407743bb51df8cfc7affb75e58","owner":"6b3d0b899f70acb2ad63868dc6303f6a8bdd96dfa52bffec40d166742e686709","tool":"ArtifactPreview","resume":false}
+2026/10/07 14:57:09 mhl stderr: session: cdbe2d407743bb51df8cfc7affb75e58
+2026/10/07 14:57:09 mhl stderr: {"time":"2026-10-07T14:57:09.174994-03:00","level":"INFO","msg":"run started","component":"mcpserver","runId":"bb697c331a2ec7fe2d9eaaa6371279ae","owner":"6b3d0b899f70acb2ad63868dc6303f6a8bdd96dfa52bffec40d166742e686709","tool":"ArtifactPreview","resume":false}
+2026/10/07 14:57:09 mhl stderr: session: bb697c331a2ec7fe2d9eaaa6371279ae
+2026/10/07 14:57:09 mhl stderr: {"time":"2026-10-07T14:57:09.178703-03:00","level":"INFO","msg":"run started","component":"mcpserver","runId":"4ae16dc0de1a1bdd387c0c2dd666f988","owner":"6b3d0b899f70acb2ad63868dc6303f6a8bdd96dfa52bffec40d166742e686709","tool":"ArtifactPreview","resume":false}
+2026/10/07 14:57:09 mhl stderr: session: 4ae16dc0de1a1bdd387c0c2dd666f988
+2026/10/07 14:57:09 mhl stderr: {"time":"2026-10-07T14:57:09.181152-03:00","level":"INFO","msg":"run started","component":"mcpserver","runId":"49f4407cbe5177cd326ccd768a575cb7","owner":"6b3d0b899f70acb2ad63868dc6303f6a8bdd96dfa52bffec40d166742e686709","tool":"ArtifactPreview","resume":false}
+2026/10/07 14:57:09 mhl stderr: session: 49f4407cbe5177cd326ccd768a575cb7
+2026/10/07 14:57:09 mhl stderr: {"time":"2026-10-07T14:57:09.182064-03:00","level":"INFO","msg":"run started","component":"mcpserver","runId":"4b7b7693cad9e4224ca8a842edae6fc6","owner":"6b3d0b899f70acb2ad63868dc6303f6a8bdd96dfa52bffec40d166742e686709","tool":"ArtifactPreview","resume":false}
+2026/10/07 14:57:09 mhl stderr: session: 4b7b7693cad9e4224ca8a842edae6fc6
+2026/10/07 14:57:09 mhl stderr: {"time":"2026-10-07T14:57:09.183045-03:00","level":"INFO","msg":"run started","component":"mcpserver","runId":"21735276eb7f810f5b5b9ac33fd427aa","owner":"6b3d0b899f70acb2ad63868dc6303f6a8bdd96dfa52bffec40d166742e686709","tool":"ArtifactPreview","resume":false}
+2026/10/07 14:57:09 mhl stderr: session: 21735276eb7f810f5b5b9ac33fd427aa
+2026/10/07 14:57:09 mhl stderr: {"time":"2026-10-07T14:57:09.183969-03:00","level":"INFO","msg":"run started","component":"mcpserver","runId":"09d83c833ea9a82f3f0282edb4f085e2","owner":"6b3d0b899f70acb2ad63868dc6303f6a8bdd96dfa52bffec40d166742e686709","tool":"ArtifactPreview","resume":false}
+2026/10/07 14:57:09 mhl stderr: session: 09d83c833ea9a82f3f0282edb4f085e2
+2026/10/07 14:57:09 mhl stderr: {"time":"2026-10-07T14:57:09.185388-03:00","level":"INFO","msg":"run started","component":"mcpserver","runId":"325ad98ded0df883d35473d1703bfd94","owner":"6b3d0b899f70acb2ad63868dc6303f6a8bdd96dfa52bffec40d166742e686709","tool":"ArtifactPreview","resume":false}
+2026/10/07 14:57:09 mhl stderr: session: 325ad98ded0df883d35473d1703bfd94
+2026/10/07 14:57:09 mhl stderr: step: Render
+2026/10/07 14:57:09 mhl stderr: {"time":"2026-10-07T14:57:09.322878-03:00","level":"INFO","msg":"run completed","component":"mcpserver","runId":"bb697c331a2ec7fe2d9eaaa6371279ae","owner":"6b3d0b899f70acb2ad63868dc6303f6a8bdd96dfa52bffec40d166742e686709","tool":"ArtifactPreview","durationMs":147,"steps":1}
+2026/10/07 14:57:09 mhl stderr: step: Render
+2026/10/07 14:57:09 mhl stderr: {"time":"2026-10-07T14:57:09.336901-03:00","level":"INFO","msg":"run completed","component":"mcpserver","runId":"21735276eb7f810f5b5b9ac33fd427aa","owner":"6b3d0b899f70acb2ad63868dc6303f6a8bdd96dfa52bffec40d166742e686709","tool":"ArtifactPreview","durationMs":153,"steps":1}
+2026/10/07 14:57:09 mhl stderr: step: Render
+2026/10/07 14:57:09 mhl stderr: step: Render
+2026/10/07 14:57:09 mhl stderr: {"time":"2026-10-07T14:57:09.339607-03:00","level":"INFO","msg":"run completed","component":"mcpserver","runId":"09d83c833ea9a82f3f0282edb4f085e2","owner":"6b3d0b899f70acb2ad63868dc6303f6a8bdd96dfa52bffec40d166742e686709","tool":"ArtifactPreview","durationMs":155,"steps":1}
+2026/10/07 14:57:09 mhl stderr: {"time":"2026-10-07T14:57:09.340161-03:00","level":"INFO","msg":"run completed","component":"mcpserver","runId":"cdbe2d407743bb51df8cfc7affb75e58","owner":"6b3d0b899f70acb2ad63868dc6303f6a8bdd96dfa52bffec40d166742e686709","tool":"ArtifactPreview","durationMs":168,"steps":1}
+2026/10/07 14:57:09 mhl stderr: step: Render
+2026/10/07 14:57:09 mhl stderr: step: Render
+2026/10/07 14:57:09 mhl stderr: {"time":"2026-10-07T14:57:09.341168-03:00","level":"INFO","msg":"run completed","component":"mcpserver","runId":"325ad98ded0df883d35473d1703bfd94","owner":"6b3d0b899f70acb2ad63868dc6303f6a8bdd96dfa52bffec40d166742e686709","tool":"ArtifactPreview","durationMs":155,"steps":1}
+2026/10/07 14:57:09 mhl stderr: {"time":"2026-10-07T14:57:09.341685-03:00","level":"INFO","msg":"run completed","component":"mcpserver","runId":"4b7b7693cad9e4224ca8a842edae6fc6","owner":"6b3d0b899f70acb2ad63868dc6303f6a8bdd96dfa52bffec40d166742e686709","tool":"ArtifactPreview","durationMs":159,"steps":1}
+2026/10/07 14:57:09 mhl stderr: step: Render
+2026/10/07 14:57:09 mhl stderr: step: Render
+2026/10/07 14:57:09 mhl stderr: {"time":"2026-10-07T14:57:09.345366-03:00","level":"INFO","msg":"run completed","component":"mcpserver","runId":"4ae16dc0de1a1bdd387c0c2dd666f988","owner":"6b3d0b899f70acb2ad63868dc6303f6a8bdd96dfa52bffec40d166742e686709","tool":"ArtifactPreview","durationMs":166,"steps":1}
+2026/10/07 14:57:09 mhl stderr: {"time":"2026-10-07T14:57:09.345541-03:00","level":"INFO","msg":"run completed","component":"mcpserver","runId":"49f4407cbe5177cd326ccd768a575cb7","owner":"6b3d0b899f70acb2ad63868dc6303f6a8bdd96dfa52bffec40d166742e686709","tool":"ArtifactPreview","durationMs":164,"steps":1}
+2026/10/07 14:57:09 mhl stderr: {"time":"2026-10-07T14:57:09.385744-03:00","level":"INFO","msg":"run started","component":"mcpserver","runId":"cd83f833308f950a355b366f15413456","owner":"6b3d0b899f70acb2ad63868dc6303f6a8bdd96dfa52bffec40d166742e686709","tool":"ArtifactPreview","resume":false}
+2026/10/07 14:57:09 mhl stderr: session: cd83f833308f950a355b366f15413456
+2026/10/07 14:57:09 mhl stderr: {"time":"2026-10-07T14:57:09.386668-03:00","level":"INFO","msg":"run started","component":"mcpserver","runId":"6e2cbd4f51b927c29e3f8228317b8a33","owner":"6b3d0b899f70acb2ad63868dc6303f6a8bdd96dfa52bffec40d166742e686709","tool":"ArtifactPreview","resume":false}
+2026/10/07 14:57:09 mhl stderr: session: 6e2cbd4f51b927c29e3f8228317b8a33
+2026/10/07 14:57:09 mhl stderr: {"time":"2026-10-07T14:57:09.387566-03:00","level":"INFO","msg":"run started","component":"mcpserver","runId":"6789c3ad3f548c28b24599a4012d8767","owner":"6b3d0b899f70acb2ad63868dc6303f6a8bdd96dfa52bffec40d166742e686709","tool":"ArtifactPreview","resume":false}
+2026/10/07 14:57:09 mhl stderr: session: 6789c3ad3f548c28b24599a4012d8767
+2026/10/07 14:57:09 mhl stderr: {"time":"2026-10-07T14:57:09.388136-03:00","level":"INFO","msg":"run started","component":"mcpserver","runId":"7b57d9b4591be5cc43317c7b96c54374","owner":"6b3d0b899f70acb2ad63868dc6303f6a8bdd96dfa52bffec40d166742e686709","tool":"ArtifactPreview","resume":false}
+2026/10/07 14:57:09 mhl stderr: session: 7b57d9b4591be5cc43317c7b96c54374
+2026/10/07 14:57:09 mhl stderr: {"time":"2026-10-07T14:57:09.389242-03:00","level":"INFO","msg":"run started","component":"mcpserver","runId":"19ba5cb61b91e689e17686308bfefd80","owner":"6b3d0b899f70acb2ad63868dc6303f6a8bdd96dfa52bffec40d166742e686709","tool":"ArtifactPreview","resume":false}
+2026/10/07 14:57:09 mhl stderr: session: 19ba5cb61b91e689e17686308bfefd80
+2026/10/07 14:57:09 mhl stderr: {"time":"2026-10-07T14:57:09.390453-03:00","level":"INFO","msg":"run started","component":"mcpserver","runId":"f0be4d31cbf7d5bd9a2a9318bf3ccfaa","owner":"6b3d0b899f70acb2ad63868dc6303f6a8bdd96dfa52bffec40d166742e686709","tool":"ArtifactPreview","resume":false}
+2026/10/07 14:57:09 mhl stderr: session: f0be4d31cbf7d5bd9a2a9318bf3ccfaa
+2026/10/07 14:57:09 mhl stderr: {"time":"2026-10-07T14:57:09.391582-03:00","level":"INFO","msg":"run started","component":"mcpserver","runId":"e45c2ae5d0101cb4b6e1a16fa8d9d670","owner":"6b3d0b899f70acb2ad63868dc6303f6a8bdd96dfa52bffec40d166742e686709","tool":"ArtifactPreview","resume":false}
+2026/10/07 14:57:09 mhl stderr: session: e45c2ae5d0101cb4b6e1a16fa8d9d670
+2026/10/07 14:57:09 mhl stderr: {"time":"2026-10-07T14:57:09.392686-03:00","level":"INFO","msg":"run started","component":"mcpserver","runId":"3118651f00b25c9debb0583102938676","owner":"6b3d0b899f70acb2ad63868dc6303f6a8bdd96dfa52bffec40d166742e686709","tool":"ArtifactPreview","resume":false}
+2026/10/07 14:57:09 mhl stderr: session: 3118651f00b25c9debb0583102938676
+2026/10/07 14:57:09 mhl stderr: step: Render
+2026/10/07 14:57:09 mhl stderr: {"time":"2026-10-07T14:57:09.516982-03:00","level":"INFO","msg":"run completed","component":"mcpserver","runId":"6789c3ad3f548c28b24599a4012d8767","owner":"6b3d0b899f70acb2ad63868dc6303f6a8bdd96dfa52bffec40d166742e686709","tool":"ArtifactPreview","durationMs":129,"steps":1}
+2026/10/07 14:57:09 mhl stderr: step: Render
+2026/10/07 14:57:09 mhl stderr: {"time":"2026-10-07T14:57:09.54509-03:00","level":"INFO","msg":"run completed","component":"mcpserver","runId":"3118651f00b25c9debb0583102938676","owner":"6b3d0b899f70acb2ad63868dc6303f6a8bdd96dfa52bffec40d166742e686709","tool":"ArtifactPreview","durationMs":152,"steps":1}
+2026/10/07 14:57:09 mhl stderr: step: Render
+2026/10/07 14:57:09 mhl stderr: step: Render
+2026/10/07 14:57:09 mhl stderr: {"time":"2026-10-07T14:57:09.547679-03:00","level":"INFO","msg":"run completed","component":"mcpserver","runId":"e45c2ae5d0101cb4b6e1a16fa8d9d670","owner":"6b3d0b899f70acb2ad63868dc6303f6a8bdd96dfa52bffec40d166742e686709","tool":"ArtifactPreview","durationMs":156,"steps":1}
+2026/10/07 14:57:09 mhl stderr: {"time":"2026-10-07T14:57:09.547784-03:00","level":"INFO","msg":"run completed","component":"mcpserver","runId":"7b57d9b4591be5cc43317c7b96c54374","owner":"6b3d0b899f70acb2ad63868dc6303f6a8bdd96dfa52bffec40d166742e686709","tool":"ArtifactPreview","durationMs":159,"steps":1}
+2026/10/07 14:57:09 mhl stderr: step: Render
+2026/10/07 14:57:09 mhl stderr: step: Render
+2026/10/07 14:57:09 mhl stderr: step: Render
+2026/10/07 14:57:09 mhl stderr: {"time":"2026-10-07T14:57:09.552219-03:00","level":"INFO","msg":"run completed","component":"mcpserver","runId":"19ba5cb61b91e689e17686308bfefd80","owner":"6b3d0b899f70acb2ad63868dc6303f6a8bdd96dfa52bffec40d166742e686709","tool":"ArtifactPreview","durationMs":162,"steps":1}
+2026/10/07 14:57:09 mhl stderr: {"time":"2026-10-07T14:57:09.552704-03:00","level":"INFO","msg":"run completed","component":"mcpserver","runId":"f0be4d31cbf7d5bd9a2a9318bf3ccfaa","owner":"6b3d0b899f70acb2ad63868dc6303f6a8bdd96dfa52bffec40d166742e686709","tool":"ArtifactPreview","durationMs":162,"steps":1}
+2026/10/07 14:57:09 mhl stderr: {"time":"2026-10-07T14:57:09.552915-03:00","level":"INFO","msg":"run completed","component":"mcpserver","runId":"6e2cbd4f51b927c29e3f8228317b8a33","owner":"6b3d0b899f70acb2ad63868dc6303f6a8bdd96dfa52bffec40d166742e686709","tool":"ArtifactPreview","durationMs":166,"steps":1}
+2026/10/07 14:57:09 mhl stderr: step: Render
+2026/10/07 14:57:09 mhl stderr: {"time":"2026-10-07T14:57:09.555803-03:00","level":"INFO","msg":"run completed","component":"mcpserver","runId":"cd83f833308f950a355b366f15413456","owner":"6b3d0b899f70acb2ad63868dc6303f6a8bdd96dfa52bffec40d166742e686709","tool":"ArtifactPreview","durationMs":170,"steps":1}
+2026/10/07 14:57:09 mhl stderr: {"time":"2026-10-07T14:57:09.60182-03:00","level":"INFO","msg":"draining","component":"mcpserver","timeout":"0s","cancelImmediately":true}
+--- PASS: TestMHLBridge_ConcurrentCallsOnTheSharedSessionNeverFail (7.29s)
+=== RUN   TestConvertOfficeSource_Docx
+--- PASS: TestConvertOfficeSource_Docx (0.00s)
+=== RUN   TestConvertOfficeSource_Pptx
+--- PASS: TestConvertOfficeSource_Pptx (0.00s)
+=== RUN   TestConvertOfficeSource_Xlsx
+--- PASS: TestConvertOfficeSource_Xlsx (0.00s)
+=== RUN   TestConvertOfficeSource_RejectsNonZip
+--- PASS: TestConvertOfficeSource_RejectsNonZip (0.00s)
+=== RUN   TestAddRawFile_ConvertsOfficeToMarkdown
+2026/10/07 14:57:09 mhl bridge: usando mhl vendorizado em /var/folders/x0/113y39ld2sz4xqvc814d7k280000gn/T/TestAddRawFile_ConvertsOfficeToMarkdown283881280/001/embedded/bin/mhl (sha256 cdc73e4fe37c49c98974e6d7ae60b7f0d867d6515c5f496e33bca6c5fca63786)
+2026/10/07 14:57:09 mhl bridge: usando pdftotext vendorizado em /var/folders/x0/113y39ld2sz4xqvc814d7k280000gn/T/TestAddRawFile_ConvertsOfficeToMarkdown283881280/001/embedded/bin/pdftotext (sha256 a96840a35c8a57e3cff578b3e8758bc744a94bed7e288a88309df89de6965261)
+2026/10/07 14:57:09 mhl bridge: arquivos prontos em 6ms
+2026/10/07 14:57:09 mhlbridge: devin resolvido em /Users/yanjustino/.local/bin/devin
+2026/10/07 14:57:09 mhlbridge: codex resolvido em /Users/yanjustino/.local/bin/codex
+2026/10/07 14:57:09 mhlbridge: claude resolvido em /Users/yanjustino/.local/bin/claude
+2026/10/07 14:57:15 mhl stderr: mhl serve mcp --http: 6 tool(s) from /Users/yanjustino/dev/senpai.info.nosync/workflows on http://127.0.0.1:64786/mcp
+2026/10/07 14:57:15 mhl bridge: ready em 6.171s (total 6.178s), serving /Users/yanjustino/dev/senpai.info.nosync/workflows (state-dir: /var/folders/x0/113y39ld2sz4xqvc814d7k280000gn/T/TestAddRawFile_ConvertsOfficeToMarkdown283881280/001/state, data-dir: /var/folders/x0/113y39ld2sz4xqvc814d7k280000gn/T/TestAddRawFile_ConvertsOfficeToMarkdown283881280/001/data, codex-cwd: /var/folders/x0/113y39ld2sz4xqvc814d7k280000gn/T/TestAddRawFile_ConvertsOfficeToMarkdown283881280/001/codex-cwd)
+2026/10/07 14:57:15 mhl stderr: {"time":"2026-10-07T14:57:15.790505-03:00","level":"INFO","msg":"run started","component":"mcpserver","runId":"7faf5fc010f4b2d8119acb40c3386504","owner":"7f8898c6e15286ad9bc599cc64ceea4ab9f76103396191bd7543eb4ec8218c55","tool":"WorkItem","resume":false}
+2026/10/07 14:57:15 mhl stderr: session: 7faf5fc010f4b2d8119acb40c3386504
+2026/10/07 14:57:15 mhl stderr: step: Dispatch
+2026/10/07 14:57:15 mhl stderr: step: Create
+2026/10/07 14:57:15 mhl stderr: step: Done
+2026/10/07 14:57:15 mhl stderr: {"time":"2026-10-07T14:57:15.894977-03:00","level":"INFO","msg":"run completed","component":"mcpserver","runId":"7faf5fc010f4b2d8119acb40c3386504","owner":"7f8898c6e15286ad9bc599cc64ceea4ab9f76103396191bd7543eb4ec8218c55","tool":"WorkItem","durationMs":104,"steps":3}
+2026/10/07 14:57:15 mhl stderr: {"time":"2026-10-07T14:57:15.994259-03:00","level":"INFO","msg":"draining","component":"mcpserver","timeout":"0s","cancelImmediately":true}
+--- PASS: TestAddRawFile_ConvertsOfficeToMarkdown (6.39s)
+=== RUN   TestExportProjectToWritesZipWithUsageAndWithoutPromptsOrRunLogs
+--- PASS: TestExportProjectToWritesZipWithUsageAndWithoutPromptsOrRunLogs (0.00s)
+=== RUN   TestImportProjectRoundTripIntoEmptyDataDir
+--- PASS: TestImportProjectRoundTripIntoEmptyDataDir (0.01s)
+=== RUN   TestImportProjectRestoresModificationTimes
+--- PASS: TestImportProjectRestoresModificationTimes (0.00s)
+=== RUN   TestImportProjectWithoutModifiedAtUsesOneTimestamp
+--- PASS: TestImportProjectWithoutModifiedAtUsesOneTimestamp (0.00s)
+=== RUN   TestImportProjectCopiesWhenIDAlreadyExists
+--- PASS: TestImportProjectCopiesWhenIDAlreadyExists (0.00s)
+=== RUN   TestImportProjectRejectsBadPackages
+=== RUN   TestImportProjectRejectsBadPackages/caminho_com_barra_invertida
+=== RUN   TestImportProjectRejectsBadPackages/arquivo_fora_da_allowlist
+=== RUN   TestImportProjectRejectsBadPackages/versao_futura
+=== RUN   TestImportProjectRejectsBadPackages/checksum_errado
+=== RUN   TestImportProjectRejectsBadPackages/modified_at_invalido
+=== RUN   TestImportProjectRejectsBadPackages/arquivo_fora_do_manifesto
+=== RUN   TestImportProjectRejectsBadPackages/sem_manifesto
+=== RUN   TestImportProjectRejectsBadPackages/caminho_com_..
+--- PASS: TestImportProjectRejectsBadPackages (0.01s)
+    --- PASS: TestImportProjectRejectsBadPackages/caminho_com_barra_invertida (0.00s)
+    --- PASS: TestImportProjectRejectsBadPackages/arquivo_fora_da_allowlist (0.00s)
+    --- PASS: TestImportProjectRejectsBadPackages/versao_futura (0.00s)
+    --- PASS: TestImportProjectRejectsBadPackages/checksum_errado (0.00s)
+    --- PASS: TestImportProjectRejectsBadPackages/modified_at_invalido (0.00s)
+    --- PASS: TestImportProjectRejectsBadPackages/arquivo_fora_do_manifesto (0.00s)
+    --- PASS: TestImportProjectRejectsBadPackages/sem_manifesto (0.00s)
+    --- PASS: TestImportProjectRejectsBadPackages/caminho_com_.. (0.00s)
+=== RUN   TestValidateRepoDir
+=== RUN   TestValidateRepoDir/repo_outside_app_data
+=== RUN   TestValidateRepoDir/relative_path
+=== RUN   TestValidateRepoDir/missing_folder
+=== RUN   TestValidateRepoDir/a_file
+=== RUN   TestValidateRepoDir/work-item_inside_app_data
+=== RUN   TestValidateRepoDir/app_data_itself
+=== RUN   TestValidateRepoDir/ancestor_of_app_data
+--- PASS: TestValidateRepoDir (0.00s)
+    --- PASS: TestValidateRepoDir/repo_outside_app_data (0.00s)
+    --- PASS: TestValidateRepoDir/relative_path (0.00s)
+    --- PASS: TestValidateRepoDir/missing_folder (0.00s)
+    --- PASS: TestValidateRepoDir/a_file (0.00s)
+    --- PASS: TestValidateRepoDir/work-item_inside_app_data (0.00s)
+    --- PASS: TestValidateRepoDir/app_data_itself (0.00s)
+    --- PASS: TestValidateRepoDir/ancestor_of_app_data (0.00s)
+=== RUN   TestValidateRepoDirFollowsSymlinks
+--- PASS: TestValidateRepoDirFollowsSymlinks (0.00s)
+=== RUN   TestRequireGitWorkTree
+--- PASS: TestRequireGitWorkTree (0.25s)
+=== RUN   TestParseRepoURL
+=== RUN   TestParseRepoURL/https://github.com/gin-gonic/gin.git
+=== RUN   TestParseRepoURL/__https://gitlab.com/grupo/sub/checkout-api__
+=== RUN   TestParseRepoURL/git@github.com:org/pagamentos.git
+=== RUN   TestParseRepoURL/ssh://git@bitbucket.org/org/cobranca.git
+=== RUN   TestParseRepoURL/https://ana:ghp_token@github.com/org/repo.git
+=== RUN   TestParseRepoURL/https://ghp_token@github.com/org/repo.git
+=== RUN   TestParseRepoURL/ssh://git:senha@host/org/repo.git
+=== RUN   TestParseRepoURL/http://github.com/org/repo.git
+=== RUN   TestParseRepoURL/file:///etc
+=== RUN   TestParseRepoURL/ext::sh_-c_touch%_/tmp/pwned
+=== RUN   TestParseRepoURL//Users/ana/dev/repo
+=== RUN   TestParseRepoURL/--upload-pack=touch_/tmp/x
+=== RUN   TestParseRepoURL/https://github.com/
+=== RUN   TestParseRepoURL/#00
+--- PASS: TestParseRepoURL (0.00s)
+    --- PASS: TestParseRepoURL/https://github.com/gin-gonic/gin.git (0.00s)
+    --- PASS: TestParseRepoURL/__https://gitlab.com/grupo/sub/checkout-api__ (0.00s)
+    --- PASS: TestParseRepoURL/git@github.com:org/pagamentos.git (0.00s)
+    --- PASS: TestParseRepoURL/ssh://git@bitbucket.org/org/cobranca.git (0.00s)
+    --- PASS: TestParseRepoURL/https://ana:ghp_token@github.com/org/repo.git (0.00s)
+    --- PASS: TestParseRepoURL/https://ghp_token@github.com/org/repo.git (0.00s)
+    --- PASS: TestParseRepoURL/ssh://git:senha@host/org/repo.git (0.00s)
+    --- PASS: TestParseRepoURL/http://github.com/org/repo.git (0.00s)
+    --- PASS: TestParseRepoURL/file:///etc (0.00s)
+    --- PASS: TestParseRepoURL/ext::sh_-c_touch%_/tmp/pwned (0.00s)
+    --- PASS: TestParseRepoURL//Users/ana/dev/repo (0.00s)
+    --- PASS: TestParseRepoURL/--upload-pack=touch_/tmp/x (0.00s)
+    --- PASS: TestParseRepoURL/https://github.com/ (0.00s)
+    --- PASS: TestParseRepoURL/#00 (0.00s)
+=== RUN   TestFriendlyCloneError
+--- PASS: TestFriendlyCloneError (0.00s)
+=== RUN   TestGitCloneShallowAndProtocolAllowList
+--- PASS: TestGitCloneShallowAndProtocolAllowList (0.83s)
+=== RUN   TestDiscardCloneOnlyDeletesTrackedClones
+--- PASS: TestDiscardCloneOnlyDeletesTrackedClones (0.00s)
+=== RUN   TestNewRunLogMeta_KeepsIdentifyingArgsOnly
+--- PASS: TestNewRunLogMeta_KeepsIdentifyingArgsOnly (0.00s)
+=== RUN   TestListProjectRunLogs_TitlesFromMetaOrSteps
+--- PASS: TestListProjectRunLogs_TitlesFromMetaOrSteps (0.00s)
+=== RUN   TestSettingsRoundTrips
+--- PASS: TestSettingsRoundTrips (0.00s)
+=== RUN   TestParseDevinModelsFlattensFamilies
+--- PASS: TestParseDevinModelsFlattensFamilies (0.00s)
+=== RUN   TestParseDevinPricingAcceptsTheCLIPriceShape
+--- PASS: TestParseDevinPricingAcceptsTheCLIPriceShape (0.00s)
+=== RUN   TestParseDevinPricingIgnoresTheSeparatorBetweenRates
+--- PASS: TestParseDevinPricingIgnoresTheSeparatorBetweenRates (0.00s)
+=== RUN   TestParseDevinPricingAcceptsTheMTokShapeWithoutACachedRate
+--- PASS: TestParseDevinPricingAcceptsTheMTokShapeWithoutACachedRate (0.00s)
+=== RUN   TestParseDevinPricingRejectsPartialOrUnknownPricing
+--- PASS: TestParseDevinPricingRejectsPartialOrUnknownPricing (0.00s)
+=== RUN   TestParseDevinModelsRejectsAnEmptyResponse
+--- PASS: TestParseDevinModelsRejectsAnEmptyResponse (0.00s)
+=== RUN   TestParseCodexModelsFiltersHiddenSlugs
+--- PASS: TestParseCodexModelsFiltersHiddenSlugs (0.00s)
+=== RUN   TestParseCodexModelsRejectsAResponseWithNoListedModels
+--- PASS: TestParseCodexModelsRejectsAResponseWithNoListedModels (0.00s)
+=== RUN   TestListClaudeModelsIsAFixedNonEmptyCatalog
+--- PASS: TestListClaudeModelsIsAFixedNonEmptyCatalog (0.00s)
+=== RUN   TestLoadSettingsIgnoresAMalformedFileRatherThanFailing
+--- PASS: TestLoadSettingsIgnoresAMalformedFileRatherThanFailing (0.00s)
+=== RUN   TestApp_SetAgent
+2026/10/07 14:57:17 mhl bridge: usando mhl vendorizado em /var/folders/x0/113y39ld2sz4xqvc814d7k280000gn/T/TestApp_SetAgent3579236782/001/embedded/bin/mhl (sha256 cdc73e4fe37c49c98974e6d7ae60b7f0d867d6515c5f496e33bca6c5fca63786)
+2026/10/07 14:57:17 mhl bridge: usando pdftotext vendorizado em /var/folders/x0/113y39ld2sz4xqvc814d7k280000gn/T/TestApp_SetAgent3579236782/001/embedded/bin/pdftotext (sha256 a96840a35c8a57e3cff578b3e8758bc744a94bed7e288a88309df89de6965261)
+2026/10/07 14:57:17 mhl bridge: arquivos prontos em 6ms
+2026/10/07 14:57:17 mhlbridge: devin resolvido em /Users/yanjustino/.local/bin/devin
+2026/10/07 14:57:17 mhlbridge: codex resolvido em /Users/yanjustino/.local/bin/codex
+2026/10/07 14:57:17 mhlbridge: claude resolvido em /Users/yanjustino/.local/bin/claude
+2026/10/07 14:57:23 mhl stderr: mhl serve mcp --http: 6 tool(s) from /Users/yanjustino/dev/senpai.info.nosync/workflows on http://127.0.0.1:64804/mcp
+2026/10/07 14:57:23 mhl bridge: ready em 6.145s (total 6.152s), serving /Users/yanjustino/dev/senpai.info.nosync/workflows (state-dir: /var/folders/x0/113y39ld2sz4xqvc814d7k280000gn/T/TestApp_SetAgent3579236782/001/state, data-dir: /var/folders/x0/113y39ld2sz4xqvc814d7k280000gn/T/TestApp_SetAgent3579236782/001/data, codex-cwd: /var/folders/x0/113y39ld2sz4xqvc814d7k280000gn/T/TestApp_SetAgent3579236782/001/codex-cwd)
+2026/10/07 14:57:23 mhl stderr: {"time":"2026-10-07T14:57:23.25939-03:00","level":"INFO","msg":"draining","component":"mcpserver","timeout":"0s","cancelImmediately":true}
+2026/10/07 14:57:23 mhlbridge: devin resolvido em /Users/yanjustino/.local/bin/devin
+2026/10/07 14:57:23 mhlbridge: codex resolvido em /Users/yanjustino/.local/bin/codex
+2026/10/07 14:57:23 mhlbridge: claude resolvido em /Users/yanjustino/.local/bin/claude
+2026/10/07 14:57:29 mhl stderr: mhl serve mcp --http: 6 tool(s) from /Users/yanjustino/dev/senpai.info.nosync/workflows on http://127.0.0.1:64819/mcp
+2026/10/07 14:57:29 mhl bridge: reconnected, serving /Users/yanjustino/dev/senpai.info.nosync/workflows
+2026/10/07 14:57:29 mhl stderr: {"time":"2026-10-07T14:57:29.152645-03:00","level":"INFO","msg":"draining","component":"mcpserver","timeout":"0s","cancelImmediately":true}
+2026/10/07 14:57:29 mhlbridge: devin resolvido em /Users/yanjustino/.local/bin/devin
+2026/10/07 14:57:29 mhlbridge: codex resolvido em /Users/yanjustino/.local/bin/codex
+2026/10/07 14:57:29 mhlbridge: claude resolvido em /Users/yanjustino/.local/bin/claude
+2026/10/07 14:57:35 mhl stderr: mhl serve mcp --http: 6 tool(s) from /Users/yanjustino/dev/senpai.info.nosync/workflows on http://127.0.0.1:64833/mcp
+2026/10/07 14:57:35 mhl bridge: reconnected, serving /Users/yanjustino/dev/senpai.info.nosync/workflows
+2026/10/07 14:57:35 mhl stderr: {"time":"2026-10-07T14:57:35.088988-03:00","level":"INFO","msg":"draining","component":"mcpserver","timeout":"0s","cancelImmediately":true}
+--- PASS: TestApp_SetAgent (17.99s)
+=== RUN   TestApp_SetAgent_RejectsAnUnknownAgentWithoutPersistingOrReconnecting
+2026/10/07 14:57:35 mhl bridge: usando mhl vendorizado em /var/folders/x0/113y39ld2sz4xqvc814d7k280000gn/T/TestApp_SetAgent_RejectsAnUnknownAgentWithoutPersistingOrReconne2773382491/001/embedded/bin/mhl (sha256 cdc73e4fe37c49c98974e6d7ae60b7f0d867d6515c5f496e33bca6c5fca63786)
+2026/10/07 14:57:35 mhl bridge: usando pdftotext vendorizado em /var/folders/x0/113y39ld2sz4xqvc814d7k280000gn/T/TestApp_SetAgent_RejectsAnUnknownAgentWithoutPersistingOrReconne2773382491/001/embedded/bin/pdftotext (sha256 a96840a35c8a57e3cff578b3e8758bc744a94bed7e288a88309df89de6965261)
+2026/10/07 14:57:35 mhl bridge: arquivos prontos em 6ms
+2026/10/07 14:57:35 mhlbridge: devin resolvido em /Users/yanjustino/.local/bin/devin
+2026/10/07 14:57:35 mhlbridge: codex resolvido em /Users/yanjustino/.local/bin/codex
+2026/10/07 14:57:35 mhlbridge: claude resolvido em /Users/yanjustino/.local/bin/claude
+2026/10/07 14:57:41 mhl stderr: mhl serve mcp --http: 6 tool(s) from /Users/yanjustino/dev/senpai.info.nosync/workflows on http://127.0.0.1:64847/mcp
+2026/10/07 14:57:41 mhl bridge: ready em 6.183s (total 6.189s), serving /Users/yanjustino/dev/senpai.info.nosync/workflows (state-dir: /var/folders/x0/113y39ld2sz4xqvc814d7k280000gn/T/TestApp_SetAgent_RejectsAnUnknownAgentWithoutPersistingOrReconne2773382491/001/state, data-dir: /var/folders/x0/113y39ld2sz4xqvc814d7k280000gn/T/TestApp_SetAgent_RejectsAnUnknownAgentWithoutPersistingOrReconne2773382491/001/data, codex-cwd: /var/folders/x0/113y39ld2sz4xqvc814d7k280000gn/T/TestApp_SetAgent_RejectsAnUnknownAgentWithoutPersistingOrReconne2773382491/001/codex-cwd)
+2026/10/07 14:57:41 mhl stderr: {"time":"2026-10-07T14:57:41.282124-03:00","level":"INFO","msg":"draining","component":"mcpserver","timeout":"0s","cancelImmediately":true}
+2026/10/07 14:57:41 mhlbridge: devin resolvido em /Users/yanjustino/.local/bin/devin
+2026/10/07 14:57:41 mhlbridge: codex resolvido em /Users/yanjustino/.local/bin/codex
+2026/10/07 14:57:41 mhlbridge: claude resolvido em /Users/yanjustino/.local/bin/claude
+2026/10/07 14:57:47 mhl stderr: mhl serve mcp --http: 6 tool(s) from /Users/yanjustino/dev/senpai.info.nosync/workflows on http://127.0.0.1:64862/mcp
+2026/10/07 14:57:47 mhl bridge: reconnected, serving /Users/yanjustino/dev/senpai.info.nosync/workflows
+2026/10/07 14:57:47 mhl stderr: {"time":"2026-10-07T14:57:47.210543-03:00","level":"INFO","msg":"draining","component":"mcpserver","timeout":"0s","cancelImmediately":true}
+--- PASS: TestApp_SetAgent_RejectsAnUnknownAgentWithoutPersistingOrReconnecting (12.12s)
+=== RUN   TestApp_SetAgent_RefusesWhileARunIsActive
+2026/10/07 14:57:47 mhl bridge: usando mhl vendorizado em /var/folders/x0/113y39ld2sz4xqvc814d7k280000gn/T/TestApp_SetAgent_RefusesWhileARunIsActive3455003273/001/embedded/bin/mhl (sha256 cdc73e4fe37c49c98974e6d7ae60b7f0d867d6515c5f496e33bca6c5fca63786)
+2026/10/07 14:57:47 mhl bridge: usando pdftotext vendorizado em /var/folders/x0/113y39ld2sz4xqvc814d7k280000gn/T/TestApp_SetAgent_RefusesWhileARunIsActive3455003273/001/embedded/bin/pdftotext (sha256 a96840a35c8a57e3cff578b3e8758bc744a94bed7e288a88309df89de6965261)
+2026/10/07 14:57:47 mhl bridge: arquivos prontos em 6ms
+2026/10/07 14:57:47 mhlbridge: devin resolvido em /Users/yanjustino/.local/bin/devin
+2026/10/07 14:57:47 mhlbridge: codex resolvido em /Users/yanjustino/.local/bin/codex
+2026/10/07 14:57:47 mhlbridge: claude resolvido em /Users/yanjustino/.local/bin/claude
+2026/10/07 14:57:53 mhl stderr: mhl serve mcp --http: 6 tool(s) from /Users/yanjustino/dev/senpai.info.nosync/workflows on http://127.0.0.1:64876/mcp
+2026/10/07 14:57:53 mhl bridge: ready em 6.163s (total 6.169s), serving /Users/yanjustino/dev/senpai.info.nosync/workflows (state-dir: /var/folders/x0/113y39ld2sz4xqvc814d7k280000gn/T/TestApp_SetAgent_RefusesWhileARunIsActive3455003273/001/state, data-dir: /var/folders/x0/113y39ld2sz4xqvc814d7k280000gn/T/TestApp_SetAgent_RefusesWhileARunIsActive3455003273/001/data, codex-cwd: /var/folders/x0/113y39ld2sz4xqvc814d7k280000gn/T/TestApp_SetAgent_RefusesWhileARunIsActive3455003273/001/codex-cwd)
+2026/10/07 14:57:53 mhl stderr: {"time":"2026-10-07T14:57:53.383561-03:00","level":"INFO","msg":"run started","component":"mcpserver","runId":"fb11b5cde4a2135e84100e5eb5174957","owner":"c9b7ac4d690d2875d446bd35d17b36dbcd5a315d6e784599c7b51d8c64245bc4","tool":"WorkItem","resume":false}
+2026/10/07 14:57:53 mhl stderr: session: fb11b5cde4a2135e84100e5eb5174957
+2026/10/07 14:57:53 mhl stderr: step: Dispatch
+2026/10/07 14:57:53 mhl stderr: step: List
+2026/10/07 14:57:53 mhl stderr: step: Done
+2026/10/07 14:57:53 mhl stderr: {"time":"2026-10-07T14:57:53.484192-03:00","level":"INFO","msg":"run completed","component":"mcpserver","runId":"fb11b5cde4a2135e84100e5eb5174957","owner":"c9b7ac4d690d2875d446bd35d17b36dbcd5a315d6e784599c7b51d8c64245bc4","tool":"WorkItem","durationMs":100,"steps":3}
+2026/10/07 14:57:53 mhl stderr: {"time":"2026-10-07T14:57:53.487424-03:00","level":"INFO","msg":"draining","component":"mcpserver","timeout":"0s","cancelImmediately":true}
+2026/10/07 14:57:53 mhlbridge: devin resolvido em /Users/yanjustino/.local/bin/devin
+2026/10/07 14:57:53 mhlbridge: codex resolvido em /Users/yanjustino/.local/bin/codex
+2026/10/07 14:57:53 mhlbridge: claude resolvido em /Users/yanjustino/.local/bin/claude
+2026/10/07 14:57:59 mhl stderr: mhl serve mcp --http: 6 tool(s) from /Users/yanjustino/dev/senpai.info.nosync/workflows on http://127.0.0.1:64897/mcp
+2026/10/07 14:57:59 mhl bridge: reconnected, serving /Users/yanjustino/dev/senpai.info.nosync/workflows
+2026/10/07 14:57:59 mhl stderr: {"time":"2026-10-07T14:57:59.413401-03:00","level":"INFO","msg":"draining","component":"mcpserver","timeout":"0s","cancelImmediately":true}
+--- PASS: TestApp_SetAgent_RefusesWhileARunIsActive (12.20s)
+=== RUN   TestApp_SetDevinModelPersistsAndReconnects
+2026/10/07 14:57:59 mhl bridge: usando mhl vendorizado em /var/folders/x0/113y39ld2sz4xqvc814d7k280000gn/T/TestApp_SetDevinModelPersistsAndReconnects2187961566/001/embedded/bin/mhl (sha256 cdc73e4fe37c49c98974e6d7ae60b7f0d867d6515c5f496e33bca6c5fca63786)
+2026/10/07 14:57:59 mhl bridge: usando pdftotext vendorizado em /var/folders/x0/113y39ld2sz4xqvc814d7k280000gn/T/TestApp_SetDevinModelPersistsAndReconnects2187961566/001/embedded/bin/pdftotext (sha256 a96840a35c8a57e3cff578b3e8758bc744a94bed7e288a88309df89de6965261)
+2026/10/07 14:57:59 mhl bridge: arquivos prontos em 6ms
+2026/10/07 14:57:59 mhlbridge: devin resolvido em /Users/yanjustino/.local/bin/devin
+2026/10/07 14:57:59 mhlbridge: codex resolvido em /Users/yanjustino/.local/bin/codex
+2026/10/07 14:57:59 mhlbridge: claude resolvido em /Users/yanjustino/.local/bin/claude
+2026/10/07 14:58:05 mhl stderr: mhl serve mcp --http: 6 tool(s) from /Users/yanjustino/dev/senpai.info.nosync/workflows on http://127.0.0.1:64910/mcp
+2026/10/07 14:58:05 mhl bridge: ready em 6.233s (total 6.239s), serving /Users/yanjustino/dev/senpai.info.nosync/workflows (state-dir: /var/folders/x0/113y39ld2sz4xqvc814d7k280000gn/T/TestApp_SetDevinModelPersistsAndReconnects2187961566/001/state, data-dir: /var/folders/x0/113y39ld2sz4xqvc814d7k280000gn/T/TestApp_SetDevinModelPersistsAndReconnects2187961566/001/data, codex-cwd: /var/folders/x0/113y39ld2sz4xqvc814d7k280000gn/T/TestApp_SetDevinModelPersistsAndReconnects2187961566/001/codex-cwd)
+2026/10/07 14:58:05 mhl stderr: {"time":"2026-10-07T14:58:05.656209-03:00","level":"INFO","msg":"draining","component":"mcpserver","timeout":"0s","cancelImmediately":true}
+2026/10/07 14:58:05 mhlbridge: devin resolvido em /Users/yanjustino/.local/bin/devin
+2026/10/07 14:58:05 mhlbridge: codex resolvido em /Users/yanjustino/.local/bin/codex
+2026/10/07 14:58:05 mhlbridge: claude resolvido em /Users/yanjustino/.local/bin/claude
+2026/10/07 14:58:11 mhl stderr: mhl serve mcp --http: 6 tool(s) from /Users/yanjustino/dev/senpai.info.nosync/workflows on http://127.0.0.1:64927/mcp
+2026/10/07 14:58:11 mhl bridge: reconnected, serving /Users/yanjustino/dev/senpai.info.nosync/workflows
+2026/10/07 14:58:11 mhl stderr: {"time":"2026-10-07T14:58:11.594689-03:00","level":"INFO","msg":"draining","component":"mcpserver","timeout":"0s","cancelImmediately":true}
+--- PASS: TestApp_SetDevinModelPersistsAndReconnects (12.18s)
+=== RUN   TestApp_SetCodexModelPersistsAndReconnects
+2026/10/07 14:58:11 mhl bridge: usando mhl vendorizado em /var/folders/x0/113y39ld2sz4xqvc814d7k280000gn/T/TestApp_SetCodexModelPersistsAndReconnects4022866691/001/embedded/bin/mhl (sha256 cdc73e4fe37c49c98974e6d7ae60b7f0d867d6515c5f496e33bca6c5fca63786)
+2026/10/07 14:58:11 mhl bridge: usando pdftotext vendorizado em /var/folders/x0/113y39ld2sz4xqvc814d7k280000gn/T/TestApp_SetCodexModelPersistsAndReconnects4022866691/001/embedded/bin/pdftotext (sha256 a96840a35c8a57e3cff578b3e8758bc744a94bed7e288a88309df89de6965261)
+2026/10/07 14:58:11 mhl bridge: arquivos prontos em 6ms
+2026/10/07 14:58:11 mhlbridge: devin resolvido em /Users/yanjustino/.local/bin/devin
+2026/10/07 14:58:11 mhlbridge: codex resolvido em /Users/yanjustino/.local/bin/codex
+2026/10/07 14:58:11 mhlbridge: claude resolvido em /Users/yanjustino/.local/bin/claude
+2026/10/07 14:58:17 mhl stderr: mhl serve mcp --http: 6 tool(s) from /Users/yanjustino/dev/senpai.info.nosync/workflows on http://127.0.0.1:64941/mcp
+2026/10/07 14:58:17 mhl bridge: ready em 6.207s (total 6.213s), serving /Users/yanjustino/dev/senpai.info.nosync/workflows (state-dir: /var/folders/x0/113y39ld2sz4xqvc814d7k280000gn/T/TestApp_SetCodexModelPersistsAndReconnects4022866691/001/state, data-dir: /var/folders/x0/113y39ld2sz4xqvc814d7k280000gn/T/TestApp_SetCodexModelPersistsAndReconnects4022866691/001/data, codex-cwd: /var/folders/x0/113y39ld2sz4xqvc814d7k280000gn/T/TestApp_SetCodexModelPersistsAndReconnects4022866691/001/codex-cwd)
+2026/10/07 14:58:17 mhl stderr: {"time":"2026-10-07T14:58:17.811628-03:00","level":"INFO","msg":"draining","component":"mcpserver","timeout":"0s","cancelImmediately":true}
+2026/10/07 14:58:17 mhlbridge: devin resolvido em /Users/yanjustino/.local/bin/devin
+2026/10/07 14:58:17 mhlbridge: codex resolvido em /Users/yanjustino/.local/bin/codex
+2026/10/07 14:58:17 mhlbridge: claude resolvido em /Users/yanjustino/.local/bin/claude
+2026/10/07 14:58:23 mhl stderr: mhl serve mcp --http: 6 tool(s) from /Users/yanjustino/dev/senpai.info.nosync/workflows on http://127.0.0.1:64956/mcp
+2026/10/07 14:58:23 mhl bridge: reconnected, serving /Users/yanjustino/dev/senpai.info.nosync/workflows
+2026/10/07 14:58:23 mhl stderr: {"time":"2026-10-07T14:58:23.739924-03:00","level":"INFO","msg":"draining","component":"mcpserver","timeout":"0s","cancelImmediately":true}
+--- PASS: TestApp_SetCodexModelPersistsAndReconnects (12.15s)
+=== RUN   TestApp_SetCodexModelRejectsAnEmptyValue
+2026/10/07 14:58:23 mhl bridge: usando mhl vendorizado em /var/folders/x0/113y39ld2sz4xqvc814d7k280000gn/T/TestApp_SetCodexModelRejectsAnEmptyValue2517933777/001/embedded/bin/mhl (sha256 cdc73e4fe37c49c98974e6d7ae60b7f0d867d6515c5f496e33bca6c5fca63786)
+2026/10/07 14:58:23 mhl bridge: usando pdftotext vendorizado em /var/folders/x0/113y39ld2sz4xqvc814d7k280000gn/T/TestApp_SetCodexModelRejectsAnEmptyValue2517933777/001/embedded/bin/pdftotext (sha256 a96840a35c8a57e3cff578b3e8758bc744a94bed7e288a88309df89de6965261)
+2026/10/07 14:58:23 mhl bridge: arquivos prontos em 6ms
+2026/10/07 14:58:23 mhlbridge: devin resolvido em /Users/yanjustino/.local/bin/devin
+2026/10/07 14:58:23 mhlbridge: codex resolvido em /Users/yanjustino/.local/bin/codex
+2026/10/07 14:58:23 mhlbridge: claude resolvido em /Users/yanjustino/.local/bin/claude
+2026/10/07 14:58:29 mhl stderr: mhl serve mcp --http: 6 tool(s) from /Users/yanjustino/dev/senpai.info.nosync/workflows on http://127.0.0.1:64969/mcp
+2026/10/07 14:58:29 mhl bridge: ready em 6.193s (total 6.199s), serving /Users/yanjustino/dev/senpai.info.nosync/workflows (state-dir: /var/folders/x0/113y39ld2sz4xqvc814d7k280000gn/T/TestApp_SetCodexModelRejectsAnEmptyValue2517933777/001/state, data-dir: /var/folders/x0/113y39ld2sz4xqvc814d7k280000gn/T/TestApp_SetCodexModelRejectsAnEmptyValue2517933777/001/data, codex-cwd: /var/folders/x0/113y39ld2sz4xqvc814d7k280000gn/T/TestApp_SetCodexModelRejectsAnEmptyValue2517933777/001/codex-cwd)
+2026/10/07 14:58:29 mhl stderr: {"time":"2026-10-07T14:58:29.942827-03:00","level":"INFO","msg":"draining","component":"mcpserver","timeout":"0s","cancelImmediately":true}
+--- PASS: TestApp_SetCodexModelRejectsAnEmptyValue (6.20s)
+=== RUN   TestApp_SetClaudeModelPersistsAndReconnects
+2026/10/07 14:58:29 mhl bridge: usando mhl vendorizado em /var/folders/x0/113y39ld2sz4xqvc814d7k280000gn/T/TestApp_SetClaudeModelPersistsAndReconnects919592344/001/embedded/bin/mhl (sha256 cdc73e4fe37c49c98974e6d7ae60b7f0d867d6515c5f496e33bca6c5fca63786)
+2026/10/07 14:58:29 mhl bridge: usando pdftotext vendorizado em /var/folders/x0/113y39ld2sz4xqvc814d7k280000gn/T/TestApp_SetClaudeModelPersistsAndReconnects919592344/001/embedded/bin/pdftotext (sha256 a96840a35c8a57e3cff578b3e8758bc744a94bed7e288a88309df89de6965261)
+2026/10/07 14:58:29 mhl bridge: arquivos prontos em 6ms
+2026/10/07 14:58:30 mhlbridge: devin resolvido em /Users/yanjustino/.local/bin/devin
+2026/10/07 14:58:30 mhlbridge: codex resolvido em /Users/yanjustino/.local/bin/codex
+2026/10/07 14:58:30 mhlbridge: claude resolvido em /Users/yanjustino/.local/bin/claude
+2026/10/07 14:58:36 mhl stderr: mhl serve mcp --http: 6 tool(s) from /Users/yanjustino/dev/senpai.info.nosync/workflows on http://127.0.0.1:64984/mcp
+2026/10/07 14:58:36 mhl bridge: ready em 6.217s (total 6.223s), serving /Users/yanjustino/dev/senpai.info.nosync/workflows (state-dir: /var/folders/x0/113y39ld2sz4xqvc814d7k280000gn/T/TestApp_SetClaudeModelPersistsAndReconnects919592344/001/state, data-dir: /var/folders/x0/113y39ld2sz4xqvc814d7k280000gn/T/TestApp_SetClaudeModelPersistsAndReconnects919592344/001/data, codex-cwd: /var/folders/x0/113y39ld2sz4xqvc814d7k280000gn/T/TestApp_SetClaudeModelPersistsAndReconnects919592344/001/codex-cwd)
+2026/10/07 14:58:36 mhl stderr: {"time":"2026-10-07T14:58:36.169416-03:00","level":"INFO","msg":"draining","component":"mcpserver","timeout":"0s","cancelImmediately":true}
+2026/10/07 14:58:36 mhlbridge: devin resolvido em /Users/yanjustino/.local/bin/devin
+2026/10/07 14:58:36 mhlbridge: codex resolvido em /Users/yanjustino/.local/bin/codex
+2026/10/07 14:58:36 mhlbridge: claude resolvido em /Users/yanjustino/.local/bin/claude
+2026/10/07 14:58:42 mhl stderr: mhl serve mcp --http: 6 tool(s) from /Users/yanjustino/dev/senpai.info.nosync/workflows on http://127.0.0.1:64998/mcp
+2026/10/07 14:58:42 mhl bridge: reconnected, serving /Users/yanjustino/dev/senpai.info.nosync/workflows
+2026/10/07 14:58:42 mhl stderr: {"time":"2026-10-07T14:58:42.089656-03:00","level":"INFO","msg":"draining","component":"mcpserver","timeout":"0s","cancelImmediately":true}
+--- PASS: TestApp_SetClaudeModelPersistsAndReconnects (12.15s)
+=== RUN   TestApp_SetClaudeModelRejectsAnEmptyValue
+2026/10/07 14:58:42 mhl bridge: usando mhl vendorizado em /var/folders/x0/113y39ld2sz4xqvc814d7k280000gn/T/TestApp_SetClaudeModelRejectsAnEmptyValue1747065145/001/embedded/bin/mhl (sha256 cdc73e4fe37c49c98974e6d7ae60b7f0d867d6515c5f496e33bca6c5fca63786)
+2026/10/07 14:58:42 mhl bridge: usando pdftotext vendorizado em /var/folders/x0/113y39ld2sz4xqvc814d7k280000gn/T/TestApp_SetClaudeModelRejectsAnEmptyValue1747065145/001/embedded/bin/pdftotext (sha256 a96840a35c8a57e3cff578b3e8758bc744a94bed7e288a88309df89de6965261)
+2026/10/07 14:58:42 mhl bridge: arquivos prontos em 6ms
+2026/10/07 14:58:42 mhlbridge: devin resolvido em /Users/yanjustino/.local/bin/devin
+2026/10/07 14:58:42 mhlbridge: codex resolvido em /Users/yanjustino/.local/bin/codex
+2026/10/07 14:58:42 mhlbridge: claude resolvido em /Users/yanjustino/.local/bin/claude
+2026/10/07 14:58:48 mhl stderr: mhl serve mcp --http: 6 tool(s) from /Users/yanjustino/dev/senpai.info.nosync/workflows on http://127.0.0.1:65011/mcp
+2026/10/07 14:58:48 mhl bridge: ready em 6.212s (total 6.218s), serving /Users/yanjustino/dev/senpai.info.nosync/workflows (state-dir: /var/folders/x0/113y39ld2sz4xqvc814d7k280000gn/T/TestApp_SetClaudeModelRejectsAnEmptyValue1747065145/001/state, data-dir: /var/folders/x0/113y39ld2sz4xqvc814d7k280000gn/T/TestApp_SetClaudeModelRejectsAnEmptyValue1747065145/001/data, codex-cwd: /var/folders/x0/113y39ld2sz4xqvc814d7k280000gn/T/TestApp_SetClaudeModelRejectsAnEmptyValue1747065145/001/codex-cwd)
+2026/10/07 14:58:48 mhl stderr: {"time":"2026-10-07T14:58:48.311684-03:00","level":"INFO","msg":"draining","component":"mcpserver","timeout":"0s","cancelImmediately":true}
+--- PASS: TestApp_SetClaudeModelRejectsAnEmptyValue (6.22s)
+=== RUN   TestApp_ListClaudeModelsNeverCallsOutToACLI
+2026/10/07 14:58:48 mhl bridge: usando mhl vendorizado em /var/folders/x0/113y39ld2sz4xqvc814d7k280000gn/T/TestApp_ListClaudeModelsNeverCallsOutToACLI2347509550/001/embedded/bin/mhl (sha256 cdc73e4fe37c49c98974e6d7ae60b7f0d867d6515c5f496e33bca6c5fca63786)
+2026/10/07 14:58:48 mhl bridge: usando pdftotext vendorizado em /var/folders/x0/113y39ld2sz4xqvc814d7k280000gn/T/TestApp_ListClaudeModelsNeverCallsOutToACLI2347509550/001/embedded/bin/pdftotext (sha256 a96840a35c8a57e3cff578b3e8758bc744a94bed7e288a88309df89de6965261)
+2026/10/07 14:58:48 mhl bridge: arquivos prontos em 6ms
+2026/10/07 14:58:48 mhlbridge: devin resolvido em /Users/yanjustino/.local/bin/devin
+2026/10/07 14:58:48 mhlbridge: codex resolvido em /Users/yanjustino/.local/bin/codex
+2026/10/07 14:58:48 mhlbridge: claude resolvido em /Users/yanjustino/.local/bin/claude
+2026/10/07 14:58:54 mhl stderr: mhl serve mcp --http: 6 tool(s) from /Users/yanjustino/dev/senpai.info.nosync/workflows on http://127.0.0.1:65025/mcp
+2026/10/07 14:58:54 mhl bridge: ready em 6.189s (total 6.195s), serving /Users/yanjustino/dev/senpai.info.nosync/workflows (state-dir: /var/folders/x0/113y39ld2sz4xqvc814d7k280000gn/T/TestApp_ListClaudeModelsNeverCallsOutToACLI2347509550/001/state, data-dir: /var/folders/x0/113y39ld2sz4xqvc814d7k280000gn/T/TestApp_ListClaudeModelsNeverCallsOutToACLI2347509550/001/data, codex-cwd: /var/folders/x0/113y39ld2sz4xqvc814d7k280000gn/T/TestApp_ListClaudeModelsNeverCallsOutToACLI2347509550/001/codex-cwd)
+2026/10/07 14:58:54 mhl stderr: {"time":"2026-10-07T14:58:54.510486-03:00","level":"INFO","msg":"draining","component":"mcpserver","timeout":"0s","cancelImmediately":true}
+--- PASS: TestApp_ListClaudeModelsNeverCallsOutToACLI (6.20s)
+=== RUN   TestApp_TailRunLogsSurvivesTheBridgeBeingReplaced
+2026/10/07 14:58:54 mhl bridge: usando mhl vendorizado em /var/folders/x0/113y39ld2sz4xqvc814d7k280000gn/T/TestApp_TailRunLogsSurvivesTheBridgeBeingReplaced613758810/001/embedded/bin/mhl (sha256 cdc73e4fe37c49c98974e6d7ae60b7f0d867d6515c5f496e33bca6c5fca63786)
+2026/10/07 14:58:54 mhl bridge: usando pdftotext vendorizado em /var/folders/x0/113y39ld2sz4xqvc814d7k280000gn/T/TestApp_TailRunLogsSurvivesTheBridgeBeingReplaced613758810/001/embedded/bin/pdftotext (sha256 a96840a35c8a57e3cff578b3e8758bc744a94bed7e288a88309df89de6965261)
+2026/10/07 14:58:54 mhl bridge: arquivos prontos em 6ms
+2026/10/07 14:58:54 mhlbridge: devin resolvido em /Users/yanjustino/.local/bin/devin
+2026/10/07 14:58:54 mhlbridge: codex resolvido em /Users/yanjustino/.local/bin/codex
+2026/10/07 14:58:54 mhlbridge: claude resolvido em /Users/yanjustino/.local/bin/claude
+2026/10/07 14:59:00 mhl stderr: mhl serve mcp --http: 6 tool(s) from /Users/yanjustino/dev/senpai.info.nosync/workflows on http://127.0.0.1:65039/mcp
+2026/10/07 14:59:00 mhl bridge: ready em 6.202s (total 6.208s), serving /Users/yanjustino/dev/senpai.info.nosync/workflows (state-dir: /var/folders/x0/113y39ld2sz4xqvc814d7k280000gn/T/TestApp_TailRunLogsSurvivesTheBridgeBeingReplaced613758810/001/state, data-dir: /var/folders/x0/113y39ld2sz4xqvc814d7k280000gn/T/TestApp_TailRunLogsSurvivesTheBridgeBeingReplaced613758810/001/data, codex-cwd: /var/folders/x0/113y39ld2sz4xqvc814d7k280000gn/T/TestApp_TailRunLogsSurvivesTheBridgeBeingReplaced613758810/001/codex-cwd)
+2026/10/07 14:59:00 mhl stderr: {"time":"2026-10-07T14:59:00.721777-03:00","level":"INFO","msg":"draining","component":"mcpserver","timeout":"0s","cancelImmediately":true}
+2026/10/07 14:59:00 mhl bridge: tailRunLogs(0123456789abcdef0123456789abcdef): fetch logs: Post "http://127.0.0.1:65039/mcp": dial tcp 127.0.0.1:65039: connect: connection refused
+2026/10/07 14:59:00 mhl bridge: tailRunLogs(0123456789abcdef0123456789abcdef): recovered from panic: runtime error: invalid memory address or nil pointer dereference
+goroutine 2313 [running]:
+runtime/debug.Stack()
+	/opt/homebrew/Cellar/go/1.26.0/libexec/src/runtime/debug/stack.go:26 +0x64
+senpai-app.recoverBackground({0x6ed09773d260, 0x2d})
+	/Users/yanjustino/dev/senpai.info.nosync/app/app.go:1227 +0x38
+panic({0x1030b91e0?, 0x104438060?})
+	/opt/homebrew/Cellar/go/1.26.0/libexec/src/runtime/panic.go:860 +0x12c
+senpai-app/mhlbridge.(*Client).postRPC(0x9?, {0x103141a98?, 0x1044974a0?}, {0x102c1a280?, 0x2007c3b88?}, {0x1030c5c00?, 0x6ed0977ad4a0?}, 0x10?)
+	/Users/yanjustino/dev/senpai.info.nosync/app/mhlbridge/mhlbridge.go:762 +0x44
+senpai-app/mhlbridge.(*Client).callWithSession(0x0, {0x103141a98, 0x1044974a0}, {0x102c1a280, 0xa}, {0x1030c5c00, 0x6ed0977ad4a0})
+	/Users/yanjustino/dev/senpai.info.nosync/app/mhlbridge/mhlbridge.go:447 +0x40
+senpai-app/mhlbridge.(*Client).ToolsCall(0x0, {0x103141a98, 0x1044974a0}, {0x102c1bd8d, 0xc}, 0x6ed0977ad470)
+	/Users/yanjustino/dev/senpai.info.nosync/app/mhlbridge/mhlbridge.go:474 +0x108
+senpai-app/mhlbridge.(*Client).RunLogs(0x0, {0x103141a98, 0x1044974a0}, {0x102c2b0e6, 0x20}, {0x0, 0x0})
+	/Users/yanjustino/dev/senpai.info.nosync/app/mhlbridge/mhlbridge.go:671 +0x1e8
+senpai-app.(*App).tailRunLogs.func1(...)
+	/Users/yanjustino/dev/senpai.info.nosync/app/app.go:1266
+senpai-app.(*App).tailRunLogs(0x6ed097c11900, 0x0, {0x102c2b0e6, 0x20}, {0x102c25bd4, 0x19})
+	/Users/yanjustino/dev/senpai.info.nosync/app/app.go:1296 +0x2b4
+senpai-app.TestApp_TailRunLogsSurvivesTheBridgeBeingReplaced(0x6ed097948908)
+	/Users/yanjustino/dev/senpai.info.nosync/app/settings_test.go:438 +0x180
+testing.tRunner(0x6ed097948908, 0x103138d00)
+	/opt/homebrew/Cellar/go/1.26.0/libexec/src/testing/testing.go:2036 +0xc4
+created by testing.(*T).Run in goroutine 1
+	/opt/homebrew/Cellar/go/1.26.0/libexec/src/testing/testing.go:2101 +0x3a8
+--- PASS: TestApp_TailRunLogsSurvivesTheBridgeBeingReplaced (6.21s)
+=== RUN   TestStartupStatus_IsStartingBeforeStartupRuns
+--- PASS: TestStartupStatus_IsStartingBeforeStartupRuns (0.00s)
+=== RUN   TestStartupStatus_ReportsTheFailureCause
+--- PASS: TestStartupStatus_ReportsTheFailureCause (0.00s)
+=== RUN   TestPrependToPath_DoesNotDuplicateTheEntry
+--- PASS: TestPrependToPath_DoesNotDuplicateTheEntry (0.00s)
+=== RUN   TestExtractIfChanged_ReplacesTheFileInsteadOfRewritingIt
+--- PASS: TestExtractIfChanged_ReplacesTheFileInsteadOfRewritingIt (0.00s)
+=== RUN   TestReplaceFile_SidelinesALockedDestination
+--- PASS: TestReplaceFile_SidelinesALockedDestination (0.00s)
+=== RUN   TestVendoredMHLBinary_IsARealExecutable
+--- PASS: TestVendoredMHLBinary_IsARealExecutable (0.00s)
+=== RUN   TestHTMLToMarkdown_KeepsMainContentOnly
+--- PASS: TestHTMLToMarkdown_KeepsMainContentOnly (0.00s)
+=== RUN   TestAddRawURL_SavesHTMLAsMarkdown
+2026/10/07 14:59:00 mhl bridge: usando mhl vendorizado em /var/folders/x0/113y39ld2sz4xqvc814d7k280000gn/T/TestAddRawURL_SavesHTMLAsMarkdown1397347582/001/embedded/bin/mhl (sha256 cdc73e4fe37c49c98974e6d7ae60b7f0d867d6515c5f496e33bca6c5fca63786)
+2026/10/07 14:59:00 mhl bridge: usando pdftotext vendorizado em /var/folders/x0/113y39ld2sz4xqvc814d7k280000gn/T/TestAddRawURL_SavesHTMLAsMarkdown1397347582/001/embedded/bin/pdftotext (sha256 a96840a35c8a57e3cff578b3e8758bc744a94bed7e288a88309df89de6965261)
+2026/10/07 14:59:00 mhl bridge: arquivos prontos em 6ms
+2026/10/07 14:59:00 mhlbridge: devin resolvido em /Users/yanjustino/.local/bin/devin
+2026/10/07 14:59:00 mhlbridge: codex resolvido em /Users/yanjustino/.local/bin/codex
+2026/10/07 14:59:00 mhlbridge: claude resolvido em /Users/yanjustino/.local/bin/claude
+2026/10/07 14:59:06 mhl stderr: mhl serve mcp --http: 6 tool(s) from /Users/yanjustino/dev/senpai.info.nosync/workflows on http://127.0.0.1:65055/mcp
+2026/10/07 14:59:06 mhl bridge: ready em 6.146s (total 6.152s), serving /Users/yanjustino/dev/senpai.info.nosync/workflows (state-dir: /var/folders/x0/113y39ld2sz4xqvc814d7k280000gn/T/TestAddRawURL_SavesHTMLAsMarkdown1397347582/001/state, data-dir: /var/folders/x0/113y39ld2sz4xqvc814d7k280000gn/T/TestAddRawURL_SavesHTMLAsMarkdown1397347582/001/data, codex-cwd: /var/folders/x0/113y39ld2sz4xqvc814d7k280000gn/T/TestAddRawURL_SavesHTMLAsMarkdown1397347582/001/codex-cwd)
+2026/10/07 14:59:06 mhl stderr: {"time":"2026-10-07T14:59:06.878661-03:00","level":"INFO","msg":"run started","component":"mcpserver","runId":"7a50e340d9cf79b705d11f53e1167984","owner":"1eeddf076a841b9dc3e9e09a4b9ecb29e084efc64ecc4fb58c4321ebce3898c1","tool":"WorkItem","resume":false}
+2026/10/07 14:59:06 mhl stderr: session: 7a50e340d9cf79b705d11f53e1167984
+2026/10/07 14:59:06 mhl stderr: step: Dispatch
+2026/10/07 14:59:06 mhl stderr: step: Create
+2026/10/07 14:59:06 mhl stderr: step: Done
+2026/10/07 14:59:06 mhl stderr: {"time":"2026-10-07T14:59:06.97835-03:00","level":"INFO","msg":"run completed","component":"mcpserver","runId":"7a50e340d9cf79b705d11f53e1167984","owner":"1eeddf076a841b9dc3e9e09a4b9ecb29e084efc64ecc4fb58c4321ebce3898c1","tool":"WorkItem","durationMs":99,"steps":3}
+2026/10/07 14:59:07 mhl stderr: {"time":"2026-10-07T14:59:07.082795-03:00","level":"INFO","msg":"draining","component":"mcpserver","timeout":"0s","cancelImmediately":true}
+--- PASS: TestAddRawURL_SavesHTMLAsMarkdown (6.36s)
+=== RUN   TestAddRawURL_SavesPDFAsIs
+2026/10/07 14:59:07 mhl bridge: usando mhl vendorizado em /var/folders/x0/113y39ld2sz4xqvc814d7k280000gn/T/TestAddRawURL_SavesPDFAsIs1411456204/001/embedded/bin/mhl (sha256 cdc73e4fe37c49c98974e6d7ae60b7f0d867d6515c5f496e33bca6c5fca63786)
+2026/10/07 14:59:07 mhl bridge: usando pdftotext vendorizado em /var/folders/x0/113y39ld2sz4xqvc814d7k280000gn/T/TestAddRawURL_SavesPDFAsIs1411456204/001/embedded/bin/pdftotext (sha256 a96840a35c8a57e3cff578b3e8758bc744a94bed7e288a88309df89de6965261)
+2026/10/07 14:59:07 mhl bridge: arquivos prontos em 9ms
+2026/10/07 14:59:07 mhlbridge: devin resolvido em /Users/yanjustino/.local/bin/devin
+2026/10/07 14:59:07 mhlbridge: codex resolvido em /Users/yanjustino/.local/bin/codex
+2026/10/07 14:59:07 mhlbridge: claude resolvido em /Users/yanjustino/.local/bin/claude
+2026/10/07 14:59:13 mhl stderr: mhl serve mcp --http: 6 tool(s) from /Users/yanjustino/dev/senpai.info.nosync/workflows on http://127.0.0.1:65074/mcp
+2026/10/07 14:59:13 mhl bridge: ready em 6.156s (total 6.165s), serving /Users/yanjustino/dev/senpai.info.nosync/workflows (state-dir: /var/folders/x0/113y39ld2sz4xqvc814d7k280000gn/T/TestAddRawURL_SavesPDFAsIs1411456204/001/state, data-dir: /var/folders/x0/113y39ld2sz4xqvc814d7k280000gn/T/TestAddRawURL_SavesPDFAsIs1411456204/001/data, codex-cwd: /var/folders/x0/113y39ld2sz4xqvc814d7k280000gn/T/TestAddRawURL_SavesPDFAsIs1411456204/001/codex-cwd)
+2026/10/07 14:59:13 mhl stderr: {"time":"2026-10-07T14:59:13.25417-03:00","level":"INFO","msg":"run started","component":"mcpserver","runId":"4766d1de33677756f95dab50e63aa97c","owner":"4ba5fd5f7a0b2cb88669e3ad30385971167095d4708b422d51d1f52a545e4ba2","tool":"WorkItem","resume":false}
+2026/10/07 14:59:13 mhl stderr: session: 4766d1de33677756f95dab50e63aa97c
+2026/10/07 14:59:13 mhl stderr: step: Dispatch
+2026/10/07 14:59:13 mhl stderr: step: Create
+2026/10/07 14:59:13 mhl stderr: step: Done
+2026/10/07 14:59:13 mhl stderr: {"time":"2026-10-07T14:59:13.358189-03:00","level":"INFO","msg":"run completed","component":"mcpserver","runId":"4766d1de33677756f95dab50e63aa97c","owner":"4ba5fd5f7a0b2cb88669e3ad30385971167095d4708b422d51d1f52a545e4ba2","tool":"WorkItem","durationMs":104,"steps":3}
+2026/10/07 14:59:13 mhl stderr: {"time":"2026-10-07T14:59:13.457928-03:00","level":"INFO","msg":"draining","component":"mcpserver","timeout":"0s","cancelImmediately":true}
+--- PASS: TestAddRawURL_SavesPDFAsIs (6.37s)
+=== RUN   TestAddRawURL_RejectsInvalidInput
+2026/10/07 14:59:13 mhl bridge: usando mhl vendorizado em /var/folders/x0/113y39ld2sz4xqvc814d7k280000gn/T/TestAddRawURL_RejectsInvalidInput4175817163/001/embedded/bin/mhl (sha256 cdc73e4fe37c49c98974e6d7ae60b7f0d867d6515c5f496e33bca6c5fca63786)
+2026/10/07 14:59:13 mhl bridge: usando pdftotext vendorizado em /var/folders/x0/113y39ld2sz4xqvc814d7k280000gn/T/TestAddRawURL_RejectsInvalidInput4175817163/001/embedded/bin/pdftotext (sha256 a96840a35c8a57e3cff578b3e8758bc744a94bed7e288a88309df89de6965261)
+2026/10/07 14:59:13 mhl bridge: arquivos prontos em 9ms
+2026/10/07 14:59:13 mhlbridge: devin resolvido em /Users/yanjustino/.local/bin/devin
+2026/10/07 14:59:13 mhlbridge: codex resolvido em /Users/yanjustino/.local/bin/codex
+2026/10/07 14:59:13 mhlbridge: claude resolvido em /Users/yanjustino/.local/bin/claude
+2026/10/07 14:59:19 mhl stderr: mhl serve mcp --http: 6 tool(s) from /Users/yanjustino/dev/senpai.info.nosync/workflows on http://127.0.0.1:65093/mcp
+2026/10/07 14:59:19 mhl bridge: ready em 6.17s (total 6.179s), serving /Users/yanjustino/dev/senpai.info.nosync/workflows (state-dir: /var/folders/x0/113y39ld2sz4xqvc814d7k280000gn/T/TestAddRawURL_RejectsInvalidInput4175817163/001/state, data-dir: /var/folders/x0/113y39ld2sz4xqvc814d7k280000gn/T/TestAddRawURL_RejectsInvalidInput4175817163/001/data, codex-cwd: /var/folders/x0/113y39ld2sz4xqvc814d7k280000gn/T/TestAddRawURL_RejectsInvalidInput4175817163/001/codex-cwd)
+2026/10/07 14:59:19 mhl stderr: {"time":"2026-10-07T14:59:19.642166-03:00","level":"INFO","msg":"run started","component":"mcpserver","runId":"a73d38eff0fadf3f0b68cf357b67bfd0","owner":"0f78873e3b6313eac9a21a700770433cb777e44ab37f8fcb20cc5705e04ec9fb","tool":"WorkItem","resume":false}
+2026/10/07 14:59:19 mhl stderr: session: a73d38eff0fadf3f0b68cf357b67bfd0
+2026/10/07 14:59:19 mhl stderr: step: Dispatch
+2026/10/07 14:59:19 mhl stderr: step: Create
+2026/10/07 14:59:19 mhl stderr: step: Done
+2026/10/07 14:59:19 mhl stderr: {"time":"2026-10-07T14:59:19.743628-03:00","level":"INFO","msg":"run completed","component":"mcpserver","runId":"a73d38eff0fadf3f0b68cf357b67bfd0","owner":"0f78873e3b6313eac9a21a700770433cb777e44ab37f8fcb20cc5705e04ec9fb","tool":"WorkItem","durationMs":101,"steps":3}
+2026/10/07 14:59:19 mhl stderr: {"time":"2026-10-07T14:59:19.846265-03:00","level":"INFO","msg":"draining","component":"mcpserver","timeout":"0s","cancelImmediately":true}
+--- PASS: TestAddRawURL_RejectsInvalidInput (6.39s)
+=== RUN   TestCurrentAppVersionUsesInjectedReleaseVersion
+--- PASS: TestCurrentAppVersionUsesInjectedReleaseVersion (0.00s)
+PASS
+ok  	senpai-app	261.417s
+?   	senpai-app/frontend/node_modules/flatted/golang/pkg/flatted	[no test files]
+=== RUN   TestActiveRuns_FiltersOutTerminalAndPausedRuns
+--- PASS: TestActiveRuns_FiltersOutTerminalAndPausedRuns (0.00s)
+=== RUN   TestActiveRuns_EmptyWhenNoRunsAreActive
+--- PASS: TestActiveRuns_EmptyWhenNoRunsAreActive (0.00s)
+=== RUN   TestActiveRuns_EmptyRunsListIsEmptyNotAnError
+--- PASS: TestActiveRuns_EmptyRunsListIsEmptyNotAnError (0.00s)
+=== RUN   TestCleanupStaleMHL_KillsAnOrphanWhoseOwnerIsGone
+2026/10/07 14:54:59 mhl bridge: encerrando mhl órfão de uma execução anterior (pid 20646)
+--- PASS: TestCleanupStaleMHL_KillsAnOrphanWhoseOwnerIsGone (0.50s)
+=== RUN   TestCleanupStaleMHL_PreservesTheMHLOfAnotherLiveInstance
+2026/10/07 14:54:59 mhl bridge: mhl pid 20648 pertence a outra instância do Senpai ainda aberta (pid 20649) — preservado
+--- PASS: TestCleanupStaleMHL_PreservesTheMHLOfAnotherLiveInstance (0.70s)
+=== RUN   TestCleanupStaleMHL_NeverKillsAReusedPid
+2026/10/07 14:55:00 mhl bridge: pid 20651 de mhl-424242.pid não é mais o mhl ("/bin/sleep") — registro descartado, processo preservado
+--- PASS: TestCleanupStaleMHL_NeverKillsAReusedPid (0.70s)
+=== RUN   TestCleanupStaleMHL_LegacyFileIsStillReaped
+2026/10/07 14:55:01 mhl bridge: encerrando mhl órfão de uma execução anterior (pid 20670)
+--- PASS: TestCleanupStaleMHL_LegacyFileIsStillReaped (0.51s)
+=== RUN   TestCleanupStaleMHL_LegacyFileOfAnotherBinaryIsNotActedOn
+2026/10/07 14:55:01 mhl bridge: pid 20671 de mhl.pid não é mais o mhl ("/bin/sleep") — registro descartado, processo preservado
+--- PASS: TestCleanupStaleMHL_LegacyFileOfAnotherBinaryIsNotActedOn (0.71s)
+=== RUN   TestCleanupStaleMHL_NoPidFileIsANoop
+--- PASS: TestCleanupStaleMHL_NoPidFileIsANoop (0.00s)
+=== RUN   TestCleanupStaleMHL_UnparsableOrDeadRecordsAreConsumed
+--- PASS: TestCleanupStaleMHL_UnparsableOrDeadRecordsAreConsumed (0.01s)
+=== RUN   TestIsSameMHL
+--- PASS: TestIsSameMHL (0.00s)
+=== RUN   TestRunStatusGet_ReportsARunFromADeadMhlProcessAsFailed
+--- PASS: TestRunStatusGet_ReportsARunFromADeadMhlProcessAsFailed (0.00s)
+=== RUN   TestRunStatusGet_KeepsRunsThisProcessStartedOrResumed
+--- PASS: TestRunStatusGet_KeepsRunsThisProcessStartedOrResumed (0.00s)
+=== RUN   TestRunStatusGet_LeavesPausedRunsFromEarlierProcessesAlone
+--- PASS: TestRunStatusGet_LeavesPausedRunsFromEarlierProcessesAlone (0.00s)
+=== RUN   TestLookPathIn_FindsTheFirstExecutableOnThePath
+--- PASS: TestLookPathIn_FindsTheFirstExecutableOnThePath (0.00s)
+=== RUN   TestLoginShellPath_ProducesANonEmptyRealPath
+--- PASS: TestLoginShellPath_ProducesANonEmptyRealPath (0.15s)
+=== RUN   TestEnrichedEnv_LetsPATHOnlyToolResolve
+--- PASS: TestEnrichedEnv_LetsPATHOnlyToolResolve (0.27s)
+=== RUN   TestCommandContextResolvesACommandWithTheEnrichedPath
+--- PASS: TestCommandContextResolvesACommandWithTheEnrichedPath (0.15s)
+=== RUN   TestExpiredSessionIsReopenedAndTheCallRetriedOnce
+2026/10/07 14:55:03 mhl bridge: sessao MCP expirada — abrindo uma nova (execucoes da sessao anterior ficam inacessiveis)
+--- PASS: TestExpiredSessionIsReopenedAndTheCallRetriedOnce (0.00s)
+=== RUN   TestNonSuccessStatusIsReportedInsteadOfEOF
+--- PASS: TestNonSuccessStatusIsReportedInsteadOfEOF (0.00s)
+PASS
+ok  	senpai-app/mhlbridge	4.567s
+exit=0

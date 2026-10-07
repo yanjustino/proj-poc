@@ -1,0 +1,45 @@
+// tool LiteralBlocks — trechos de uma fonte que entram na pagina da wiki
+// exatamente como estao, sem passar pela LLM. O ingest pede a LLM uma
+// sintese em prosa (source_summary) e trechos de codigo (code_snippets); um
+// conteudo que ja e estruturado e deterministico — a arvore de pastas e as
+// linguagens de um retrato de repositorio (RepoSnapshot) — se perdia nessa
+// sintese: a LLM resumia a arvore em uma frase. Quem gera a fonte marca o
+// trecho com wrap(); o IngestGenerate extrai com extract() e o
+// WikiPages.write_source grava o trecho na pagina, logo apos a sintese.
+//
+// Os marcadores sao comentarios HTML: invisiveis num visualizador de
+// Markdown e inconfundiveis com qualquer conteudo real de uma fonte.
+
+export tool LiteralBlocks {
+    open(): string -> "<!-- senpai:literal -->"
+    close(): string -> "<!-- /senpai:literal -->"
+
+    wrap(markdown: string): string -> self.open() + "\n" + markdown.trim() + "\n" + self.close()
+
+    // Todos os trechos marcados, na ordem, separados por linha em branco.
+    // Um marcador aberto sem fechamento e ignorado (nunca engole o resto da
+    // fonte).
+    extract(text: string): string -> {
+        var out = []
+        var parts = text.split(self.open())
+        var i = 1
+        while (i < parts.size()) {
+            var inner = parts[i].split(self.close())
+            if (inner.size() > 1 && !inner[0].trim().is_empty()) out += [inner[0].trim()]
+            i = i + 1
+        }
+        return out.join("\n\n")
+    }
+}
+
+test LiteralBlocksSpec {
+    describe extract_returns_every_marked_block_in_order {
+        var text = "intro\n" + LiteralBlocks.wrap("## A\n\n- um") + "\nmeio\n" + LiteralBlocks.wrap("## B") + "\nfim"
+        are_equal(LiteralBlocks.extract(text), "## A\n\n- um\n\n## B")
+    }
+
+    describe extract_is_empty_without_markers_and_ignores_an_unclosed_one {
+        are_equal(LiteralBlocks.extract("fonte comum, sem marcas"), "")
+        are_equal(LiteralBlocks.extract("x " + LiteralBlocks.open() + " sem fim"), "")
+    }
+}

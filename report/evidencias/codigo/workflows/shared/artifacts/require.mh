@@ -1,0 +1,42 @@
+// Require le um artefato predecessor para o prompt de outro. Obrigatorio:
+// falha com a mensagem padrao "gere 'x' antes de 'y'" antes de qualquer
+// chamada de LLM. Opcional: texto fixo no lugar do que ainda nao existe
+// (C3 — a LLM nunca decide se um contexto ausente "conta").
+
+import { Context } from "context.mh"
+
+export tool Require {
+    present(content: string, need: string, before: string): string -> {
+        if (content.is_empty()) fail("gere '${need}' antes de '${before}'")
+        return content
+    }
+
+    artifact(project_id: string, need: string, before: string): string ->
+        self.present(Context.artifact(project_id, "${need}.html"), need, before)
+
+    adr(project_id: string, before: string): string ->
+        self.present(Context.adr_context(project_id), "adr", before)
+
+    diagramas(project_id: string, before: string): string ->
+        self.present(Context.artifact_dir(project_id, "diagramas"), "diagramas", before)
+
+    // `scope` nomeia o work-item no texto: "este projeto", "esta oportunidade".
+    optional(content: string, scope: string): string ->
+        if (content.is_empty()) "(não gerado para ${scope})" else content
+}
+
+test RequireSpec {
+    describe a_missing_predecessor_fails_with_the_standard_message {
+        try {
+            Require.artifact("spec-test-require-missing", "brief", "requisitos")
+            is_true(false)
+        } catch (err) {
+            is_true(err.contains("gere 'brief' antes de 'requisitos'"))
+        }
+    }
+
+    describe optional_fills_in_the_placeholder {
+        are_equal(Require.optional("", "este projeto"), "(não gerado para este projeto)")
+        are_equal(Require.optional("x", "este projeto"), "x")
+    }
+}

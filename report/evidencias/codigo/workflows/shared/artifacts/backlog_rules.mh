@@ -1,0 +1,360 @@
+// backlog_rules.mh — coerencia semantica entre campos de uma historia ou
+// feature que o JSON Schema valida isoladamente. Os prompts determinam as
+// combinacoes (uma historia de usuario tem nature "funcional" e
+// Como/Quero/Para; um enabler tem subtipo), mas um JSON valido podia ser um
+// "spike" funcional com persona e sem pergunta. JSON Schema condicional
+// (if/then) nao resolve: o Devin nao valida schema nativamente — o contrato
+// vai no prompt —, entao o codigo e a unica validacao garantida. Os avisos
+// aparecem na secao de conformidade de cada pagina (e no preview, antes de
+// aprovar), no mesmo padrao de C4Diagram/DerModel/Contracts.
+
+import { Cite } from "cite.mh"
+
+export tool StoryRules {
+    blank(value: any): bool -> (value ?? "").trim().is_empty()
+
+    internal expected_nature(story_type: string): string -> match story_type {
+        "historia_usuario"      -> "funcional"
+        "historia_habilitadora" -> "tecnica"
+        "spike"                 -> "pesquisa"
+        _                       -> ""
+    }
+
+    // Historia gravada antes dos campos tecnicos (resultado_tecnico etc.) —
+    // mesmo discriminador de ArtifactBody.historia; nao e verificada.
+    is_legacy(h: any): bool -> h?.resultado_tecnico == null && h?.habilita == null && h?.evidenciado_por == null
+
+    check(h: any): string[] -> {
+        if (self.is_legacy(h)) return []
+        var out = []
+        var tipo = h?.story_type ?? ""
+        var nature = self.expected_nature(tipo)
+        if (!nature.is_empty() && (h?.nature ?? "") != nature) out += ["Tipo " + tipo + " exige nature \"" + nature + "\" (veio \"" + (h?.nature ?? "") + "\")."]
+        var persona = !self.blank(h?.como) || !self.blank(h?.quero) || !self.blank(h?.para)
+        var persona_completa = !self.blank(h?.como) && !self.blank(h?.quero) && !self.blank(h?.para)
+        var tecnico = !self.blank(h?.resultado_tecnico) || !self.blank(h?.habilita) || !self.blank(h?.evidenciado_por)
+        if (tipo == "historia_usuario") {
+            if (!persona_completa) out += ["História de usuário sem Como/Quero/Para completo."]
+            if (tecnico) out += ["História de usuário não usa resultado técnico/habilita/evidenciado por — isso é de história habilitadora ou spike."]
+        }
+        if (tipo == "historia_habilitadora") {
+            if (persona) out += ["História habilitadora não usa Como/Quero/Para — descreva o resultado técnico (sem persona artificial)."]
+            if (self.blank(h?.resultado_tecnico) || self.blank(h?.habilita) || self.blank(h?.evidenciado_por)) out += ["História habilitadora precisa de resultado técnico, do que habilita e de como é evidenciada."]
+        }
+        if (tipo == "spike") {
+            if (persona) out += ["Spike não usa Como/Quero/Para — declare a pergunta de investigação."]
+            out = out + self.check_spike(h)
+        }
+        if ((h?.work_item_type ?? "historia") != "historia") out += ["work_item_type deve ser \"historia\"."]
+        return out
+    }
+
+    // Spike: a investigacao precisa de pergunta, limite de tempo, evidencia
+    // de saida e a decisao que desbloqueia (spike estruturado; um spike
+    // antigo, sem o objeto `spike`, usa resultado_tecnico/habilita/
+    // evidenciado_por como pergunta/decisao/evidencia).
+    internal check_spike(h: any): string[] -> {
+        var spike = h?.spike
+        if (spike == null) {
+            if (self.blank(h?.resultado_tecnico) || self.blank(h?.habilita) || self.blank(h?.evidenciado_por)) return ["Spike precisa da pergunta, da decisão habilitada e da evidência esperada."]
+            return []
+        }
+        var faltando = []
+        if (self.blank(spike?.pergunta)) faltando += ["pergunta"]
+        if (self.blank(spike?.timebox)) faltando += ["timebox"]
+        if (self.blank(spike?.evidencia_saida)) faltando += ["evidência de saída"]
+        if (self.blank(spike?.decisao_habilitada)) faltando += ["decisão habilitada"]
+        if (self.blank(spike?.criterio_encerramento)) faltando += ["critério de encerramento"]
+        if (faltando.is_empty()) return []
+        return ["Spike sem " + faltando.join(", ") + "."]
+    }
+}
+
+export tool FeatureRules {
+    check(f: any): string[] -> {
+        var tipo = f?.tipo_item
+        if (tipo == null) return []
+        var out = []
+        var subtipo = f?.subtipo_enabler ?? "nao_aplicavel"
+        var habilitados = f?.itens_habilitados ?? []
+        if (tipo == "feature_negocio") {
+            if (subtipo != "nao_aplicavel") out += ["Feature de negócio não tem subtipo de enabler (veio \"" + subtipo + "\")."]
+            if (!habilitados.is_empty()) out += ["Feature de negócio não habilita outros itens — isso é de enabler."]
+        }
+        if (tipo == "enabler") {
+            if (subtipo == "nao_aplicavel") out += ["Enabler sem subtipo (exploração, arquitetura, infraestrutura ou conformidade)."]
+            if (habilitados.is_empty() && (f?.gaps ?? []).is_empty()) out += ["Enabler sem itens habilitados — diga que itens do backlog ele habilita ou registre a ausência em Lacunas."]
+        }
+        out = out + self.check_measurement(f)
+        return out
+    }
+
+    // Hipotese de beneficio verificavel: metrica e meta sempre; baseline ou
+    // a lacuna registrada. Feature anterior a medicao_beneficio nao e checada.
+    internal check_measurement(f: any): string[] -> {
+        var m = f?.medicao_beneficio
+        if (m == null) return []
+        var out = []
+        if (StoryRules.blank(m?.metrica) || StoryRules.blank(m?.meta)) out += ["Hipótese de benefício sem métrica e meta verificáveis."]
+        if (StoryRules.blank(m?.baseline) && (f?.gaps ?? []).is_empty()) out += ["Hipótese de benefício sem baseline — informe o valor atual ou registre a ausência em Lacunas."]
+        if (StoryRules.blank(m?.janela)) out += ["Hipótese de benefício sem janela de medição."]
+        return out
+    }
+}
+
+// DependencyRules — dependencias estruturadas entre as historias de um lote
+// ({tipo, destino, texto}): so verificaveis olhando o lote inteiro, entao
+// correm no *Generate (Traceability.annotate) e viram avisos da historia.
+export tool DependencyRules {
+    // Um destino sem espaco e com digito ("FT003", "FR-012", "US0002") e um
+    // identificador; com espaco, e o titulo de outra historia do lote.
+    internal is_identifier(destino: string): bool -> {
+        var d = destino.trim()
+        if (d.is_empty() || d.contains(" ")) return false
+        return "0123456789".split("").any((c) -> d.contains(c))
+    }
+
+    // `outros`: nomes validos fora do lote — features (codigo e titulo) e
+    // elementos do C4 (conteineres, sistemas externos) —, destinos legitimos
+    // de uma dependencia que nao sao historias deste lote.
+    check_batch(historias: any[], outros: string[]): any[] -> {
+        var titles = historias.map((h) -> (h?.titulo ?? "").to_lower().trim())
+        var outros_norm = outros.map((o) -> o.to_lower().trim())
+        var pares = self.gateway_backend_pairs(historias)
+        var out = []
+        for (var h in historias) {
+            var avisos = []
+            var own = (h?.titulo ?? "").to_lower().trim()
+            // Dependencia antiga (so texto, sem tipo) nao e verificada.
+            for (var d in (h?.dependencias_impedimentos ?? []).filter((x) -> x?.tipo != null)) {
+                var tipo = d.tipo
+                var destino = (d?.destino ?? "").trim()
+                if (destino.is_empty()) {
+                    if (tipo != "impedimento_externo") avisos += ["Dependência (" + tipo + ") sem destino."]
+                } else if ((tipo == "depende_de" || tipo == "bloqueia") && !self.is_identifier(destino)) {
+                    var target = destino.to_lower()
+                    if (!titles.contains(target)) {
+                        // Um titulo de feature abreviado ("Infraestrutura em AWS com
+                        // EKS" para "... e zonas de disponibilidade") tambem vale.
+                        var conhecido = outros_norm.contains(target) || (target.size() >= 12 && outros_norm.any((o) -> o.starts_with(target)))
+                        if (!conhecido) avisos += ["Dependência para algo que não existe no backlog nem na arquitetura: “" + destino + "”."]
+                    } else if (tipo == "depende_de" && target != own) {
+                        var other = historias.filter((x) -> (x?.titulo ?? "").to_lower().trim() == target)[0]
+                        var back = (other?.dependencias_impedimentos ?? []).any((x) -> x?.tipo == "depende_de" && (x?.destino ?? "").to_lower().trim() == own)
+                        if (back) avisos += ["Dependência circular com “" + destino + "” — uma das duas precisa vir primeiro."]
+                    }
+                }
+            }
+            out += [avisos + pares[out.size()]]
+        }
+        return out
+    }
+
+    internal endpoint_keys(h: any): string[] ->
+        (h?.contratos?.endpoints ?? []).map((e) -> e.metodo + " " + self.normalize_path(e.caminho))
+
+    // Prefixos de roteamento que o gateway costuma acrescentar ("/api",
+    // "/v1") nao fazem dois endpoints diferentes.
+    internal normalize_path(caminho: string): string -> {
+        var parts = caminho.split("/").filter((p) -> !p.is_empty())
+        var out = []
+        var skipping = true
+        for (var p in parts) {
+            var is_prefix = p == "api" || (p.starts_with("v") && p.size() <= 3 && "0123456789".contains(p.substring(1, 2)))
+            if (skipping && is_prefix) {
+                out = out
+            } else {
+                skipping = false
+                out += [p]
+            }
+        }
+        return "/" + out.join("/")
+    }
+
+    // O par Gateway/Backend de um mesmo endpoint (regra do time: dois
+    // artefatos por endpoint REST) precisa expor o mesmo contrato: o gateway
+    // depende do backend (dependencias_impedimentos) e os dois descrevem os
+    // mesmos metodo+caminho. Avisos vao para a historia de gateway.
+    internal gateway_backend_pairs(historias: any[]): any[] -> {
+        var out = []
+        for (var h in historias) {
+            var avisos = []
+            if ((h?.subclassification ?? "") == "api_gateway") {
+                var backends = []
+                for (var d in (h?.dependencias_impedimentos ?? [])) {
+                    var alvo = (d?.destino ?? "").to_lower().trim()
+                    backends = backends + historias.filter((x) -> (x?.subclassification ?? "") == "backend" && (x?.titulo ?? "").to_lower().trim() == alvo)
+                }
+                if (backends.is_empty()) {
+                    avisos += ["História de API Gateway sem dependência (depende_de) para a história de Backend do mesmo endpoint."]
+                } else {
+                    var gw = self.endpoint_keys(h)
+                    var be = []
+                    for (var b in backends) be = be + self.endpoint_keys(b)
+                    var faltam = be.filter((k) -> !gw.contains(k))
+                    var sobram = gw.filter((k) -> !be.contains(k))
+                    if (!faltam.is_empty()) avisos += ["O gateway não expõe endpoint(s) do backend: " + faltam.join(", ") + " — exponha ou justifique como interno."]
+                    if (!sobram.is_empty()) avisos += ["O gateway expõe endpoint(s) que o backend não implementa: " + sobram.join(", ") + "."]
+                }
+            }
+            out += [avisos]
+        }
+        return out
+    }
+}
+
+// BacklogHtml — renderizacao dos campos estruturados de feature/historia.
+// Um item anterior a eles (texto com prefixo [AS-IS], proposta em texto)
+// cai na lista simples de sempre.
+export tool BacklogHtml {
+    change_badge(mudanca: string): string -> match mudanca {
+        "as_is"      -> "<span class=\"item-kind item-kind-subtype\">já existe</span> "
+        "modificado" -> "<span class=\"item-kind item-kind-subtype\">modificado</span> "
+        "removido"   -> "<span class=\"item-kind item-kind-subtype\">removido</span> "
+        _            -> ""
+    }
+
+    change_list(items: any[]): string ->
+        "<ul>" + items.map((i) -> "<li>" + self.change_badge(i?.mudanca ?? "") + html.escape(i?.texto ?? "") + " " + Cite.badges(i?.fontes ?? []) + "</li>").join("") + "</ul>"
+
+    story_type_label(tipo: string): string -> match tipo {
+        "historia_usuario"      -> "História de usuário"
+        "historia_habilitadora" -> "História habilitadora"
+        "spike"                 -> "Spike"
+        _                       -> tipo
+    }
+
+    proposals(items: any[]): string -> {
+        if (items.is_empty() || items[0]?.tipo == null) return Cite.list(items)
+        return "<table><thead><tr><th>Tipo</th><th>História</th><th>Resultado</th><th>Fontes</th></tr></thead><tbody>" +
+            items.map((p) -> "<tr><td>" + self.story_type_label(p.tipo) + "</td><td>" + html.escape(p?.titulo ?? "") + "</td><td>" + html.escape(p?.resultado ?? "") + "</td><td>" + Cite.badges(p?.fontes ?? []) + "</td></tr>").join("") +
+            "</tbody></table>"
+    }
+
+    measurement(m: any): string -> {
+        if (m == null) return ""
+        var guardrails = m?.guardrails ?? []
+        return "<table><tbody>" +
+            "<tr><th>Métrica</th><td>" + html.escape(if (StoryRules.blank(m?.metrica)) "—" else m.metrica) + "</td></tr>" +
+            "<tr><th>Baseline</th><td>" + html.escape(if (StoryRules.blank(m?.baseline)) "—" else m.baseline) + "</td></tr>" +
+            "<tr><th>Meta</th><td>" + html.escape(if (StoryRules.blank(m?.meta)) "—" else m.meta) + "</td></tr>" +
+            "<tr><th>Janela</th><td>" + html.escape(if (StoryRules.blank(m?.janela)) "—" else m.janela) + "</td></tr>" +
+            "<tr><th>Guardrails</th><td>" + (if (guardrails.is_empty()) "—" else html.escape(guardrails.join("; "))) + "</td></tr>" +
+            "</tbody></table>" + Cite.note(m?.fontes ?? [])
+    }
+
+    dependency_type_label(tipo: string): string -> match tipo {
+        "depende_de"          -> "Depende de"
+        "bloqueia"            -> "Bloqueia"
+        "relacionada"         -> "Relacionada"
+        "impedimento_externo" -> "Impedimento externo"
+        _                     -> tipo
+    }
+
+    dependencies(items: any[]): string -> {
+        if (items.is_empty() || items[0]?.tipo == null) return Cite.list(items)
+        return "<table><thead><tr><th>Tipo</th><th>Destino</th><th>Justificativa</th><th>Fontes</th></tr></thead><tbody>" +
+            items.map((d) -> "<tr><td>" + self.dependency_type_label(d.tipo) + "</td><td>" + self.change_badge(d?.mudanca ?? "") + html.escape(d?.destino ?? "") +
+                "</td><td>" + html.escape(d?.texto ?? "") + "</td><td>" + Cite.badges(d?.fontes ?? []) + "</td></tr>").join("") +
+            "</tbody></table>"
+    }
+}
+
+test BacklogRulesSpec {
+    describe coherent_user_story_passes {
+        are_equal(StoryRules.check({story_type: "historia_usuario", nature: "funcional", como: "a", quero: "b", para: "c", resultado_tecnico: "", habilita: "", evidenciado_por: "", work_item_type: "historia"}).size(), 0)
+    }
+
+    describe incoherent_user_story_is_flagged {
+        var avisos = StoryRules.check({story_type: "historia_usuario", nature: "tecnica", como: "a", quero: "", para: "c", resultado_tecnico: "x", habilita: "", evidenciado_por: ""}).join(" | ")
+        is_true(avisos.contains("exige nature \"funcional\" (veio \"tecnica\")"))
+        is_true(avisos.contains("sem Como/Quero/Para completo"))
+        is_true(avisos.contains("não usa resultado técnico"))
+    }
+
+    describe enabler_story_with_persona_is_flagged {
+        var avisos = StoryRules.check({story_type: "historia_habilitadora", nature: "tecnica", como: "desenvolvedor", quero: "x", para: "y", resultado_tecnico: "", habilita: "", evidenciado_por: ""}).join(" | ")
+        is_true(avisos.contains("não usa Como/Quero/Para"))
+        is_true(avisos.contains("precisa de resultado técnico"))
+    }
+
+    describe structured_spike_needs_every_field {
+        var avisos = StoryRules.check({story_type: "spike", nature: "pesquisa", como: "", quero: "", para: "", resultado_tecnico: "", habilita: "", evidenciado_por: "",
+            spike: {pergunta: "Qual banco?", timebox: "", metodo: "", evidencia_saida: "", decisao_habilitada: "ADR", criterio_encerramento: ""}}).join(" | ")
+        is_true(avisos.contains("Spike sem timebox, evidência de saída, critério de encerramento."))
+    }
+
+    describe complete_spike_passes {
+        are_equal(StoryRules.check({story_type: "spike", nature: "pesquisa", como: "", quero: "", para: "", resultado_tecnico: "", habilita: "", evidenciado_por: "",
+            spike: {pergunta: "Qual banco?", timebox: "2 dias", metodo: "benchmark", evidencia_saida: "relatório", decisao_habilitada: "ADR-003", criterio_encerramento: "resposta ou timebox"}}).size(), 0)
+    }
+
+    describe legacy_story_is_not_checked {
+        are_equal(StoryRules.check({story_type: "spike", nature: "funcional", como: "x"}).size(), 0)
+    }
+
+    describe dependency_batch_checks {
+        var historias = [
+            {titulo: "API Gateway de ordens", dependencias_impedimentos: [{tipo: "depende_de", destino: "Backend de ordens", texto: "", mudanca: "novo"}]},
+            {titulo: "Backend de ordens", dependencias_impedimentos: [
+                {tipo: "depende_de", destino: "API Gateway de ordens", texto: "", mudanca: "novo"},
+                {tipo: "depende_de", destino: "Histórias que não existe", texto: "", mudanca: "novo"},
+                {tipo: "depende_de", destino: "FT003", texto: "", mudanca: "novo"},
+                {tipo: "bloqueia", destino: "", texto: "", mudanca: "novo"},
+                {tipo: "impedimento_externo", destino: "", texto: "acesso à B3", mudanca: "as_is"},
+            ]},
+        ]
+        var avisos = DependencyRules.check_batch(historias, [])
+        is_true(avisos[0].join(" ").contains("Dependência circular com “Backend de ordens”"))
+        var segunda = avisos[1].join(" | ")
+        is_true(segunda.contains("não existe no backlog nem na arquitetura: “Histórias que não existe”"))
+        is_true(segunda.contains("Dependência (bloqueia) sem destino"))
+        is_true(!segunda.contains("FT003"))
+        is_true(!segunda.contains("impedimento_externo"))
+    }
+
+    describe dependencies_to_features_and_architecture_are_valid {
+        var historias = [{titulo: "A", dependencias_impedimentos: [
+            {tipo: "depende_de", destino: "Infraestrutura em AWS com EKS", texto: "", mudanca: "novo"},
+            {tipo: "depende_de", destino: "Bureau de Crédito", texto: "", mudanca: "novo"},
+        ]}]
+        are_equal(DependencyRules.check_batch(historias, ["FT006", "Infraestrutura em AWS com EKS e zonas múltiplas", "bureau-credito", "Bureau de Crédito"])[0].size(), 0)
+    }
+
+    describe gateway_and_backend_must_expose_the_same_endpoints {
+        var historias = [
+            {titulo: "Gateway cadastro", subclassification: "api_gateway",
+             dependencias_impedimentos: [{tipo: "depende_de", destino: "Backend cadastro", texto: "", mudanca: "novo"}],
+             contratos: {endpoints: [{metodo: "POST", caminho: "/api/v1/investidores"}, {metodo: "DELETE", caminho: "/investidores/{id}"}], eventos: []}},
+            {titulo: "Backend cadastro", subclassification: "backend", dependencias_impedimentos: [],
+             contratos: {endpoints: [{metodo: "POST", caminho: "/investidores"}, {metodo: "GET", caminho: "/investidores/{id}/status"}], eventos: []}},
+            {titulo: "Gateway solto", subclassification: "api_gateway", dependencias_impedimentos: [], contratos: {endpoints: [], eventos: []}},
+        ]
+        var avisos = DependencyRules.check_batch(historias, [])
+        var gw = avisos[0].join(" | ")
+        is_true(gw.contains("não expõe endpoint(s) do backend: GET /investidores/{id}/status"))
+        is_true(gw.contains("expõe endpoint(s) que o backend não implementa: DELETE /investidores/{id}"))
+        is_true(!gw.contains("POST"))
+        is_true(avisos[2][0].contains("sem dependência (depende_de) para a história de Backend"))
+        are_equal(avisos[1].size(), 0)
+    }
+
+    describe measurement_checks {
+        is_true(FeatureRules.check({tipo_item: "feature_negocio", subtipo_enabler: "nao_aplicavel", itens_habilitados: [], gaps: [], medicao_beneficio: {metrica: "", baseline: "", meta: "", janela: "", guardrails: []}}).join(" | ").contains("sem métrica e meta verificáveis"))
+        are_equal(FeatureRules.check({tipo_item: "feature_negocio", subtipo_enabler: "nao_aplicavel", itens_habilitados: [], gaps: [{texto: "baseline desconhecido"}], medicao_beneficio: {metrica: "conversão", baseline: "", meta: "+10%", janela: "30 dias", guardrails: []}}).size(), 0)
+    }
+
+    describe structured_fields_render_and_legacy_falls_back {
+        is_true(BacklogHtml.proposals([{tipo: "spike", titulo: "Banco", resultado: "decisão", fontes: []}]).contains("<td>Spike</td>"))
+        is_true(BacklogHtml.proposals([{texto: "[spike] Banco", fontes: []}]).starts_with("<ul>"))
+        is_true(BacklogHtml.change_list([{texto: "Cadastro atual", mudanca: "as_is", fontes: []}]).contains("já existe</span> Cadastro atual"))
+        is_true(BacklogHtml.dependencies([{tipo: "depende_de", destino: "FT003", texto: "x", mudanca: "novo", fontes: []}]).contains("<td>Depende de</td>"))
+    }
+
+    describe feature_type_coherence {
+        is_true(FeatureRules.check({tipo_item: "feature_negocio", subtipo_enabler: "arquitetura", itens_habilitados: [{texto: "x"}]}).join(" ").contains("não tem subtipo"))
+        is_true(FeatureRules.check({tipo_item: "enabler", subtipo_enabler: "nao_aplicavel", itens_habilitados: []}).join(" | ").contains("Enabler sem itens habilitados"))
+        are_equal(FeatureRules.check({tipo_item: "enabler", subtipo_enabler: "infraestrutura", itens_habilitados: [{texto: "FT001"}]}).size(), 0)
+        are_equal(FeatureRules.check({resumo: "legado"}).size(), 0)
+    }
+}

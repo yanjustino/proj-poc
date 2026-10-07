@@ -1,0 +1,202 @@
+// tool RadahnModel — o assessment de aderencia ao Radahn que acompanha o
+// plano de implementacao de cada historia (plano.radahn): a LLM devolve o
+// veredito e o radahn.yaml; a conformidade do YAML, o selo, a secao do
+// plano e a gravacao do arquivo sao codigo (C3, mesmo padrao de PlanoModel).
+//
+// O Radahn e um motor low-code de APIs REST configurado por radahn.yaml
+// (ver prompts/). Como nao ha parser de YAML no mhl, a conformidade e
+// textual: o essencial que o motor recusaria no boot (kind, skills
+// desconhecidas, tabs) e o que o catalogo de armadilhas manda checar
+// (Finish, segredos literais).
+
+import { Paths } from "../core/paths.mh"
+
+export tool RadahnModel {
+    // Skills e control steps do catalogo (prompts/02-skills.md). Uma skill
+    // fora daqui e uma skill inventada — o Radahn falha no boot com ela.
+    internal known_kinds(): string[] -> [
+        "Parallel", "ForEach",
+        "LogicalOperator", "StaticValidation", "EmptyValidation", "JsonValidation", "PostgresQuery", "MySqlQuery",
+        "HttpAuthorize", "HttpSearch", "OutputTransformer", "MergeLocalStore", "HttpStatusCodeResult",
+        "HttpProblemDetailsResponse", "StringOperator", "JsonTransformer", "MathOperator", "MathDateTimeOperator",
+        "DataValidation", "PostgresOperation", "MysqlOperation", "HttpOperation",
+        "SnsPublish", "SqsSend", "SqsGetMessages", "SqsDeleteMessage", "CloudwatchMetric", "AwsSendMessage",
+        "AwsDynamoPutItem", "AwsDynamoGetItem", "AwsDynamoUpdateItem", "AwsDynamoDeleteItem", "AwsDynamoQuery",
+        "RedisPutItem", "RedisGetItem", "RedisIncrementItem", "RedisDeleteItem",
+        "KafkaPublish", "KafkaConsume", "KafkaAck", "KafkaCertDownload",
+        "Command", "UnzipFile"
+    ]
+
+    internal yaml_text(data: any): string -> (data?.radahn?.yaml ?? "").trim()
+
+    // Aplicavel = o assessment diz que sim E ha um radahn.yaml para levar.
+    applicable(data: any): bool -> (data?.radahn?.aplicavel ?? false) && !self.yaml_text(data).is_empty()
+
+    aderencia_label(nivel: string): string -> match nivel {
+        "alta"          -> "Aderência alta"
+        "media"         -> "Aderência média"
+        "baixa"         -> "Aderência baixa"
+        "nao_aplicavel" -> "Não aplicável"
+        _               -> nivel
+    }
+
+    // Valor de todo `kind:` do YAML (com ou sem "- " na frente, sem aspas nem comentario).
+    internal yaml_kinds(yaml: string): string[] -> {
+        var out = []
+        for (var line in yaml.split("\n")) {
+            var t = line.trim()
+            if (t.starts_with("- ")) t = t.replace("- ", "").trim()
+            if (t.starts_with("kind:")) {
+                var value = t.replace("kind:", "").split("#")[0].trim().replace("\"", "").replace("'", "")
+                if (!value.is_empty() && !out.contains(value)) out += [value]
+            }
+        }
+        return out
+    }
+
+    // Chaves que jamais podem ter valor literal no YAML (vem de FROM_ENV).
+    internal secret_keys(): string[] -> ["password:", "secret:", "clientsecret:", "apikey:", "authorization:"]
+
+    internal literal_secrets(yaml: string): string[] -> {
+        var out = []
+        for (var line in yaml.split("\n")) {
+            var t = line.trim()
+            if (t.starts_with("- ")) t = t.replace("- ", "").trim()
+            var lower = t.to_lower()
+            for (var key in self.secret_keys()) {
+                if (lower.starts_with(key)) {
+                    var value = t.replace(t.split(":")[0] + ":", "").trim()
+                    if (!value.is_empty() && !value.contains("FROM_ENV(") && !value.starts_with("$")) out += [t.split(":")[0]]
+                }
+            }
+        }
+        return out
+    }
+
+    internal check_yaml(yaml: string): string[] -> {
+        var out = []
+        if (yaml.contains("\t")) out += ["radahn.yaml usa tabs — o YAML aceita só espaços."]
+        if (!yaml.contains("kind: ApplicationWorkflow") && !yaml.contains("kind: ApiWorkflow")) out += ["radahn.yaml sem `kind: ApplicationWorkflow`."]
+        if (!yaml.contains("routes:") || !yaml.contains("behaviors:")) out += ["radahn.yaml sem `routes:` e/ou `behaviors:`."]
+        if (!yaml.contains("Finish")) out += ["radahn.yaml sem nenhum `onSuccess: Finish`."]
+        var known = self.known_kinds()
+        var desconhecidas = self.yaml_kinds(yaml).filter((k) -> k != "ApplicationWorkflow" && k != "ApiWorkflow" && !known.contains(k))
+        if (!desconhecidas.is_empty()) out += ["radahn.yaml usa skill que não existe no catálogo do Radahn: " + desconhecidas.join(", ") + "."]
+        var segredos = self.literal_secrets(yaml)
+        if (!segredos.is_empty()) out += ["radahn.yaml tem valor literal em campo sensível (" + segredos.join(", ") + ") — use FROM_ENV(NOME)."]
+        return out
+    }
+
+    check_assessment(radahn: any): string[] -> self.check({radahn})
+
+    check(data: any): string[] -> {
+        var radahn = data?.radahn
+        if (!(data?.radahn_erro ?? "").is_empty()) return ["A avaliação de aderência ao Radahn falhou e foi ignorada: " + data.radahn_erro]
+        if (radahn == null) return []
+        var yaml = self.yaml_text(data)
+        var out = []
+        if ((radahn?.aplicavel ?? false) && yaml.is_empty()) out += ["Radahn marcado como aplicável, mas o radahn.yaml veio vazio."]
+        if (self.applicable(data)) out = out + self.check_yaml(yaml)
+        return out
+    }
+
+    // --- Renderizacao -------------------------------------------------------------
+
+    warnings_html(data: any): string -> {
+        var avisos = self.check(data)
+        if (avisos.is_empty()) return ""
+        return "<h2>Conformidade do radahn.yaml</h2><ul class=\"c4-warnings\">" + avisos.map((a) -> "<li>" + html.escape(a) + "</li>").join("") + "</ul>"
+    }
+
+    badge_html(data: any): string -> {
+        if (!self.applicable(data)) return ""
+        return "<span class=\"radahn-badge\" title=\"Esta história pode ser implementada com o Radahn — veja o radahn.yaml gerado junto com o plano.\">Radahn aplicável · " +
+            html.escape(self.aderencia_label(data?.radahn?.aderencia ?? "")) + "</span>"
+    }
+
+    internal list_html(itens: any[]): string -> {
+        if (itens.is_empty()) return "<p>—</p>"
+        return "<ul>" + itens.map((i) -> "<li>" + html.escape(i) + "</li>").join("") + "</ul>"
+    }
+
+    section_html(data: any): string -> {
+        var radahn = data?.radahn
+        if (radahn == null) return ""
+        var out = "<h2>Aderência ao Radahn</h2><p>" + (if (self.applicable(data)) self.badge_html(data) else "<strong>" + html.escape(self.aderencia_label(radahn?.aderencia ?? "nao_aplicavel")) + "</strong>") + "</p>" +
+            "<p>" + html.escape(radahn?.justificativa ?? "") + "</p>"
+        out = out + "<h3>Sinais a favor</h3>" + self.list_html(radahn?.sinais ?? [])
+        out = out + "<h3>Impedimentos</h3>" + self.list_html(radahn?.impedimentos ?? [])
+        if (self.applicable(data)) {
+            out = out + "<h3>Skills previstas</h3>" + self.list_html(radahn?.skills ?? [])
+            out = out + "<h3>Variáveis de ambiente</h3>" + self.list_html(radahn?.variaveis_ambiente ?? [])
+            out = out + "<h3>Lacunas para fechar o YAML</h3>" + self.list_html(radahn?.lacunas ?? [])
+            out = out + "<h3>radahn.yaml</h3><pre class=\"radahn-yaml\">" + html.escape(self.yaml_text(data)) + "</pre>"
+        }
+        return out
+    }
+
+    // --- Arquivo ----------------------------------------------------------------------
+
+    // Grava (ou remove, se nao aplicavel mais) o radahn.yaml ao lado do
+    // plano.html. `plano_relative` e o caminho do plano sob artifacts/.
+    persist(project_id: string, plano_relative: string, data: any): string -> {
+        var relative = plano_relative.replace("plano.html", "radahn.yaml")
+        var path = Paths.artifact(project_id, relative)
+        if (self.applicable(data)) {
+            fs.write(path, self.yaml_text(data) + "\n")
+            return relative
+        }
+        if (fs.exists(path)) fs.delete(path)
+        return ""
+    }
+}
+
+tool RadahnFixtures {
+    internal yaml(): string -> "kind: ApplicationWorkflow\nmetadata:\n  name: ordens\nspec:\n  routes:\n    obterOrdem:\n      method: GET\n      url: /ordens/$id\n  behaviors:\n    obterOrdem:\n      - name: Buscar\n        kind: PostgresQuery\n        postgresQuery: { resultType: Item, sql: \"SELECT 1\", parameters: [$id] }\n        onSuccess: NextStep\n      - name: Vazio\n        kind: EmptyValidation\n        onSuccess: Finish\n        onFailure: { statusCode: 404, message: \"nao encontrado\" }\n"
+
+    internal plano(): any -> {radahn: {aplicavel: true, aderencia: "alta", justificativa: "GET simples", sinais: ["consulta"], impedimentos: [], skills: ["PostgresQuery"], variaveis_ambiente: ["DB_URL"], lacunas: [], yaml: RadahnFixtures.yaml()}}
+}
+
+test RadahnModelSpec {
+    describe a_valid_yaml_has_no_warnings {
+        are_equal(RadahnModel.check(RadahnFixtures.plano()).size(), 0)
+        is_true(RadahnModel.applicable(RadahnFixtures.plano()))
+    }
+
+    describe not_applicable_or_empty_yaml_is_not_applicable {
+        is_true(!RadahnModel.applicable({radahn: {aplicavel: false, yaml: ""}}))
+        is_true(!RadahnModel.applicable({radahn: {aplicavel: true, yaml: "  "}}))
+        is_true(!RadahnModel.applicable({}))
+        are_equal(RadahnModel.badge_html({radahn: {aplicavel: false, yaml: ""}}), "")
+        is_true(RadahnModel.check({radahn: {aplicavel: true, yaml: ""}}).join(" ").contains("veio vazio"))
+    }
+
+    describe unknown_skills_tabs_and_literal_secrets_are_flagged {
+        var yaml = "kind: ApplicationWorkflow\nspec:\n\troutes:\n  behaviors:\n    x:\n      - name: a\n        kind: MagicSkill\n        password: hunter2\n        bearerToken: $accessToken\n        clientSecret: FROM_ENV(SECRET)\n"
+        var avisos = RadahnModel.check_yaml(yaml).join(" | ")
+        is_true(avisos.contains("usa tabs"))
+        is_true(avisos.contains("não existe no catálogo do Radahn: MagicSkill"))
+        is_true(avisos.contains("valor literal em campo sensível (password)"))
+        is_true(!avisos.contains("clientSecret"))
+        is_true(avisos.contains("sem nenhum `onSuccess: Finish`"))
+    }
+
+    describe badge_and_section_render_for_applicable_plans {
+        var data = RadahnFixtures.plano()
+        is_true(RadahnModel.badge_html(data).contains("Radahn aplicável · Aderência alta"))
+        var section = RadahnModel.section_html(data)
+        is_true(section.contains("<h2>Aderência ao Radahn</h2>"))
+        is_true(section.contains("<pre class=\"radahn-yaml\">kind: ApplicationWorkflow"))
+        var nao = RadahnModel.section_html({radahn: {aplicavel: false, aderencia: "nao_aplicavel", justificativa: "UI", sinais: [], impedimentos: ["tela"], skills: [], variaveis_ambiente: [], lacunas: [], yaml: ""}})
+        is_true(nao.contains("Não aplicável"))
+        is_true(!nao.contains("radahn.yaml</h3>"))
+    }
+
+    describe a_failed_assessment_is_reported_and_check_assessment_wraps_the_object {
+        var avisos = RadahnModel.check({radahn_erro: "timeout"}).join(" | ")
+        is_true(avisos.contains("falhou e foi ignorada: timeout"))
+        is_true(RadahnModel.warnings_html({radahn_erro: "timeout"}).contains("Conformidade do radahn.yaml"))
+        are_equal(RadahnModel.check_assessment(RadahnFixtures.plano().radahn).size(), 0)
+        is_true(RadahnModel.check_assessment({aplicavel: true, yaml: ""}).join(" ").contains("veio vazio"))
+    }
+}

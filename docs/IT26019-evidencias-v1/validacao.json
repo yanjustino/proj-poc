@@ -1,0 +1,869 @@
+{
+  "data": "2026-10-07",
+  "fuso_referencia": "America/Sao_Paulo",
+  "commit_base": "9c5678c83a9e52f9130d8a00718986cc60c81988",
+  "ambiente": {
+    "go": "go1.26.0",
+    "os": "darwin",
+    "arquitetura": "arm64",
+    "mhl_cli": "1.5.0-alpha.2",
+    "mhl_embarcado": "1.5.0-alpha.2"
+  },
+  "escopo": "Fontes do repositorio e fixtures sinteticas. Nenhum work-item real consultado. Nenhuma chamada real de LLM executada.",
+  "mhl": {
+    "diretorio_execucao": "Raiz de copia temporaria isolada da arvore workflows/; sem dados reais de projects/.",
+    "lint": {
+      "comando": "mhl lint workflows",
+      "exit_code": 0,
+      "resultado": "No problems found."
+    },
+    "test": {
+      "comando": "mhl test workflows",
+      "exit_code": 0,
+      "arquivos": 64,
+      "arquivos_com_testes": 57,
+      "blocos_de_teste": 60,
+      "casos_describe": 397,
+      "assertivas_aprovadas": 1181,
+      "assertivas_falhas": 0,
+      "assertivas_incompletas": 0,
+      "duracao_segundos": 5.507,
+      "log": "testes-mhl.txt"
+    }
+  },
+  "go": {
+    "diretorio_execucao": "app/",
+    "comando": "go test -short -count=1 -json ./...",
+    "exit_code": 0,
+    "pacotes": [
+      {
+        "pacote": "senpai-app/mhlbridge",
+        "resultado": "pass",
+        "duracao_segundos": 3.968
+      },
+      {
+        "pacote": "senpai-app",
+        "resultado": "pass",
+        "duracao_segundos": 267.461
+      }
+    ],
+    "testes_e_subtestes": {
+      "pass": 130,
+      "skip": 1
+    },
+    "casos": [
+      {
+        "pacote": "senpai-app/mhlbridge",
+        "teste": "TestActiveRuns_FiltersOutTerminalAndPausedRuns",
+        "resultado": "pass",
+        "duracao_segundos": 0
+      },
+      {
+        "pacote": "senpai-app/mhlbridge",
+        "teste": "TestActiveRuns_EmptyWhenNoRunsAreActive",
+        "resultado": "pass",
+        "duracao_segundos": 0
+      },
+      {
+        "pacote": "senpai-app/mhlbridge",
+        "teste": "TestActiveRuns_EmptyRunsListIsEmptyNotAnError",
+        "resultado": "pass",
+        "duracao_segundos": 0
+      },
+      {
+        "pacote": "senpai-app/mhlbridge",
+        "teste": "TestCleanupStaleMHL_KillsAnOrphanWhoseOwnerIsGone",
+        "resultado": "pass",
+        "duracao_segundos": 0.51
+      },
+      {
+        "pacote": "senpai-app/mhlbridge",
+        "teste": "TestCleanupStaleMHL_PreservesTheMHLOfAnotherLiveInstance",
+        "resultado": "pass",
+        "duracao_segundos": 0.7
+      },
+      {
+        "pacote": "senpai-app/mhlbridge",
+        "teste": "TestCleanupStaleMHL_NeverKillsAReusedPid",
+        "resultado": "pass",
+        "duracao_segundos": 0.7
+      },
+      {
+        "pacote": "senpai-app/mhlbridge",
+        "teste": "TestCleanupStaleMHL_LegacyFileIsStillReaped",
+        "resultado": "pass",
+        "duracao_segundos": 0.5
+      },
+      {
+        "pacote": "senpai-app/mhlbridge",
+        "teste": "TestCleanupStaleMHL_LegacyFileOfAnotherBinaryIsNotActedOn",
+        "resultado": "pass",
+        "duracao_segundos": 0.7
+      },
+      {
+        "pacote": "senpai-app/mhlbridge",
+        "teste": "TestCleanupStaleMHL_NoPidFileIsANoop",
+        "resultado": "pass",
+        "duracao_segundos": 0
+      },
+      {
+        "pacote": "senpai-app/mhlbridge",
+        "teste": "TestCleanupStaleMHL_UnparsableOrDeadRecordsAreConsumed",
+        "resultado": "pass",
+        "duracao_segundos": 0
+      },
+      {
+        "pacote": "senpai-app/mhlbridge",
+        "teste": "TestIsSameMHL",
+        "resultado": "pass",
+        "duracao_segundos": 0
+      },
+      {
+        "pacote": "senpai-app/mhlbridge",
+        "teste": "TestRunStatusGet_ReportsARunFromADeadMhlProcessAsFailed",
+        "resultado": "pass",
+        "duracao_segundos": 0
+      },
+      {
+        "pacote": "senpai-app/mhlbridge",
+        "teste": "TestRunStatusGet_KeepsRunsThisProcessStartedOrResumed",
+        "resultado": "pass",
+        "duracao_segundos": 0
+      },
+      {
+        "pacote": "senpai-app/mhlbridge",
+        "teste": "TestRunStatusGet_LeavesPausedRunsFromEarlierProcessesAlone",
+        "resultado": "pass",
+        "duracao_segundos": 0
+      },
+      {
+        "pacote": "senpai-app/mhlbridge",
+        "teste": "TestLookPathIn_FindsTheFirstExecutableOnThePath",
+        "resultado": "pass",
+        "duracao_segundos": 0
+      },
+      {
+        "pacote": "senpai-app/mhlbridge",
+        "teste": "TestLoginShellPath_ProducesANonEmptyRealPath",
+        "resultado": "pass",
+        "duracao_segundos": 0.14
+      },
+      {
+        "pacote": "senpai-app/mhlbridge",
+        "teste": "TestEnrichedEnv_LetsPATHOnlyToolResolve",
+        "resultado": "pass",
+        "duracao_segundos": 0.29
+      },
+      {
+        "pacote": "senpai-app/mhlbridge",
+        "teste": "TestCommandContextResolvesACommandWithTheEnrichedPath",
+        "resultado": "pass",
+        "duracao_segundos": 0.14
+      },
+      {
+        "pacote": "senpai-app/mhlbridge",
+        "teste": "TestExpiredSessionIsReopenedAndTheCallRetriedOnce",
+        "resultado": "pass",
+        "duracao_segundos": 0
+      },
+      {
+        "pacote": "senpai-app/mhlbridge",
+        "teste": "TestNonSuccessStatusIsReportedInsteadOfEOF",
+        "resultado": "pass",
+        "duracao_segundos": 0
+      },
+      {
+        "pacote": "senpai-app",
+        "teste": "TestAddRawFile_HappyPathAndDedup",
+        "resultado": "pass",
+        "duracao_segundos": 6.82
+      },
+      {
+        "pacote": "senpai-app",
+        "teste": "TestAddRawFile_RejectsInvalidProjectID",
+        "resultado": "pass",
+        "duracao_segundos": 6.41
+      },
+      {
+        "pacote": "senpai-app",
+        "teste": "TestAddRawText_WritesMarkdownAndDedups",
+        "resultado": "pass",
+        "duracao_segundos": 6.49
+      },
+      {
+        "pacote": "senpai-app",
+        "teste": "TestAddRawText_RejectsInvalidInput",
+        "resultado": "pass",
+        "duracao_segundos": 6.5
+      },
+      {
+        "pacote": "senpai-app",
+        "teste": "TestListAndReadProjectDir_HappyPath",
+        "resultado": "pass",
+        "duracao_segundos": 6.48
+      },
+      {
+        "pacote": "senpai-app",
+        "teste": "TestListProjectDir_MissingDirReturnsEmptyArray",
+        "resultado": "pass",
+        "duracao_segundos": 6.41
+      },
+      {
+        "pacote": "senpai-app",
+        "teste": "TestListProjectDir_SeedsMermaidAssetOnFirstArtifactsTouch",
+        "resultado": "pass",
+        "duracao_segundos": 6.45
+      },
+      {
+        "pacote": "senpai-app",
+        "teste": "TestListProjectRunLogs_MissingDirReturnsEmptyArray",
+        "resultado": "pass",
+        "duracao_segundos": 6.35
+      },
+      {
+        "pacote": "senpai-app",
+        "teste": "TestListProjectRunLogs_ListsPersistedRunsNewestFirst",
+        "resultado": "pass",
+        "duracao_segundos": 6.85
+      },
+      {
+        "pacote": "senpai-app",
+        "teste": "TestListProjectRunLogs_RejectsInvalidProjectID",
+        "resultado": "pass",
+        "duracao_segundos": 6.16
+      },
+      {
+        "pacote": "senpai-app",
+        "teste": "TestProjectFileAccess_RejectsPathTraversal",
+        "resultado": "pass",
+        "duracao_segundos": 6.48
+      },
+      {
+        "pacote": "senpai-app",
+        "teste": "TestExportProjectToRejectsDestinationInsideArtifacts",
+        "resultado": "pass",
+        "duracao_segundos": 0
+      },
+      {
+        "pacote": "senpai-app",
+        "teste": "TestExportProjectToRejectsInvalidProjectID",
+        "resultado": "pass",
+        "duracao_segundos": 0
+      },
+      {
+        "pacote": "senpai-app",
+        "teste": "TestExportHandoffToCopiesThePackage",
+        "resultado": "pass",
+        "duracao_segundos": 0
+      },
+      {
+        "pacote": "senpai-app",
+        "teste": "TestIsReady_FalseBeforeStartupTrueAfter",
+        "resultado": "pass",
+        "duracao_segundos": 6.3
+      },
+      {
+        "pacote": "senpai-app",
+        "teste": "TestListWorkflowsAndManifest",
+        "resultado": "pass",
+        "duracao_segundos": 6.48
+      },
+      {
+        "pacote": "senpai-app",
+        "teste": "TestRunLifecycle_WorkItem",
+        "resultado": "pass",
+        "duracao_segundos": 6.91
+      },
+      {
+        "pacote": "senpai-app",
+        "teste": "TestApprovalRecoveryCommitsPendingDraftWithoutLLM",
+        "resultado": "pass",
+        "duracao_segundos": 7.05
+      },
+      {
+        "pacote": "senpai-app",
+        "teste": "TestModoBuddyPauseResume_WikiIngest",
+        "resultado": "skip",
+        "duracao_segundos": 0
+      },
+      {
+        "pacote": "senpai-app",
+        "teste": "TestResolveWorkflowsDir_PrefersLiveCheckout",
+        "resultado": "pass",
+        "duracao_segundos": 0
+      },
+      {
+        "pacote": "senpai-app",
+        "teste": "TestExtractVendoredWorkflows_IsARealRunnableTree",
+        "resultado": "pass",
+        "duracao_segundos": 6.24
+      },
+      {
+        "pacote": "senpai-app",
+        "teste": "TestEnsureVendoredPdftotext_ExtractsARunnableBinary",
+        "resultado": "pass",
+        "duracao_segundos": 0.19
+      },
+      {
+        "pacote": "senpai-app",
+        "teste": "TestAttachHistoriaFiles_CopiesDedupsAndRemoves",
+        "resultado": "pass",
+        "duracao_segundos": 6.86
+      },
+      {
+        "pacote": "senpai-app",
+        "teste": "TestAttachHistoriaFiles_RootStoryOfDelivery",
+        "resultado": "pass",
+        "duracao_segundos": 6.66
+      },
+      {
+        "pacote": "senpai-app",
+        "teste": "TestAttachHistoriaFiles_RejectsInvalidTargets",
+        "resultado": "pass",
+        "duracao_segundos": 6.49
+      },
+      {
+        "pacote": "senpai-app",
+        "teste": "TestReadLocalProjects_MirrorsWorkItemList",
+        "resultado": "pass",
+        "duracao_segundos": 0
+      },
+      {
+        "pacote": "senpai-app",
+        "teste": "TestReadLocalProjects_NoProjectsDir",
+        "resultado": "pass",
+        "duracao_segundos": 0
+      },
+      {
+        "pacote": "senpai-app",
+        "teste": "TestLocalProjects_BeforeStartup",
+        "resultado": "pass",
+        "duracao_segundos": 0
+      },
+      {
+        "pacote": "senpai-app",
+        "teste": "TestReadProjectActivity_LastChangeAndPendingSources",
+        "resultado": "pass",
+        "duracao_segundos": 0
+      },
+      {
+        "pacote": "senpai-app",
+        "teste": "TestMHLBridge_ConcurrentCallsOnTheSharedSessionNeverFail",
+        "resultado": "pass",
+        "duracao_segundos": 7.26
+      },
+      {
+        "pacote": "senpai-app",
+        "teste": "TestConvertOfficeSource_Docx",
+        "resultado": "pass",
+        "duracao_segundos": 0
+      },
+      {
+        "pacote": "senpai-app",
+        "teste": "TestConvertOfficeSource_Pptx",
+        "resultado": "pass",
+        "duracao_segundos": 0
+      },
+      {
+        "pacote": "senpai-app",
+        "teste": "TestConvertOfficeSource_Xlsx",
+        "resultado": "pass",
+        "duracao_segundos": 0
+      },
+      {
+        "pacote": "senpai-app",
+        "teste": "TestConvertOfficeSource_RejectsNonZip",
+        "resultado": "pass",
+        "duracao_segundos": 0
+      },
+      {
+        "pacote": "senpai-app",
+        "teste": "TestAddRawFile_ConvertsOfficeToMarkdown",
+        "resultado": "pass",
+        "duracao_segundos": 6.44
+      },
+      {
+        "pacote": "senpai-app",
+        "teste": "TestExportProjectToWritesZipWithUsageAndWithoutPromptsOrRunLogs",
+        "resultado": "pass",
+        "duracao_segundos": 0
+      },
+      {
+        "pacote": "senpai-app",
+        "teste": "TestImportProjectRoundTripIntoEmptyDataDir",
+        "resultado": "pass",
+        "duracao_segundos": 0
+      },
+      {
+        "pacote": "senpai-app",
+        "teste": "TestImportProjectRestoresModificationTimes",
+        "resultado": "pass",
+        "duracao_segundos": 0
+      },
+      {
+        "pacote": "senpai-app",
+        "teste": "TestImportProjectWithoutModifiedAtUsesOneTimestamp",
+        "resultado": "pass",
+        "duracao_segundos": 0
+      },
+      {
+        "pacote": "senpai-app",
+        "teste": "TestImportProjectCopiesWhenIDAlreadyExists",
+        "resultado": "pass",
+        "duracao_segundos": 0
+      },
+      {
+        "pacote": "senpai-app",
+        "teste": "TestImportProjectRejectsBadPackages/caminho_com_barra_invertida",
+        "resultado": "pass",
+        "duracao_segundos": 0
+      },
+      {
+        "pacote": "senpai-app",
+        "teste": "TestImportProjectRejectsBadPackages/arquivo_fora_da_allowlist",
+        "resultado": "pass",
+        "duracao_segundos": 0
+      },
+      {
+        "pacote": "senpai-app",
+        "teste": "TestImportProjectRejectsBadPackages/versao_futura",
+        "resultado": "pass",
+        "duracao_segundos": 0
+      },
+      {
+        "pacote": "senpai-app",
+        "teste": "TestImportProjectRejectsBadPackages/checksum_errado",
+        "resultado": "pass",
+        "duracao_segundos": 0
+      },
+      {
+        "pacote": "senpai-app",
+        "teste": "TestImportProjectRejectsBadPackages/modified_at_invalido",
+        "resultado": "pass",
+        "duracao_segundos": 0
+      },
+      {
+        "pacote": "senpai-app",
+        "teste": "TestImportProjectRejectsBadPackages/arquivo_fora_do_manifesto",
+        "resultado": "pass",
+        "duracao_segundos": 0
+      },
+      {
+        "pacote": "senpai-app",
+        "teste": "TestImportProjectRejectsBadPackages/sem_manifesto",
+        "resultado": "pass",
+        "duracao_segundos": 0
+      },
+      {
+        "pacote": "senpai-app",
+        "teste": "TestImportProjectRejectsBadPackages/caminho_com_..",
+        "resultado": "pass",
+        "duracao_segundos": 0
+      },
+      {
+        "pacote": "senpai-app",
+        "teste": "TestImportProjectRejectsBadPackages",
+        "resultado": "pass",
+        "duracao_segundos": 0.01
+      },
+      {
+        "pacote": "senpai-app",
+        "teste": "TestValidateRepoDir/repo_outside_app_data",
+        "resultado": "pass",
+        "duracao_segundos": 0
+      },
+      {
+        "pacote": "senpai-app",
+        "teste": "TestValidateRepoDir/relative_path",
+        "resultado": "pass",
+        "duracao_segundos": 0
+      },
+      {
+        "pacote": "senpai-app",
+        "teste": "TestValidateRepoDir/missing_folder",
+        "resultado": "pass",
+        "duracao_segundos": 0
+      },
+      {
+        "pacote": "senpai-app",
+        "teste": "TestValidateRepoDir/a_file",
+        "resultado": "pass",
+        "duracao_segundos": 0
+      },
+      {
+        "pacote": "senpai-app",
+        "teste": "TestValidateRepoDir/work-item_inside_app_data",
+        "resultado": "pass",
+        "duracao_segundos": 0
+      },
+      {
+        "pacote": "senpai-app",
+        "teste": "TestValidateRepoDir/app_data_itself",
+        "resultado": "pass",
+        "duracao_segundos": 0
+      },
+      {
+        "pacote": "senpai-app",
+        "teste": "TestValidateRepoDir/ancestor_of_app_data",
+        "resultado": "pass",
+        "duracao_segundos": 0
+      },
+      {
+        "pacote": "senpai-app",
+        "teste": "TestValidateRepoDir",
+        "resultado": "pass",
+        "duracao_segundos": 0
+      },
+      {
+        "pacote": "senpai-app",
+        "teste": "TestValidateRepoDirFollowsSymlinks",
+        "resultado": "pass",
+        "duracao_segundos": 0
+      },
+      {
+        "pacote": "senpai-app",
+        "teste": "TestRequireGitWorkTree",
+        "resultado": "pass",
+        "duracao_segundos": 0.25
+      },
+      {
+        "pacote": "senpai-app",
+        "teste": "TestParseRepoURL/https://github.com/gin-gonic/gin.git",
+        "resultado": "pass",
+        "duracao_segundos": 0
+      },
+      {
+        "pacote": "senpai-app",
+        "teste": "TestParseRepoURL/__https://gitlab.com/grupo/sub/checkout-api__",
+        "resultado": "pass",
+        "duracao_segundos": 0
+      },
+      {
+        "pacote": "senpai-app",
+        "teste": "TestParseRepoURL/git@github.com:org/pagamentos.git",
+        "resultado": "pass",
+        "duracao_segundos": 0
+      },
+      {
+        "pacote": "senpai-app",
+        "teste": "TestParseRepoURL/ssh://git@bitbucket.org/org/cobranca.git",
+        "resultado": "pass",
+        "duracao_segundos": 0
+      },
+      {
+        "pacote": "senpai-app",
+        "teste": "TestParseRepoURL/https://ana:ghp_token@github.com/org/repo.git",
+        "resultado": "pass",
+        "duracao_segundos": 0
+      },
+      {
+        "pacote": "senpai-app",
+        "teste": "TestParseRepoURL/https://ghp_token@github.com/org/repo.git",
+        "resultado": "pass",
+        "duracao_segundos": 0
+      },
+      {
+        "pacote": "senpai-app",
+        "teste": "TestParseRepoURL/ssh://git:senha@host/org/repo.git",
+        "resultado": "pass",
+        "duracao_segundos": 0
+      },
+      {
+        "pacote": "senpai-app",
+        "teste": "TestParseRepoURL/http://github.com/org/repo.git",
+        "resultado": "pass",
+        "duracao_segundos": 0
+      },
+      {
+        "pacote": "senpai-app",
+        "teste": "TestParseRepoURL/file:///etc",
+        "resultado": "pass",
+        "duracao_segundos": 0
+      },
+      {
+        "pacote": "senpai-app",
+        "teste": "TestParseRepoURL/ext::sh_-c_touch%_/tmp/pwned",
+        "resultado": "pass",
+        "duracao_segundos": 0
+      },
+      {
+        "pacote": "senpai-app",
+        "teste": "TestParseRepoURL//Users/ana/dev/repo",
+        "resultado": "pass",
+        "duracao_segundos": 0
+      },
+      {
+        "pacote": "senpai-app",
+        "teste": "TestParseRepoURL/--upload-pack=touch_/tmp/x",
+        "resultado": "pass",
+        "duracao_segundos": 0
+      },
+      {
+        "pacote": "senpai-app",
+        "teste": "TestParseRepoURL/https://github.com/",
+        "resultado": "pass",
+        "duracao_segundos": 0
+      },
+      {
+        "pacote": "senpai-app",
+        "teste": "TestParseRepoURL/#00",
+        "resultado": "pass",
+        "duracao_segundos": 0
+      },
+      {
+        "pacote": "senpai-app",
+        "teste": "TestParseRepoURL",
+        "resultado": "pass",
+        "duracao_segundos": 0
+      },
+      {
+        "pacote": "senpai-app",
+        "teste": "TestFriendlyCloneError",
+        "resultado": "pass",
+        "duracao_segundos": 0
+      },
+      {
+        "pacote": "senpai-app",
+        "teste": "TestGitCloneShallowAndProtocolAllowList",
+        "resultado": "pass",
+        "duracao_segundos": 0.83
+      },
+      {
+        "pacote": "senpai-app",
+        "teste": "TestDiscardCloneOnlyDeletesTrackedClones",
+        "resultado": "pass",
+        "duracao_segundos": 0
+      },
+      {
+        "pacote": "senpai-app",
+        "teste": "TestNewRunLogMeta_KeepsIdentifyingArgsOnly",
+        "resultado": "pass",
+        "duracao_segundos": 0
+      },
+      {
+        "pacote": "senpai-app",
+        "teste": "TestListProjectRunLogs_TitlesFromMetaOrSteps",
+        "resultado": "pass",
+        "duracao_segundos": 0
+      },
+      {
+        "pacote": "senpai-app",
+        "teste": "TestSettingsRoundTrips",
+        "resultado": "pass",
+        "duracao_segundos": 0
+      },
+      {
+        "pacote": "senpai-app",
+        "teste": "TestParseDevinModelsFlattensFamilies",
+        "resultado": "pass",
+        "duracao_segundos": 0
+      },
+      {
+        "pacote": "senpai-app",
+        "teste": "TestParseDevinPricingAcceptsTheCLIPriceShape",
+        "resultado": "pass",
+        "duracao_segundos": 0
+      },
+      {
+        "pacote": "senpai-app",
+        "teste": "TestParseDevinPricingIgnoresTheSeparatorBetweenRates",
+        "resultado": "pass",
+        "duracao_segundos": 0
+      },
+      {
+        "pacote": "senpai-app",
+        "teste": "TestParseDevinPricingAcceptsTheMTokShapeWithoutACachedRate",
+        "resultado": "pass",
+        "duracao_segundos": 0
+      },
+      {
+        "pacote": "senpai-app",
+        "teste": "TestParseDevinPricingRejectsPartialOrUnknownPricing",
+        "resultado": "pass",
+        "duracao_segundos": 0
+      },
+      {
+        "pacote": "senpai-app",
+        "teste": "TestParseDevinModelsRejectsAnEmptyResponse",
+        "resultado": "pass",
+        "duracao_segundos": 0
+      },
+      {
+        "pacote": "senpai-app",
+        "teste": "TestParseCodexModelsFiltersHiddenSlugs",
+        "resultado": "pass",
+        "duracao_segundos": 0
+      },
+      {
+        "pacote": "senpai-app",
+        "teste": "TestParseCodexModelsRejectsAResponseWithNoListedModels",
+        "resultado": "pass",
+        "duracao_segundos": 0
+      },
+      {
+        "pacote": "senpai-app",
+        "teste": "TestListClaudeModelsIsAFixedNonEmptyCatalog",
+        "resultado": "pass",
+        "duracao_segundos": 0
+      },
+      {
+        "pacote": "senpai-app",
+        "teste": "TestLoadSettingsIgnoresAMalformedFileRatherThanFailing",
+        "resultado": "pass",
+        "duracao_segundos": 0
+      },
+      {
+        "pacote": "senpai-app",
+        "teste": "TestApp_SetAgent",
+        "resultado": "pass",
+        "duracao_segundos": 18.27
+      },
+      {
+        "pacote": "senpai-app",
+        "teste": "TestApp_SetAgent_RejectsAnUnknownAgentWithoutPersistingOrReconnecting",
+        "resultado": "pass",
+        "duracao_segundos": 12.24
+      },
+      {
+        "pacote": "senpai-app",
+        "teste": "TestApp_SetAgent_RefusesWhileARunIsActive",
+        "resultado": "pass",
+        "duracao_segundos": 12.36
+      },
+      {
+        "pacote": "senpai-app",
+        "teste": "TestApp_SetDevinModelPersistsAndReconnects",
+        "resultado": "pass",
+        "duracao_segundos": 12.2
+      },
+      {
+        "pacote": "senpai-app",
+        "teste": "TestApp_SetCodexModelPersistsAndReconnects",
+        "resultado": "pass",
+        "duracao_segundos": 12.17
+      },
+      {
+        "pacote": "senpai-app",
+        "teste": "TestApp_SetCodexModelRejectsAnEmptyValue",
+        "resultado": "pass",
+        "duracao_segundos": 6.23
+      },
+      {
+        "pacote": "senpai-app",
+        "teste": "TestApp_SetClaudeModelPersistsAndReconnects",
+        "resultado": "pass",
+        "duracao_segundos": 12.24
+      },
+      {
+        "pacote": "senpai-app",
+        "teste": "TestApp_SetClaudeModelRejectsAnEmptyValue",
+        "resultado": "pass",
+        "duracao_segundos": 6.38
+      },
+      {
+        "pacote": "senpai-app",
+        "teste": "TestApp_ListClaudeModelsNeverCallsOutToACLI",
+        "resultado": "pass",
+        "duracao_segundos": 6.61
+      },
+      {
+        "pacote": "senpai-app",
+        "teste": "TestApp_TailRunLogsSurvivesTheBridgeBeingReplaced",
+        "resultado": "pass",
+        "duracao_segundos": 7.61
+      },
+      {
+        "pacote": "senpai-app",
+        "teste": "TestStartupStatus_IsStartingBeforeStartupRuns",
+        "resultado": "pass",
+        "duracao_segundos": 0
+      },
+      {
+        "pacote": "senpai-app",
+        "teste": "TestStartupStatus_ReportsTheFailureCause",
+        "resultado": "pass",
+        "duracao_segundos": 0
+      },
+      {
+        "pacote": "senpai-app",
+        "teste": "TestPrependToPath_DoesNotDuplicateTheEntry",
+        "resultado": "pass",
+        "duracao_segundos": 0
+      },
+      {
+        "pacote": "senpai-app",
+        "teste": "TestExtractIfChanged_ReplacesTheFileInsteadOfRewritingIt",
+        "resultado": "pass",
+        "duracao_segundos": 0
+      },
+      {
+        "pacote": "senpai-app",
+        "teste": "TestReplaceFile_SidelinesALockedDestination",
+        "resultado": "pass",
+        "duracao_segundos": 0
+      },
+      {
+        "pacote": "senpai-app",
+        "teste": "TestVendoredMHLBinary_IsARealExecutable",
+        "resultado": "pass",
+        "duracao_segundos": 0
+      },
+      {
+        "pacote": "senpai-app",
+        "teste": "TestHTMLToMarkdown_KeepsMainContentOnly",
+        "resultado": "pass",
+        "duracao_segundos": 0
+      },
+      {
+        "pacote": "senpai-app",
+        "teste": "TestAddRawURL_SavesHTMLAsMarkdown",
+        "resultado": "pass",
+        "duracao_segundos": 7.29
+      },
+      {
+        "pacote": "senpai-app",
+        "teste": "TestAddRawURL_SavesPDFAsIs",
+        "resultado": "pass",
+        "duracao_segundos": 6.77
+      },
+      {
+        "pacote": "senpai-app",
+        "teste": "TestAddRawURL_RejectsInvalidInput",
+        "resultado": "pass",
+        "duracao_segundos": 7.11
+      },
+      {
+        "pacote": "senpai-app",
+        "teste": "TestCurrentAppVersionUsesInjectedReleaseVersion",
+        "resultado": "pass",
+        "duracao_segundos": 0
+      }
+    ],
+    "observacao": "Primeira tentativa no sandbox falhou por bind: operation not permitted. A tentativa final passou apos liberacao de portas locais. -short omitiu TestModoBuddyPauseResume_WikiIngest, que utiliza LLM real."
+  },
+  "vet": {
+    "diretorio_execucao": "app/",
+    "comando": "go vet ./...",
+    "exit_code": 0,
+    "diagnosticos": []
+  },
+  "workflows_embarcados": {
+    "arquivos_comparados": 136,
+    "divergencias": []
+  },
+  "limites": [
+    "Nao executado teste com LLM real.",
+    "Nao feita medicao de retrabalho, economia ou qualidade em producao.",
+    "Runtime embarcado tinha modificacao local preexistente; hash registrado no manifesto.",
+    "Os resultados nao comprovam por si sos novidade ou atividade inventiva."
+  ],
+  "congelamento_codigo": {
+    "data": "2026-10-07",
+    "diretorio": "code/",
+    "arquivos": 42,
+    "bytes": 702969,
+    "hashes_sha256_conferidos": 42,
+    "divergencias": [],
+    "escopo": "Copia documental dos arquivos citados na secao 10. Verificacao de integridade e dos links; resultados dos testes anteriores preservados."
+  }
+}

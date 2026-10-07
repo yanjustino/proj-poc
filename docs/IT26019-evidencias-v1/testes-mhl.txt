@@ -1,0 +1,2110 @@
+test ArtifactPreviewSpec
+  describe diagrama_item_renders_standalone_with_its_own_title
+    ✓ PASS is_true(true)
+    ✓ PASS is_true(true)
+  ✓ 2 passed, 0 failed, 0 incomplete
+  describe structured_c4_item_renders_generated_mermaid_legend_tables_and_warnings
+    ✓ PASS is_true(true)
+    ✓ PASS is_true(true)
+    ✓ PASS is_true(true)
+    ✓ PASS is_true(true)
+    ✓ PASS is_true(true)
+    ✓ PASS is_true(true)
+    ✓ PASS is_true(true)
+    ✓ PASS is_true(true)
+    ✓ PASS is_true(true)
+    ✓ PASS is_true(true)
+  ✓ 10 passed, 0 failed, 0 incomplete
+  describe structured_der_renders_generated_er_diagram_tables_and_warnings
+    ✓ PASS is_true(true)
+    ✓ PASS is_true(true)
+    ✓ PASS is_true(true)
+    ✓ PASS is_true(true)
+    ✓ PASS is_true(true)
+    ✓ PASS is_true(true)
+  ✓ 6 passed, 0 failed, 0 incomplete
+  describe legacy_der_still_renders_with_a_regeneration_notice
+    ✓ PASS is_true(true)
+    ✓ PASS is_true(true)
+    ✓ PASS is_true(true)
+  ✓ 3 passed, 0 failed, 0 incomplete
+  describe structured_story_renders_traceability_contracts_and_numbered_criteria
+    ✓ PASS is_true(true)
+    ✓ PASS is_true(true)
+    ✓ PASS is_true(true)
+    ✓ PASS is_true(true)
+    ✓ PASS is_true(true)
+    ✓ PASS is_true(true)
+    ✓ PASS is_true(true)
+    ✓ PASS is_true(true)
+  ✓ 8 passed, 0 failed, 0 incomplete
+  describe legacy_story_still_renders_its_free_text_contract
+    ✓ PASS is_true(true)
+    ✓ PASS is_true(true)
+    ✓ PASS is_true(true)
+  ✓ 3 passed, 0 failed, 0 incomplete
+  describe plano_renders_sequence_tasks_and_coverage
+    ✓ PASS is_true(true)
+    ✓ PASS is_true(true)
+    ✓ PASS is_true(true)
+    ✓ PASS is_true(true)
+    ✓ PASS is_true(true)
+  ✓ 5 passed, 0 failed, 0 incomplete
+  describe incoherent_story_is_flagged_and_empty_sections_are_omitted
+    ✓ PASS is_true(true)
+    ✓ PASS is_true(true)
+    ✓ PASS is_true(true)
+    ✓ PASS is_true(true)
+    ✓ PASS is_true(true)
+    ✓ PASS is_true(true)
+    ✓ PASS is_true(true)
+  ✓ 7 passed, 0 failed, 0 incomplete
+  describe structured_spike_and_scenarios_render
+    ✓ PASS is_true(true)
+    ✓ PASS is_true(true)
+    ✓ PASS is_true(true)
+    ✓ PASS is_true(true)
+    ✓ PASS is_true(true)
+    ✓ PASS is_true(true)
+    ✓ PASS is_true(true)
+  ✓ 7 passed, 0 failed, 0 incomplete
+  describe a_detail_tab_previews_its_own_view
+    ✓ PASS is_true(true)
+    ✓ PASS is_true(true)
+    ✓ PASS is_true(true)
+  ✓ 3 passed, 0 failed, 0 incomplete
+  describe incoherent_feature_is_flagged
+    ✓ PASS is_true(true)
+    ✓ PASS is_true(true)
+    ✓ PASS is_true(true)
+  ✓ 3 passed, 0 failed, 0 incomplete
+  describe auto_review_note_is_shown
+    ✓ PASS is_true(true)
+    ✓ PASS is_true(true)
+  ✓ 2 passed, 0 failed, 0 incomplete
+  describe decisao_item_renders_standalone_with_its_own_title
+    ✓ PASS is_true(true)
+    ✓ PASS is_true(true)
+  ✓ 2 passed, 0 failed, 0 incomplete
+  describe diagramas_collection_fallback_still_concatenates_when_called_directly
+    ✓ PASS is_true(true)
+    ✓ PASS is_true(true)
+    ✓ PASS is_true(true)
+  ✓ 3 passed, 0 failed, 0 incomplete
+  describe dependencias_renders_the_map_ordem_and_diagram
+    ✓ PASS is_true(true)
+    ✓ PASS is_true(true)
+    ✓ PASS is_true(true)
+    ✓ PASS is_true(true)
+  ✓ 4 passed, 0 failed, 0 incomplete
+  describe enabler_feature_renders_classification_benefit_and_enabled_items
+    ✓ PASS is_true(true)
+    ✓ PASS is_true(true)
+    ✓ PASS is_true(true)
+    ✓ PASS is_true(true)
+  ✓ 4 passed, 0 failed, 0 incomplete
+  describe enabling_story_renders_a_technical_statement_instead_of_como_quero_para
+    ✓ PASS is_true(true)
+    ✓ PASS is_true(true)
+    ✓ PASS is_true(true)
+    ✓ PASS is_false(false)
+  ✓ 4 passed, 0 failed, 0 incomplete
+  describe unknown_artifact_is_rejected_before_running
+    ✓ PASS is_true(true)
+  ✓ 1 passed, 0 failed, 0 incomplete
+  describe modelo_renders_both_derived_views_and_the_tables
+    ✓ PASS is_true(true)
+    ✓ PASS is_true(true)
+    ✓ PASS is_true(true)
+    ✓ PASS is_true(true)
+    ✓ PASS is_true(true)
+    ✓ PASS is_true(true)
+    ✓ PASS is_true(true)
+  ✓ 7 passed, 0 failed, 0 incomplete
+  describe each_model_view_renders_alone_as_its_diagram_page
+    ✓ PASS is_true(true)
+    ✓ PASS is_true(true)
+    ✓ PASS is_true(true)
+    ✓ PASS is_true(true)
+  ✓ 4 passed, 0 failed, 0 incomplete
+test ArtifactEditSpec
+  describe accepts_the_same_top_level_keys_in_any_order
+    ✓ PASS is_true(true)
+  ✓ 1 passed, 0 failed, 0 incomplete
+  describe rejects_missing_or_extra_keys
+    ✓ PASS is_false(false)
+    ✓ PASS is_false(false)
+    ✓ PASS is_false(false)
+  ✓ 3 passed, 0 failed, 0 incomplete
+  describe optional_keys_may_be_added_or_kept
+    ✓ PASS is_true(true)
+    ✓ PASS is_true(true)
+    ✓ PASS is_false(false)
+  ✓ 3 passed, 0 failed, 0 incomplete
+test ArtifactEditDirectiveSpec
+  describe directive_carries_each_edited_section_verbatim
+    ✓ PASS is_true(true)
+    ✓ PASS is_true(true)
+    ✓ PASS is_true(true)
+  ✓ 3 passed, 0 failed, 0 incomplete
+test ArtifactSaveSpec
+  describe rejects_a_non_editable_artifact_before_running
+    ✓ PASS is_true(true)
+  ✓ 1 passed, 0 failed, 0 incomplete
+  describe fails_when_the_artifact_was_never_generated
+    ✓ PASS is_false(false)
+    ✓ PASS is_true(true)
+  ✓ 2 passed, 0 failed, 0 incomplete
+  describe saving_the_model_redraws_the_context_and_container_diagrams
+    ✓ PASS is_true(true)
+    ✓ PASS are_equal(["contexto-de-sistema-loja","conteineres-loja"], ["contexto-de-sistema-loja","conteineres-loja"])
+    ✓ PASS is_true(true)
+    ✓ PASS is_true(true)
+    ✓ PASS is_false(false)
+  ✓ 5 passed, 0 failed, 0 incomplete
+  describe saving_details_draws_them_and_drops_the_llm_component_diagram
+    ✓ PASS is_true(true)
+    ✓ PASS are_equal(["contexto-de-sistema-loja","conteineres-loja","componentes-api","componentes-api-2"], ["contexto-de-sistema-loja","conteineres-loja","componentes-api","componentes-api-2"])
+    ✓ PASS is_true(true)
+    ✓ PASS is_true(true)
+  ✓ 4 passed, 0 failed, 0 incomplete
+  describe rejects_a_path_traversal_project_id
+    ✓ PASS is_false(false)
+    ✓ PASS is_true(true)
+  ✓ 2 passed, 0 failed, 0 incomplete
+test DeliveryWorkflowSpec
+  describe rejects_an_invalid_mode_before_running
+    ✓ PASS is_true(true)
+  ✓ 1 passed, 0 failed, 0 incomplete
+  describe rejects_a_final_artifact_that_does_not_match_mode
+    ✓ PASS is_false(false)
+    ✓ PASS is_true(true)
+  ✓ 2 passed, 0 failed, 0 incomplete
+  describe historias_is_rejected_outside_feature_mode
+    ✓ PASS is_false(false)
+    ✓ PASS is_true(true)
+  ✓ 2 passed, 0 failed, 0 incomplete
+  describe rejects_an_unknown_artifact_before_running
+    ✓ PASS is_true(true)
+  ✓ 1 passed, 0 failed, 0 incomplete
+  describe rejects_an_artifact_of_another_level_listing_its_own
+    ✓ PASS is_false(false)
+    ✓ PASS is_true(true)
+  ✓ 2 passed, 0 failed, 0 incomplete
+  describe the_approval_path_validates_the_artifact_too
+    ✓ PASS is_false(false)
+    ✓ PASS is_true(true)
+  ✓ 2 passed, 0 failed, 0 incomplete
+  describe adr_requires_brief_then_requisitos
+    ✓ PASS is_true(true)
+    ✓ PASS is_true(true)
+  ✓ 2 passed, 0 failed, 0 incomplete
+  describe der_modelo_and_diagramas_require_requisitos_then_adr
+    ✓ PASS is_true(true)
+    ✓ PASS is_true(true)
+    ✓ PASS is_true(true)
+    ✓ PASS is_true(true)
+    ✓ PASS is_true(true)
+    ✓ PASS is_true(true)
+    ✓ PASS is_true(true)
+  ✓ 7 passed, 0 failed, 0 incomplete
+  describe the_final_artifact_chains_through_every_predecessor
+    ✓ PASS is_true(true)
+    ✓ PASS is_true(true)
+    ✓ PASS is_true(true)
+    ✓ PASS is_true(true)
+    ✓ PASS is_true(true)
+  ✓ 5 passed, 0 failed, 0 incomplete
+  describe historia_final_requires_brief_first
+    ✓ PASS is_true(true)
+  ✓ 1 passed, 0 failed, 0 incomplete
+  describe historias_requires_a_feature_artifact_first
+    ✓ PASS is_true(true)
+  ✓ 1 passed, 0 failed, 0 incomplete
+  describe plano_in_feature_mode_requires_a_historia_id
+    ✓ PASS is_true(true)
+  ✓ 1 passed, 0 failed, 0 incomplete
+  describe approving_adrs_twice_replaces_the_previous_batch
+    ✓ PASS is_true(true)
+    ✓ PASS are_equal(["ADR-001-banco"], ["ADR-001-banco"])
+    ✓ PASS are_equal(1, 1)
+  ✓ 3 passed, 0 failed, 0 incomplete
+test DiscoveryWorkflowSpec
+  describe rejects_an_unknown_artifact_before_running
+    ✓ PASS is_true(true)
+  ✓ 1 passed, 0 failed, 0 incomplete
+  describe rejects_an_artifact_of_another_level_listing_its_own
+    ✓ PASS is_false(false)
+    ✓ PASS is_true(true)
+  ✓ 2 passed, 0 failed, 0 incomplete
+  describe atributos_and_requisitos_require_brief_first
+    ✓ PASS is_true(true)
+    ✓ PASS is_true(true)
+  ✓ 2 passed, 0 failed, 0 incomplete
+  describe technical_artifacts_require_requisitos_then_atributos_then_adr_then_modelo
+    ✓ PASS is_true(true)
+    ✓ PASS is_true(true)
+    ✓ PASS is_true(true)
+    ✓ PASS is_true(true)
+    ✓ PASS is_true(true)
+    ✓ PASS is_true(true)
+    ✓ PASS is_true(true)
+    ✓ PASS is_true(true)
+    ✓ PASS is_true(true)
+    ✓ PASS is_true(true)
+    ✓ PASS is_true(true)
+    ✓ PASS is_true(true)
+    ✓ PASS is_true(true)
+    ✓ PASS is_true(true)
+    ✓ PASS is_true(true)
+    ✓ PASS is_true(true)
+  ✓ 16 passed, 0 failed, 0 incomplete
+  describe dependencias_is_not_an_artifact_of_its_own
+    ✓ PASS is_true(true)
+  ✓ 1 passed, 0 failed, 0 incomplete
+  describe historias_requires_a_feature_id
+    ✓ PASS is_true(true)
+  ✓ 1 passed, 0 failed, 0 incomplete
+  describe plano_requires_a_feature_and_a_historia_id
+    ✓ PASS is_true(true)
+  ✓ 1 passed, 0 failed, 0 incomplete
+  describe the_approval_path_validates_the_required_ids_too
+    ✓ PASS is_true(true)
+  ✓ 1 passed, 0 failed, 0 incomplete
+  describe approving_a_document_writes_it_without_calling_the_llm
+    ✓ PASS is_true(true)
+    ✓ PASS are_equal(["Dispatch","Commit"], ["Dispatch","Commit"])
+    ✓ PASS are_equal("features", "features")
+    ✓ PASS is_true(true)
+  ✓ 4 passed, 0 failed, 0 incomplete
+  describe commit_resolves_the_feature_folder_when_the_draft_lacks_it
+    ✓ PASS are_equal("FT001-checkout", "FT001-checkout")
+    ✓ PASS are_equal("FT001-outro", "FT001-outro")
+  ✓ 2 passed, 0 failed, 0 incomplete
+test DiscoveryFeaturesSpec
+  describe each_page_details_its_own_slice_of_the_outline
+    ✓ PASS are_equal(["A","B","C","D","E","F","G"], ["A","B","C","D","E","F","G"])
+    ✓ PASS are_equal("ABC\nDEF\nG\n", "ABC\nDEF\nG\n")
+    ✓ PASS are_equal(30, 30)
+    ✓ PASS are_equal(12, 12)
+  ✓ 4 passed, 0 failed, 0 incomplete
+  describe lote_lists_the_whole_outline_and_only_the_page_items_to_detail
+    ✓ PASS is_true(true)
+    ✓ PASS is_true(true)
+    ✓ PASS is_true(true)
+    ✓ PASS is_true(true)
+  ✓ 4 passed, 0 failed, 0 incomplete
+  describe dependencias_content_numbers_items_as_the_commit_will
+    ✓ PASS is_true(true)
+    ✓ PASS is_true(true)
+    ✓ PASS is_true(true)
+  ✓ 3 passed, 0 failed, 0 incomplete
+test WriterAdapterSpec
+  describe forwards_schema_path_as_a_distinct_codex_argument
+    ✓ PASS are_equal("exec --ignore-user-config --ignore-rules --output-schema workflows/shared/artifacts/schemas/brief.schema.json gere o brief", "exec --ignore-user-config --ignore-rules --output-schema workflows/shared/artifacts/schemas/brief.schema.json gere o brief")
+  ✓ 1 passed, 0 failed, 0 incomplete
+  describe forwards_the_per_call_export_path_to_devin
+    ✓ PASS are_equal("--prompt-file projects/wi_1/.devin-prompt-id.txt --export projects/wi_1/.devin-export-id.json --print", "--prompt-file projects/wi_1/.devin-prompt-id.txt --export projects/wi_1/.devin-export-id.json --print")
+  ✓ 1 passed, 0 failed, 0 incomplete
+test StructuredOutputSpec
+  describe removes_a_transport_marker_from_a_nested_field
+    ✓ PASS are_equal("resposta", "resposta")
+  ✓ 1 passed, 0 failed, 0 incomplete
+  describe normalizes_objects_inside_arrays
+    ✓ PASS are_equal("primeiro", "primeiro")
+    ✓ PASS are_equal("segundo", "segundo")
+  ✓ 2 passed, 0 failed, 0 incomplete
+  describe preserves_unrelated_markup
+    ✓ PASS are_equal("texto com </outro_campo> legítimo", "texto com </outro_campo> legítimo")
+  ✓ 1 passed, 0 failed, 0 incomplete
+test UsageParserSpec
+  describe keeps_devin_output_and_marks_usage_unavailable_without_an_export
+    ✓ PASS are_equal(0, 0)
+    ✓ PASS are_equal(0, 0)
+    ✓ PASS are_equal("{\"ok\":true}", "{\"ok\":true}")
+    ✓ PASS are_equal(0, 0)
+    ✓ PASS are_equal(0, 0)
+    ✓ PASS are_equal(0, 0)
+    ✓ PASS are_equal(false, false)
+    ✓ PASS are_equal("unavailable", "unavailable")
+  ✓ 8 passed, 0 failed, 0 incomplete
+  describe strips_prose_around_devins_json_object
+    ✓ PASS are_equal("{\"titulo\":\"história {1}\"}", "{\"titulo\":\"história {1}\"}")
+  ✓ 1 passed, 0 failed, 0 incomplete
+  describe fails_with_the_response_start_when_devin_returns_no_json
+    ✓ PASS are_equal(true, true)
+  ✓ 1 passed, 0 failed, 0 incomplete
+  describe removes_only_devins_outer_markdown_fence
+    ✓ PASS are_equal("{\"body\":\"use ``` dentro\"}", "{\"body\":\"use ``` dentro\"}")
+  ✓ 1 passed, 0 failed, 0 incomplete
+  describe extracts_devin_totals_from_atif_without_adding_cached_tokens_twice
+    ✓ PASS are_equal(12801, 12801)
+    ✓ PASS are_equal(67, 67)
+    ✓ PASS are_equal(1472, 1472)
+    ✓ PASS are_equal(0, 0)
+    ✓ PASS are_equal(0, 0)
+    ✓ PASS are_equal(true, true)
+    ✓ PASS are_equal("unavailable", "unavailable")
+  ✓ 7 passed, 0 failed, 0 incomplete
+  describe prefers_even_a_reported_zero_over_a_model_price_estimate
+    ✓ PASS are_equal(0, 0)
+    ✓ PASS are_equal("reported", "reported")
+    ✓ PASS are_equal("", "")
+  ✓ 3 passed, 0 failed, 0 incomplete
+  describe estimates_from_selected_model_prices_when_devin_does_not_report_cost
+    ✓ PASS are_equal(0.00088, 0.00088)
+    ✓ PASS are_equal("estimated", "estimated")
+    ✓ PASS are_equal("swe-1-6", "swe-1-6")
+    ✓ PASS are_equal("$0.5 / 1M Input", "$0.5 / 1M Input")
+  ✓ 4 passed, 0 failed, 0 incomplete
+  describe marks_cost_unavailable_when_neither_execution_nor_model_has_pricing
+    ✓ PASS are_equal(0, 0)
+    ✓ PASS are_equal("unavailable", "unavailable")
+  ✓ 2 passed, 0 failed, 0 incomplete
+  describe keeps_the_response_when_devins_export_is_invalid
+    ✓ PASS are_equal("{\"ok\":true}", "{\"ok\":true}")
+    ✓ PASS are_equal(0, 0)
+    ✓ PASS are_equal(0, 0)
+    ✓ PASS are_equal(0, 0)
+  ✓ 4 passed, 0 failed, 0 incomplete
+  describe extracts_claude_tokens_cache_and_cost_from_the_real_envelope_shape
+    ✓ PASS are_equal(21262, 21262)
+    ✓ PASS are_equal(4, 4)
+    ✓ PASS are_equal("{\"ok\":true}", "{\"ok\":true}")
+    ✓ PASS are_equal(21260, 21260)
+    ✓ PASS are_equal(0, 0)
+    ✓ PASS are_equal(0.128202, 0.128202)
+  ✓ 6 passed, 0 failed, 0 incomplete
+  describe claude_tokens_in_includes_cache_so_cache_read_never_exceeds_it
+    ✓ PASS are_equal(15262, 15262)
+    ✓ PASS is_true(true)
+  ✓ 2 passed, 0 failed, 0 incomplete
+  describe falls_back_to_claude_result_when_structured_output_is_absent
+    ✓ PASS are_equal("{\"ok\":true}", "{\"ok\":true}")
+  ✓ 1 passed, 0 failed, 0 incomplete
+  describe extracts_codex_final_message_usage_and_both_cache_fields_from_jsonl
+    ✓ PASS are_equal(14368, 14368)
+    ✓ PASS are_equal(5, 5)
+    ✓ PASS are_equal("{\"ok\":true}", "{\"ok\":true}")
+    ✓ PASS are_equal(512, 512)
+    ✓ PASS are_equal(10624, 10624)
+    ✓ PASS are_equal(0, 0)
+  ✓ 6 passed, 0 failed, 0 incomplete
+test ArchConformanceSpec
+  describe a_coherent_item_has_no_warnings
+    ✓ PASS are_equal([], [])
+  ✓ 1 passed, 0 failed, 0 incomplete
+  describe legacy_items_are_not_checked
+    ✓ PASS are_equal([], [])
+    ✓ PASS are_equal([], [])
+    ✓ PASS are_equal("", "")
+  ✓ 3 passed, 0 failed, 0 incomplete
+  describe an_item_without_declared_adherence_is_flagged_except_exploration
+    ✓ PASS is_true(true)
+    ✓ PASS are_equal([], [])
+  ✓ 2 passed, 0 failed, 0 incomplete
+  describe invented_references_are_flagged
+    ✓ PASS is_true(true)
+    ✓ PASS is_true(true)
+    ✓ PASS is_true(true)
+    ✓ PASS is_true(true)
+  ✓ 4 passed, 0 failed, 0 incomplete
+  describe a_new_component_needs_a_justification
+    ✓ PASS is_true(true)
+    ✓ PASS are_equal([], [])
+    ✓ PASS are_equal([], [])
+    ✓ PASS are_equal([], [])
+  ✓ 4 passed, 0 failed, 0 incomplete
+  describe a_new_entity_outside_the_der_needs_a_gap
+    ✓ PASS is_true(true)
+    ✓ PASS are_equal([], [])
+  ✓ 2 passed, 0 failed, 0 incomplete
+  describe an_architecture_enabler_must_cite_an_adr
+    ✓ PASS is_true(true)
+  ✓ 1 passed, 0 failed, 0 incomplete
+  describe missing_artifacts_leave_their_category_unchecked
+    ✓ PASS are_equal([], [])
+  ✓ 1 passed, 0 failed, 0 incomplete
+  describe annotate_stores_the_warnings_on_each_item
+    ✓ PASS are_equal(1, 1)
+  ✓ 1 passed, 0 failed, 0 incomplete
+  describe coverage_flags_adrs_and_restrictions_no_item_cites
+    ✓ PASS is_true(true)
+    ✓ PASS is_false(false)
+    ✓ PASS is_true(true)
+    ✓ PASS are_equal([], [])
+    ✓ PASS is_true(true)
+  ✓ 5 passed, 0 failed, 0 incomplete
+  describe html_renders_the_adherence_table
+    ✓ PASS is_true(true)
+    ✓ PASS is_true(true)
+  ✓ 2 passed, 0 failed, 0 incomplete
+test ArchModelDetailSpec
+  describe details_become_views_after_context_and_container
+    ✓ PASS are_equal(["Contexto de sistema — Loja","Contêineres — Loja","Componentes — API de Pedidos","Contêineres — ERP por dentro"], ["Contexto de sistema — Loja","Contêineres — Loja","Componentes — API de Pedidos","Contêineres — ERP por dentro"])
+    ✓ PASS are_equal("c4-component", "c4-component")
+    ✓ PASS are_equal("API de Pedidos", "API de Pedidos")
+    ✓ PASS are_equal("Recebe pedidos", "Recebe pedidos")
+    ✓ PASS is_true(true)
+    ✓ PASS are_equal(1, 1)
+  ✓ 6 passed, 0 failed, 0 incomplete
+  describe a_clean_model_with_details_has_no_warnings
+    ✓ PASS are_equal([], [])
+  ✓ 1 passed, 0 failed, 0 incomplete
+  describe renaming_the_origin_renames_the_scope
+    ✓ PASS are_equal("Componentes — API de Vendas", "Componentes — API de Vendas")
+    ✓ PASS are_equal("API de Vendas", "API de Vendas")
+  ✓ 2 passed, 0 failed, 0 incomplete
+  describe a_detail_whose_origin_is_gone_is_orphan_but_still_drawn
+    ✓ PASS is_true(true)
+    ✓ PASS are_equal("API de Pedidos", "API de Pedidos")
+    ✓ PASS is_true(true)
+  ✓ 3 passed, 0 failed, 0 incomplete
+  describe a_component_view_needs_an_application_container
+    ✓ PASS is_true(true)
+  ✓ 1 passed, 0 failed, 0 incomplete
+  describe a_container_view_of_an_external_system_is_coherent_with_the_context
+    ✓ PASS are_equal([], [])
+  ✓ 1 passed, 0 failed, 0 incomplete
+  describe a_component_view_can_be_born_from_another_detail
+    ✓ PASS are_equal("Componentes — Faturador", "Componentes — Faturador")
+    ✓ PASS is_true(true)
+    ✓ PASS are_equal([], [])
+  ✓ 3 passed, 0 failed, 0 incomplete
+  describe annotated_detail_finds_the_view_by_id
+    ✓ PASS are_equal("Contêineres — ERP por dentro", "Contêineres — ERP por dentro")
+    ✓ PASS is_true(true)
+  ✓ 2 passed, 0 failed, 0 incomplete
+  describe the_llm_component_diagram_of_a_detailed_container_is_dropped
+    ✓ PASS are_equal(["Loja Web","sequence"], ["Loja Web","sequence"])
+    ✓ PASS are_equal(3, 3)
+  ✓ 2 passed, 0 failed, 0 incomplete
+  describe the_legend_covers_components
+    ✓ PASS is_true(true)
+  ✓ 1 passed, 0 failed, 0 incomplete
+test ArchModelSpec
+  describe a_clean_model_has_no_warnings
+    ✓ PASS are_equal([], [])
+  ✓ 1 passed, 0 failed, 0 incomplete
+  describe context_puts_the_system_after_the_people_and_keeps_its_own_relations
+    ✓ PASS are_equal("c4-context", "c4-context")
+    ✓ PASS are_equal("Contexto de sistema — Loja", "Contexto de sistema — Loja")
+    ✓ PASS is_true(true)
+    ✓ PASS are_equal(["cliente","sistema","erp"], ["cliente","sistema","erp"])
+    ✓ PASS are_equal("sistema", "sistema")
+    ✓ PASS are_equal("Vende online", "Vende online")
+    ✓ PASS are_equal(["Compra produtos em","Envia faturas para"], ["Compra produtos em","Envia faturas para"])
+    ✓ PASS is_true(true)
+  ✓ 8 passed, 0 failed, 0 incomplete
+  describe a_model_without_boundaries_keeps_the_single_scope_boundary
+    ✓ PASS is_true(true)
+    ✓ PASS are_equal([], [])
+  ✓ 2 passed, 0 failed, 0 incomplete
+  describe container_is_the_container_diagram_as_written
+    ✓ PASS are_equal("Contêineres — Loja", "Contêineres — Loja")
+    ✓ PASS are_equal("Loja", "Loja")
+    ✓ PASS are_equal(5, 5)
+    ✓ PASS are_equal(4, 4)
+    ✓ PASS is_true(true)
+  ✓ 5 passed, 0 failed, 0 incomplete
+  describe each_view_is_checked_against_its_c4_rules
+    ✓ PASS is_true(true)
+    ✓ PASS is_true(true)
+    ✓ PASS is_true(true)
+    ✓ PASS is_true(true)
+    ✓ PASS is_true(true)
+  ✓ 5 passed, 0 failed, 0 incomplete
+  describe levels_that_disagree_only_warn
+    ✓ PASS are_equal(["“Banco Central” aparece aqui mas não no diagrama de contexto."], ["“Banco Central” aparece aqui mas não no diagrama de contexto."])
+  ✓ 1 passed, 0 failed, 0 incomplete
+  describe the_system_name_is_required
+    ✓ PASS is_true(true)
+  ✓ 1 passed, 0 failed, 0 incomplete
+  describe a_model_without_views_renders_empty_views
+    ✓ PASS are_equal(1, 1)
+    ✓ PASS are_equal(0, 0)
+  ✓ 2 passed, 0 failed, 0 incomplete
+  describe optional_diagrams_drops_context_and_container
+    ✓ PASS are_equal(["sequence","c4-deployment"], ["sequence","c4-deployment"])
+  ✓ 1 passed, 0 failed, 0 incomplete
+  describe legend_covers_both_views
+    ✓ PASS is_true(true)
+    ✓ PASS is_true(true)
+    ✓ PASS is_true(true)
+  ✓ 3 passed, 0 failed, 0 incomplete
+  describe warnings_and_scope_escape_names
+    ✓ PASS is_true(true)
+    ✓ PASS is_true(true)
+  ✓ 2 passed, 0 failed, 0 incomplete
+test ArtifactChecksSpec
+  describe derived_views_only_count_their_batch_warnings
+    ✓ PASS are_equal(["falta implantação"], ["falta implantação"])
+    ✓ PASS is_true(true)
+  ✓ 2 passed, 0 failed, 0 incomplete
+  describe annotate_keeps_the_derived_marker
+    ✓ PASS is_true(true)
+    ✓ PASS is_false(false)
+  ✓ 2 passed, 0 failed, 0 incomplete
+test ArtifactCommitSpec
+  describe model_views_is_a_no_op_before_any_diagram_exists
+    ✓ PASS are_equal([], [])
+    ✓ PASS is_false(false)
+  ✓ 2 passed, 0 failed, 0 incomplete
+  describe model_views_replaces_derived_and_legacy_views_and_keeps_optional_ones
+    ✓ PASS are_equal(["contexto-de-sistema-loja","conteineres-loja","login"], ["contexto-de-sistema-loja","conteineres-loja","login"])
+    ✓ PASS is_false(false)
+    ✓ PASS is_true(true)
+    ✓ PASS is_true(true)
+    ✓ PASS is_false(false)
+    ✓ PASS is_true(true)
+    ✓ PASS are_equal(3, 3)
+  ✓ 7 passed, 0 failed, 0 incomplete
+  describe regenerating_adrs_replaces_the_previous_batch
+    ✓ PASS are_equal(["ADR-001-banco","ADR-002-banco"], ["ADR-001-banco","ADR-002-banco"])
+    ✓ PASS are_equal(2, 2)
+  ✓ 2 passed, 0 failed, 0 incomplete
+  describe regenerating_the_model_keeps_the_saved_details
+    ✓ PASS are_equal(1, 1)
+    ✓ PASS are_equal("DET-001", "DET-001")
+    ✓ PASS is_true(true)
+  ✓ 3 passed, 0 failed, 0 incomplete
+  describe features_writes_the_dependency_map_with_the_codes_it_mints
+    ✓ PASS are_equal(["FT001-base","FT002-consumo"], ["FT001-base","FT002-consumo"])
+    ✓ PASS is_true(true)
+    ✓ PASS are_equal("FT002", "FT002")
+    ✓ PASS is_false(false)
+    ✓ PASS is_false(false)
+  ✓ 5 passed, 0 failed, 0 incomplete
+  describe single_writes_json_then_the_page_with_its_footer
+    ✓ PASS are_equal("artifacts/dependencias.html", "artifacts/dependencias.html")
+    ✓ PASS are_equal(1, 1)
+    ✓ PASS is_true(true)
+  ✓ 3 passed, 0 failed, 0 incomplete
+test ArtifactDataSpec
+  describe maps_html_artifact_paths_to_adjacent_json_paths
+    ✓ PASS are_equal("brief.json", "brief.json")
+    ✓ PASS are_equal("features/FT001-checkout/feature.json", "features/FT001-checkout/feature.json")
+  ✓ 2 passed, 0 failed, 0 incomplete
+  describe rejects_a_non_html_artifact_path
+    ✓ PASS is_true(true)
+  ✓ 1 passed, 0 failed, 0 incomplete
+test ArtifactHtmlSpec
+  describe story_statement_escapes_all_llm_fields
+    ✓ PASS are_equal("<blockquote><strong>Como</strong> &lt;Admin&gt;, <strong>quero</strong> usar &amp; revisar, <strong>para</strong> evitar &#34;falhas&#34;.</blockquote>", "<blockquote><strong>Como</strong> &lt;Admin&gt;, <strong>quero</strong> usar &amp; revisar, <strong>para</strong> evitar &#34;falhas&#34;.</blockquote>")
+  ✓ 1 passed, 0 failed, 0 incomplete
+  describe enabler_statement_uses_technical_outcome_without_a_fake_persona
+    ✓ PASS are_equal("<blockquote><strong>Resultado técnico:</strong> Deploy &lt;automatizado&gt;<br><strong>Habilita:</strong> FT001 &amp; FT002<br><strong>Evidenciado por:</strong> smoke test</blockquote>", "<blockquote><strong>Resultado técnico:</strong> Deploy &lt;automatizado&gt;<br><strong>Habilita:</strong> FT001 &amp; FT002<br><strong>Evidenciado por:</strong> smoke test</blockquote>")
+  ✓ 1 passed, 0 failed, 0 incomplete
+  describe spike_statement_names_the_investigation_question
+    ✓ PASS is_true(true)
+  ✓ 1 passed, 0 failed, 0 incomplete
+  describe requirements_renders_columns_sources_and_escaped_values
+    ✓ PASS are_equal("<table><thead><tr><th>ID</th><th>Título</th><th>Descrição</th><th>Critérios de aceitação</th><th>Prioridade</th><th>Fontes</th></tr></thead><tbody><tr><td>FR-001</td><td>Criar &lt;pedido&gt;</td><td>Aceitar &amp; validar</td><td>Pedido persistido</td><td>Must</td><td><citemark>sources/ata</citemark></td></tr></tbody></table>", "<table><thead><tr><th>ID</th><th>Título</th><th>Descrição</th><th>Critérios de aceitação</th><th>Prioridade</th><th>Fontes</th></tr></thead><tbody><tr><td>FR-001</td><td>Criar &lt;pedido&gt;</td><td>Aceitar &amp; validar</td><td>Pedido persistido</td><td>Must</td><td><citemark>sources/ata</citemark></td></tr></tbody></table>")
+  ✓ 1 passed, 0 failed, 0 incomplete
+  describe requirements_shows_the_change_badge_for_a_pre_existing_item
+    ✓ PASS is_true(true)
+  ✓ 1 passed, 0 failed, 0 incomplete
+  describe dependency_map_lists_each_prerequisite_with_justification_and_sources
+    ✓ PASS are_equal("<table><thead><tr><th>Código</th><th>Item de backlog</th><th>Depende de</th></tr></thead><tbody><tr><td>FT002</td><td>Pagamentos</td><td><ul><li><strong>FT001</strong> — precisa do cadastro &amp; login <citemark>features/FT001-cadastro</citemark></li></ul></td></tr></tbody></table>", "<table><thead><tr><th>Código</th><th>Item de backlog</th><th>Depende de</th></tr></thead><tbody><tr><td>FT002</td><td>Pagamentos</td><td><ul><li><strong>FT001</strong> — precisa do cadastro &amp; login <citemark>features/FT001-cadastro</citemark></li></ul></td></tr></tbody></table>")
+  ✓ 1 passed, 0 failed, 0 incomplete
+  describe dependency_map_shows_a_dash_for_a_feature_with_no_dependencies
+    ✓ PASS are_equal("<table><thead><tr><th>Código</th><th>Item de backlog</th><th>Depende de</th></tr></thead><tbody><tr><td>FT001</td><td>Cadastro</td><td>—</td></tr></tbody></table>", "<table><thead><tr><th>Código</th><th>Item de backlog</th><th>Depende de</th></tr></thead><tbody><tr><td>FT001</td><td>Cadastro</td><td>—</td></tr></tbody></table>")
+  ✓ 1 passed, 0 failed, 0 incomplete
+  describe execution_order_numbers_rows_starting_at_one
+    ✓ PASS are_equal("<table><thead><tr><th>#</th><th>Código</th><th>Item de backlog</th></tr></thead><tbody><tr><td>1</td><td>FT001</td><td>Cadastro</td></tr><tr><td>2</td><td>FT002</td><td>Pagamentos</td></tr></tbody></table>", "<table><thead><tr><th>#</th><th>Código</th><th>Item de backlog</th></tr></thead><tbody><tr><td>1</td><td>FT001</td><td>Cadastro</td></tr><tr><td>2</td><td>FT002</td><td>Pagamentos</td></tr></tbody></table>")
+  ✓ 1 passed, 0 failed, 0 incomplete
+  describe considered_options_lists_each_option_escaped
+    ✓ PASS are_equal("<ul><li>Postgres</li><li>&lt;MySQL&gt;</li></ul>", "<ul><li>Postgres</li><li>&lt;MySQL&gt;</li></ul>")
+  ✓ 1 passed, 0 failed, 0 incomplete
+  describe decision_outcome_escapes_both_fields
+    ✓ PASS are_equal("<p><strong>Opção escolhida:</strong> &lt;Postgres&gt; — atende &amp; escala</p>", "<p><strong>Opção escolhida:</strong> &lt;Postgres&gt; — atende &amp; escala</p>")
+  ✓ 1 passed, 0 failed, 0 incomplete
+  describe options_pros_and_cons_renders_a_heading_and_two_lists_per_option
+    ✓ PASS are_equal("<h3>Postgres</h3><p><strong>Prós</strong></p><ul><li>maduro <span class=\"cite cite-inferencia\">inferência</span></li></ul><p><strong>Contras</strong></p><ul><li>custo &amp; operação <span class=\"cite cite-gap\">gap</span></li></ul>", "<h3>Postgres</h3><p><strong>Prós</strong></p><ul><li>maduro <span class=\"cite cite-inferencia\">inferência</span></li></ul><p><strong>Contras</strong></p><ul><li>custo &amp; operação <span class=\"cite cite-gap\">gap</span></li></ul>")
+  ✓ 1 passed, 0 failed, 0 incomplete
+  describe adr_links_renders_type_and_reference_escaped
+    ✓ PASS are_equal("<ul><li><strong>Depende de</strong> — Usar &lt;Postgres&gt;</li></ul>", "<ul><li><strong>Depende de</strong> — Usar &lt;Postgres&gt;</li></ul>")
+  ✓ 1 passed, 0 failed, 0 incomplete
+test ArtifactIdSpec
+  describe pad3_zero_fills_to_three_digits
+    ✓ PASS are_equal("001", "001")
+    ✓ PASS are_equal("009", "009")
+    ✓ PASS are_equal("010", "010")
+    ✓ PASS are_equal("099", "099")
+    ✓ PASS are_equal("100", "100")
+    ✓ PASS are_equal("999", "999")
+  ✓ 6 passed, 0 failed, 0 incomplete
+  describe folder_name_combines_id_and_slug
+    ✓ PASS are_equal("FT001-checkout-em-uma-etapa", "FT001-checkout-em-uma-etapa")
+    ✓ PASS are_equal("ADR-001-usar-tokenizacao-via-psp", "ADR-001-usar-tokenizacao-via-psp")
+  ✓ 2 passed, 0 failed, 0 incomplete
+test SchemaFileSpec
+  describe exposes_schema_content_and_codex_file_path
+    ✓ PASS are_equal("object", "object")
+    ✓ PASS is_true(true)
+    ✓ PASS is_true(true)
+  ✓ 3 passed, 0 failed, 0 incomplete
+test AutoReviewSpec
+  describe never_calls_the_model_more_than_twice_even_if_warnings_persist
+    ✓ PASS are_equal(2, 2)
+    ✓ PASS is_true(true)
+    ✓ PASS is_true(true)
+    ✓ PASS are_equal(20, 20)
+  ✓ 4 passed, 0 failed, 0 incomplete
+  describe a_revision_with_fewer_warnings_replaces_the_original
+    ✓ PASS are_equal(2, 2)
+    ✓ PASS is_true(true)
+    ✓ PASS are_equal(0, 0)
+  ✓ 3 passed, 0 failed, 0 incomplete
+  describe disabled_or_clean_generation_calls_the_model_once
+    ✓ PASS are_equal(2, 2)
+  ✓ 1 passed, 0 failed, 0 incomplete
+  describe an_invalid_revised_answer_keeps_the_original
+    ✓ PASS are_equal(1, 1)
+    ✓ PASS is_true(true)
+  ✓ 2 passed, 0 failed, 0 incomplete
+  describe a_failed_revision_call_keeps_the_original
+    ✓ PASS are_equal(1, 1)
+    ✓ PASS is_true(true)
+    ✓ PASS is_true(true)
+    ✓ PASS are_equal(3, 3)
+    ✓ PASS are_equal(4, 4)
+  ✓ 5 passed, 0 failed, 0 incomplete
+  describe block_lists_unique_warnings_and_the_previous_answer
+    ✓ PASS is_true(true)
+    ✓ PASS is_true(true)
+    ✓ PASS is_true(true)
+  ✓ 3 passed, 0 failed, 0 incomplete
+  describe note_reports_the_outcome
+    ✓ PASS is_true(true)
+    ✓ PASS is_true(true)
+    ✓ PASS are_equal("", "")
+    ✓ PASS are_equal("", "")
+  ✓ 4 passed, 0 failed, 0 incomplete
+  describe tag_items_copies_the_review_record
+    ✓ PASS is_true(true)
+  ✓ 1 passed, 0 failed, 0 incomplete
+test BacklogRulesSpec
+  describe coherent_user_story_passes
+    ✓ PASS are_equal(0, 0)
+  ✓ 1 passed, 0 failed, 0 incomplete
+  describe incoherent_user_story_is_flagged
+    ✓ PASS is_true(true)
+    ✓ PASS is_true(true)
+    ✓ PASS is_true(true)
+  ✓ 3 passed, 0 failed, 0 incomplete
+  describe enabler_story_with_persona_is_flagged
+    ✓ PASS is_true(true)
+    ✓ PASS is_true(true)
+  ✓ 2 passed, 0 failed, 0 incomplete
+  describe structured_spike_needs_every_field
+    ✓ PASS is_true(true)
+  ✓ 1 passed, 0 failed, 0 incomplete
+  describe complete_spike_passes
+    ✓ PASS are_equal(0, 0)
+  ✓ 1 passed, 0 failed, 0 incomplete
+  describe legacy_story_is_not_checked
+    ✓ PASS are_equal(0, 0)
+  ✓ 1 passed, 0 failed, 0 incomplete
+  describe dependency_batch_checks
+    ✓ PASS is_true(true)
+    ✓ PASS is_true(true)
+    ✓ PASS is_true(true)
+    ✓ PASS is_true(true)
+    ✓ PASS is_true(true)
+  ✓ 5 passed, 0 failed, 0 incomplete
+  describe dependencies_to_features_and_architecture_are_valid
+    ✓ PASS are_equal(0, 0)
+  ✓ 1 passed, 0 failed, 0 incomplete
+  describe gateway_and_backend_must_expose_the_same_endpoints
+    ✓ PASS is_true(true)
+    ✓ PASS is_true(true)
+    ✓ PASS is_true(true)
+    ✓ PASS is_true(true)
+    ✓ PASS are_equal(0, 0)
+  ✓ 5 passed, 0 failed, 0 incomplete
+  describe measurement_checks
+    ✓ PASS is_true(true)
+    ✓ PASS are_equal(0, 0)
+  ✓ 2 passed, 0 failed, 0 incomplete
+  describe structured_fields_render_and_legacy_falls_back
+    ✓ PASS is_true(true)
+    ✓ PASS is_true(true)
+    ✓ PASS is_true(true)
+    ✓ PASS is_true(true)
+  ✓ 4 passed, 0 failed, 0 incomplete
+  describe feature_type_coherence
+    ✓ PASS is_true(true)
+    ✓ PASS is_true(true)
+    ✓ PASS are_equal(0, 0)
+    ✓ PASS are_equal(0, 0)
+  ✓ 4 passed, 0 failed, 0 incomplete
+test C4DiagramSpec
+  describe level_and_labels_are_derived_from_the_type
+    ✓ PASS are_equal("Strategic", "Strategic")
+    ✓ PASS are_equal("Product", "Product")
+    ✓ PASS are_equal("Tactical", "Tactical")
+    ✓ PASS are_equal("Contêiner (C4)", "Contêiner (C4)")
+  ✓ 4 passed, 0 failed, 0 incomplete
+  describe mm_escapes_quotes_brackets_and_hash_for_mermaid_labels
+    ✓ PASS are_equal("C#35; #quot;x#quot; #lt;y#gt;", "C#35; #quot;x#quot; #lt;y#gt;")
+  ✓ 1 passed, 0 failed, 0 incomplete
+  describe context_mermaid_has_one_node_per_element_with_c4_classes
+    ✓ PASS is_true(true)
+    ✓ PASS is_true(true)
+    ✓ PASS is_true(true)
+    ✓ PASS is_true(true)
+    ✓ PASS is_true(true)
+    ✓ PASS is_true(true)
+  ✓ 6 passed, 0 failed, 0 incomplete
+  describe container_mermaid_puts_containers_inside_the_system_boundary
+    ✓ PASS is_true(true)
+    ✓ PASS is_true(true)
+    ✓ PASS is_true(true)
+    ✓ PASS is_true(true)
+  ✓ 4 passed, 0 failed, 0 incomplete
+  describe clip_cuts_long_text_on_a_word_boundary
+    ✓ PASS are_equal("curto", "curto")
+    ✓ PASS are_equal("Lê e grava…", "Lê e grava…")
+    ✓ PASS are_equal("Supercalifragilístico…", "Supercalifragilístico…")
+  ✓ 3 passed, 0 failed, 0 incomplete
+  describe diagram_labels_are_clipped_but_tables_keep_the_full_text
+    ✓ PASS is_true(true)
+    ✓ PASS is_true(true)
+    ✓ PASS is_true(true)
+    ✓ PASS is_true(true)
+    ✓ PASS is_true(true)
+  ✓ 5 passed, 0 failed, 0 incomplete
+  describe a_clean_context_diagram_has_no_warnings
+    ✓ PASS are_equal(0, 0)
+  ✓ 1 passed, 0 failed, 0 incomplete
+  describe context_flags_technology_and_container_level_detail
+    ✓ PASS is_true(true)
+    ✓ PASS is_true(true)
+    ✓ PASS is_true(true)
+    ✓ PASS is_true(true)
+  ✓ 4 passed, 0 failed, 0 incomplete
+  describe container_flags_missing_technology_on_containers_and_their_communication
+    ✓ PASS is_true(true)
+    ✓ PASS is_true(true)
+  ✓ 2 passed, 0 failed, 0 incomplete
+  describe relations_to_unknown_elements_are_flagged_and_not_drawn
+    ✓ PASS is_true(true)
+    ✓ PASS is_true(true)
+  ✓ 2 passed, 0 failed, 0 incomplete
+  describe component_requires_a_container_scope
+    ✓ PASS is_true(true)
+    ✓ PASS is_true(true)
+  ✓ 2 passed, 0 failed, 0 incomplete
+  describe deployment_nests_containers_inside_their_nodes
+    ✓ PASS is_true(true)
+    ✓ PASS is_true(true)
+    ✓ PASS is_true(true)
+  ✓ 3 passed, 0 failed, 0 incomplete
+  describe legacy_c4_diagram_keeps_its_mermaid_and_asks_for_regeneration
+    ✓ PASS is_true(true)
+    ✓ PASS are_equal("flowchart LR\n a --> b", "flowchart LR\n a --> b")
+    ✓ PASS is_true(true)
+    ✓ PASS are_equal("", "")
+  ✓ 4 passed, 0 failed, 0 incomplete
+  describe non_c4_diagrams_are_never_checked
+    ✓ PASS are_equal(0, 0)
+    ✓ PASS are_equal("", "")
+  ✓ 2 passed, 0 failed, 0 incomplete
+  describe batch_flags_missing_levels_on_the_first_diagram_only
+    ✓ PASS is_true(true)
+    ✓ PASS are_equal(0, 0)
+  ✓ 2 passed, 0 failed, 0 incomplete
+  describe batch_flags_names_that_do_not_match_between_levels
+    ✓ PASS is_true(true)
+    ✓ PASS is_true(true)
+    ✓ PASS is_true(true)
+  ✓ 3 passed, 0 failed, 0 incomplete
+  describe annotate_attaches_batch_warnings_and_fills_missing_fields
+    ✓ PASS are_equal("", "")
+    ✓ PASS are_equal(0, 0)
+    ✓ PASS is_true(true)
+  ✓ 3 passed, 0 failed, 0 incomplete
+  describe missing_deployment_is_flagged_when_adrs_define_infrastructure
+    ✓ PASS is_true(true)
+    ✓ PASS is_true(true)
+    ✓ PASS is_true(true)
+    ✓ PASS are_equal(0, 0)
+  ✓ 4 passed, 0 failed, 0 incomplete
+  describe warnings_html_escapes_llm_names
+    ✓ PASS is_true(true)
+  ✓ 1 passed, 0 failed, 0 incomplete
+  describe container_with_explicit_boundaries_draws_one_subgraph_each
+    ✓ PASS is_true(true)
+    ✓ PASS is_true(true)
+    ✓ PASS is_true(true)
+    ✓ PASS is_true(true)
+    ✓ PASS is_true(true)
+    ✓ PASS is_true(true)
+    ✓ PASS is_true(true)
+    ✓ PASS is_true(true)
+    ✓ PASS are_equal(3, 3)
+  ✓ 9 passed, 0 failed, 0 incomplete
+test ChangesBlockSpec
+  describe for_artifact_is_empty_when_the_changes_file_does_not_exist
+    ✓ PASS are_equal("", "")
+  ✓ 1 passed, 0 failed, 0 incomplete
+  describe for_artifact_numbers_every_matching_entry_in_order_and_ignores_other_artifacts_and_features
+    ✓ PASS is_true(true)
+    ✓ PASS is_true(true)
+    ✓ PASS is_false(false)
+    ✓ PASS is_false(false)
+  ✓ 4 passed, 0 failed, 0 incomplete
+  describe for_artifact_filters_historias_by_feature_id
+    ✓ PASS is_true(true)
+    ✓ PASS is_false(false)
+  ✓ 2 passed, 0 failed, 0 incomplete
+test CiteSpec
+  describe badge_recognizes_gap_case_and_whitespace_insensitively
+    ✓ PASS are_equal("<span class=\"cite cite-gap\">gap</span>", "<span class=\"cite cite-gap\">gap</span>")
+    ✓ PASS are_equal("<span class=\"cite cite-gap\">gap</span>", "<span class=\"cite cite-gap\">gap</span>")
+    ✓ PASS are_equal("<span class=\"cite cite-gap\">gap</span>", "<span class=\"cite cite-gap\">gap</span>")
+  ✓ 3 passed, 0 failed, 0 incomplete
+  describe badge_recognizes_inferencia_with_or_without_accent
+    ✓ PASS are_equal("<span class=\"cite cite-inferencia\">inferência</span>", "<span class=\"cite cite-inferencia\">inferência</span>")
+    ✓ PASS are_equal("<span class=\"cite cite-inferencia\">inferência</span>", "<span class=\"cite cite-inferencia\">inferência</span>")
+  ✓ 2 passed, 0 failed, 0 incomplete
+  describe badge_marks_a_real_reference_for_finalize_to_number_later
+    ✓ PASS are_equal("<citemark>entities/time-de-pagamentos</citemark>", "<citemark>entities/time-de-pagamentos</citemark>")
+  ✓ 1 passed, 0 failed, 0 incomplete
+  describe badges_renders_one_marker_per_source_space_separated
+    ✓ PASS are_equal("<citemark>requisitos</citemark> <span class=\"cite cite-gap\">gap</span>", "<citemark>requisitos</citemark> <span class=\"cite cite-gap\">gap</span>")
+  ✓ 1 passed, 0 failed, 0 incomplete
+  describe list_renders_text_and_badges_per_item
+    ✓ PASS are_equal("<ul><li>Reduzir abandono <citemark>concepts/abandono-de-carrinho</citemark></li><li>Meta sem dado <span class=\"cite cite-gap\">gap</span></li></ul>", "<ul><li>Reduzir abandono <citemark>concepts/abandono-de-carrinho</citemark></li><li>Meta sem dado <span class=\"cite cite-gap\">gap</span></li></ul>")
+  ✓ 1 passed, 0 failed, 0 incomplete
+  describe list_item_with_multiple_sources_renders_multiple_badges
+    ✓ PASS are_equal("<ul><li>Requer tokenização <citemark>entities/time-de-pagamentos</citemark> <citemark>concepts/tokenizacao-de-cartao</citemark></li></ul>", "<ul><li>Requer tokenização <citemark>entities/time-de-pagamentos</citemark> <citemark>concepts/tokenizacao-de-cartao</citemark></li></ul>")
+  ✓ 1 passed, 0 failed, 0 incomplete
+  describe note_renders_one_marker_per_source
+    ✓ PASS are_equal("<p class=\"fontes\"><citemark>requisitos</citemark> <span class=\"cite cite-gap\">gap</span></p>", "<p class=\"fontes\"><citemark>requisitos</citemark> <span class=\"cite cite-gap\">gap</span></p>")
+  ✓ 1 passed, 0 failed, 0 incomplete
+  describe finalize_leaves_a_marker_free_body_untouched_and_appends_nothing
+    ✓ PASS are_equal("<p>Sem citações aqui.</p>", "<p>Sem citações aqui.</p>")
+  ✓ 1 passed, 0 failed, 0 incomplete
+  describe finalize_numbers_a_single_citation_and_lists_it
+    ✓ PASS are_equal("<p class=\"fontes\"><sup class=\"cite-num\" title=\"requisitos/FR-001\">[1]</sup></p><h2>Referências</h2><ol class=\"cite-references\"><li>requisitos/FR-001</li></ol>", "<p class=\"fontes\"><sup class=\"cite-num\" title=\"requisitos/FR-001\">[1]</sup></p><h2>Referências</h2><ol class=\"cite-references\"><li>requisitos/FR-001</li></ol>")
+  ✓ 1 passed, 0 failed, 0 incomplete
+  describe finalize_reuses_the_same_number_for_a_repeated_source
+    ✓ PASS are_equal("<sup class=\"cite-num\" title=\"requisitos/FR-001\">[1]</sup> <sup class=\"cite-num\" title=\"requisitos/FR-001\">[1]</sup><h2>Referências</h2><ol class=\"cite-references\"><li>requisitos/FR-001</li></ol>", "<sup class=\"cite-num\" title=\"requisitos/FR-001\">[1]</sup> <sup class=\"cite-num\" title=\"requisitos/FR-001\">[1]</sup><h2>Referências</h2><ol class=\"cite-references\"><li>requisitos/FR-001</li></ol>")
+  ✓ 1 passed, 0 failed, 0 incomplete
+  describe finalize_numbers_distinct_sources_in_order_of_first_appearance
+    ✓ PASS are_equal("<sup class=\"cite-num\" title=\"requisitos/FR-002\">[1]</sup> <sup class=\"cite-num\" title=\"requisitos/FR-001\">[2]</sup> <sup class=\"cite-num\" title=\"requisitos/FR-002\">[1]</sup><h2>Referências</h2><ol class=\"cite-references\"><li>requisitos/FR-002</li><li>requisitos/FR-001</li></ol>", "<sup class=\"cite-num\" title=\"requisitos/FR-002\">[1]</sup> <sup class=\"cite-num\" title=\"requisitos/FR-001\">[2]</sup> <sup class=\"cite-num\" title=\"requisitos/FR-002\">[1]</sup><h2>Referências</h2><ol class=\"cite-references\"><li>requisitos/FR-002</li><li>requisitos/FR-001</li></ol>")
+  ✓ 1 passed, 0 failed, 0 incomplete
+  describe finalize_leaves_gap_and_inferencia_badges_alone
+    ✓ PASS are_equal("<span class=\"cite cite-gap\">gap</span> <span class=\"cite cite-inferencia\">inferência</span> <sup class=\"cite-num\" title=\"requisitos/FR-001\">[1]</sup><h2>Referências</h2><ol class=\"cite-references\"><li>requisitos/FR-001</li></ol>", "<span class=\"cite cite-gap\">gap</span> <span class=\"cite cite-inferencia\">inferência</span> <sup class=\"cite-num\" title=\"requisitos/FR-001\">[1]</sup><h2>Referências</h2><ol class=\"cite-references\"><li>requisitos/FR-001</li></ol>")
+  ✓ 1 passed, 0 failed, 0 incomplete
+  describe finalize_escapes_a_source_id_in_the_references_list_and_in_the_hover_hint
+    ✓ PASS are_equal("<sup class=\"cite-num\" title=\"&lt;script&gt;\">[1]</sup><h2>Referências</h2><ol class=\"cite-references\"><li>&lt;script&gt;</li></ol>", "<sup class=\"cite-num\" title=\"&lt;script&gt;\">[1]</sup><h2>Referências</h2><ol class=\"cite-references\"><li>&lt;script&gt;</li></ol>")
+  ✓ 1 passed, 0 failed, 0 incomplete
+test CommonDraftsSpec
+  describe with_proposals_each_page_details_its_own_slice
+    ✓ PASS are_equal(["A","B","C","D","E","F"], ["A","B","C","D","E","F"])
+    ✓ PASS are_equal("0:ABCD\n4:EF\n", "0:ABCD\n4:EF\n")
+    ✓ PASS are_equal(20, 20)
+  ✓ 3 passed, 0 failed, 0 incomplete
+  describe without_proposals_pages_until_the_model_says_it_is_done
+    ✓ PASS are_equal(["A","B","C"], ["A","B","C"])
+    ✓ PASS are_equal(8, 8)
+    ✓ PASS are_equal("0\n2\n", "0\n2\n")
+  ✓ 3 passed, 0 failed, 0 incomplete
+  describe without_proposals_stops_at_the_page_limit_and_on_an_empty_page
+    ✓ PASS are_equal(8, 8)
+    ✓ PASS are_equal(0, 0)
+  ✓ 2 passed, 0 failed, 0 incomplete
+  describe lote_names_the_proposals_of_the_page_and_what_was_already_generated
+    ✓ PASS is_true(true)
+    ✓ PASS is_false(false)
+    ✓ PASS is_true(true)
+    ✓ PASS is_true(true)
+    ✓ PASS is_true(true)
+  ✓ 5 passed, 0 failed, 0 incomplete
+test ContextSpec
+  describe wiki_prefixes_the_continuity_block_when_the_work_item_declares_one
+    ✓ PASS is_true(true)
+  ✓ 1 passed, 0 failed, 0 incomplete
+  describe wiki_has_no_continuity_block_when_the_work_item_does_not_declare_one
+    ✓ PASS is_true(true)
+  ✓ 1 passed, 0 failed, 0 incomplete
+  describe artifact_dir_of_dirs_concatenates_item_file_from_each_subfolder
+    ✓ PASS is_true(true)
+    ✓ PASS is_true(true)
+    ✓ PASS is_true(true)
+    ✓ PASS is_true(true)
+  ✓ 4 passed, 0 failed, 0 incomplete
+  describe artifact_dir_of_dirs_is_empty_for_a_missing_directory
+    ✓ PASS are_equal("", "")
+  ✓ 1 passed, 0 failed, 0 incomplete
+  describe artifact_dir_of_dirs_skips_a_subfolder_still_missing_its_item_file
+    ✓ PASS is_true(true)
+  ✓ 1 passed, 0 failed, 0 incomplete
+  describe dedupe_shared_fields_zeroes_a_requisitos_field_thats_byte_identical_to_atributos
+    ✓ PASS are_equal([], [])
+    ✓ PASS are_equal([], [])
+    ✓ PASS are_equal("resumo dos requisitos", "resumo dos requisitos")
+    ✓ PASS are_equal([{"texto":"gap só do requisitos"}], [{"texto":"gap só do requisitos"}])
+  ✓ 4 passed, 0 failed, 0 incomplete
+  describe dedupe_shared_fields_keeps_a_field_that_genuinely_differs_between_the_two
+    ✓ PASS are_equal([{"texto":"só do requisitos"}], [{"texto":"só do requisitos"}])
+  ✓ 1 passed, 0 failed, 0 incomplete
+  describe dedupe_shared_fields_returns_requisitos_unchanged_when_nothing_matches
+    ✓ PASS are_equal("{\"exclusoes\":[{\"texto\":\"único\"}]}", "{\"exclusoes\":[{\"texto\":\"único\"}]}")
+  ✓ 1 passed, 0 failed, 0 incomplete
+  describe dedupe_shared_fields_fails_closed_on_invalid_json
+    ✓ PASS are_equal("{\"exclusoes\":[]}", "{\"exclusoes\":[]}")
+    ✓ PASS are_equal("not json", "not json")
+  ✓ 2 passed, 0 failed, 0 incomplete
+  describe dedupe_shared_fields_is_a_no_op_for_empty_inputs
+    ✓ PASS are_equal("{\"exclusoes\":[]}", "{\"exclusoes\":[]}")
+    ✓ PASS are_equal("", "")
+  ✓ 2 passed, 0 failed, 0 incomplete
+  describe adr_context_projects_each_decision_to_only_the_downstream_relevant_fields
+    ✓ PASS is_true(true)
+    ✓ PASS is_true(true)
+    ✓ PASS is_true(true)
+    ✓ PASS is_true(true)
+    ✓ PASS is_true(true)
+    ✓ PASS is_true(true)
+    ✓ PASS is_true(true)
+    ✓ PASS is_true(true)
+  ✓ 8 passed, 0 failed, 0 incomplete
+  describe adr_context_is_empty_for_a_missing_directory
+    ✓ PASS are_equal("", "")
+  ✓ 1 passed, 0 failed, 0 incomplete
+  describe adr_context_falls_back_to_the_full_body_for_an_adr_without_json
+    ✓ PASS is_true(true)
+    ✓ PASS is_true(true)
+  ✓ 2 passed, 0 failed, 0 incomplete
+test ContextSliceSpec
+  describe refs_collects_sources_and_traceability
+    ✓ PASS is_true(true)
+    ✓ PASS is_true(true)
+    ✓ PASS is_true(true)
+    ✓ PASS is_true(true)
+    ✓ PASS is_true(true)
+  ✓ 5 passed, 0 failed, 0 incomplete
+  describe ids_for_accepts_prefixed_and_bare_ids
+    ✓ PASS are_equal(["FR-001","FR-003"], ["FR-001","FR-003"])
+  ✓ 1 passed, 0 failed, 0 incomplete
+  describe slices_requirements_adrs_and_diagrams_by_citation
+    ✓ PASS is_true(true)
+    ✓ PASS is_true(true)
+    ✓ PASS is_true(true)
+    ✓ PASS is_true(true)
+    ✓ PASS is_true(true)
+    ✓ PASS is_true(true)
+    ✓ PASS is_true(true)
+    ✓ PASS is_true(true)
+    ✓ PASS is_true(true)
+    ✓ PASS is_true(true)
+  ✓ 10 passed, 0 failed, 0 incomplete
+test DerModelSpec
+  describe markers_follow_crows_foot_notation
+    ✓ PASS are_equal("||", "||")
+    ✓ PASS are_equal("|o", "|o")
+    ✓ PASS are_equal("}|", "}|")
+    ✓ PASS are_equal("}o", "}o")
+    ✓ PASS are_equal("o{", "o{")
+    ✓ PASS are_equal("|{", "|{")
+    ✓ PASS are_equal("o|", "o|")
+  ✓ 7 passed, 0 failed, 0 incomplete
+  describe token_makes_mermaid_safe_identifiers
+    ✓ PASS are_equal("data_de_criacao", "data_de_criacao")
+    ✓ PASS are_equal("a_1_nome", "a_1_nome")
+  ✓ 2 passed, 0 failed, 0 incomplete
+  describe logical_mermaid_has_aliases_attributes_keys_and_relations
+    ✓ PASS is_true(true)
+    ✓ PASS is_true(true)
+    ✓ PASS is_true(true)
+    ✓ PASS is_true(true)
+    ✓ PASS is_true(true)
+  ✓ 5 passed, 0 failed, 0 incomplete
+  describe conceptual_mermaid_omits_attributes
+    ✓ PASS is_true(true)
+  ✓ 1 passed, 0 failed, 0 incomplete
+  describe a_clean_logical_model_has_no_warnings
+    ✓ PASS are_equal(0, 0)
+  ✓ 1 passed, 0 failed, 0 incomplete
+  describe logical_flags_missing_pk_many_to_many_and_multivalued
+    ✓ PASS is_true(true)
+    ✓ PASS is_true(true)
+    ✓ PASS is_true(true)
+    ✓ PASS is_true(true)
+    ✓ PASS is_true(true)
+    ✓ PASS is_true(true)
+    ✓ PASS is_true(true)
+    ✓ PASS is_true(true)
+    ✓ PASS is_true(true)
+  ✓ 9 passed, 0 failed, 0 incomplete
+  describe many_areas_produce_an_overview_and_one_diagram_per_area
+    ✓ PASS are_equal(3, 3)
+    ✓ PASS are_equal("Visão geral", "Visão geral")
+    ✓ PASS is_true(true)
+    ✓ PASS is_true(true)
+    ✓ PASS is_true(true)
+    ✓ PASS is_true(true)
+  ✓ 6 passed, 0 failed, 0 incomplete
+  describe legacy_der_is_flagged_for_regeneration
+    ✓ PASS is_true(true)
+    ✓ PASS is_true(true)
+  ✓ 2 passed, 0 failed, 0 incomplete
+  describe relations_tables_split_by_evidence
+    ✓ PASS is_true(true)
+    ✓ PASS is_true(true)
+    ✓ PASS is_true(true)
+  ✓ 3 passed, 0 failed, 0 incomplete
+test DraftsSpec
+  describe reviewed_attaches_the_review_record
+    ✓ PASS is_true(true)
+    ✓ PASS are_equal(2, 2)
+  ✓ 2 passed, 0 failed, 0 incomplete
+  describe reviewed_items_tags_every_item
+    ✓ PASS is_false(false)
+  ✓ 1 passed, 0 failed, 0 incomplete
+  describe followed_by_sums_both_calls
+    ✓ PASS are_equal(2, 2)
+    ✓ PASS are_equal(11, 11)
+    ✓ PASS are_equal(7, 7)
+  ✓ 3 passed, 0 failed, 0 incomplete
+  describe with_adds_fields_to_the_draft_data
+    ✓ PASS are_equal("FT001-x", "FT001-x")
+    ✓ PASS are_equal([], [])
+    ✓ PASS are_equal(3, 3)
+  ✓ 3 passed, 0 failed, 0 incomplete
+test FeatureReviewSpec
+  describe a_feature_without_status_file_is_pending
+    ✓ PASS are_equal("pendente", "pendente")
+    ✓ PASS is_false(false)
+  ✓ 2 passed, 0 failed, 0 incomplete
+  describe approve_reject_and_reopen_round_trip
+    ✓ PASS are_equal("aprovada", "aprovada")
+    ✓ PASS are_equal("rejeitada", "rejeitada")
+    ✓ PASS are_equal("fora do escopo", "fora do escopo")
+    ✓ PASS is_true(true)
+    ✓ PASS are_equal("pendente", "pendente")
+    ✓ PASS are_equal("", "")
+    ✓ PASS are_equal(2, 2)
+    ✓ PASS are_equal("rejeicao", "rejeicao")
+    ✓ PASS are_equal("FT001", "FT001")
+    ✓ PASS is_true(true)
+    ✓ PASS are_equal("reabertura", "reabertura")
+  ✓ 11 passed, 0 failed, 0 incomplete
+  describe a_rejected_feature_fails_the_gate_until_reopened
+    ✓ PASS is_true(true)
+  ✓ 1 passed, 0 failed, 0 incomplete
+  describe rejecting_requires_a_reason
+    ✓ PASS is_true(true)
+    ✓ PASS are_equal("pendente", "pendente")
+  ✓ 2 passed, 0 failed, 0 incomplete
+  describe rejects_a_malformed_feature_id_or_decision
+    ✓ PASS is_true(true)
+    ✓ PASS is_true(true)
+  ✓ 2 passed, 0 failed, 0 incomplete
+  describe the_rejection_reason_never_reaches_the_backlog_prompt
+    ✓ PASS are_equal("", "")
+  ✓ 1 passed, 0 failed, 0 incomplete
+test HandoffSpec
+  describe build_ships_each_story_attachments_next_to_its_spec
+    ✓ PASS are_equal("use a fila de pagamentos", "use a fila de pagamentos")
+    ✓ PASS is_true(true)
+    ✓ PASS is_true(true)
+    ✓ PASS is_false(false)
+    ✓ PASS is_false(false)
+  ✓ 5 passed, 0 failed, 0 incomplete
+  describe build_leaves_out_the_stories_of_a_rejected_feature
+    ✓ PASS are_equal(1, 1)
+    ✓ PASS is_true(true)
+    ✓ PASS is_false(false)
+  ✓ 3 passed, 0 failed, 0 incomplete
+  describe tasks_are_an_ordered_checklist_with_criteria_and_dependencies
+    ✓ PASS is_true(true)
+    ✓ PASS is_true(true)
+    ✓ PASS is_true(true)
+  ✓ 3 passed, 0 failed, 0 incomplete
+  describe plan_md_carries_the_radahn_assessment_only_when_present
+    ✓ PASS is_true(true)
+    ✓ PASS is_true(true)
+    ✓ PASS is_true(true)
+    ✓ PASS is_true(true)
+    ✓ PASS is_true(true)
+    ✓ PASS is_true(true)
+    ✓ PASS is_true(true)
+    ✓ PASS is_true(true)
+  ✓ 8 passed, 0 failed, 0 incomplete
+  describe readme_lists_every_story_and_still_calls_out_why_blocked_ones_are_blocked
+    ✓ PASS is_true(true)
+    ✓ PASS is_true(true)
+    ✓ PASS is_true(true)
+    ✓ PASS is_true(true)
+  ✓ 4 passed, 0 failed, 0 incomplete
+  describe spec_shows_the_blocking_reasons_when_the_story_is_not_ready
+    ✓ PASS is_true(true)
+    ✓ PASS is_true(true)
+  ✓ 2 passed, 0 failed, 0 incomplete
+  describe table_cells_escape_pipes_and_newlines
+    ✓ PASS are_equal("a\\|b c", "a\\|b c")
+  ✓ 1 passed, 0 failed, 0 incomplete
+test HistoriaAnexosSpec
+  describe list_skips_hidden_files_and_directories
+    ✓ PASS are_equal(["a.md","b.pdf"], ["a.md","b.pdf"])
+    ✓ PASS are_equal([], [])
+  ✓ 2 passed, 0 failed, 0 incomplete
+  describe the_single_delivery_story_keeps_its_attachments_at_the_root
+    ✓ PASS are_equal(["contrato.md"], ["contrato.md"])
+  ✓ 1 passed, 0 failed, 0 incomplete
+  describe snapshot_and_restore_carry_attachments_by_story_code
+    ✓ PASS are_equal(1, 1)
+    ✓ PASS are_equal("dependencia", "dependencia")
+    ✓ PASS is_false(false)
+  ✓ 3 passed, 0 failed, 0 incomplete
+test HistoriaSpecSpec
+  describe traceability_flags_references_that_do_not_exist
+    ✓ PASS is_true(true)
+    ✓ PASS is_true(true)
+    ✓ PASS is_true(true)
+    ✓ PASS is_true(true)
+  ✓ 4 passed, 0 failed, 0 incomplete
+  describe traceability_skips_kinds_the_work_item_does_not_have
+    ✓ PASS are_equal(0, 0)
+  ✓ 1 passed, 0 failed, 0 incomplete
+  describe a_user_story_without_requirements_is_flagged
+    ✓ PASS is_true(true)
+    ✓ PASS are_equal(0, 0)
+  ✓ 2 passed, 0 failed, 0 incomplete
+  describe annotate_attaches_warnings_to_each_story
+    ✓ PASS is_true(true)
+  ✓ 1 passed, 0 failed, 0 incomplete
+  describe openapi_is_generated_from_the_structured_contract
+    ✓ PASS are_equal("3.1.0", "3.1.0")
+    ✓ PASS are_equal("consultarOrdem", "consultarOrdem")
+    ✓ PASS are_equal("path", "path")
+    ✓ PASS is_true(true)
+    ✓ PASS are_equal("uuid", "uuid")
+    ✓ PASS are_equal("numero", "numero")
+    ✓ PASS are_equal("date-time", "date-time")
+    ✓ PASS are_equal(0, 0)
+  ✓ 8 passed, 0 failed, 0 incomplete
+  describe asyncapi_is_generated_for_events
+    ✓ PASS are_equal("3.0.0", "3.0.0")
+    ✓ PASS are_equal("send", "send")
+    ✓ PASS are_equal("id", "id")
+  ✓ 3 passed, 0 failed, 0 incomplete
+  describe no_contract_means_no_spec_file
+    ✓ PASS are_equal(null, null)
+    ✓ PASS are_equal(null, null)
+  ✓ 2 passed, 0 failed, 0 incomplete
+  describe pretty_prints_nested_json
+    ✓ PASS are_equal("{\n  \"a\": [\n    1,\n    {\n      \"b\": \"c\"\n    }\n  ],\n  \"d\": {}\n}", "{\n  \"a\": [\n    1,\n    {\n      \"b\": \"c\"\n    }\n  ],\n  \"d\": {}\n}")
+  ✓ 1 passed, 0 failed, 0 incomplete
+  describe a_coherent_contract_has_no_warnings
+    ✓ PASS are_equal(0, 0)
+  ✓ 1 passed, 0 failed, 0 incomplete
+  describe contract_check_flags_incoherent_endpoints
+    ✓ PASS is_true(true)
+    ✓ PASS is_true(true)
+    ✓ PASS is_true(true)
+    ✓ PASS is_true(true)
+    ✓ PASS is_true(true)
+    ✓ PASS is_true(true)
+    ✓ PASS is_true(true)
+    ✓ PASS is_true(true)
+  ✓ 8 passed, 0 failed, 0 incomplete
+  describe patch_without_a_body_is_not_flagged_unlike_post_and_put
+    ✓ PASS are_equal(0, 0)
+    ✓ PASS is_true(true)
+  ✓ 2 passed, 0 failed, 0 incomplete
+  describe backend_story_without_any_contract_is_not_flagged
+    ✓ PASS are_equal(0, 0)
+    ✓ PASS are_equal(0, 0)
+    ✓ PASS is_true(true)
+    ✓ PASS is_true(true)
+    ✓ PASS is_true(true)
+  ✓ 5 passed, 0 failed, 0 incomplete
+  describe known_reads_ids_from_the_work_item_artifacts_and_spec_files_are_written
+    ✓ PASS are_equal(["FR-001","IR-001","RN-001"], ["FR-001","IR-001","RN-001"])
+    ✓ PASS are_equal(["NFR-001"], ["NFR-001"])
+    ✓ PASS are_equal(["ADR-001"], ["ADR-001"])
+    ✓ PASS are_equal(["Ordem","o"], ["Ordem","o"])
+    ✓ PASS are_equal(["API de Ordens","Investidor"], ["API de Ordens","Investidor"])
+    ✓ PASS is_true(true)
+    ✓ PASS is_true(true)
+  ✓ 7 passed, 0 failed, 0 incomplete
+  describe gherkin_is_generated_with_criteria_tags
+    ✓ PASS are_equal("# language: pt\nFuncionalidade: Consultar ordem\n\n  @CA1\n  Cenário: Ordem existe\n    Dado uma ordem 123\n    E o investidor dono dela\n    Quando ele consulta a ordem\n    Então recebe o estado atual\n", "# language: pt\nFuncionalidade: Consultar ordem\n\n  @CA1\n  Cenário: Ordem existe\n    Dado uma ordem 123\n    E o investidor dono dela\n    Quando ele consulta a ordem\n    Então recebe o estado atual\n")
+    ✓ PASS is_true(true)
+  ✓ 2 passed, 0 failed, 0 incomplete
+  describe scenario_check_flags_incomplete_and_unknown_references
+    ✓ PASS is_true(true)
+    ✓ PASS is_true(true)
+    ✓ PASS are_equal(0, 0)
+  ✓ 3 passed, 0 failed, 0 incomplete
+  describe spike_statement_lists_its_structured_fields
+    ✓ PASS is_true(true)
+    ✓ PASS is_true(true)
+    ✓ PASS is_true(true)
+  ✓ 3 passed, 0 failed, 0 incomplete
+  describe legacy_story_is_not_checked
+    ✓ PASS are_equal(0, 0)
+  ✓ 1 passed, 0 failed, 0 incomplete
+test ArtifactMetaSpec
+  describe names_the_backend_that_generated_the_draft
+    ✓ PASS are_equal("gerado em 2026-10-01 10:00 · artifacts/brief.html · devin · 3 → 4 tokens", "gerado em 2026-10-01 10:00 · artifacts/brief.html · devin · 3 → 4 tokens")
+    ✓ PASS is_false(false)
+  ✓ 2 passed, 0 failed, 0 incomplete
+test PlanoModelSpec
+  describe sequence_diagram_uses_aliased_participants_and_return_arrows
+    ✓ PASS is_true(true)
+    ✓ PASS is_true(true)
+    ✓ PASS is_true(true)
+    ✓ PASS is_true(true)
+    ✓ PASS is_true(true)
+    ✓ PASS is_true(true)
+  ✓ 6 passed, 0 failed, 0 incomplete
+  describe a_complete_plan_has_no_warnings
+    ✓ PASS are_equal(0, 0)
+  ✓ 1 passed, 0 failed, 0 incomplete
+  describe untested_and_unknown_criteria_are_flagged
+    ✓ PASS is_true(true)
+    ✓ PASS is_true(true)
+    ✓ PASS is_true(true)
+    ✓ PASS is_true(true)
+    ✓ PASS is_true(true)
+    ✓ PASS is_true(true)
+  ✓ 6 passed, 0 failed, 0 incomplete
+  describe context_check_flags_containers_adrs_and_entities_that_do_not_exist
+    ✓ PASS is_true(true)
+    ✓ PASS is_true(true)
+    ✓ PASS is_true(true)
+  ✓ 3 passed, 0 failed, 0 incomplete
+  describe coverage_table_marks_untested_criteria
+    ✓ PASS is_true(true)
+    ✓ PASS is_true(true)
+  ✓ 2 passed, 0 failed, 0 incomplete
+test ReadinessSpec
+  describe legacy_story_is_not_ready
+    ✓ PASS are_equal("nao_pronta", "nao_pronta")
+    ✓ PASS is_true(true)
+    ✓ PASS is_true(true)
+  ✓ 3 passed, 0 failed, 0 incomplete
+  describe complete_story_with_clean_plan_is_ready_and_gaps_make_it_ready_with_notes
+    ✓ PASS are_equal("pronta", "pronta")
+    ✓ PASS are_equal("pronta_com_ressalvas", "pronta_com_ressalvas")
+    ✓ PASS is_true(true)
+    ✓ PASS is_true(true)
+  ✓ 4 passed, 0 failed, 0 incomplete
+  describe dependency_on_a_story_that_is_not_ready_becomes_a_note
+    ✓ PASS are_equal("pronta_com_ressalvas", "pronta_com_ressalvas")
+    ✓ PASS is_true(true)
+    ✓ PASS are_equal("nao_pronta", "nao_pronta")
+  ✓ 3 passed, 0 failed, 0 incomplete
+  describe batch_finds_discovery_and_delivery_layouts
+    ✓ PASS are_equal(2, 2)
+    ✓ PASS are_equal("", "")
+    ✓ PASS are_equal("historias/FT001-a/US001-b", "historias/FT001-a/US001-b")
+    ✓ PASS are_equal("FT001-a", "FT001-a")
+    ✓ PASS are_equal("US001", "US001")
+  ✓ 5 passed, 0 failed, 0 incomplete
+test RequireSpec
+  describe a_missing_predecessor_fails_with_the_standard_message
+    ✓ PASS is_true(true)
+  ✓ 1 passed, 0 failed, 0 incomplete
+  describe optional_fills_in_the_placeholder
+    ✓ PASS are_equal("(não gerado para este projeto)", "(não gerado para este projeto)")
+    ✓ PASS are_equal("x", "x")
+  ✓ 2 passed, 0 failed, 0 incomplete
+test DirTextSpec
+  describe body_only_strips_doctype_head_and_style_keeping_just_the_content
+    ✓ PASS are_equal("<h1>ADR-001</h1><p>Contexto.</p>", "<h1>ADR-001</h1><p>Contexto.</p>")
+  ✓ 1 passed, 0 failed, 0 incomplete
+  describe body_only_passes_through_content_with_no_body_tag_unchanged
+    ✓ PASS are_equal("# Entidade\n\nDescrição em markdown.", "# Entidade\n\nDescrição em markdown.")
+  ✓ 1 passed, 0 failed, 0 incomplete
+  describe body_only_passes_through_an_empty_string_unchanged
+    ✓ PASS are_equal("", "")
+  ✓ 1 passed, 0 failed, 0 incomplete
+test FixtureSpec
+  describe project_starts_empty_and_drop_removes_it
+    ✓ PASS is_false(false)
+    ✓ PASS is_false(false)
+  ✓ 2 passed, 0 failed, 0 incomplete
+test HtmlSpec
+  describe list_wraps_each_item_and_escapes_it
+    ✓ PASS are_equal("<ul><li>a</li><li>b</li></ul>", "<ul><li>a</li><li>b</li></ul>")
+  ✓ 1 passed, 0 failed, 0 incomplete
+  describe list_escapes_html_special_characters
+    ✓ PASS are_equal("<ul><li>&lt;script&gt;alert(1)&lt;/script&gt;</li></ul>", "<ul><li>&lt;script&gt;alert(1)&lt;/script&gt;</li></ul>")
+  ✓ 1 passed, 0 failed, 0 incomplete
+  describe empty_list_is_empty_ul
+    ✓ PASS are_equal("<ul></ul>", "<ul></ul>")
+  ✓ 1 passed, 0 failed, 0 incomplete
+  describe sections_renders_a_heading_and_paragraph_per_item
+    ✓ PASS are_equal("<h2>Desempenho</h2><p>Rápido.</p><h2>Segurança</h2><p>Seguro &amp; confiável.</p>", "<h2>Desempenho</h2><p>Rápido.</p><h2>Segurança</h2><p>Seguro &amp; confiável.</p>")
+  ✓ 1 passed, 0 failed, 0 incomplete
+test MarkdownSpec
+  describe list_renders_one_bullet_per_item
+    ✓ PASS are_equal("- a\n- b\n- c", "- a\n- b\n- c")
+  ✓ 1 passed, 0 failed, 0 incomplete
+  describe list_of_one_item
+    ✓ PASS are_equal("- only", "- only")
+  ✓ 1 passed, 0 failed, 0 incomplete
+  describe empty_list_is_empty_string
+    ✓ PASS are_equal("", "")
+  ✓ 1 passed, 0 failed, 0 incomplete
+  describe code_block_keeps_the_code_intact
+    ✓ PASS are_equal("```python\ndef f(x):\n\n    return x\n```", "```python\ndef f(x):\n\n    return x\n```")
+  ✓ 1 passed, 0 failed, 0 incomplete
+  describe code_block_grows_the_fence_past_one_inside_the_code
+    ✓ PASS are_equal("````\na ``` b\n````", "````\na ``` b\n````")
+  ✓ 1 passed, 0 failed, 0 incomplete
+test PathsSpec
+  describe valid_ids_are_accepted
+    ✓ PASS is_true(true)
+    ✓ PASS is_true(true)
+    ✓ PASS is_true(true)
+  ✓ 3 passed, 0 failed, 0 incomplete
+  describe malicious_or_malformed_ids_are_rejected
+    ✓ PASS is_false(false)
+    ✓ PASS is_false(false)
+    ✓ PASS is_false(false)
+    ✓ PASS is_false(false)
+    ✓ PASS is_false(false)
+    ✓ PASS is_false(false)
+    ✓ PASS is_false(false)
+  ✓ 7 passed, 0 failed, 0 incomplete
+  describe ensure_valid_fails_hard_on_a_malicious_id
+    ✓ PASS is_true(true)
+  ✓ 1 passed, 0 failed, 0 incomplete
+  describe artifact_paths_stay_scoped_under_projects
+    ✓ PASS are_equal("projects/wi_1/artifacts/brief.html", "projects/wi_1/artifacts/brief.html")
+    ✓ PASS are_equal("projects/wi_1/wiki/index.md", "projects/wi_1/wiki/index.md")
+    ✓ PASS are_equal("projects/wi_1/raw/ata.pdf", "projects/wi_1/raw/ata.pdf")
+    ✓ PASS are_equal("projects/wi_1/project.json", "projects/wi_1/project.json")
+    ✓ PASS are_equal("projects/wi_1/usage.jsonl", "projects/wi_1/usage.jsonl")
+    ✓ PASS are_equal("projects/wi_1/prompt_log.jsonl", "projects/wi_1/prompt_log.jsonl")
+    ✓ PASS are_equal("projects/wi_1/changes.jsonl", "projects/wi_1/changes.jsonl")
+    ✓ PASS are_equal("projects/wi_1/.index-state.json", "projects/wi_1/.index-state.json")
+  ✓ 8 passed, 0 failed, 0 incomplete
+  describe relative_traversal_is_rejected_even_with_a_valid_project_id
+    ✓ PASS is_true(true)
+  ✓ 1 passed, 0 failed, 0 incomplete
+test SlugSpec
+  describe simple_title
+    ✓ PASS are_equal("time-de-pagamentos", "time-de-pagamentos")
+  ✓ 1 passed, 0 failed, 0 incomplete
+  describe accented_title
+    ✓ PASS are_equal("tokenizacao-de-cartao", "tokenizacao-de-cartao")
+  ✓ 1 passed, 0 failed, 0 incomplete
+  describe punctuation_collapses_to_single_dash
+    ✓ PASS are_equal("checkout-em-uma-etapa-v2", "checkout-em-uma-etapa-v2")
+  ✓ 1 passed, 0 failed, 0 incomplete
+  describe leading_and_trailing_punctuation_is_trimmed
+    ✓ PASS are_equal("abandono-de-carrinho", "abandono-de-carrinho")
+  ✓ 1 passed, 0 failed, 0 incomplete
+  describe empty_title_falls_back
+    ✓ PASS are_equal("pagina", "pagina")
+    ✓ PASS are_equal("pagina", "pagina")
+  ✓ 2 passed, 0 failed, 0 incomplete
+test WorkflowsRootSpec
+  describe falls_back_to_the_relative_literal_when_the_env_var_is_unset
+    ✓ PASS are_equal("workflows/shared/artifacts/schemas/brief.schema.json", "workflows/shared/artifacts/schemas/brief.schema.json")
+  ✓ 1 passed, 0 failed, 0 incomplete
+test RadahnAssessSpec
+  describe attach_returns_the_annotated_plan_without_touching_the_caller_copy
+    ✓ PASS is_true(true)
+    ✓ PASS is_true(true)
+    ✓ PASS are_equal("timeout", "timeout")
+    ✓ PASS is_true(true)
+  ✓ 4 passed, 0 failed, 0 incomplete
+  describe plan_view_drops_internal_annotations_and_defaults_missing_lists
+    ✓ PASS are_equal("x", "x")
+    ✓ PASS are_equal(1, 1)
+    ✓ PASS are_equal(0, 0)
+    ✓ PASS is_true(true)
+    ✓ PASS is_true(true)
+    ✓ PASS is_true(true)
+  ✓ 6 passed, 0 failed, 0 incomplete
+test RadahnModelSpec
+  describe a_valid_yaml_has_no_warnings
+    ✓ PASS are_equal(0, 0)
+    ✓ PASS is_true(true)
+  ✓ 2 passed, 0 failed, 0 incomplete
+  describe not_applicable_or_empty_yaml_is_not_applicable
+    ✓ PASS is_true(true)
+    ✓ PASS is_true(true)
+    ✓ PASS is_true(true)
+    ✓ PASS are_equal("", "")
+    ✓ PASS is_true(true)
+  ✓ 5 passed, 0 failed, 0 incomplete
+  describe unknown_skills_tabs_and_literal_secrets_are_flagged
+    ✓ PASS is_true(true)
+    ✓ PASS is_true(true)
+    ✓ PASS is_true(true)
+    ✓ PASS is_true(true)
+    ✓ PASS is_true(true)
+  ✓ 5 passed, 0 failed, 0 incomplete
+  describe badge_and_section_render_for_applicable_plans
+    ✓ PASS is_true(true)
+    ✓ PASS is_true(true)
+    ✓ PASS is_true(true)
+    ✓ PASS is_true(true)
+    ✓ PASS is_true(true)
+  ✓ 5 passed, 0 failed, 0 incomplete
+  describe a_failed_assessment_is_reported_and_check_assessment_wraps_the_object
+    ✓ PASS is_true(true)
+    ✓ PASS is_true(true)
+    ✓ PASS are_equal(0, 0)
+    ✓ PASS is_true(true)
+  ✓ 4 passed, 0 failed, 0 incomplete
+test TelemetrySpec
+  describe event_reports_the_step_outcome
+    ✓ PASS are_equal("Generate: 2/5", "Generate: 2/5")
+    ✓ PASS are_equal(3, 3)
+    ✓ PASS are_equal("Success", "Success")
+    ✓ PASS are_equal("Fail", "Fail")
+  ✓ 4 passed, 0 failed, 0 incomplete
+test LiteralBlocksSpec
+  describe extract_returns_every_marked_block_in_order
+    ✓ PASS are_equal("## A\n\n- um\n\n## B", "## A\n\n- um\n\n## B")
+  ✓ 1 passed, 0 failed, 0 incomplete
+  describe extract_is_empty_without_markers_and_ignores_an_unclosed_one
+    ✓ PASS are_equal("", "")
+    ✓ PASS are_equal("", "")
+  ✓ 2 passed, 0 failed, 0 incomplete
+test RawExtractSpec
+  describe reads_each_new_plain_text_extension_directly
+    ✓ PASS are_equal("conteudo de .json", "conteudo de .json")
+    ✓ PASS are_equal("conteudo de .yml", "conteudo de .yml")
+    ✓ PASS are_equal("conteudo de .yaml", "conteudo de .yaml")
+    ✓ PASS are_equal("conteudo de .sql", "conteudo de .sql")
+    ✓ PASS are_equal("conteudo de .feature", "conteudo de .feature")
+    ✓ PASS are_equal("conteudo de .py", "conteudo de .py")
+    ✓ PASS are_equal("conteudo de .cs", "conteudo de .cs")
+    ✓ PASS are_equal("conteudo de .ts", "conteudo de .ts")
+  ✓ 8 passed, 0 failed, 0 incomplete
+  describe fails_clearly_for_an_extension_still_out_of_scope
+    ✓ PASS is_true(true)
+    ✓ PASS is_true(true)
+  ✓ 2 passed, 0 failed, 0 incomplete
+test RepoSnapshotSpec
+  describe accepts_only_absolute_paths
+    ✓ PASS is_true(true)
+    ✓ PASS is_true(true)
+    ✓ PASS is_true(true)
+    ✓ PASS is_false(false)
+    ✓ PASS is_false(false)
+    ✓ PASS is_false(false)
+  ✓ 6 passed, 0 failed, 0 incomplete
+  describe safe_name_keeps_a_readable_filename
+    ✓ PASS are_equal("checkout-api", "checkout-api")
+    ✓ PASS are_equal("etc", "etc")
+    ✓ PASS are_equal("a-b-c", "a-b-c")
+    ✓ PASS are_equal("repositorio", "repositorio")
+  ✓ 4 passed, 0 failed, 0 incomplete
+  describe secret_files_are_recognized_by_name
+    ✓ PASS is_true(true)
+    ✓ PASS is_true(true)
+    ✓ PASS is_true(true)
+    ✓ PASS is_true(true)
+    ✓ PASS is_true(true)
+    ✓ PASS is_true(true)
+    ✓ PASS is_true(true)
+    ✓ PASS is_true(true)
+    ✓ PASS is_true(true)
+    ✓ PASS is_true(true)
+    ✓ PASS is_true(true)
+  ✓ 11 passed, 0 failed, 0 incomplete
+  describe redact_drops_only_lines_that_carry_a_secret_value
+    ✓ PASS is_true(true)
+    ✓ PASS is_false(false)
+    ✓ PASS is_false(false)
+    ✓ PASS is_true(true)
+    ✓ PASS is_true(true)
+    ✓ PASS is_false(false)
+  ✓ 6 passed, 0 failed, 0 incomplete
+  describe public_url_drops_credentials_from_the_remote
+    ✓ PASS are_equal("https://github.com/org/repo.git", "https://github.com/org/repo.git")
+    ✓ PASS are_equal("https://gitlab.com/g/s/r", "https://gitlab.com/g/s/r")
+    ✓ PASS are_equal("https://github.com/org/repo", "https://github.com/org/repo")
+    ✓ PASS are_equal("git@github.com:org/repo.git", "git@github.com:org/repo.git")
+  ✓ 4 passed, 0 failed, 0 incomplete
+  describe languages_are_counted_and_sorted_ignoring_vendored_code
+    ✓ PASS are_equal("Go", "Go")
+    ✓ PASS are_equal(3, 3)
+    ✓ PASS is_false(false)
+    ✓ PASS is_true(true)
+  ✓ 4 passed, 0 failed, 0 incomplete
+  describe tree_counts_files_per_folder_and_lists_root_files
+    ✓ PASS is_true(true)
+    ✓ PASS is_true(true)
+    ✓ PASS is_true(true)
+    ✓ PASS is_true(true)
+    ✓ PASS is_false(false)
+  ✓ 5 passed, 0 failed, 0 incomplete
+  describe tree_hides_vendored_subfolders_and_caps_its_length
+    ✓ PASS is_true(true)
+    ✓ PASS is_false(false)
+    ✓ PASS is_true(true)
+  ✓ 3 passed, 0 failed, 0 incomplete
+  describe manifests_rules_and_entrypoints_are_classified
+    ✓ PASS is_true(true)
+    ✓ PASS is_true(true)
+    ✓ PASS is_true(true)
+    ✓ PASS is_false(false)
+    ✓ PASS is_true(true)
+    ✓ PASS is_true(true)
+    ✓ PASS is_true(true)
+    ✓ PASS is_false(false)
+    ✓ PASS is_true(true)
+  ✓ 9 passed, 0 failed, 0 incomplete
+  describe write_rejects_a_relative_path_before_touching_anything
+    ✓ PASS is_true(true)
+    ✓ PASS is_false(false)
+  ✓ 2 passed, 0 failed, 0 incomplete
+  describe write_snapshots_a_real_git_repo_into_raw
+    ✓ PASS are_equal("fixture-repo", "fixture-repo")
+    ✓ PASS are_equal(3, 3)
+    ✓ PASS are_equal("fixture-repo — estrutura.md", "fixture-repo — estrutura.md")
+    ✓ PASS is_true(true)
+    ✓ PASS is_true(true)
+    ✓ PASS is_false(false)
+    ✓ PASS is_true(true)
+    ✓ PASS is_true(true)
+    ✓ PASS is_true(true)
+    ✓ PASS is_true(true)
+    ✓ PASS is_true(true)
+    ✓ PASS is_false(false)
+    ✓ PASS is_true(true)
+    ✓ PASS is_true(true)
+    ✓ PASS is_true(true)
+    ✓ PASS is_true(true)
+    ✓ PASS is_true(true)
+    ✓ PASS is_true(true)
+    ✓ PASS is_false(false)
+    ✓ PASS is_false(false)
+    ✓ PASS are_equal("fixture-repo — estrutura (2).md", "fixture-repo — estrutura (2).md")
+  ✓ 21 passed, 0 failed, 0 incomplete
+test WikiAlertsSpec
+  describe strip_removes_the_trailing_alert_block
+    ✓ PASS are_equal("# Plataforma\n\n## Fatos (2026-01-01)\n\n- deve ser mobile\n\n", "# Plataforma\n\n## Fatos (2026-01-01)\n\n- deve ser mobile\n\n")
+  ✓ 1 passed, 0 failed, 0 incomplete
+  describe strip_also_handles_a_page_that_ends_with_a_single_newline
+    ✓ PASS are_equal("# A\n\ntexto\n\n", "# A\n\ntexto\n\n")
+  ✓ 1 passed, 0 failed, 0 incomplete
+  describe strip_leaves_a_page_without_alerts_untouched
+    ✓ PASS are_equal("# A\n\n- x\n\n", "# A\n\n- x\n\n")
+  ✓ 1 passed, 0 failed, 0 incomplete
+  describe insert_keeps_the_alert_block_at_the_end
+    ✓ PASS are_equal("# A\n\n## Fatos (2026-01-01)\n\n- velho\n\n## Fatos (2026-02-01)\n\n- novo\n\n## Alertas da revisão\n\n- Contradição com sources/b: x\n", "# A\n\n## Fatos (2026-01-01)\n\n- velho\n\n## Fatos (2026-02-01)\n\n- novo\n\n## Alertas da revisão\n\n- Contradição com sources/b: x\n")
+  ✓ 1 passed, 0 failed, 0 incomplete
+  describe insert_appends_to_a_page_without_alerts
+    ✓ PASS are_equal("# A\n\n- x\n\n", "# A\n\n- x\n\n")
+  ✓ 1 passed, 0 failed, 0 incomplete
+  describe is_resolved_tells_superseded_lines_from_pending_ones
+    ✓ PASS is_true(true)
+    ✓ PASS is_false(false)
+    ✓ PASS is_false(false)
+  ✓ 3 passed, 0 failed, 0 incomplete
+  describe block_renders_one_bullet_per_line
+    ✓ PASS are_equal("## Alertas da revisão\n\n- a\n- b\n", "## Alertas da revisão\n\n- a\n- b\n")
+  ✓ 1 passed, 0 failed, 0 incomplete
+  describe squash_collapses_whitespace
+    ✓ PASS are_equal("a b c d", "a b c d")
+  ✓ 1 passed, 0 failed, 0 incomplete
+test WikiHtmlExportSpec
+  describe strip_leading_title_removes_the_opening_heading_that_matches_the_title
+    ✓ PASS are_equal("Resumo aqui.", "Resumo aqui.")
+  ✓ 1 passed, 0 failed, 0 incomplete
+  describe strip_leading_title_leaves_content_untouched_when_it_does_not_open_with_the_title
+    ✓ PASS are_equal("## Fatos (2026-01-01)\n\n- fato", "## Fatos (2026-01-01)\n\n- fato")
+  ✓ 1 passed, 0 failed, 0 incomplete
+  describe md_to_html_renders_heading_paragraph_and_list_blocks
+    ✓ PASS are_equal("<h1>Título</h1>\n<p>Um resumo.</p>\n<h2>Fatos (2026-01-01)</h2>\n<ul><li>fato um</li><li>fato dois</li></ul>", "<h1>Título</h1>\n<p>Um resumo.</p>\n<h2>Fatos (2026-01-01)</h2>\n<ul><li>fato um</li><li>fato dois</li></ul>")
+  ✓ 1 passed, 0 failed, 0 incomplete
+  describe md_to_html_keeps_a_fenced_code_block_with_a_blank_line_intact
+    ✓ PASS are_equal("<p>Resumo.</p>\n<h2>Trechos de código</h2>\n<p>Valida o CPF.</p>\n<pre><code class=\"language-python\">def valida(cpf):\n\n    return len(cpf) == 11 and &#34;&lt;&#34; not in cpf</code></pre>", "<p>Resumo.</p>\n<h2>Trechos de código</h2>\n<p>Valida o CPF.</p>\n<pre><code class=\"language-python\">def valida(cpf):\n\n    return len(cpf) == 11 and &#34;&lt;&#34; not in cpf</code></pre>")
+  ✓ 1 passed, 0 failed, 0 incomplete
+  describe md_to_html_closes_a_longer_fence_only_on_the_same_fence
+    ✓ PASS are_equal("<pre><code>a ``` b</code></pre>\n<p>depois</p>", "<pre><code>a ``` b</code></pre>\n<p>depois</p>")
+  ✓ 1 passed, 0 failed, 0 incomplete
+  describe md_to_html_escapes_html_special_characters
+    ✓ PASS is_true(true)
+    ✓ PASS is_true(true)
+  ✓ 2 passed, 0 failed, 0 incomplete
+  describe render_index_section_lists_entries_with_links
+    ✓ PASS is_true(true)
+    ✓ PASS is_true(true)
+    ✓ PASS is_true(true)
+  ✓ 3 passed, 0 failed, 0 incomplete
+  describe render_index_section_shows_the_natureza_badge_only_when_the_entry_has_one
+    ✓ PASS is_true(true)
+    ✓ PASS is_true(true)
+  ✓ 2 passed, 0 failed, 0 incomplete
+  describe search_index_carries_ranking_signals
+    ✓ PASS are_equal(0, 0)
+    ✓ PASS are_equal(1, 1)
+    ✓ PASS are_equal(2, 2)
+    ✓ PASS are_equal("2026-03-04", "2026-03-04")
+    ✓ PASS are_equal(1, 1)
+    ✓ PASS are_equal(1, 1)
+    ✓ PASS are_equal("", "")
+  ✓ 7 passed, 0 failed, 0 incomplete
+  describe build_search_entries_flattens_every_category
+    ✓ PASS are_equal(2, 2)
+    ✓ PASS are_equal("Fontes", "Fontes")
+    ✓ PASS are_equal("Entidades", "Entidades")
+  ✓ 3 passed, 0 failed, 0 incomplete
+  describe render_index_section_flags_entries_that_have_alerts
+    ✓ PASS is_true(true)
+    ✓ PASS are_equal("1 alerta", "1 alerta")
+  ✓ 2 passed, 0 failed, 0 incomplete
+  describe alert_lines_reads_the_bullets_of_the_trailing_alert_block
+    ✓ PASS are_equal(["um","dois"], ["um","dois"])
+    ✓ PASS are_equal([], [])
+  ✓ 2 passed, 0 failed, 0 incomplete
+  describe link_word_links_known_page_refs_and_keeps_trailing_punctuation
+    ✓ PASS are_equal("<a href=\"../sources/ata.html\">Ata &lt;1&gt;</a>:", "<a href=\"../sources/ata.html\">Ata &lt;1&gt;</a>:")
+    ✓ PASS are_equal("sources/outra", "sources/outra")
+    ✓ PASS are_equal("texto", "texto")
+  ✓ 3 passed, 0 failed, 0 incomplete
+  describe render_alert_styles_each_kind_and_splits_the_quote
+    ✓ PASS is_true(true)
+    ✓ PASS is_true(true)
+    ✓ PASS is_true(true)
+    ✓ PASS is_true(true)
+    ✓ PASS is_false(false)
+    ✓ PASS is_true(true)
+    ✓ PASS is_true(true)
+  ✓ 7 passed, 0 failed, 0 incomplete
+  describe render_alerts_shows_superseded_lines_apart_from_pending_ones
+    ✓ PASS is_true(true)
+    ✓ PASS is_false(false)
+    ✓ PASS are_equal("", "")
+  ✓ 3 passed, 0 failed, 0 incomplete
+  describe related_finds_mentions_in_both_directions
+    ✓ PASS are_equal(1, 1)
+    ✓ PASS are_equal("aplicativo-mobile", "aplicativo-mobile")
+    ✓ PASS are_equal(1, 1)
+  ✓ 3 passed, 0 failed, 0 incomplete
+  describe plain_text_drops_headings_and_list_markers
+    ✓ PASS are_equal("Exige trilha · Relatório mensal · Parágrafo final", "Exige trilha · Relatório mensal · Parágrafo final")
+  ✓ 1 passed, 0 failed, 0 incomplete
+test WikiIndexSpec
+  describe render_section_lists_entries_alphabetically_pre_sorted
+    ✓ PASS are_equal("## Fontes\n\n- [Ata](sources/a.md) — resumo a\n- [Benchmark](sources/b.md) — resumo b\n\n", "## Fontes\n\n- [Ata](sources/a.md) — resumo a\n- [Benchmark](sources/b.md) — resumo b\n\n")
+  ✓ 1 passed, 0 failed, 0 incomplete
+  describe render_section_of_empty_list_is_empty_string
+    ✓ PASS are_equal("", "")
+  ✓ 1 passed, 0 failed, 0 incomplete
+  describe render_section_shows_the_natureza_badge_only_when_the_entry_has_one
+    ✓ PASS are_equal("## Fontes\n\n- [Ata](sources/a.md) `[sistema atual]` — resumo a\n- [Benchmark](sources/b.md) — resumo b\n\n", "## Fontes\n\n- [Ata](sources/a.md) `[sistema atual]` — resumo a\n- [Benchmark](sources/b.md) — resumo b\n\n")
+  ✓ 1 passed, 0 failed, 0 incomplete
+  describe merge_aliases_drops_repeats_and_the_title_ignoring_case_and_accents
+    ✓ PASS are_equal(["LGPD","Conformidade"], ["LGPD","Conformidade"])
+  ✓ 1 passed, 0 failed, 0 incomplete
+  describe catalog_lists_titles_with_their_aliases
+    ✓ PASS are_equal("(nenhuma página ainda — todas as entidades e conceitos desta fonte são novos)", "(nenhuma página ainda — todas as entidades e conceitos desta fonte são novos)")
+    ✓ PASS are_equal("### Conceitos\n\n- Compliance regulatório (também: Conformidade)\n\n", "### Conceitos\n\n- Compliance regulatório (também: Conformidade)\n\n")
+  ✓ 2 passed, 0 failed, 0 incomplete
+  describe canonical_title_matches_an_existing_title_or_alias
+    ✓ PASS are_equal("Compliance regulatório", "Compliance regulatório")
+    ✓ PASS are_equal("Compliance regulatório", "Compliance regulatório")
+    ✓ PASS are_equal("Observabilidade", "Observabilidade")
+    ✓ PASS are_equal("Conformidade regulatória", "Conformidade regulatória")
+  ✓ 4 passed, 0 failed, 0 incomplete
+  describe upsert_keeps_the_first_summary_and_accumulates_aliases
+    ✓ PASS are_equal("primeiro", "primeiro")
+    ✓ PASS are_equal(["Conheça seu cliente","Know your customer"], ["Conheça seu cliente","Know your customer"])
+  ✓ 2 passed, 0 failed, 0 incomplete
+test WikiLintSpec
+  describe normalize_ref_accepts_the_shapes_a_llm_tends_to_emit
+    ✓ PASS are_equal("entities/a", "entities/a")
+    ✓ PASS are_equal("entities/a", "entities/a")
+    ✓ PASS are_equal("entities/a", "entities/a")
+  ✓ 3 passed, 0 failed, 0 incomplete
+  describe valid_ref_rejects_traversal_and_unknown_folders
+    ✓ PASS is_false(false)
+    ✓ PASS is_false(false)
+    ✓ PASS is_false(false)
+  ✓ 3 passed, 0 failed, 0 incomplete
+  describe a_newer_source_that_settles_a_contradiction_closes_it
+    ✓ PASS are_equal(0, 0)
+    ✓ PASS are_equal(1, 1)
+    ✓ PASS are_equal(["sources/ata-3"], ["sources/ata-3"])
+    ✓ PASS are_equal(0, 0)
+    ✓ PASS is_true(true)
+    ✓ PASS is_false(false)
+    ✓ PASS is_false(false)
+  ✓ 7 passed, 0 failed, 0 incomplete
+  describe a_contradiction_no_newer_source_settles_stays_pending
+    ✓ PASS are_equal(1, 1)
+    ✓ PASS are_equal(0, 0)
+    ✓ PASS are_equal(1, 1)
+    ✓ PASS is_true(true)
+    ✓ PASS are_equal(1, 1)
+    ✓ PASS are_equal(1, 1)
+    ✓ PASS is_false(false)
+  ✓ 7 passed, 0 failed, 0 incomplete
+  describe missing_concepts_keep_only_specific_terms_cited_in_two_pages
+    ✓ PASS are_equal(1, 1)
+    ✓ PASS are_equal("Batch diário", "Batch diário")
+    ✓ PASS are_equal(["entities/b3","entities/backoffice"], ["entities/b3","entities/backoffice"])
+    ✓ PASS are_equal(3, 3)
+  ✓ 4 passed, 0 failed, 0 incomplete
+  describe render_report_lists_each_section
+    ✓ PASS is_true(true)
+    ✓ PASS is_true(true)
+    ✓ PASS is_true(true)
+    ✓ PASS is_true(true)
+  ✓ 4 passed, 0 failed, 0 incomplete
+test WikiPagesSpec
+  describe natureza_line_labels_each_known_value
+    ✓ PASS is_true(true)
+    ✓ PASS is_true(true)
+    ✓ PASS is_true(true)
+  ✓ 3 passed, 0 failed, 0 incomplete
+  describe natureza_line_is_empty_for_an_unknown_or_missing_value
+    ✓ PASS are_equal("", "")
+    ✓ PASS are_equal("", "")
+  ✓ 2 passed, 0 failed, 0 incomplete
+  describe snippets_section_writes_each_snippet_as_a_fenced_block_under_its_caption
+    ✓ PASS are_equal("\n## Trechos de código\n\nTabela de pedidos\n\n```sql\nCREATE TABLE pedido (\n  id INT\n);\n```\n", "\n## Trechos de código\n\nTabela de pedidos\n\n```sql\nCREATE TABLE pedido (\n  id INT\n);\n```\n")
+  ✓ 1 passed, 0 failed, 0 incomplete
+  describe snippets_section_is_empty_without_snippets
+    ✓ PASS are_equal("", "")
+  ✓ 1 passed, 0 failed, 0 incomplete
+test WikiActionsSpec
+  describe commit_concept_writes_the_page_and_indexes_it
+    ✓ PASS are_equal("settlement", "settlement")
+    ✓ PASS are_equal(1, 1)
+    ✓ PASS is_true(true)
+    ✓ PASS are_equal(["Liquidação"], ["Liquidação"])
+  ✓ 4 passed, 0 failed, 0 incomplete
+  describe ingest_keeps_the_review_alerts_after_the_new_facts
+    ✓ PASS is_true(true)
+    ✓ PASS is_true(true)
+    ✓ PASS is_true(true)
+  ✓ 3 passed, 0 failed, 0 incomplete
+  describe ingest_keeps_the_code_snippets_literally_in_the_source_page
+    ✓ PASS is_true(true)
+    ✓ PASS is_true(true)
+  ✓ 2 passed, 0 failed, 0 incomplete
+  describe ingest_keeps_the_literal_block_of_the_source_in_the_page
+    ✓ PASS is_true(true)
+    ✓ PASS is_true(true)
+  ✓ 2 passed, 0 failed, 0 incomplete
+  describe ingest_reuses_the_page_of_a_known_alias_and_feeds_the_search_index
+    ✓ PASS are_equal(1, 1)
+    ✓ PASS is_true(true)
+    ✓ PASS is_true(true)
+    ✓ PASS are_equal("Compliance regulatório", "Compliance regulatório")
+    ✓ PASS are_equal(["Conformidade","Regulação CVM"], ["Conformidade","Regulação CVM"])
+    ✓ PASS is_true(true)
+    ✓ PASS are_equal(2, 2)
+  ✓ 7 passed, 0 failed, 0 incomplete
+test WikiSchemaFileSpec
+  describe each_schema_carries_its_json_and_an_absolute_path
+    ✓ PASS are_equal("object", "object")
+    ✓ PASS is_true(true)
+    ✓ PASS is_true(true)
+    ✓ PASS are_equal("object", "object")
+    ✓ PASS is_true(true)
+    ✓ PASS is_true(true)
+    ✓ PASS are_equal("object", "object")
+    ✓ PASS is_true(true)
+    ✓ PASS is_true(true)
+    ✓ PASS are_equal("object", "object")
+    ✓ PASS is_true(true)
+    ✓ PASS is_true(true)
+  ✓ 12 passed, 0 failed, 0 incomplete
+test WikiWorkflowSpec
+  describe rejects_an_unknown_action_before_running
+    ✓ PASS is_true(true)
+  ✓ 1 passed, 0 failed, 0 incomplete
+  describe rejects_an_invalid_project_id_before_touching_anything
+    ✓ PASS is_false(false)
+    ✓ PASS is_true(true)
+  ✓ 2 passed, 0 failed, 0 incomplete
+  describe ingest_rejects_zero_raw_paths_before_reading_anything
+    ✓ PASS is_false(false)
+    ✓ PASS is_true(true)
+  ✓ 2 passed, 0 failed, 0 incomplete
+  describe snapshot_repo_requires_an_absolute_repo_path
+    ✓ PASS is_false(false)
+    ✓ PASS is_true(true)
+    ✓ PASS is_false(false)
+    ✓ PASS is_true(true)
+  ✓ 4 passed, 0 failed, 0 incomplete
+  describe ingest_rejects_more_than_one_raw_path_before_reading_anything
+    ✓ PASS is_false(false)
+    ✓ PASS is_true(true)
+  ✓ 2 passed, 0 failed, 0 incomplete
+  describe ingest_of_a_source_that_does_not_exist_fails_without_calling_the_llm
+    ✓ PASS is_false(false)
+    ✓ PASS is_true(true)
+  ✓ 2 passed, 0 failed, 0 incomplete
+  describe create_concept_rejects_an_empty_title_before_calling_the_llm
+    ✓ PASS is_false(false)
+    ✓ PASS is_true(true)
+  ✓ 2 passed, 0 failed, 0 incomplete
+  describe create_concept_commits_an_approved_draft_without_calling_the_llm
+    ✓ PASS is_true(true)
+    ✓ PASS are_equal("settlement", "settlement")
+    ✓ PASS is_true(true)
+  ✓ 3 passed, 0 failed, 0 incomplete
+  describe create_concept_rejects_an_approved_draft_without_facts
+    ✓ PASS is_false(false)
+    ✓ PASS is_true(true)
+  ✓ 2 passed, 0 failed, 0 incomplete
+  describe query_rejects_an_empty_question_before_calling_the_llm
+    ✓ PASS is_false(false)
+    ✓ PASS is_true(true)
+  ✓ 2 passed, 0 failed, 0 incomplete
+test WorkItemActionsSpec
+  describe create_records_the_continuity_field_when_given
+    ✓ PASS are_equal("Checkout atual — fluxo de pagamento PIX", "Checkout atual — fluxo de pagamento PIX")
+    ✓ PASS are_equal("Checkout atual — fluxo de pagamento PIX", "Checkout atual — fluxo de pagamento PIX")
+  ✓ 2 passed, 0 failed, 0 incomplete
+  describe create_defaults_continuity_to_empty_when_not_given
+    ✓ PASS are_equal("", "")
+  ✓ 1 passed, 0 failed, 0 incomplete
+  describe productivity_sums_llm_time_and_measures_review_cycles
+    ✓ PASS are_equal(70, 70)
+    ✓ PASS are_equal(2, 2)
+    ✓ PASS are_equal(3, 3)
+    ✓ PASS are_equal(2, 2)
+    ✓ PASS are_equal(285, 285)
+    ✓ PASS are_equal(90, 90)
+    ✓ PASS are_equal(1, 1)
+    ✓ PASS are_equal(1.5, 1.5)
+    ✓ PASS are_equal(1, 1)
+    ✓ PASS are_equal("2026-09-25T11:02:00Z", "2026-09-25T11:02:00Z")
+  ✓ 10 passed, 0 failed, 0 incomplete
+  describe productivity_second_cycle_of_the_same_item_starts_after_the_previous_approval
+    ✓ PASS are_equal(360, 360)
+    ✓ PASS are_equal(2, 2)
+  ✓ 2 passed, 0 failed, 0 incomplete
+  describe productivity_of_an_empty_project_is_all_zeros
+    ✓ PASS are_equal(0, 0)
+    ✓ PASS are_equal(0, 0)
+    ✓ PASS are_equal(0, 0)
+    ✓ PASS are_equal("", "")
+  ✓ 4 passed, 0 failed, 0 incomplete
+  describe maps_opportunities_to_discovery
+    ✓ PASS are_equal("discovery", "discovery")
+  ✓ 1 passed, 0 failed, 0 incomplete
+  describe maps_delivery_item_types_to_delivery
+    ✓ PASS are_equal("delivery", "delivery")
+    ✓ PASS are_equal("delivery", "delivery")
+  ✓ 2 passed, 0 failed, 0 incomplete
+  describe rejects_an_unknown_item_type
+    ✓ PASS is_true(true)
+  ✓ 1 passed, 0 failed, 0 incomplete
+  describe summarizes_usage_by_artifact
+    ✓ PASS are_equal(17, 17)
+    ✓ PASS are_equal(7, 7)
+    ✓ PASS are_equal(2, 2)
+    ✓ PASS are_equal("der", "der")
+  ✓ 4 passed, 0 failed, 0 incomplete
+  describe an_old_line_with_no_cache_or_cost_fields_summarizes_as_zero_not_an_error
+    ✓ PASS are_equal(0, 0)
+    ✓ PASS are_equal(0, 0)
+    ✓ PASS are_equal(0, 0)
+    ✓ PASS are_equal(0, 0)
+    ✓ PASS are_equal(0, 0)
+    ✓ PASS are_equal(0, 0)
+    ✓ PASS are_equal(1, 1)
+    ✓ PASS are_equal("unavailable", "unavailable")
+  ✓ 8 passed, 0 failed, 0 incomplete
+  describe sums_cache_tokens_and_cost_across_lines_that_do_have_them
+    ✓ PASS are_equal(21260, 21260)
+    ✓ PASS are_equal(21260, 21260)
+    ✓ PASS are_equal(0.170302, 0.170302)
+    ✓ PASS are_equal(21260, 21260)
+    ✓ PASS are_equal(21260, 21260)
+    ✓ PASS are_equal(1, 1)
+    ✓ PASS are_equal(1, 1)
+    ✓ PASS are_equal(0, 0)
+    ✓ PASS are_equal("swe-1-6", "swe-1-6")
+  ✓ 9 passed, 0 failed, 0 incomplete
+  describe summarizes_empty_usage
+    ✓ PASS are_equal(0, 0)
+    ✓ PASS are_equal(0, 0)
+    ✓ PASS are_equal(0, 0)
+    ✓ PASS are_equal(0, 0)
+    ✓ PASS are_equal(0, 0)
+    ✓ PASS are_equal([], [])
+  ✓ 6 passed, 0 failed, 0 incomplete
+  describe formats_prompt_log_entries_in_chronological_order
+    ✓ PASS are_equal(2, 2)
+    ✓ PASS are_equal("brief", "brief")
+    ✓ PASS are_equal("Codex", "Codex")
+    ✓ PASS are_equal("unavailable", "unavailable")
+    ✓ PASS are_equal("requisitos", "requisitos")
+    ✓ PASS are_equal("reported", "reported")
+  ✓ 6 passed, 0 failed, 0 incomplete
+  describe an_old_prompt_log_line_with_no_cache_or_cost_fields_formats_as_zero
+    ✓ PASS are_equal(0, 0)
+    ✓ PASS are_equal(0, 0)
+    ✓ PASS are_equal(0, 0)
+    ✓ PASS are_equal("unavailable", "unavailable")
+  ✓ 4 passed, 0 failed, 0 incomplete
+  describe an_old_prompt_log_line_with_no_token_fields_formats_as_zero_and_does_not_fail_the_whole_batch
+    ✓ PASS are_equal(0, 0)
+    ✓ PASS are_equal(0, 0)
+    ✓ PASS are_equal(5, 5)
+    ✓ PASS are_equal(7, 7)
+  ✓ 4 passed, 0 failed, 0 incomplete
+  describe format_prompt_log_of_empty_lines_is_empty
+    ✓ PASS are_equal([], [])
+  ✓ 1 passed, 0 failed, 0 incomplete
+  describe formats_changes_log_entries_in_chronological_order_defaulting_feature_id_to_empty
+    ✓ PASS are_equal(2, 2)
+    ✓ PASS are_equal("historias", "historias")
+    ✓ PASS are_equal("FT001", "FT001")
+    ✓ PASS are_equal("adr", "adr")
+    ✓ PASS are_equal("", "")
+  ✓ 5 passed, 0 failed, 0 incomplete
+  describe format_changes_log_marks_manual_edits_and_defaults_to_pedido
+    ✓ PASS are_equal("edicao_manual", "edicao_manual")
+    ✓ PASS are_equal("pedido", "pedido")
+  ✓ 2 passed, 0 failed, 0 incomplete
+  describe format_changes_log_of_empty_lines_is_empty
+    ✓ PASS are_equal([], [])
+  ✓ 1 passed, 0 failed, 0 incomplete
+test WorkItemWorkflowSpec
+  describe every_action_reaches_its_own_step
+    ✓ PASS is_false(false)
+    ✓ PASS are_equal(true, true)
+    ✓ PASS is_false(false)
+    ✓ PASS are_equal(true, true)
+    ✓ PASS is_false(false)
+    ✓ PASS are_equal(true, true)
+    ✓ PASS is_false(false)
+    ✓ PASS are_equal(true, true)
+    ✓ PASS is_false(false)
+    ✓ PASS are_equal(true, true)
+    ✓ PASS is_false(false)
+    ✓ PASS are_equal(true, true)
+    ✓ PASS is_false(false)
+    ✓ PASS are_equal(true, true)
+    ✓ PASS is_false(false)
+    ✓ PASS are_equal(true, true)
+    ✓ PASS is_false(false)
+    ✓ PASS are_equal(true, true)
+    ✓ PASS is_false(false)
+    ✓ PASS are_equal(true, true)
+  ✓ 20 passed, 0 failed, 0 incomplete
+  describe rejects_an_unknown_action_before_running
+    ✓ PASS is_true(true)
+  ✓ 1 passed, 0 failed, 0 incomplete
+  describe feature_review_rejects_a_malformed_feature_id_before_touching_disk
+    ✓ PASS is_false(false)
+    ✓ PASS is_true(true)
+  ✓ 2 passed, 0 failed, 0 incomplete
+  describe create_rejects_an_empty_name_before_touching_disk
+    ✓ PASS is_false(false)
+    ✓ PASS is_true(true)
+  ✓ 2 passed, 0 failed, 0 incomplete
+  describe create_rejects_an_invalid_item_type_before_touching_disk
+    ✓ PASS is_false(false)
+    ✓ PASS is_true(true)
+  ✓ 2 passed, 0 failed, 0 incomplete
+  describe get_on_a_nonexistent_project_id_fails_without_writing_anything
+    ✓ PASS is_false(false)
+    ✓ PASS is_true(true)
+  ✓ 2 passed, 0 failed, 0 incomplete
+  describe archive_on_a_nonexistent_project_id_fails_without_writing_anything
+    ✓ PASS is_false(false)
+    ✓ PASS is_true(true)
+  ✓ 2 passed, 0 failed, 0 incomplete
+  describe productivity_on_a_project_without_history_returns_zeros_not_a_failure
+    ✓ PASS is_true(true)
+    ✓ PASS are_equal(0, 0)
+    ✓ PASS are_equal(0, 0)
+  ✓ 3 passed, 0 failed, 0 incomplete
+  describe usage_on_a_nonexistent_project_id_returns_a_zeroed_ledger_not_a_failure
+    ✓ PASS is_true(true)
+    ✓ PASS are_equal(0, 0)
+    ✓ PASS are_equal(0, 0)
+    ✓ PASS are_equal([], [])
+  ✓ 4 passed, 0 failed, 0 incomplete
+
+================================================================
+ TEST REPORT
+================================================================
+ ✓ artifact_preview.mh :: ArtifactPreviewSpec — 88 passed, 0 failed, 0 incomplete
+ ✓ artifact_save.mh :: ArtifactEditSpec — 7 passed, 0 failed, 0 incomplete
+ ✓ artifact_save.mh :: ArtifactEditDirectiveSpec — 3 passed, 0 failed, 0 incomplete
+ ✓ artifact_save.mh :: ArtifactSaveSpec — 14 passed, 0 failed, 0 incomplete
+ ✓ delivery.mh :: DeliveryWorkflowSpec — 30 passed, 0 failed, 0 incomplete
+ ✓ discovery.mh :: DiscoveryWorkflowSpec — 31 passed, 0 failed, 0 incomplete
+ ✓ discovery_artifacts.mh :: DiscoveryFeaturesSpec — 11 passed, 0 failed, 0 incomplete
+ ✓ agents.mh :: WriterAdapterSpec — 2 passed, 0 failed, 0 incomplete
+ ✓ structured_output.mh :: StructuredOutputSpec — 4 passed, 0 failed, 0 incomplete
+ ✓ usage.mh :: UsageParserSpec — 46 passed, 0 failed, 0 incomplete
+ ✓ arch_conformance.mh :: ArchConformanceSpec — 26 passed, 0 failed, 0 incomplete
+ ✓ arch_model.mh :: ArchModelDetailSpec — 22 passed, 0 failed, 0 incomplete
+ ✓ arch_model.mh :: ArchModelSpec — 31 passed, 0 failed, 0 incomplete
+ ✓ artifact_checks.mh :: ArtifactChecksSpec — 4 passed, 0 failed, 0 incomplete
+ ✓ artifact_commit.mh :: ArtifactCommitSpec — 22 passed, 0 failed, 0 incomplete
+ ✓ artifact_data.mh :: ArtifactDataSpec — 3 passed, 0 failed, 0 incomplete
+ ✓ artifact_html.mh :: ArtifactHtmlSpec — 12 passed, 0 failed, 0 incomplete
+ ✓ artifact_id.mh :: ArtifactIdSpec — 8 passed, 0 failed, 0 incomplete
+ ✓ artifacts_common.mh :: SchemaFileSpec — 3 passed, 0 failed, 0 incomplete
+ ✓ auto_review.mh :: AutoReviewSpec — 23 passed, 0 failed, 0 incomplete
+ ✓ backlog_rules.mh :: BacklogRulesSpec — 30 passed, 0 failed, 0 incomplete
+ ✓ c4_diagram.mh :: C4DiagramSpec — 65 passed, 0 failed, 0 incomplete
+ ✓ changes_log.mh :: ChangesBlockSpec — 7 passed, 0 failed, 0 incomplete
+ ✓ cite.mh :: CiteSpec — 16 passed, 0 failed, 0 incomplete
+ ✓ common_drafts.mh :: CommonDraftsSpec — 13 passed, 0 failed, 0 incomplete
+ ✓ context.mh :: ContextSpec — 29 passed, 0 failed, 0 incomplete
+ ✓ context_slice.mh :: ContextSliceSpec — 16 passed, 0 failed, 0 incomplete
+ ✓ der_model.mh :: DerModelSpec — 36 passed, 0 failed, 0 incomplete
+ ✓ draft.mh :: DraftsSpec — 9 passed, 0 failed, 0 incomplete
+ ✓ feature_review.mh :: FeatureReviewSpec — 19 passed, 0 failed, 0 incomplete
+ ✓ handoff.mh :: HandoffSpec — 26 passed, 0 failed, 0 incomplete
+ ✓ historia_anexos.mh :: HistoriaAnexosSpec — 6 passed, 0 failed, 0 incomplete
+ ✓ historia_spec.mh :: HistoriaSpecSpec — 54 passed, 0 failed, 0 incomplete
+ ✓ page_shell.mh :: ArtifactMetaSpec — 2 passed, 0 failed, 0 incomplete
+ ✓ plano_model.mh :: PlanoModelSpec — 18 passed, 0 failed, 0 incomplete
+ ✓ readiness.mh :: ReadinessSpec — 15 passed, 0 failed, 0 incomplete
+ ✓ require.mh :: RequireSpec — 3 passed, 0 failed, 0 incomplete
+ ✓ dir_text.mh :: DirTextSpec — 3 passed, 0 failed, 0 incomplete
+ ✓ fixture.mh :: FixtureSpec — 2 passed, 0 failed, 0 incomplete
+ ✓ html.mh :: HtmlSpec — 4 passed, 0 failed, 0 incomplete
+ ✓ markdown.mh :: MarkdownSpec — 5 passed, 0 failed, 0 incomplete
+ ✓ paths.mh :: PathsSpec — 20 passed, 0 failed, 0 incomplete
+ ✓ slug.mh :: SlugSpec — 6 passed, 0 failed, 0 incomplete
+ ✓ workflows_root.mh :: WorkflowsRootSpec — 1 passed, 0 failed, 0 incomplete
+ ✓ radahn_assess.mh :: RadahnAssessSpec — 10 passed, 0 failed, 0 incomplete
+ ✓ radahn_model.mh :: RadahnModelSpec — 21 passed, 0 failed, 0 incomplete
+ ✓ telemetry.mh :: TelemetrySpec — 4 passed, 0 failed, 0 incomplete
+ ✓ literal_blocks.mh :: LiteralBlocksSpec — 3 passed, 0 failed, 0 incomplete
+ ✓ raw_extract.mh :: RawExtractSpec — 10 passed, 0 failed, 0 incomplete
+ ✓ repo_snapshot.mh :: RepoSnapshotSpec — 75 passed, 0 failed, 0 incomplete
+ ✓ wiki_alerts.mh :: WikiAlertsSpec — 10 passed, 0 failed, 0 incomplete
+ ✓ wiki_html_export.mh :: WikiHtmlExportSpec — 43 passed, 0 failed, 0 incomplete
+ ✓ wiki_index.mh :: WikiIndexSpec — 12 passed, 0 failed, 0 incomplete
+ ✓ wiki_lint.mh :: WikiLintSpec — 28 passed, 0 failed, 0 incomplete
+ ✓ wiki_pages.mh :: WikiPagesSpec — 7 passed, 0 failed, 0 incomplete
+ ✓ actions.mh :: WikiActionsSpec — 18 passed, 0 failed, 0 incomplete
+ ✓ schema_files.mh :: WikiSchemaFileSpec — 12 passed, 0 failed, 0 incomplete
+ ✓ wiki.mh :: WikiWorkflowSpec — 22 passed, 0 failed, 0 incomplete
+ ✓ actions.mh :: WorkItemActionsSpec — 73 passed, 0 failed, 0 incomplete
+ ✓ work_item.mh :: WorkItemWorkflowSpec — 38 passed, 0 failed, 0 incomplete
+----------------------------------------------------------------
+ Files       64 (57 with tests)
+ Tests       60
+ Describes   397
+ Assertions  1181
+   ✓ Passed      1181
+   ✗ Failed      0
+   ○ Incomplete  0
+================================================================
+ 1181 passed, 0 failed, 0 incomplete — PASSED in 5.507s
+================================================================

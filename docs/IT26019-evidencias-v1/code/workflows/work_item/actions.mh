@@ -1,0 +1,580 @@
+// Casos de uso determinísticos do ciclo de vida de um work-item. Centraliza
+// política, persistência e leitura; o workflow mantém apenas a orquestração.
+
+import { Paths } from "../shared/core/paths.mh"
+import { Fixture } from "../shared/core/fixture.mh"
+
+export tool WorkItemActions {
+    // continuidade_de: texto livre e opcional descrevendo qual sistema já
+    // existente este work-item evolui (ex.: "Checkout atual — apenas o
+    // fluxo de pagamento PIX"). Nunca obrigatório — uma Oportunidade
+    // genuinamente greenfield deixa vazio. Context.wiki injeta isso como um
+    // bloco citável no início do conteúdo da wiki, então mesmo um Delivery
+    // que nunca gera brief/DER (ambos opcionais) ainda carrega o sinal de
+    // continuidade nos artefatos que sempre leem a wiki (brief, atributos,
+    // requisitos).
+    create(name: string, item_type: string, continuidade_de: string = ""): any -> {
+        if (name.is_empty()) fail("'name' e obrigatorio para action: \"create\"")
+
+        var new_id = uuid.v7()
+        var record = {
+            id: new_id,
+            name,
+            type: item_type,
+            level: self.level_for(item_type),
+            continuidade_de,
+            created_at: time.format(time.now(), "2006-01-02T15:04:05Z07:00"),
+            archived: false
+        }
+
+        self.create_directories(new_id)
+        fs.write(Paths.project_file(new_id), json.stringify(record))
+        return record
+    }
+
+    list(): any[] -> {
+        var projects = []
+        if (!dir.exists("projects")) return projects
+
+        for (var entry in dir.list("projects")) {
+            if (dir.exists(entry)) {
+                var candidate_id = entry.replace("projects/", "")
+                if (Paths.is_valid_id(candidate_id) && fs.exists(Paths.project_file(candidate_id))) {
+                    projects += [json.parse(fs.read(Paths.project_file(candidate_id)))]
+                }
+            }
+        }
+
+        return projects.sort_by((project) -> project.created_at)
+    }
+
+    get(project_id: string): any -> {
+        var path = self.existing_project_file(project_id)
+        return json.parse(fs.read(path))
+    }
+
+    archive(project_id: string): any -> {
+        var path = self.existing_project_file(project_id)
+        var record = json.parse(fs.read(path))
+        record["archived"] = true
+        fs.write(path, json.stringify(record))
+        return record
+    }
+
+    usage(project_id: string): any -> {
+        project_id = Paths.ensure_valid(project_id)
+        var path = Paths.usage_file(project_id)
+        if (!fs.exists(path)) return self.summarize_usage([])
+        return self.summarize_usage(json.parse_lines(fs.read(path)))
+    }
+
+    // prompt_log devolve o prompt final + resposta bruta (e o consumo,
+    // duplicado de usage.jsonl na propria linha — ver Writer.generate em
+    // agents.mh) de cada chamada de LLM deste work-item, em ordem
+    // cronologica (mais antiga primeiro — sem `.reverse()` disponivel pra
+    // array aqui; quem precisar de mais-recente-primeiro inverte do lado de
+    // quem chama) — usado pela tela de Logs do frontend pra mostrar o que
+    // uma geracao especifica realmente fez, nao so o progresso tecnico do
+    // mhl.
+    prompt_log(project_id: string): any[] -> {
+        project_id = Paths.ensure_valid(project_id)
+        var path = Paths.prompt_log_file(project_id)
+        if (!fs.exists(path)) return []
+        return self.format_prompt_log(json.parse_lines(fs.read(path)))
+    }
+
+    // Separado de prompt_log() (I/O) pra ficar testavel sem fs — mesmo
+    // padrao de summarize_usage() acima.
+    //
+    // `tokens_in`/`tokens_out` usam `?? 0` pelo mesmo motivo que os campos de
+    // cache/custo abaixo (linhas gravadas antes de Writer.generate passar a
+    // registra-los nao tem essas chaves) — confirmado em produção: um
+    // work-item real com entradas de antes desse campo existir (ingest da
+    // wiki) tinha 2 linhas sem `tokens_in`, e um `line.value.tokens_in` direto
+    // (sem guarda) derrubava `format_prompt_log` inteiro com "field not
+    // found" pra QUALQUER artefato do work-item, nao so pra essa linha —
+    // a tela de Logs ficava sem nenhuma Chamada de LLM, de nenhum artefato.
+    // changes_log devolve todo pedido de mudança já registrado neste
+    // work-item (ChangesLog, workflows/shared/artifacts/changes_log.mh —
+    // populado por Dispatch/Gate de Discovery e Delivery a cada "Solicitar
+    // mudança"/loop de feedback), em ordem cronológica (mais antigo
+    // primeiro, mesma convenção de prompt_log acima) — usado pela aba
+    // Mudanças do frontend pra mostrar, por artefato, o histórico completo
+    // de diretivas já aplicadas.
+    changes_log(project_id: string): any[] -> {
+        project_id = Paths.ensure_valid(project_id)
+        var path = Paths.changes_file(project_id)
+        if (!fs.exists(path)) return []
+        return self.format_changes_log(json.parse_lines(fs.read(path)))
+    }
+
+    internal format_changes_log(lines: any[]): any[] -> {
+        var entries = lines.map((line) -> {
+            artifact: line.value.artifact,
+            feature_id: line.value?.feature_id ?? "",
+            feedback: line.value.feedback,
+            origem: line.value?.origem ?? "pedido",
+            at: line.ts,
+        })
+        return entries.sort_by((entry) -> entry.at)
+    }
+
+    internal format_prompt_log(lines: any[]): any[] -> {
+        var entries = lines.map((line) -> {
+            artifact: line.value.artifact,
+            backend: line.value.backend,
+            prompt: line.value.prompt,
+            response: line.value.response,
+            tokens_in: line.value?.tokens_in ?? 0,
+            tokens_out: line.value?.tokens_out ?? 0,
+            cache_creation_tokens: line.value?.cache_creation_tokens ?? 0,
+            cache_read_tokens: line.value?.cache_read_tokens ?? 0,
+            cost_usd: line.value?.cost_usd ?? 0,
+            cost_source: self.cost_source(line.value),
+            cost_model: line.value?.cost_model ?? "",
+            cost_pricing_reference: line.value?.cost_pricing_reference ?? "",
+            at: line.ts,
+        })
+        return entries.sort_by((entry) -> entry.at)
+    }
+
+    // Linhas antigas nao tinham cost_source. Um custo positivo nelas so
+    // podia ter vindo do total_cost_usd do Claude; zero era tambem o
+    // placeholder usado por Devin/Codex quando nao havia custo. Preserva a
+    // informacao que de fato existe sem converter esse zero legado em valor
+    // informado.
+    internal cost_source(entry: any): string -> {
+        var source = entry?.cost_source ?? ""
+        if (source == "reported" || source == "estimated" || source == "unavailable") return source
+        return if ((entry?.cost_usd ?? 0) > 0) "reported" else "unavailable"
+    }
+
+    internal level_for(item_type: string): string -> {
+        var valid_types = ["oportunidade", "feature", "historia"]
+        if (!valid_types.contains(item_type)) {
+            fail(
+                "'item_type' invalido: '" + item_type +
+                "' (use oportunidade | feature | historia)"
+            )
+        }
+        return if (item_type == "oportunidade") "discovery" else "delivery"
+    }
+
+    // `?? 0` on cache_creation_tokens/cache_read_tokens/cost_usd: ledger
+    // lines written before Writer.generate started recording them don't
+    // have these keys at all, and a plain `entry.cache_creation_tokens`
+    // throws "field not found" on a genuinely missing key (confirmed —
+    // mhl's field access isn't forgiving the way a dynamic language's is).
+    // `entry?.x` reads it as null instead of throwing when absent, `?? 0`
+    // turns that null into zero. `cost_source`, however, keeps absence
+    // distinguishable from an actual reported cost of US$ 0.
+    internal summarize_usage(lines: any[]): any -> {
+        var total_in = 0
+        var total_out = 0
+        var total_cache_creation = 0
+        var total_cache_read = 0
+        var total_cost_usd = 0
+        var cost_reported_count = 0
+        var cost_estimated_count = 0
+        var cost_unavailable_count = 0
+        var by_artifact = []
+
+        for (var line in lines) {
+            var entry = line.value
+            var cache_creation = entry?.cache_creation_tokens ?? 0
+            var cache_read = entry?.cache_read_tokens ?? 0
+            var cost_usd = entry?.cost_usd ?? 0
+            var cost_source = self.cost_source(entry)
+            total_in = total_in + entry.tokens_in
+            total_out = total_out + entry.tokens_out
+            total_cache_creation = total_cache_creation + cache_creation
+            total_cache_read = total_cache_read + cache_read
+            total_cost_usd = total_cost_usd + cost_usd
+            if (cost_source == "reported") cost_reported_count = cost_reported_count + 1
+            else if (cost_source == "estimated") cost_estimated_count = cost_estimated_count + 1
+            else cost_unavailable_count = cost_unavailable_count + 1
+            by_artifact += [{
+                artifact: entry.artifact,
+                tokens_in: entry.tokens_in,
+                tokens_out: entry.tokens_out,
+                cache_creation_tokens: cache_creation,
+                cache_read_tokens: cache_read,
+                cost_usd,
+                cost_source,
+                cost_model: entry?.cost_model ?? "",
+                cost_pricing_reference: entry?.cost_pricing_reference ?? "",
+                at: line.ts
+            }]
+        }
+
+        return {
+            total_tokens_in: total_in,
+            total_tokens_out: total_out,
+            total_cache_creation_tokens: total_cache_creation,
+            total_cache_read_tokens: total_cache_read,
+            total_cost_usd,
+            cost_reported_count,
+            cost_estimated_count,
+            cost_unavailable_count,
+            by_artifact
+        }
+    }
+
+    // productivity: metricas de produtividade do work-item para o resumo do
+    // projeto — tempo de processamento (soma da duracao de cada chamada de
+    // LLM, usage.jsonl), ciclo e espera por revisao de cada artefato
+    // (activity.jsonl) e pedidos de mudanca (changes.jsonl). Nunca falha por
+    // um arquivo ausente: work-items anteriores a esses registros so mostram
+    // zeros (e `timed_calls` < `total_calls` sinaliza historico parcial).
+    productivity(project_id: string): any -> {
+        project_id = Paths.ensure_valid(project_id)
+        return self.summarize_productivity(
+            self.read_lines(Paths.usage_file(project_id)),
+            self.read_lines(Paths.activity_file(project_id)),
+            self.read_lines(Paths.changes_file(project_id))
+        )
+    }
+
+    internal read_lines(path: string): any[] -> {
+        if (!fs.exists(path)) return []
+        return json.parse_lines(fs.read(path))
+    }
+
+    // Separado de productivity() (I/O) pra ficar testavel sem fs — mesmo
+    // padrao de summarize_usage().
+    //
+    // Um ciclo de revisao de um item (artifact + feature_id) vai do primeiro
+    // "started" depois da aprovacao anterior ate o proximo "approved":
+    //   - ciclo  = approved - started (geracao + revisao + rodadas de ajuste);
+    //   - espera = approved - ultimo "draft_ready" (quanto o rascunho final
+    //              esperou uma pessoa aprovar);
+    //   - rodadas = quantos "draft_ready" o ciclo teve — 1 e "aprovado de
+    //              primeira", mais que 1 houve "Regerar".
+    // Um ciclo sem "started"/"draft_ready" registrados (aprovado antes de
+    // activity.jsonl existir) conta como aprovado mas fica fora das medias.
+    internal summarize_productivity(usage_lines: any[], activity_lines: any[], changes_lines: any[]): any -> {
+        var processing_seconds = 0
+        var timed_calls = 0
+        for (var line in usage_lines) {
+            var duration = line.value?.duration_s
+            if (duration != null) {
+                processing_seconds = processing_seconds + duration
+                timed_calls = timed_calls + 1
+            }
+        }
+
+        var events = activity_lines
+            .map((line) -> {event: line.value.event, key: line.value.artifact + ":" + (line.value?.feature_id ?? ""), at: line.ts})
+            .sort_by((e) -> e.at)
+
+        var approved_count = 0
+        var cycle_total = 0
+        var cycle_samples = 0
+        var review_total = 0
+        var review_samples = 0
+        var first_pass = 0
+        var rounds_total = 0
+        var i = 0
+        for (var e in events) {
+            if (e.event == "approved") {
+                approved_count = approved_count + 1
+                var started_at = ""
+                var last_draft_at = ""
+                var drafts = 0
+                var j = i - 1
+                var scanning = true
+                while (scanning && j >= 0) {
+                    var x = events[j]
+                    if (x.key == e.key) {
+                        if (x.event == "approved") scanning = false
+                        else if (x.event == "draft_ready") {
+                            drafts = drafts + 1
+                            if (last_draft_at.is_empty()) last_draft_at = x.at
+                        } else if (x.event == "started") started_at = x.at
+                    }
+                    j = j - 1
+                }
+                if (!started_at.is_empty()) {
+                    cycle_total = cycle_total + time.diff(e.at, started_at)
+                    cycle_samples = cycle_samples + 1
+                }
+                if (!last_draft_at.is_empty()) {
+                    review_total = review_total + time.diff(e.at, last_draft_at)
+                    review_samples = review_samples + 1
+                    rounds_total = rounds_total + drafts
+                    if (drafts == 1) first_pass = first_pass + 1
+                }
+            }
+            i = i + 1
+        }
+
+        var last_activity_at = ""
+        for (var line in usage_lines + activity_lines + changes_lines) {
+            if (last_activity_at.is_empty() || time.diff(line.ts, last_activity_at) > 0) last_activity_at = line.ts
+        }
+
+        return {
+            processing_seconds,
+            timed_calls,
+            total_calls: usage_lines.size(),
+            approved_count,
+            avg_cycle_seconds: if (cycle_samples > 0) cycle_total / cycle_samples else 0,
+            cycle_samples,
+            avg_review_seconds: if (review_samples > 0) review_total / review_samples else 0,
+            review_samples,
+            avg_rounds: if (review_samples > 0) rounds_total / review_samples else 0,
+            first_pass_count: first_pass,
+            change_requests: changes_lines.size(),
+            last_activity_at,
+        }
+    }
+
+    internal create_directories(project_id: string) -> {
+        dir.create(Paths.root(project_id))
+        dir.create(Paths.raw_dir(project_id))
+        dir.create(Paths.wiki_dir(project_id))
+        dir.create(Paths.artifacts_dir(project_id))
+    }
+
+    internal existing_project_file(project_id: string): string -> {
+        project_id = Paths.ensure_valid(project_id)
+        var path = Paths.project_file(project_id)
+        if (!fs.exists(path)) fail("work-item nao encontrado: '" + project_id + "'")
+        return path
+    }
+}
+
+test WorkItemActionsSpec {
+    describe create_records_the_continuity_field_when_given {
+        var record = WorkItemActions.create("Checkout renovado", "feature", "Checkout atual — fluxo de pagamento PIX")
+        are_equal(record.continuidade_de, "Checkout atual — fluxo de pagamento PIX")
+        are_equal(json.parse(fs.read(Paths.project_file(record.id))).continuidade_de, "Checkout atual — fluxo de pagamento PIX")
+
+        Fixture.drop(record.id)
+    }
+
+    describe create_defaults_continuity_to_empty_when_not_given {
+        var record = WorkItemActions.create("Oportunidade nova", "oportunidade")
+        are_equal(record.continuidade_de, "")
+
+        Fixture.drop(record.id)
+    }
+
+    describe productivity_sums_llm_time_and_measures_review_cycles {
+        var usage = [
+            {value: {artifact: "brief", tokens_in: 1, tokens_out: 1, duration_s: 40}, ts: "2026-09-25T10:00:40Z"},
+            {value: {artifact: "brief", tokens_in: 1, tokens_out: 1, duration_s: 30}, ts: "2026-09-25T10:05:30Z"},
+            {value: {artifact: "ingest:a.md", tokens_in: 1, tokens_out: 1}, ts: "2026-09-25T09:00:00Z"},
+        ]
+        var activity = [
+            // brief: gerado, regerado uma vez, aprovado 2 min depois do 2o rascunho
+            {value: {event: "started", artifact: "brief", feature_id: ""}, ts: "2026-09-25T10:00:00Z"},
+            {value: {event: "draft_ready", artifact: "brief", feature_id: ""}, ts: "2026-09-25T10:00:40Z"},
+            {value: {event: "draft_ready", artifact: "brief", feature_id: ""}, ts: "2026-09-25T10:05:30Z"},
+            {value: {event: "approved", artifact: "brief", feature_id: ""}, ts: "2026-09-25T10:07:30Z"},
+            // historias de FT001: aprovadas de primeira, 1 min de espera
+            {value: {event: "started", artifact: "historias", feature_id: "FT001"}, ts: "2026-09-25T11:00:00Z"},
+            {value: {event: "draft_ready", artifact: "historias", feature_id: "FT001"}, ts: "2026-09-25T11:01:00Z"},
+            {value: {event: "approved", artifact: "historias", feature_id: "FT001"}, ts: "2026-09-25T11:02:00Z"},
+            // historias de FT002: iniciadas e ainda sem aprovacao — fora das medias
+            {value: {event: "started", artifact: "historias", feature_id: "FT002"}, ts: "2026-09-25T11:00:30Z"},
+        ]
+        var changes = [{value: {artifact: "brief", feature_id: "", feedback: "x"}, ts: "2026-09-25T10:04:00Z"}]
+        var p = WorkItemActions.summarize_productivity(usage, activity, changes)
+        are_equal(p.processing_seconds, 70)
+        are_equal(p.timed_calls, 2)
+        are_equal(p.total_calls, 3)
+        are_equal(p.approved_count, 2)
+        // ciclos: brief 450s, FT001 120s
+        are_equal(p.avg_cycle_seconds, 285)
+        // espera: brief 120s, FT001 60s
+        are_equal(p.avg_review_seconds, 90)
+        are_equal(p.first_pass_count, 1)
+        are_equal(p.avg_rounds, 1.5)
+        are_equal(p.change_requests, 1)
+        are_equal(p.last_activity_at, "2026-09-25T11:02:00Z")
+    }
+
+    describe productivity_second_cycle_of_the_same_item_starts_after_the_previous_approval {
+        var activity = [
+            {value: {event: "started", artifact: "adr", feature_id: ""}, ts: "2026-09-25T10:00:00Z"},
+            {value: {event: "draft_ready", artifact: "adr", feature_id: ""}, ts: "2026-09-25T10:01:00Z"},
+            {value: {event: "approved", artifact: "adr", feature_id: ""}, ts: "2026-09-25T10:02:00Z"},
+            {value: {event: "started", artifact: "adr", feature_id: ""}, ts: "2026-09-25T12:00:00Z"},
+            {value: {event: "draft_ready", artifact: "adr", feature_id: ""}, ts: "2026-09-25T12:01:00Z"},
+            {value: {event: "approved", artifact: "adr", feature_id: ""}, ts: "2026-09-25T12:10:00Z"},
+        ]
+        var p = WorkItemActions.summarize_productivity([], activity, [])
+        // 120s e 600s — o segundo ciclo nao herda o "started" das 10h
+        are_equal(p.avg_cycle_seconds, 360)
+        are_equal(p.first_pass_count, 2)
+    }
+
+    describe productivity_of_an_empty_project_is_all_zeros {
+        var p = WorkItemActions.summarize_productivity([], [], [])
+        are_equal(p.processing_seconds, 0)
+        are_equal(p.approved_count, 0)
+        are_equal(p.avg_cycle_seconds, 0)
+        are_equal(p.last_activity_at, "")
+    }
+
+    describe maps_opportunities_to_discovery {
+        are_equal(WorkItemActions.level_for("oportunidade"), "discovery")
+    }
+
+    describe maps_delivery_item_types_to_delivery {
+        are_equal(WorkItemActions.level_for("feature"), "delivery")
+        are_equal(WorkItemActions.level_for("historia"), "delivery")
+    }
+
+    describe rejects_an_unknown_item_type {
+        try {
+            WorkItemActions.level_for("epico")
+            is_true(false)
+        } catch (err) {
+            is_true(true)
+        }
+    }
+
+    // Lines in this exact old shape (no cache_*/cost_usd keys at all) are
+    // real, not a hypothetical — every line written before Writer.generate
+    // started recording those fields looks exactly like this.
+    describe summarizes_usage_by_artifact {
+        var result = WorkItemActions.summarize_usage([
+            {value: {artifact: "brief", tokens_in: 10, tokens_out: 4}, ts: "t1"},
+            {value: {artifact: "der", tokens_in: 7, tokens_out: 3}, ts: "t2"}
+        ])
+        are_equal(result.total_tokens_in, 17)
+        are_equal(result.total_tokens_out, 7)
+        are_equal(result.by_artifact.size(), 2)
+        are_equal(result.by_artifact[1].artifact, "der")
+    }
+
+    describe an_old_line_with_no_cache_or_cost_fields_summarizes_as_zero_not_an_error {
+        var result = WorkItemActions.summarize_usage([
+            {value: {artifact: "brief", tokens_in: 10, tokens_out: 4}, ts: "t1"}
+        ])
+        are_equal(result.total_cache_creation_tokens, 0)
+        are_equal(result.total_cache_read_tokens, 0)
+        are_equal(result.total_cost_usd, 0)
+        are_equal(result.by_artifact[0].cache_creation_tokens, 0)
+        are_equal(result.by_artifact[0].cache_read_tokens, 0)
+        are_equal(result.by_artifact[0].cost_usd, 0)
+        are_equal(result.cost_unavailable_count, 1)
+        are_equal(result.by_artifact[0].cost_source, "unavailable")
+    }
+
+    describe sums_cache_tokens_and_cost_across_lines_that_do_have_them {
+        var result = WorkItemActions.summarize_usage([
+            {value: {
+                artifact: "brief", tokens_in: 2, tokens_out: 4,
+                cache_creation_tokens: 21260, cache_read_tokens: 0,
+                cost_usd: 0.128202, cost_source: "reported"
+            }, ts: "t1"},
+            {value: {
+                artifact: "requisitos", tokens_in: 3, tokens_out: 6,
+                cache_creation_tokens: 0, cache_read_tokens: 21260,
+                cost_usd: 0.0421, cost_source: "estimated",
+                cost_model: "swe-1-6", cost_pricing_reference: "$0.5 / 1M Input"
+            }, ts: "t2"}
+        ])
+        are_equal(result.total_cache_creation_tokens, 21260)
+        are_equal(result.total_cache_read_tokens, 21260)
+        are_equal(result.total_cost_usd, 0.170302)
+        are_equal(result.by_artifact[0].cache_creation_tokens, 21260)
+        are_equal(result.by_artifact[1].cache_read_tokens, 21260)
+        are_equal(result.cost_reported_count, 1)
+        are_equal(result.cost_estimated_count, 1)
+        are_equal(result.cost_unavailable_count, 0)
+        are_equal(result.by_artifact[1].cost_model, "swe-1-6")
+    }
+
+    describe summarizes_empty_usage {
+        var result = WorkItemActions.summarize_usage([])
+        are_equal(result.total_tokens_in, 0)
+        are_equal(result.total_tokens_out, 0)
+        are_equal(result.cost_reported_count, 0)
+        are_equal(result.cost_estimated_count, 0)
+        are_equal(result.cost_unavailable_count, 0)
+        are_equal(result.by_artifact, [])
+    }
+
+    describe formats_prompt_log_entries_in_chronological_order {
+        var result = WorkItemActions.format_prompt_log([
+            {value: {
+                artifact: "requisitos", backend: "Claude", prompt: "gere os requisitos", response: "{...}",
+                tokens_in: 7, tokens_out: 3, cache_creation_tokens: 21260, cache_read_tokens: 0,
+                cost_usd: 0.12, cost_source: "reported"
+            }, ts: "2026-01-01T11:00:00Z"},
+            {value: {
+                artifact: "brief", backend: "Codex", prompt: "gere o brief", response: "{...}",
+                tokens_in: 10, tokens_out: 4, cache_creation_tokens: 0, cache_read_tokens: 0, cost_usd: 0
+            }, ts: "2026-01-01T10:00:00Z"}
+        ])
+        are_equal(result.size(), 2)
+        are_equal(result[0].artifact, "brief")
+        are_equal(result[0].backend, "Codex")
+        are_equal(result[0].cost_source, "unavailable")
+        are_equal(result[1].artifact, "requisitos")
+        are_equal(result[1].cost_source, "reported")
+    }
+
+    // Mesma logica de an_old_line_with_no_cache_or_cost_fields_summarizes_as_zero_not_an_error
+    // acima, aplicada a format_prompt_log.
+    describe an_old_prompt_log_line_with_no_cache_or_cost_fields_formats_as_zero {
+        var result = WorkItemActions.format_prompt_log([
+            {value: {artifact: "brief", backend: "Codex", prompt: "p", response: "r", tokens_in: 1, tokens_out: 2}, ts: "t1"}
+        ])
+        are_equal(result[0].cache_creation_tokens, 0)
+        are_equal(result[0].cache_read_tokens, 0)
+        are_equal(result[0].cost_usd, 0)
+        are_equal(result[0].cost_source, "unavailable")
+    }
+
+    // Reproduz um caso real: um work-item com linhas do ingest da wiki
+    // gravadas antes de Writer.generate passar a registrar tokens_in/
+    // tokens_out em toda entrada tinha 2 dessas — e um acesso direto (sem
+    // `?? 0`) a esses dois campos derrubava format_prompt_log inteiro com
+    // "field not found" pra QUALQUER linha da lista, nao so pra essa,
+    // esvaziando a tela de Logs por completo (nenhuma Chamada de LLM
+    // aparecia, de nenhum artefato).
+    describe an_old_prompt_log_line_with_no_token_fields_formats_as_zero_and_does_not_fail_the_whole_batch {
+        var result = WorkItemActions.format_prompt_log([
+            {value: {artifact: "ingest:notas.md", backend: "Codex", prompt: "p", response: "r"}, ts: "t1"},
+            {value: {artifact: "brief", backend: "Codex", prompt: "p", response: "r", tokens_in: 5, tokens_out: 7}, ts: "t2"}
+        ])
+        are_equal(result[0].tokens_in, 0)
+        are_equal(result[0].tokens_out, 0)
+        are_equal(result[1].tokens_in, 5)
+        are_equal(result[1].tokens_out, 7)
+    }
+
+    describe format_prompt_log_of_empty_lines_is_empty {
+        are_equal(WorkItemActions.format_prompt_log([]), [])
+    }
+
+    describe formats_changes_log_entries_in_chronological_order_defaulting_feature_id_to_empty {
+        var result = WorkItemActions.format_changes_log([
+            {value: {artifact: "adr", feedback: "mude EKS para ECS"}, ts: "2026-01-01T11:00:00Z"},
+            {value: {artifact: "historias", feature_id: "FT001", feedback: "adicione cenario de erro"}, ts: "2026-01-01T10:00:00Z"}
+        ])
+        are_equal(result.size(), 2)
+        are_equal(result[0].artifact, "historias")
+        are_equal(result[0].feature_id, "FT001")
+        are_equal(result[1].artifact, "adr")
+        are_equal(result[1].feature_id, "")
+    }
+
+    describe format_changes_log_marks_manual_edits_and_defaults_to_pedido {
+        var result = WorkItemActions.format_changes_log([
+            {value: {artifact: "brief", feedback: "Edição manual", origem: "edicao_manual"}, ts: "2026-01-01T11:00:00Z"},
+            {value: {artifact: "adr", feedback: "mude EKS para ECS"}, ts: "2026-01-01T12:00:00Z"}
+        ])
+        are_equal(result[0].origem, "edicao_manual")
+        are_equal(result[1].origem, "pedido")
+    }
+
+    describe format_changes_log_of_empty_lines_is_empty {
+        are_equal(WorkItemActions.format_changes_log([]), [])
+    }
+}
