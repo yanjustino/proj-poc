@@ -87,6 +87,8 @@ export function RetryStartup():Promise<string>;
 
 export function SelectRawFiles():Promise<string>;
 
+export function SelectRawFilesFiltered(arg1:string,arg2:string,arg3:string):Promise<string>;
+
 export function SetAgent(arg1:string):Promise<string>;
 
 export function SetClaudeModel(arg1:string):Promise<string>;

@@ -1,6 +1,7 @@
 import {
   listProjectDir,
   selectRawFiles,
+  selectRawFilesFiltered,
   addRawFile,
   watchExistingRun,
   isFullyTerminal,
@@ -9,6 +10,8 @@ import {
 } from '../api.js';
 import { openAddTextSourceModal } from './add-text-source-modal.js';
 import { openAddUrlSourceModal } from './add-url-source-modal.js';
+import { openAddSourcePicker, kindCardHtml } from './add-source-picker.js';
+import { SOURCE_KINDS, kindOfFile, filePattern } from './source-kinds.js';
 import { createRunTracker } from '../run-tracker.js';
 import { icon } from '../icons.js';
 import { getActiveRun, clearActiveRun } from '../active-runs.js';
@@ -17,7 +20,8 @@ import { formatRelativeTime } from '../time-format.js';
 
 // renderFontesTab owns the "upload de arquivos-base → Wiki ingest" flow
 // (§3.2 of the plan). Uploading and ingesting are deliberately separate
-// steps here: "+ Adicionar fontes" only copies the picked files into raw/
+// steps here: "+ Adicionar fonte" (a picker of source kinds, see
+// add-source-picker.js) only copies/writes the source into raw/
 // (fast, no LLM call), and ingest — either "Ingerir pendentes" for the
 // whole batch or a row's own "Ingerir" button for just that one — is a
 // distinct action the user triggers afterwards. Wiki only accepts one
@@ -53,9 +57,7 @@ export async function renderFontesTab(container, project, { onChanged }) {
       </div>
       <div class="collection-map-actions">
         <button class="button tertiary small" data-ingest-pending disabled>${icon('inbox', 14)} Ingerir pendentes</button>
-        <button class="button secondary small" data-add-url>${icon('link', 14)} Inserir link</button>
-        <button class="button secondary small" data-add-text>${icon('plus', 14)} Inserir texto</button>
-        <button class="button primary small" data-add>${icon('plus', 14)} Adicionar fontes</button>
+        <button class="button primary small" data-add>${icon('plus', 14)} Adicionar fonte</button>
         <div class="view-toggle" data-view-toggle>
           <button class="view-toggle-btn" data-view="cards" title="Ver como cards">${icon('grid', 15)}</button>
           <button class="view-toggle-btn" data-view="table" title="Ver como tabela">${icon('list', 15)}</button>
@@ -72,8 +74,6 @@ export async function renderFontesTab(container, project, { onChanged }) {
 
   const sourcesEl = container.querySelector('[data-sources]');
   const addButton = container.querySelector('[data-add]');
-  const addTextButton = container.querySelector('[data-add-text]');
-  const addUrlButton = container.querySelector('[data-add-url]');
   const ingestPendingButton = container.querySelector('[data-ingest-pending]');
   const sourceCountEl = container.querySelector('[data-source-count]');
   const filterButtons = [...container.querySelectorAll('[data-source-filter]')];
@@ -202,7 +202,7 @@ export async function renderFontesTab(container, project, { onChanged }) {
     sourceCountEl.textContent = `${rawNames.length} ${rawNames.length === 1 ? 'arquivo' : 'arquivos'}`;
     if (rawNames.length === 0) {
       sourcesEl.className = 'list-area';
-      sourcesEl.innerHTML = '<div class="collection-map-empty">Nenhuma fonte enviada ainda.</div>';
+      renderOnboarding();
     } else if (visibleNames.length === 0) {
       sourcesEl.className = 'list-area';
       sourcesEl.innerHTML = '<div class="collection-map-empty">Nenhuma fonte neste filtro.</div>';
@@ -216,6 +216,25 @@ export async function renderFontesTab(container, project, { onChanged }) {
     ingestPendingButton.innerHTML = pending.length
       ? `${icon('inbox', 14)} Ingerir pendentes (${pending.length})`
       : `${icon('inbox', 14)} Ingerir pendentes`;
+  }
+
+  // renderOnboarding: an empty project shows the source-kind gallery inline
+  // instead of a bare "nenhuma fonte" — picking a card jumps straight to that
+  // kind's tips in the picker.
+  function renderOnboarding() {
+    sourcesEl.className = 'list-area';
+    sourcesEl.innerHTML = `
+      <div class="source-onboarding">
+        <div class="source-onboarding-head">
+          <h3>Comece trazendo o que você já tem</h3>
+          <p>A wiki aprende com as fontes. Quanto mais variadas — código, conversas, documentos —, mais completo fica o contexto para os artefatos.</p>
+        </div>
+        <div class="source-kind-grid">${SOURCE_KINDS.map(kindCardHtml).join('')}</div>
+      </div>
+    `;
+    sourcesEl.querySelectorAll('[data-kind]').forEach((card) => {
+      card.addEventListener('click', () => addSource(card.dataset.kind));
+    });
   }
 
   function renderCards(visibleNames) {
@@ -286,7 +305,7 @@ export async function renderFontesTab(container, project, { onChanged }) {
     return `
       <tr class="data-row static ${failure ? 'failed' : ''}" title="${escapeAttribute(rowTitle)}">
         <td class="data-row-dot"><span class="status-dot ${dot}"></span></td>
-        <td class="data-row-name"><i>${icon('fileText', 14)}</i><span title="${escapeAttribute(name)}">${escapeHtml(name)}</span></td>
+        <td class="data-row-name"><i>${icon(kindOfFile(name)?.icon || 'fileText', 14)}</i><span title="${escapeAttribute(name)}">${escapeHtml(name)}</span></td>
         <td class="data-row-status">${escapeHtml(statusText)}${failure ? `<div class="data-row-error">${escapeHtml(failure.summary)}</div>` : ''}</td>
         <td class="data-row-when">${escapeHtml(when)}</td>
         <td class="data-row-actions">
@@ -299,7 +318,7 @@ export async function renderFontesTab(container, project, { onChanged }) {
   function sourceCardBody(name, status, state, action = '') {
     const extension = name.includes('.') ? name.split('.').pop().toUpperCase() : 'ARQUIVO';
     return `
-      <div class="source-card-kind"><i>${icon('fileText', 15)}</i><span>${escapeHtml(extension)}</span></div>
+      <div class="source-card-kind"><i>${icon(kindOfFile(name)?.icon || 'fileText', 15)}</i><span>${escapeHtml(extension)}</span></div>
       <strong title="${escapeHtml(name)}">${escapeHtml(name)}</strong>
       <p>${state === 'done' ? 'Disponível como contexto na wiki.' : state === 'failed' ? 'A última tentativa de ingestão falhou.' : 'Aguardando processamento para entrar no contexto.'}</p>
       <footer><span class="status-dot ${state}"></span><span>${escapeHtml(status)}</span>${action}</footer>
@@ -335,10 +354,30 @@ export async function renderFontesTab(container, project, { onChanged }) {
     });
   });
 
-  addButton.addEventListener('click', async () => {
+  addButton.addEventListener('click', () => addSource());
+
+  // addSource: picker first (what kind of source?), then that kind's way of
+  // adding it. Every path ends the same way — refresh, notify, and ingest
+  // right away only if a modal's "Registrar e ingerir" asked for it.
+  async function addSource(initialKindId = null) {
+    const choice = await openAddSourcePicker(initialKindId);
+    if (!choice) return;
+    const { kind, action } = choice;
+    if (action === 'paste' || action === 'url') {
+      const result = action === 'url'
+        ? await openAddUrlSourceModal(project)
+        : await openAddTextSourceModal(project, kind.paste);
+      if (!result) return;
+      await refresh();
+      onChanged();
+      if (result.ingest) enqueueIngest(project.id, [result.name]);
+      return;
+    }
     addButton.disabled = true;
     try {
-      const paths = await selectRawFiles();
+      const paths = kind
+        ? await selectRawFilesFiltered(`Selecionar fontes — ${kind.label}`, kind.label, filePattern(kind))
+        : await selectRawFiles();
       for (const sourcePath of paths) {
         try {
           await addRawFile(project.id, sourcePath);
@@ -354,23 +393,7 @@ export async function renderFontesTab(container, project, { onChanged }) {
     } finally {
       addButton.disabled = false;
     }
-  });
-
-  addTextButton.addEventListener('click', async () => {
-    const result = await openAddTextSourceModal(project);
-    if (!result) return;
-    await refresh();
-    onChanged();
-    if (result.ingest) enqueueIngest(project.id, [result.name]);
-  });
-
-  addUrlButton.addEventListener('click', async () => {
-    const result = await openAddUrlSourceModal(project);
-    if (!result) return;
-    await refresh();
-    onChanged();
-    if (result.ingest) enqueueIngest(project.id, [result.name]);
-  });
+  }
 
   ingestPendingButton.addEventListener('click', () => enqueueIngest(project.id, pendingNames()));
 

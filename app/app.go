@@ -1550,6 +1550,32 @@ func (a *App) SelectRawFiles() (string, error) {
 	return string(body), nil
 }
 
+// SelectRawFilesFiltered is SelectRawFiles narrowed to one kind of source
+// (the Fontes tab's "quero inserir um PDF/código/..." cards): pattern is a
+// dialog filter like "*.pdf;*.md", label its display name. The filter only
+// guides the picker — AddRawFile and RawExtract still decide what is accepted.
+func (a *App) SelectRawFilesFiltered(title string, label string, pattern string) (string, error) {
+	if _, err := a.requireBridge(); err != nil {
+		return "", err
+	}
+	options := runtime.OpenDialogOptions{Title: title}
+	if strings.TrimSpace(pattern) != "" {
+		options.Filters = []runtime.FileFilter{{DisplayName: label, Pattern: pattern}}
+	}
+	paths, err := runtime.OpenMultipleFilesDialog(a.ctx, options)
+	if err != nil {
+		return "", fmt.Errorf("select raw files: %w", err)
+	}
+	if paths == nil {
+		paths = []string{}
+	}
+	body, err := json.Marshal(paths)
+	if err != nil {
+		return "", fmt.Errorf("encode selected paths: %w", err)
+	}
+	return string(body), nil
+}
+
 // AddRawFile copies sourcePath into projects/<projectID>/raw/, under its own
 // basename (de-duplicated if a file with that name already exists), and
 // returns the resulting basename — exactly the value a caller should put in

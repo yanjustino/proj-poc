@@ -174,6 +174,10 @@ export function SelectRawFiles() {
   return window['go']['main']['App']['SelectRawFiles']();
 }
 
+export function SelectRawFilesFiltered(arg1, arg2, arg3) {
+  return window['go']['main']['App']['SelectRawFilesFiltered'](arg1, arg2, arg3);
+}
+
 export function SetAgent(arg1) {
   return window['go']['main']['App']['SetAgent'](arg1);
 }

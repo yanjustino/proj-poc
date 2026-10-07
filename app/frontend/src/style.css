@@ -1385,3 +1385,40 @@ button, a, input, select, textarea, label, summary, [role="button"], [contentedi
 /* Zoom level bubble (zoom.js) — shown briefly after Cmd/Ctrl +/-/0. */
 .zoom-indicator { position: fixed; top: 16px; left: 50%; transform: translateX(-50%); z-index: 1000; padding: 6px 14px; border-radius: 999px; background: var(--surface-2); border: 1px solid var(--line); color: var(--ink); font: 600 12px var(--sans); box-shadow: var(--soft-shadow); opacity: 0; pointer-events: none; transition: opacity .15s ease; }
 .zoom-indicator.visible { opacity: 1; }
+
+/* Fontes — source-kind picker (add-source-picker.js) and the empty-state
+   gallery in tab-fontes.js: "quero inserir um PDF/código/..." cards. */
+.modal.modal-picker { width: min(720px, calc(100vw - 32px)); max-height: calc(100vh - 48px); overflow-y: auto; }
+.picker-head { display: flex; align-items: flex-start; justify-content: space-between; gap: 12px; margin-bottom: 16px; }
+.picker-head h2 { margin: 0 0 4px; }
+.picker-head p { margin: 0; color: var(--muted); font-size: 12px; line-height: 1.45; }
+.picker-back { border: 0; background: transparent; color: var(--muted); display: inline-flex; align-items: center; gap: 4px; padding: 4px 0; font-size: 12px; cursor: pointer; }
+.picker-back:hover { color: var(--ink); }
+.picker-back .icon { transform: rotate(180deg); }
+.picker-foot { margin-top: 14px; text-align: center; }
+.picker-link { border: 0; background: transparent; color: var(--muted); display: inline-flex; align-items: center; gap: 6px; font-size: 11px; cursor: pointer; text-decoration: underline; text-underline-offset: 3px; }
+.picker-link:hover { color: var(--ink); }
+
+.source-kind-grid { display: grid; grid-template-columns: repeat(auto-fill, minmax(190px, 1fr)); gap: 10px; }
+.source-kind-card { text-align: left; display: flex; flex-direction: column; gap: 6px; padding: 14px; border: 1px solid var(--line); border-radius: var(--radius-lg); background: var(--surface); color: var(--ink); cursor: pointer; font-family: inherit; transition: transform .16s ease, border-color .16s ease, box-shadow .16s ease; }
+.source-kind-card:hover, .source-kind-card:focus-visible { transform: translateY(-2px); border-color: var(--vermilion); box-shadow: var(--shadow); outline: none; }
+.source-kind-card i { width: 34px; height: 34px; border-radius: var(--radius-md); display: grid; place-items: center; background: rgba(236,112,0,.12); color: var(--vermilion); margin-bottom: 4px; }
+.source-kind-card strong { font-size: 13px; line-height: 1.3; }
+.source-kind-card span { color: var(--muted); font-size: 11px; line-height: 1.4; }
+
+.source-kind-detail section { margin-top: 16px; }
+.source-kind-detail h3 { display: flex; align-items: center; gap: 6px; margin: 0 0 6px; font-size: 11px; text-transform: uppercase; letter-spacing: .06em; color: var(--muted); }
+.source-kind-detail p, .source-kind-detail li { color: var(--ink); font-size: 13px; line-height: 1.5; margin: 0; }
+.source-kind-detail ul { margin: 0; padding-left: 18px; display: grid; gap: 4px; }
+.source-kind-hero { display: flex; align-items: center; gap: 14px; }
+.source-kind-hero i { width: 48px; height: 48px; flex: none; border-radius: var(--radius-lg); display: grid; place-items: center; background: rgba(236,112,0,.12); color: var(--vermilion); }
+.source-kind-hero h2 { margin: 2px 0 0; }
+.source-kind-hero .eyebrow { color: var(--vermilion); font: 700 10px var(--sans); letter-spacing: .14em; text-transform: uppercase; }
+.ext-chips { display: flex; flex-wrap: wrap; gap: 5px; }
+.ext-chips code { padding: 2px 7px; border-radius: 999px; background: var(--surface-3); color: var(--muted); font: 10px var(--mono); }
+
+.source-onboarding { border: 1px dashed var(--line); border-radius: var(--radius-lg); padding: 22px; }
+.source-onboarding-head { margin-bottom: 16px; }
+.source-onboarding-head h3 { margin: 0 0 4px; font-size: 15px; color: var(--ink); }
+.source-onboarding-head p { margin: 0; color: var(--muted); font-size: 12px; line-height: 1.5; max-width: 620px; }
+.modal textarea.mono { font-family: var(--mono); font-size: 12px; }

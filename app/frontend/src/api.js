@@ -220,6 +220,12 @@ export async function selectRawFiles() {
   return parseJSON(await App.SelectRawFiles(), 'SelectRawFiles');
 }
 
+// selectRawFilesFiltered: the same picker narrowed to one kind of source —
+// pattern like "*.pdf;*.md" (see app.go's SelectRawFilesFiltered).
+export async function selectRawFilesFiltered(title, label, pattern) {
+  return parseJSON(await App.SelectRawFilesFiltered(title, label, pattern), 'SelectRawFilesFiltered');
+}
+
 export async function addRawFile(projectId, sourcePath) {
   return App.AddRawFile(projectId, sourcePath);
 }
