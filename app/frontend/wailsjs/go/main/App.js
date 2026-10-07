@@ -26,12 +26,20 @@ export function CancelRun(arg1) {
   return window['go']['main']['App']['CancelRun'](arg1);
 }
 
+export function CloneRepoForSnapshot(arg1, arg2) {
+  return window['go']['main']['App']['CloneRepoForSnapshot'](arg1, arg2);
+}
+
 export function DataDir() {
   return window['go']['main']['App']['DataDir']();
 }
 
 export function DeleteProject(arg1) {
   return window['go']['main']['App']['DeleteProject'](arg1);
+}
+
+export function DiscardClone(arg1) {
+  return window['go']['main']['App']['DiscardClone'](arg1);
 }
 
 export function ExportHandoff(arg1) {
@@ -176,6 +184,10 @@ export function SelectRawFiles() {
 
 export function SelectRawFilesFiltered(arg1, arg2, arg3) {
   return window['go']['main']['App']['SelectRawFilesFiltered'](arg1, arg2, arg3);
+}
+
+export function SelectRepoDir() {
+  return window['go']['main']['App']['SelectRepoDir']();
 }
 
 export function SetAgent(arg1) {

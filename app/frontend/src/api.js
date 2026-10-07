@@ -230,6 +230,39 @@ export async function addRawFile(projectId, sourcePath) {
   return App.AddRawFile(projectId, sourcePath);
 }
 
+// selectRepoDir: native folder picker for a repository source, validated on
+// the Go side (git work tree, outside the app's data — app/repo_source.go).
+// Resolves "" when cancelled.
+export async function selectRepoDir() {
+  return App.SelectRepoDir();
+}
+
+// cloneRepo shallow-clones a repository link (https:// or SSH; private ones
+// through the machine's own git credentials) into a temp folder and resolves
+// its path, for snapshotRepo. Always pair with discardClone — see
+// app/repo_source.go's CloneRepoForSnapshot.
+export async function cloneRepo(link, branch = '') {
+  return App.CloneRepoForSnapshot(link, branch);
+}
+
+export async function discardClone(path) {
+  return App.DiscardClone(path);
+}
+
+// snapshotRepo writes the AS-IS snapshot of a git repository into raw/ (Wiki
+// action snapshot_repo, no LLM — workflows/shared/wiki/repo_snapshot.mh) and
+// resolves {repo, commit, sources}. Never pauses, so callWorkflowOnce (see
+// its comment) — with a longer timeout than its default, since reading a
+// large repository can take a while.
+export async function snapshotRepo(projectId, repoPath) {
+  const vars = await callWorkflowOnce(
+    'Wiki',
+    { project_id: projectId, action: 'snapshot_repo', repo_path: repoPath },
+    { timeoutMs: SNAPSHOT_TIMEOUT_MS },
+  );
+  return vars.wiki_result ?? { sources: [] };
+}
+
 export async function addRawText(projectId, title, content) {
   return App.AddRawText(projectId, title, content);
 }
@@ -539,12 +572,13 @@ export async function deleteProject(projectId) {
 // on every refresh, and one of the two intermittently failed — the cards
 // flipped to "indisponível" with mhl perfectly healthy.
 const CALL_TIMEOUT_MS = 15000;
+const SNAPSHOT_TIMEOUT_MS = 5 * 60 * 1000;
 const POLL_INTERVAL_MS = 150;
 const workflowQueues = new Map(); // workflow -> tail promise of its queue
 
-function callWorkflowOnce(workflow, args) {
+function callWorkflowOnce(workflow, args, { timeoutMs = CALL_TIMEOUT_MS } = {}) {
   const previous = workflowQueues.get(workflow) ?? Promise.resolve();
-  const result = previous.then(() => runWorkflowOnce(workflow, args));
+  const result = previous.then(() => runWorkflowOnce(workflow, args, timeoutMs));
   // Keep the queue alive after a failure — the NEXT call still runs; the
   // caller still gets this call's own outcome through `result`.
   workflowQueues.set(
@@ -557,14 +591,14 @@ function callWorkflowOnce(workflow, args) {
   return result;
 }
 
-async function runWorkflowOnce(workflow, args) {
+async function runWorkflowOnce(workflow, args, timeoutMs) {
   await ensureReady();
   let status = await parseJSON(await App.StartRun(workflow, JSON.stringify(args)), 'StartRun');
-  const deadline = Date.now() + CALL_TIMEOUT_MS;
+  const deadline = Date.now() + timeoutMs;
 
   while (status.state === 'working' || status.state === 'queued') {
     if (Date.now() > deadline) {
-      throw new Error(`run de ${workflow} (${JSON.stringify(args)}) não respondeu em ${CALL_TIMEOUT_MS}ms`);
+      throw new Error(`run de ${workflow} (${JSON.stringify(args)}) não respondeu em ${timeoutMs}ms`);
     }
     await sleep(POLL_INTERVAL_MS);
     status = await parseJSON(await App.GetRunStatus(status.runId), 'GetRunStatus');

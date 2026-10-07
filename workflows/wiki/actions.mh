@@ -19,7 +19,7 @@ export tool WikiActions {
         var source_slug = Slug.from_title(data.source_title)
         // `?? []`: um ingest pausado no Modo Buddy antes de code_snippets
         // existir retoma com o ingest_data antigo.
-        WikiPages.write_source(project_id, source_slug, data.source_title, data.source_summary, data.natureza, data?.code_snippets ?? [])
+        WikiPages.write_source(project_id, source_slug, data.source_title, data.source_summary, data.natureza, data?.code_snippets ?? [], data?.literal ?? "")
         WikiIndex.upsert_source(project_id, {
             slug: source_slug,
             title: data.source_title,
@@ -158,6 +158,25 @@ test WikiActionsSpec {
         })
         is_true(fs.read(Paths.wiki(id, "sources/calculo-de-frete.md")).contains("Regra do frete\n\n```python\n" + code + "\n```"))
         is_true(fs.read(Paths.wiki(id, "html/sources/calculo-de-frete.html")).contains("<pre><code class=\"language-python\">" + code.replace("<", "&lt;") + "</code></pre>"))
+        Fixture.drop(id)
+    }
+
+    // O trecho literal de um retrato de repositorio (LiteralBlocks) entra
+    // intacto na pagina — com a arvore indentada sobrevivendo ao HTML.
+    describe ingest_keeps_the_literal_block_of_the_source_in_the_page {
+        var id = Fixture.project("spec-test-wiki-ingest-literal")
+        dir.create(Paths.wiki(id, "sources"))
+        dir.create(Paths.wiki(id, "entities"))
+        dir.create(Paths.wiki(id, "concepts"))
+        var literal = "## Árvore de pastas\n\n```text\napp/  (3 arquivos)\n  api/  (2 arquivos)\n```"
+        WikiActions.commit_ingest(id, {
+            source_title: "checkout estrutura", source_summary: "Serviço Go com uma API.", natureza: "sistema_atual", index_summary: "estrutura",
+            code_snippets: [], entities: [], concepts: [], literal,
+        })
+        var page = fs.read(Paths.wiki(id, "sources/checkout-estrutura.md"))
+        is_true(page.contains("Serviço Go com uma API.\n\n" + literal))
+        var html_page = fs.read(Paths.wiki(id, "html/sources/checkout-estrutura.html"))
+        is_true(html_page.contains("app/  (3 arquivos)\n  api/  (2 arquivos)"))
         Fixture.drop(id)
     }
 

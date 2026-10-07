@@ -10,6 +10,7 @@ import {
 } from '../api.js';
 import { openAddTextSourceModal } from './add-text-source-modal.js';
 import { openAddUrlSourceModal } from './add-url-source-modal.js';
+import { openAddRepoSourceModal } from './add-repo-source-modal.js';
 import { openAddSourcePicker, kindCardHtml } from './add-source-picker.js';
 import { SOURCE_KINDS, kindOfFile, filePattern } from './source-kinds.js';
 import { createRunTracker } from '../run-tracker.js';
@@ -363,6 +364,14 @@ export async function renderFontesTab(container, project, { onChanged }) {
     const choice = await openAddSourcePicker(initialKindId);
     if (!choice) return;
     const { kind, action } = choice;
+    if (action === 'repo') {
+      const result = await openAddRepoSourceModal(project);
+      if (!result) return;
+      await refresh();
+      onChanged();
+      if (result.ingest && result.names.length) enqueueIngest(project.id, result.names);
+      return;
+    }
     if (action === 'paste' || action === 'url') {
       const result = action === 'url'
         ? await openAddUrlSourceModal(project)

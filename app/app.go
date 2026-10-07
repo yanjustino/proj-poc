@@ -948,6 +948,7 @@ func senpaiBaseDir() (string, error) {
 // shutdown is called when the app is closing. Ends the MCP session and
 // terminates the mhl child process — it must not outlive this app.
 func (a *App) shutdown(ctx context.Context) {
+	discardAllClones()
 	if err := a.bridge().Stop(); err != nil {
 		log.Printf("mhl bridge: shutdown: %v", err)
 	}
@@ -1580,7 +1581,8 @@ func (a *App) SelectRawFilesFiltered(title string, label string, pattern string)
 // basename (de-duplicated if a file with that name already exists), and
 // returns the resulting basename — exactly the value a caller should put in
 // Wiki's `raw_paths: [...]` (Paths.raw only ever concatenates "raw/" + this
-// name; see workflows/shared/core/paths.mh).
+// name; see workflows/shared/core/paths.mh). Office files (.docx/.pptx/.xlsx)
+// are converted to Markdown instead of copied, and saved as "<name>.md".
 func (a *App) AddRawFile(projectID string, sourcePath string) (string, error) {
 	rawDir, err := a.projectRootDir(projectID, "raw", []string{"raw"})
 	if err != nil {
@@ -1594,6 +1596,20 @@ func (a *App) AddRawFile(projectID string, sourcePath string) (string, error) {
 	if base == "." || base == string(filepath.Separator) || base == "" {
 		return "", fmt.Errorf("caminho de origem invalido: %q", sourcePath)
 	}
+	if isOfficeSource(base) {
+		// Office files are stored already converted (office_source.go), so
+		// RawExtract never sees a .docx/.pptx/.xlsx.
+		body, err := convertOfficeSource(sourcePath)
+		if err != nil {
+			return "", err
+		}
+		dest := uniqueDestination(rawDir, base+".md")
+		if err := os.WriteFile(dest, body, 0o644); err != nil {
+			return "", fmt.Errorf("write converted office source: %w", err)
+		}
+		return filepath.Base(dest), nil
+	}
+
 	dest := uniqueDestination(rawDir, base)
 
 	src, err := os.Open(sourcePath)

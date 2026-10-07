@@ -4,7 +4,7 @@ import { SOURCE_KINDS, sourceKind } from './source-kinds.js';
 // openAddSourcePicker: the "o que você quer trazer?" gallery. Step 1 is a
 // grid of source kinds ("quero inserir um PDF", ...); picking one shows what
 // that kind contributes and how to prepare it, plus the ways to add it.
-// Resolves { kind, action } (action: 'files' | 'paste' | 'url' | 'any') or
+// Resolves { kind, action } (action: 'files' | 'paste' | 'url' | 'repo' | 'any') or
 // null if cancelled — actually adding the source stays the caller's job, so
 // this module never touches raw/.
 //
@@ -115,6 +115,7 @@ const ACTION_LABELS = {
   files: (kind) => [icon('upload', 14), kind.id === 'pdf' ? 'Escolher PDFs' : 'Escolher arquivos'],
   paste: (kind) => [icon('edit', 14), kind.id === 'note' || kind.id === 'markdown' ? 'Escrever' : 'Colar texto'],
   url: () => [icon('link', 14), 'Informar link'],
+  repo: () => [icon('gitBranch', 14), 'Importar repositório'],
 };
 
 function actionButtonHtml(kind, action, primary) {

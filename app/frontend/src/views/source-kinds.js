@@ -5,14 +5,19 @@
 //   files — native picker filtered to `extensions` (AddRawFile)
 //   paste — text modal (AddRawText, always saved as .md)
 //   url   — web page download (AddRawURL)
+//   repo  — AS-IS snapshot of a git repository (Wiki action snapshot_repo)
 //
 // `extensions` must stay a subset of what RawExtract accepts
 // (workflows/shared/wiki/raw_extract.mh: plain_text_extensions + .pdf) —
 // a file the picker offers but the ingest rejects only fails later, mid-run.
+// The exception is OFFICE_EXTENSIONS: AddRawFile converts those to Markdown
+// on upload (app/office_source.go), so RawExtract only ever sees the .md.
 const CODE_EXTENSIONS = [
   '.py', '.go', '.cs', '.java', '.kt', '.js', '.jsx', '.ts', '.tsx', '.rb', '.php', '.rs',
   '.swift', '.c', '.h', '.cpp', '.hpp', '.sh', '.xml', '.proto', '.graphql', '.tf',
 ];
+
+const OFFICE_EXTENSIONS = ['.docx', '.pptx', '.xlsx'];
 
 export const SOURCE_KINDS = [
   {
@@ -36,6 +41,23 @@ export const SOURCE_KINDS = [
       language: true,
       hint: 'O trecho é salvo como Markdown dentro de um bloco de código, preservando a indentação.',
     },
+  },
+  {
+    id: 'repo',
+    icon: 'gitBranch',
+    label: 'Repositório',
+    wish: 'Quero inserir um repositório',
+    teaser: 'O retrato AS-IS de um sistema que já existe.',
+    why: 'Para evoluir um sistema existente, a wiki precisa saber como ele é hoje. Em vez do código inteiro, o Senpai tira um retrato do repositório — estrutura, linguagens, stack, dependências, regras do time e decisões registradas — e marca tudo como sistema atual, a base sobre a qual a nova feature é desenhada.',
+    tips: [
+      'Cole o link (https:// ou SSH) ou escolha um clone que já está no seu disco; em monorepo local, pode ser só a subpasta do serviço.',
+      'Repositório privado: o Senpai usa o acesso que o git desta máquina já tem (credential helper ou chave SSH). Nunca cole um token no link.',
+      'Só arquivos versionados entram — o .gitignore é respeitado. Faça commit do que importa antes.',
+      'Arquivos com cara de segredo (.env, chaves, credenciais) nunca são lidos, e linhas que parecem segredo são omitidas. Mesmo assim, revise o resultado.',
+      'O retrato registra o commit de origem: é uma foto daquele momento, não um link vivo.',
+    ],
+    extensions: [],
+    actions: ['repo'],
   },
   {
     id: 'transcript',
@@ -72,6 +94,23 @@ export const SOURCE_KINDS = [
       'Tabelas complexas podem perder a formatação na extração.',
     ],
     extensions: ['.pdf'],
+    actions: ['files'],
+  },
+  {
+    id: 'office',
+    icon: 'briefcase',
+    label: 'Office',
+    wish: 'Quero inserir um documento Office',
+    teaser: 'Word, PowerPoint e Excel do dia a dia do negócio.',
+    why: 'Boa parte do conhecimento do negócio circula em Word, PowerPoint e Excel: especificações, apresentações de kickoff, tabelas de regras e de preços. O Senpai converte o arquivo em Markdown no envio — títulos, listas, tabelas, slides com notas do apresentador e planilhas como tabelas.',
+    tips: [
+      'Formatos antigos (.doc, .ppt, .xls) e arquivos protegidos por senha não são lidos: abra e salve como .docx/.pptx/.xlsx.',
+      'Imagens, gráficos e diagramas não entram — só o texto. Se um slide é só imagem, descreva-o nas notas do apresentador.',
+      'Planilhas: a primeira linha preenchida vira o cabeçalho da tabela, e cada aba entra até 2.000 linhas e 50 colunas. Envie a estrutura e as regras, não dumps de dados reais.',
+      'Fórmulas entram pelo último valor calculado, não pela fórmula.',
+      'Comentários e alterações controladas excluídas ficam de fora; revise o documento antes de enviar.',
+    ],
+    extensions: OFFICE_EXTENSIONS,
     actions: ['files'],
   },
   {
@@ -149,11 +188,13 @@ export function sourceKind(id) {
 }
 
 // kindOfFile: best-effort kind for an existing raw/ file, by extension —
-// only drives the icon on the Fontes cards/table. Pasted text is always .md,
-// so a pasted transcript or note shows as Markdown; that's fine.
+// only drives the icon on the Fontes cards/table. Converted Office files are
+// "<name>.docx.md" (or "<name>.docx (2).md" when de-duplicated). Pasted text
+// is always .md, so a pasted transcript or note shows as Markdown; that's fine.
 export function kindOfFile(name) {
   const lower = name.toLowerCase();
   const ext = lower.includes('.') ? lower.slice(lower.lastIndexOf('.')) : '';
+  if (OFFICE_EXTENSIONS.includes(ext) || /\.(docx|pptx|xlsx)( \(\d+\))?\.md$/.test(lower)) return sourceKind('office');
   if (ext === '.pdf') return sourceKind('pdf');
   if (ext === '.md') return sourceKind('markdown');
   if (ext === '.txt') return sourceKind('transcript');

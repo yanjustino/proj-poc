@@ -13,9 +13,13 @@ export function AttachHistoriaFiles(arg1:string,arg2:string):Promise<string>;
 
 export function CancelRun(arg1:string):Promise<string>;
 
+export function CloneRepoForSnapshot(arg1:string,arg2:string):Promise<string>;
+
 export function DataDir():Promise<string>;
 
 export function DeleteProject(arg1:string):Promise<void>;
+
+export function DiscardClone(arg1:string):Promise<void>;
 
 export function ExportHandoff(arg1:string):Promise<string>;
 
@@ -88,6 +92,8 @@ export function RetryStartup():Promise<string>;
 export function SelectRawFiles():Promise<string>;
 
 export function SelectRawFilesFiltered(arg1:string,arg2:string,arg3:string):Promise<string>;
+
+export function SelectRepoDir():Promise<string>;
 
 export function SetAgent(arg1:string):Promise<string>;
 

@@ -449,7 +449,9 @@ html[data-theme='light'] .combo-option.selected { color: var(--vermilion); }
    would silently overflow/clip instead of being readable. */
 .data-row-feedback { color: var(--ink); white-space: normal; }
 .data-row-actions { display: flex; justify-content: flex-end; gap: 4px; }
-.data-row-actions button { border: 0; background: transparent; color: var(--blue-deep); font: 600 11px var(--sans); padding: 3px 6px; }
+/* Table actions are monochrome (muted ink, brighter on hover) — the row's
+   status dot and badges already carry the color. */
+.data-row-actions button { border: 0; background: transparent; color: var(--muted); font: 600 11px var(--sans); padding: 3px 6px; }
 .data-row-actions button:hover { color: var(--ink); }
 .data-row-actions button:disabled { opacity: .5; cursor: wait; }
 /* One per category, spanning the whole grid — separates the flat card list
@@ -561,7 +563,7 @@ html[data-theme='light'] .combo-option.selected { color: var(--vermilion); }
 .artifact-card-approve { border: 0; background: transparent; color: var(--green); padding: 3px 0 3px 6px; display: inline-flex; align-items: center; gap: 5px; font: 600 10px var(--sans); }
 .artifact-card-approve:hover { color: var(--ink); }
 .artifact-card-approve:disabled { opacity: .6; cursor: wait; }
-.data-row-actions .artifact-card-approve { color: var(--green); display: inline-flex; gap: 4px; }
+.data-row-actions .artifact-card-approve { color: var(--muted); display: inline-flex; gap: 4px; }
 
 /* Revisão de features do Discovery (feature_review.mh): cabeçalhos dos
    grupos de status no backlog, ações Rejeitar/Reabrir e a barra de revisão
@@ -577,8 +579,9 @@ html[data-theme='light'] .combo-option.selected { color: var(--vermilion); }
 .artifact-card-reopen { color: var(--muted); }
 .artifact-card-reject:hover, .artifact-card-reopen:hover { color: var(--ink); }
 .artifact-card-reject:disabled, .artifact-card-reopen:disabled { opacity: .6; cursor: wait; }
-.data-row-actions .artifact-card-reject { color: var(--red); display: inline-flex; gap: 4px; }
+.data-row-actions .artifact-card-reject { color: var(--muted); display: inline-flex; gap: 4px; }
 .data-row-actions .artifact-card-reopen { color: var(--muted); display: inline-flex; gap: 4px; }
+.data-row-actions .artifact-card-approve:hover:not(:disabled), .data-row-actions .artifact-card-reject:hover:not(:disabled), .data-row-actions .artifact-card-reopen:hover:not(:disabled) { color: var(--ink); }
 .feature-review-badge { display: inline-flex; align-items: center; margin: 4px 0 0 4px; padding: 2px 8px; border-radius: 999px; font: 600 10px var(--sans); }
 .feature-review-badge.rejeitada { background: rgba(222, 53, 11, .12); color: var(--red); }
 .feature-review-bar { border: 1px solid var(--line); border-radius: 12px; background: var(--surface); padding: 10px 12px; margin-bottom: 10px; }
@@ -970,15 +973,21 @@ label.check input { accent-color: var(--vermilion); }
 .artifact-card.feature .artifact-card-kind i, .source-card.ready .source-card-kind i { background: rgba(0,135,90,.16); color: #2fb380; }
 .artifact-card-main > strong, .source-card > strong, .wiki-page-card strong { color: var(--rice-paper); }
 .artifact-card-foot, .source-card > footer, .wiki-page-card footer, .source-card .run-tracker { border-color: var(--line); }
-.artifact-card-generate, .artifact-card-export, .source-card-action { color: #ff8c33; }
-.artifact-card-generate:hover, .artifact-card-export:hover, .source-card-action:hover { color: #fff; }
+.source-card-action { color: #ff8c33; }
+.source-card-action:hover { color: #fff; }
+/* Artifact card actions (Exportar/Atualizar/Gerar) stay monochrome: a grid of
+   cards each with orange and amber links read as noise. They sit in muted
+   ink and brighten on hover; status color lives in the card's own badge. */
+.artifact-card-generate, .artifact-card-export, .artifact-card-update,
+.artifact-card.featured .artifact-card-generate { color: var(--muted); }
+.artifact-card-generate:hover, .artifact-card-export:hover, .artifact-card-update:hover,
+.artifact-card.featured .artifact-card-generate:hover { color: var(--ink); }
 .artifact-card.featured { border-color: #5a3510; background: var(--surface); color: var(--rice-paper); box-shadow: inset 3px 0 var(--vermilion); }
 .artifact-card.featured.selected { border-color: var(--vermilion); box-shadow: inset 3px 0 var(--vermilion), 0 0 0 1px var(--vermilion); }
 .artifact-card.featured .artifact-card-kind i { background: rgba(236,112,0,.14); color: #ff8c33; }
 .artifact-card.featured .artifact-card-main > strong { color: var(--rice-paper); }
 .artifact-card.featured .artifact-card-description, .artifact-card.featured .artifact-card-foot { color: var(--muted); }
 .artifact-card.featured .artifact-card-foot { border-top-color: var(--line); }
-.artifact-card.featured .artifact-card-generate { color: #ff8c33; }
 
 .button.primary { background: var(--vermilion); color: #fff; box-shadow: 0 8px 22px rgba(236,112,0,.18); }
 .button.primary:hover { background: #ff8c33; }
@@ -1422,3 +1431,10 @@ button, a, input, select, textarea, label, summary, [role="button"], [contentedi
 .source-onboarding-head h3 { margin: 0 0 4px; font-size: 15px; color: var(--ink); }
 .source-onboarding-head p { margin: 0; color: var(--muted); font-size: 12px; line-height: 1.5; max-width: 620px; }
 .modal textarea.mono { font-family: var(--mono); font-size: 12px; }
+.repo-picker { display: flex; align-items: center; gap: 8px; }
+.repo-picker code { flex: 1; min-width: 0; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; padding: 8px 10px; border: 1px solid var(--line); border-radius: var(--radius-md); background: var(--surface-2); color: var(--muted); font: 11px var(--mono); }
+.repo-origin-tabs { display: inline-flex; gap: 4px; padding: 3px; border: 1px solid var(--line); border-radius: var(--radius-md); background: var(--surface-2); margin-bottom: 4px; }
+.repo-origin-tab { display: inline-flex; align-items: center; gap: 6px; border: 0; border-radius: var(--radius-sm); background: transparent; color: var(--muted); padding: 6px 12px; font: 600 11px var(--sans); cursor: pointer; }
+.repo-origin-tab:hover { color: var(--ink); }
+.repo-origin-tab.active { background: var(--surface); color: var(--ink); box-shadow: var(--soft-shadow); }
+.repo-origin-tab:disabled { opacity: .5; cursor: not-allowed; }

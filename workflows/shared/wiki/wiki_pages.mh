@@ -21,8 +21,14 @@ export tool WikiPages {
     // all_pages concatena pra brief/atributos/requisitos, entao o rotulo
     // precisa estar aqui pra chegar citavel a esses artefatos mesmo quando
     // ninguem le o indice separadamente.
-    write_source(project_id: string, slug: string, title: string, summary: string, natureza: string, snippets: any[] = []) ->
-        fs.write(Paths.wiki(project_id, "sources/" + slug + ".md"), "# " + title + "\n\n" + self.natureza_line(natureza) + summary + "\n" + self.snippets_section(snippets))
+    //
+    // `literal` (LiteralBlocks.extract da fonte) entra intacto logo apos a
+    // sintese: conteudo deterministico que a LLM resumiria e perderia.
+    write_source(project_id: string, slug: string, title: string, summary: string, natureza: string, snippets: any[] = [], literal: string = "") ->
+        fs.write(Paths.wiki(project_id, "sources/" + slug + ".md"), "# " + title + "\n\n" + self.natureza_line(natureza) + summary + "\n" + self.literal_section(literal) + self.snippets_section(snippets))
+
+    internal literal_section(literal: string): string ->
+        if (literal.trim().is_empty()) "" else "\n" + literal.trim() + "\n"
 
     // Trechos de codigo da fonte, copiados literalmente pela LLM
     // (ingest.schema.json code_snippets) — a sintese em prosa diz o que o
