@@ -89,7 +89,8 @@ export tool CommonDrafts {
     // que so o lote inteiro revela (nomes divergentes do modelo, falta de
     // implantacao).
     diagramas(project_id: string, autorrevisao: bool, requisitos: string, atributos: string, adr: string, modelo: string): Draft -> {
-        var views = ArchModel.views(json.parse(modelo))
+        var modelo_data = json.parse(modelo)
+        var views = ArchModel.views(modelo_data)
         return Drafts.reviewed_items(AutoReview.generate(
             enabled: autorrevisao,
             prompt: DiagramasInstruction(
@@ -101,7 +102,7 @@ export tool CommonDrafts {
                 feedback_content: ChangesBlock.for_artifact(project_id, "diagramas", "")
             ),
             schema_file: DiagramasSchema, project_id:, artifact: "diagramas",
-            prepare: (raw) -> C4Diagram.annotate({diagramas: views + ArchModel.optional_diagrams(json.parse(raw)?.diagramas ?? [])}, C4Diagram.infra_hint(adr)),
+            prepare: (raw) -> C4Diagram.annotate({diagramas: views + ArchModel.optional_diagrams(json.parse(raw)?.diagramas ?? [], modelo_data)}, C4Diagram.infra_hint(adr)),
             check: (d) -> ArtifactChecks.diagramas(d)
         ), "diagramas")
     }

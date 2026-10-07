@@ -12,6 +12,8 @@ import { ArtifactCommit } from "../shared/artifacts/artifact_commit.mh"
 import { AutoReview } from "../shared/artifacts/auto_review.mh"
 import { ChangesBlock } from "../shared/artifacts/changes_log.mh"
 import { FeatureReview } from "../shared/artifacts/feature_review.mh"
+import { ArchConformance } from "../shared/artifacts/arch_conformance.mh"
+import { Traceability } from "../shared/artifacts/historia_spec.mh"
 import { CommonDrafts, TechContext } from "../shared/artifacts/common_drafts.mh"
 import { Drafts, Draft } from "../shared/artifacts/draft.mh"
 import { ArtifactSchema, AtributosInstruction, AtributosSchema } from "../shared/artifacts/artifacts_common.mh"
@@ -143,6 +145,7 @@ export tool DiscoveryDrafts {
         var der = Require.optional(Context.artifact(project_id, "der.html"), "esta oportunidade")
         var diagramas = Require.diagramas(project_id, "features")
         var feedback = ChangesBlock.for_artifact(project_id, "features", "")
+        var known = Traceability.known(project_id)
         var roteiro = Drafts.generate(
             FeaturesRoteiroInstruction(
                 schema_conventions: ArtifactSchema(),
@@ -170,7 +173,7 @@ export tool DiscoveryDrafts {
                 feedback_content: feedback
             ),
             schema_file: FeaturesSchema, project_id:, artifact: "features",
-            prepare: (raw) -> json.parse(raw),
+            prepare: (raw) -> ArchConformance.annotate(json.parse(raw), known),
             check: (d) -> ArtifactChecks.features(d)
         ), "features"))
         var mapa = Drafts.generate(
@@ -181,8 +184,11 @@ export tool DiscoveryDrafts {
             ),
             DependenciasSchema, project_id, "features"
         )
+        // Cobertura so existe com o lote inteiro: vai no mapa, sem autorrevisao.
+        var dependencias = mapa.data
+        dependencias["avisos_cobertura"] = ArchConformance.coverage(detalhe.data.features, known)
         return {
-            data: {features: detalhe.data.features, dependencias: mapa.data},
+            data: {features: detalhe.data.features, dependencias},
             tokens_in: roteiro.tokens_in + detalhe.tokens_in + mapa.tokens_in,
             tokens_out: roteiro.tokens_out + detalhe.tokens_out + mapa.tokens_out,
         }

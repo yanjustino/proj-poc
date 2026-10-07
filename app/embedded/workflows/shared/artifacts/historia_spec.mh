@@ -26,10 +26,13 @@ export tool Traceability {
     // so deixa sua lista vazia — Delivery nao tem atributos, DER e opcional.
     known(project_id: string): any -> {
         var requisitos = self.ids_of(self.read_json(project_id, "requisitos.json"), ["funcionais", "integracoes", "dados", "negocio", "regras_negocio"])
-        var atributos = self.ids_of(self.read_json(project_id, "atributos.json"), ["requisitos_nao_funcionais", "restricoes_arquiteturais", "compliance"])
+        var atributos_json = self.read_json(project_id, "atributos.json")
+        var atributos = self.ids_of(atributos_json, ["requisitos_nao_funcionais", "restricoes_arquiteturais", "compliance"])
         return {
             requisitos,
             atributos,
+            // So as restricoes, para a cobertura do backlog (ArchConformance).
+            restricoes: self.ids_of(atributos_json, ["restricoes_arquiteturais"]),
             adrs: self.adr_ids(project_id),
             entidades: self.der_entities(self.read_json(project_id, "der.json")),
             conteineres: self.containers(project_id),

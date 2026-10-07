@@ -529,7 +529,11 @@ export tool C4Diagram {
         var has_context = diagramas.any((d) -> d.diagram_type == "c4-context")
         var has_container = diagramas.any((d) -> d.diagram_type == "c4-container")
         var context_people = self.names_by_types(diagramas, "c4-context", ["pessoa", "sistema_externo"])
-        var context_systems = self.names_by_types(diagramas, "c4-context", ["sistema"])
+        // Um diagrama de conteiner pode detalhar qualquer sistema de software
+        // do contexto: o sistema em escopo ou um sistema externo (visao
+        // detalhada do modelo, ArchModel) — e, do ponto de vista deste, o
+        // sistema em escopo aparece como sistema externo.
+        var context_systems = self.names_by_types(diagramas, "c4-context", ["sistema", "sistema_externo"])
         var containers = self.names_by_types(diagramas, "c4-container", ["container", "banco_dados"])
         var has_structured_context = diagramas.any((d) -> d.diagram_type == "c4-context" && self.is_structured(d))
         var has_structured_container = diagramas.any((d) -> d.diagram_type == "c4-container" && self.is_structured(d))
@@ -551,7 +555,8 @@ export tool C4Diagram {
                         avisos += ["O sistema em escopo (" + d.escopo.nome + ") não corresponde ao sistema do diagrama de contexto."]
                     }
                     for (var el in d.elementos) {
-                        if ((el.tipo == "pessoa" || el.tipo == "sistema_externo") && !context_people.contains(self.normalized(el.nome))) {
+                        var n = self.normalized(el.nome)
+                        if ((el.tipo == "pessoa" || el.tipo == "sistema_externo") && !context_people.contains(n) && !context_systems.contains(n)) {
                             avisos += ["“" + el.nome + "” aparece aqui mas não no diagrama de contexto."]
                         }
                     }

@@ -31,10 +31,12 @@ tool ArtifactEdit {
         EditableArtifact.modelo     -> "Modelo arquitetural"
     }
 
-    // Mesmas chaves de topo, sem faltar nem sobrar nenhuma.
-    check_shape(current: any, edited: any): bool -> {
-        var current_keys = current.keys()
-        var edited_keys = edited.keys()
+    // Mesmas chaves de topo, sem faltar nem sobrar nenhuma. `optional`: chaves
+    // que o editor pode acrescentar a um JSON gravado antes delas (as visoes
+    // detalhadas do modelo) — nao contam de nenhum dos lados.
+    check_shape(current: any, edited: any, optional: string[] = []): bool -> {
+        var current_keys = current.keys().filter((k) -> !optional.contains(k))
+        var edited_keys = edited.keys().filter((k) -> !optional.contains(k))
         if (current_keys.size() != edited_keys.size()) return false
         for (var key in current_keys) {
             if (!edited_keys.contains(key)) return false
@@ -63,7 +65,7 @@ tool ArtifactEdit {
 }
 
 workflow ArtifactSave {
-    description: "Grava a edicao manual de um artefato de documento unico (brief | atributos | requisitos | modelo): JSON e HTML re-renderizado; o modelo redesenha os diagramas de contexto e conteiner."
+    description: "Grava a edicao manual de um artefato de documento unico (brief | atributos | requisitos | modelo): JSON e HTML re-renderizado; o modelo redesenha as visoes dele em diagramas/ (contexto, conteiner e as detalhadas)."
 
     input project_id: string
     input artifact: EditableArtifact
@@ -86,7 +88,8 @@ workflow ArtifactSave {
         if (!fs.exists(html_path) || !fs.exists(json_path)) {
             fail("'${artifact}' ainda nao foi gerado neste work-item")
         }
-        if (!ArtifactEdit.check_shape(json.parse(fs.read(json_path)), data)) {
+        var optional = if (artifact == EditableArtifact.modelo) ["detalhes"] else []
+        if (!ArtifactEdit.check_shape(json.parse(fs.read(json_path)), data, optional)) {
             fail("estrutura do '${artifact}' diferente da original — edicao recusada")
         }
 
@@ -120,6 +123,12 @@ test ArtifactEditSpec {
         is_false(ArtifactEdit.check_shape({a: 1, b: 2}, {a: 1}))
         is_false(ArtifactEdit.check_shape({a: 1}, {a: 1, c: 3}))
         is_false(ArtifactEdit.check_shape({a: 1, b: 2}, {a: 1, c: 3}))
+    }
+
+    describe optional_keys_may_be_added_or_kept {
+        is_true(ArtifactEdit.check_shape({a: 1}, {a: 1, detalhes: []}, ["detalhes"]))
+        is_true(ArtifactEdit.check_shape({a: 1, detalhes: []}, {a: 1, detalhes: []}, ["detalhes"]))
+        is_false(ArtifactEdit.check_shape({a: 1}, {a: 1, outra: []}, ["detalhes"]))
     }
 }
 
@@ -181,6 +190,55 @@ test ArtifactSaveSpec {
         is_true(fs.read(Paths.artifact(id, "modelo.html")).contains("API de Pedidos"))
         is_true(fs.read(Paths.artifact(id, "diagramas/conteineres-loja.html")).contains("API de Pedidos"))
         is_false(fs.exists(Paths.artifact(id, "diagramas/x.html")))
+        Fixture.drop(id)
+    }
+
+    // Um modelo gravado antes das visoes detalhadas (sem `detalhes`) aceita
+    // a chave nova; cada visao vira um diagrama, e o diagrama de componente
+    // da LLM do conteiner detalhado sai do lote. Dois diagramas com o mesmo
+    // titulo nao se sobrescrevem.
+    describe saving_details_draws_them_and_drops_the_llm_component_diagram {
+        var id = Fixture.project("spec-test-save-modelo-detalhes")
+        var modelo = {
+            sistema: {nome: "Loja", descricao: "", fontes: ["brief"]},
+            contexto: {
+                elementos: [{id: "cliente", nome: "Cliente", tipo: "pessoa", tecnologia: "", descricao: "", fontes: ["gap"]}],
+                relacoes: [{de: "cliente", para: "sistema", descricao: "Usa", tecnologia: "", fontes: ["gap"]}],
+            },
+            conteineres: {
+                fronteiras: [{id: "loja", nome: "Loja", descricao: "", fontes: ["gap"]}],
+                elementos: [
+                    {id: "cliente", nome: "Cliente", tipo: "pessoa", tecnologia: "", descricao: "", fronteira: "", fontes: ["gap"]},
+                    {id: "api", nome: "API", tipo: "container", tecnologia: "Java", descricao: "", fronteira: "loja", fontes: ["gap"]},
+                ],
+                relacoes: [{de: "cliente", para: "api", descricao: "Usa", tecnologia: "HTTPS", fontes: ["gap"]}],
+            },
+            gaps: [],
+        }
+        ArtifactData.write(id, "modelo.html", modelo)
+        fs.write(Paths.artifact(id, "modelo.html"), "<html></html>")
+        dir.create(Paths.artifact(id, "diagramas"))
+        ArtifactData.write(id, "diagramas/componentes-api.html", {diagram_type: "c4-component", titulo: "Componentes API", escopo: {nome: "API", descricao: "", fontes: []}, elementos: [], relacoes: []})
+        fs.write(Paths.artifact(id, "diagramas/componentes-api.html"), "<html></html>")
+
+        var componentes = {
+            id: "DET-001", tipo: "c4-component", titulo: "", descricao: "", fontes: ["gap"],
+            origem: {visao: "conteineres", elemento: "api", nome: "API"}, fronteiras: [],
+            elementos: [
+                {id: "cliente", nome: "Cliente", tipo: "pessoa", tecnologia: "", descricao: "", fronteira: "", fontes: ["gap"]},
+                {id: "EL-001", nome: "Controlador", tipo: "componente", tecnologia: "JAX-RS", descricao: "", fronteira: "", fontes: ["gap"]},
+            ],
+            relacoes: [{de: "cliente", para: "EL-001", descricao: "Usa", tecnologia: "HTTPS", fontes: ["gap"]}],
+        }
+        var outro = componentes
+        outro["id"] = "DET-002"
+        var editado = modelo
+        editado["detalhes"] = [componentes, outro]
+        var run = ArtifactSave.run(inputs: {project_id: id, artifact: "modelo", data: editado})
+        is_true(run.ok)
+        are_equal(run.vars.redrawn, ["contexto-de-sistema-loja", "conteineres-loja", "componentes-api", "componentes-api-2"])
+        is_true(fs.read(Paths.artifact(id, "diagramas/componentes-api.html")).contains("Controlador"))
+        is_true(fs.read(Paths.artifact(id, "modelo.html")).contains("Componentes — API"))
         Fixture.drop(id)
     }
 

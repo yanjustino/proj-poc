@@ -156,6 +156,54 @@
           }
         }
       }
+    },
+    "aderenciaRef": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": [
+        "tipo",
+        "ref",
+        "como",
+        "mudanca",
+        "fontes"
+      ],
+      "properties": {
+        "tipo": {
+          "type": "string",
+          "enum": [
+            "conteiner",
+            "entidade",
+            "adr",
+            "atributo"
+          ],
+          "description": "conteiner: elemento do C4 (contêiner, banco, sistema externo); entidade: entidade do DER; adr: decisão arquitetural; atributo: requisito não funcional, restrição arquitetural ou compliance."
+        },
+        "ref": {
+          "type": "string",
+          "description": "Identificador exato como aparece no artefato: id ou nome do elemento C4, nome da entidade do DER, ADR-NNN, id do atributo (NFR-001, RA-001...)."
+        },
+        "como": {
+          "type": "string",
+          "description": "Como o item usa, altera ou respeita o elemento."
+        },
+        "mudanca": {
+          "type": "string",
+          "enum": [
+            "novo",
+            "modificado",
+            "as_is",
+            "removido"
+          ],
+          "description": "novo: criado por este item; modificado: altera algo existente; as_is: já existe e só é referenciado; removido: deixa de existir."
+        },
+        "fontes": {
+          "type": "array",
+          "items": {
+            "type": "string"
+          },
+          "minItems": 1
+        }
+      }
     }
   },
   "type": "object",
@@ -177,6 +225,7 @@
     "fora_escopo",
     "regras_negocio",
     "interacoes_entidades_dados",
+    "aderencia_arquitetural",
     "criterios_aceite",
     "historias_propostas",
     "dependencias_integridade",
@@ -276,6 +325,12 @@
       "type": "array",
       "items": {
         "$ref": "#/$defs/mudancaText"
+      }
+    },
+    "aderencia_arquitetural": {
+      "type": "array",
+      "items": {
+        "$ref": "#/$defs/aderenciaRef"
       }
     },
     "criterios_aceite": {

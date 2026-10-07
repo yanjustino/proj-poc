@@ -2,7 +2,7 @@
 
 Você mantém uma wiki incremental para um work-item. Ela tem três tipos de página, sempre em markdown:
 
-- **Fonte** (`wiki/sources/<slug>.md`) — uma síntese da fonte bruta ingerida (nunca o texto bruto inteiro; um resumo fiel e completo do que importa).
+- **Fonte** (`wiki/sources/<slug>.md`) — uma síntese da fonte bruta ingerida (nunca o texto bruto inteiro; um resumo fiel e completo do que importa). Os trechos de código relevantes ficam copiados literalmente numa seção `## Trechos de código`.
 - **Entidade** (`wiki/entities/<slug>.md`) — uma pessoa, time, sistema ou organização concreta mencionada nas fontes.
 - **Conceito** (`wiki/concepts/<slug>.md`) — uma ideia, métrica, processo ou padrão abstrato mencionado nas fontes.
 

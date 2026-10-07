@@ -11,14 +11,21 @@
 // texto plano, nenhum precisa de parser) e .pdf (via pdftotext). json/yml/sql/
 // feature entraram para cobrir fontes de continuidade (Delivery): contratos,
 // schemas de dados, configuracao e cenarios ja implementados de um sistema
-// existente costumam viver nesses formatos, nao em prosa. Imagens e outros
+// existente costumam viver nesses formatos, nao em prosa. Codigo-fonte
+// (code_extensions) segue o mesmo caminho: e texto puro, e o ingest copia os
+// trechos relevantes literalmente para a wiki (code_snippets). Imagens e outros
 // formatos ficam fora do escopo desta fase — ver PLANO-MACRO-MHL-SENPAI.md
 // Fase 2.
 export tool RawExtract {
     // Extensoes de texto puro — mesmo branch de leitura, sem parser algum:
     // o conteudo bruto do arquivo vira o `source_text` do prompt de ingest,
     // que ja e format-agnostico (ver ingest.prompt.md).
-    internal plain_text_extensions(): string[] -> [".txt", ".md", ".json", ".yml", ".yaml", ".sql", ".feature"]
+    internal plain_text_extensions(): string[] -> [".txt", ".md", ".json", ".yml", ".yaml", ".sql", ".feature"] + self.code_extensions()
+
+    internal code_extensions(): string[] -> [
+        ".py", ".go", ".cs", ".java", ".kt", ".js", ".jsx", ".ts", ".tsx", ".rb", ".php", ".rs",
+        ".swift", ".c", ".h", ".cpp", ".hpp", ".sh", ".xml", ".proto", ".graphql", ".tf",
+    ]
 
     text(path: string): string -> {
         var lower = path.to_lower()
@@ -40,7 +47,7 @@ test RawExtractSpec {
     describe reads_each_new_plain_text_extension_directly {
         var dir_path = "projects/spec-test-raw-extract/raw"
         dir.create(dir_path)
-        for (var ext in [".json", ".yml", ".yaml", ".sql", ".feature"]) {
+        for (var ext in [".json", ".yml", ".yaml", ".sql", ".feature", ".py", ".cs", ".ts"]) {
             var path = dir_path + "/fonte" + ext
             fs.write(path, "conteudo de " + ext)
             are_equal(RawExtract.text(path), "conteudo de " + ext)
