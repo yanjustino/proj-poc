@@ -10,8 +10,9 @@
 import { ArtifactBody } from "../shared/artifacts/artifact_body.mh"
 import { PageShell } from "../shared/artifacts/page_shell.mh"
 import { ArchModel } from "../shared/artifacts/arch_model.mh"
+import { ArchConformance } from "../shared/artifacts/arch_conformance.mh"
 
-enum PreviewArtifact { brief, atributos, requisitos, der, modelo, modelo_contexto, modelo_conteineres, feature, historia, decisao, diagrama, adr, diagramas, features, dependencias, historias, plano }
+enum PreviewArtifact { brief, atributos, requisitos, der, modelo, modelo_contexto, modelo_conteineres, modelo_detalhe, feature, historia, decisao, diagrama, adr, diagramas, features, dependencias, historias, plano }
 
 tool PreviewPages {
     // O caminho dos assets do plano nao importa: o app injeta o mermaid.
@@ -25,6 +26,9 @@ tool PreviewPages {
         // cada aba do editor do modelo (artifact-editor.js).
         PreviewArtifact.modelo_contexto    -> self.view(ArchModel.context(data))
         PreviewArtifact.modelo_conteineres -> self.view(ArchModel.container(data))
+        // Aba de uma visao detalhada: o modelo inteiro + `detalhe_ativo` (id),
+        // anotada como no lote (coerencia com os niveis acima e origem).
+        PreviewArtifact.modelo_detalhe     -> self.view(ArchModel.annotated_detail(data, data.detalhe_ativo))
         PreviewArtifact.feature      -> self.page("Detalhamento do item de backlog", ArtifactBody.feature(data))
         PreviewArtifact.historia     -> self.page("Detalhamento da história", ArtifactBody.historia(data))
         PreviewArtifact.decisao      -> self.page(html.escape(data.titulo), ArtifactBody.adr(data))
@@ -33,7 +37,7 @@ tool PreviewPages {
         PreviewArtifact.plano        -> self.page("Plano de implementação — ${html.escape(data?.historia_titulo ?? "")}", ArtifactBody.plano(data, "../"))
         PreviewArtifact.adr          -> self.batch("ADRs", data.decisions, (d) -> ArtifactBody.adr(d))
         PreviewArtifact.diagramas    -> self.batch("Diagramas C4", data.diagramas, (d) -> ArtifactBody.diagrama(d))
-        PreviewArtifact.features     -> self.batch("Backlog da solução", data.features, (f) -> ArtifactBody.feature(f))
+        PreviewArtifact.features     -> self.page("Backlog da solução", ArchConformance.coverage_html(data?.dependencias?.avisos_cobertura ?? []) + self.items(data.features, (f) -> ArtifactBody.feature(f)))
         PreviewArtifact.historias    -> self.batch("Histórias", data.historias, (h) -> ArtifactBody.historia(h))
     }
 
@@ -41,8 +45,10 @@ tool PreviewPages {
 
     internal view(diagrama: any): string -> self.page(html.escape(diagrama.titulo), ArtifactBody.diagrama(diagrama))
 
-    internal batch(title: string, items: any[], render: any): string ->
-        self.page(title, items.map((item) -> "<h2>${html.escape(item.titulo)}</h2>${render(item)}").join(""))
+    internal batch(title: string, items: any[], render: any): string -> self.page(title, self.items(items, render))
+
+    internal items(items: any[], render: any): string ->
+        items.map((item) -> "<h2>${html.escape(item.titulo)}</h2>${render(item)}").join("")
 }
 
 workflow ArtifactPreview {
@@ -293,6 +299,24 @@ test ArtifactPreviewSpec {
         is_true(page.contains("@CA1"))
         is_true(page.contains("Cenário: Comparação concluída"))
         is_true(!page.contains("Conformidade da especificação"))
+    }
+
+    describe a_detail_tab_previews_its_own_view {
+        var run = ArtifactPreview.run(inputs: {
+            artifact: "modelo_detalhe",
+            data: {
+                sistema: {nome: "Loja", descricao: "", fontes: ["gap"]},
+                contexto: {elementos: [], relacoes: []},
+                conteineres: {fronteiras: [], elementos: [{id: "api", nome: "API", tipo: "container", tecnologia: "Java", descricao: "", fronteira: "", fontes: ["gap"]}], relacoes: []},
+                gaps: [],
+                detalhes: [{id: "DET-001", tipo: "c4-component", titulo: "", descricao: "", fontes: ["gap"], origem: {visao: "conteineres", elemento: "api", nome: "API"}, fronteiras: [],
+                    elementos: [{id: "c", nome: "Controlador <X>", tipo: "componente", tecnologia: "JAX-RS", descricao: "", fronteira: "", fontes: ["gap"]}], relacoes: []}],
+                detalhe_ativo: "DET-001",
+            }
+        })
+        is_true(run.ok)
+        is_true(run.vars.preview_html.contains("Componentes — API"))
+        is_true(run.vars.preview_html.contains("Controlador &lt;X&gt;"))
     }
 
     describe incoherent_feature_is_flagged {

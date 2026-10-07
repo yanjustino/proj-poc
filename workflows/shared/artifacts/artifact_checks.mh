@@ -30,11 +30,12 @@ export tool ArtifactChecks {
 
     der(data: any): string[] -> DerModel.check(data)
 
-    feature(data: any): string[] -> FeatureRules.check(data)
+    // Feature ja anotada (ArchConformance.annotate: avisos_arquitetura).
+    feature(data: any): string[] -> FeatureRules.check(data) + (data?.avisos_arquitetura ?? [])
 
     features(data: any): string[] -> {
         var out = []
-        for (var f in (data?.features ?? [])) out = out + FeatureRules.check(f)
+        for (var f in (data?.features ?? [])) out = out + self.feature(f)
         return out
     }
 

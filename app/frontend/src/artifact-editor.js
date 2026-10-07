@@ -4,8 +4,9 @@
 // previa vem do mesmo workflow ArtifactPreview que o Modo Buddy usa. Salvar
 // chama ArtifactSave, que regrava JSON + HTML pelos mesmos templates dos
 // *Commit — por isso a estrutura (chaves de topo) nunca muda aqui: so valores
-// de texto e itens de lista.
-import { artifactPreview, saveArtifact } from './api.js';
+// de texto e itens de lista. Excecao: `detalhes` do modelo (visoes
+// detalhadas), que um modelo gravado antes delas ganha (ArtifactSave aceita).
+import { artifactPreview, saveArtifact, listProjectDir, readProjectFile } from './api.js';
 import { buildDocFrame } from './reading-pane.js';
 import { inlineMermaid, hasMermaidDiagram } from './mermaid-inline.js';
 import { icon } from './icons.js';
@@ -35,29 +36,34 @@ const TIPOS_ELEMENTO = [
   ['banco_dados', 'Contêiner: banco de dados'],
 ];
 const TIPOS_CONTEXTO = TIPOS_ELEMENTO.slice(0, 2);
-// As pontas de uma relacao sao os elementos do mesmo diagrama, mostrados pelo
-// nome; o id fica por baixo. No contexto, o sistema em escopo e uma ponta
-// tambem, pelo id reservado "sistema" (ArchModel).
-const elementOptions = (view) => (data) => [
-  ...(view === 'contexto' ? [['sistema', `${data.sistema?.nome || 'Sistema em escopo'} (sistema em escopo)`]] : []),
-  ...data[view].elementos.map((el) => [el.id, el.nome || el.id]),
+const TIPOS_COMPONENTE = [['componente', 'Componente'], ...TIPOS_ELEMENTO];
+// Cada visao mora numa chave do JSON: "contexto", "conteineres" ou
+// "detalhes.<i>" (visao detalhada). As pontas de uma relacao sao os elementos
+// da mesma visao, mostrados pelo nome; o id fica por baixo. No contexto, o
+// sistema em escopo e uma ponta tambem, pelo id reservado "sistema" (ArchModel).
+const elementOptions = (viewKey) => (data) => [
+  ...(viewKey === 'contexto' ? [['sistema', `${data.sistema?.nome || 'Sistema em escopo'} (sistema em escopo)`]] : []),
+  ...getIn(data, viewKey).elementos.map((el) => [el.id, el.nome || el.id]),
 ];
 // Uma relacao sem uma das pontas nao tem como ser desenhada.
-const removeRelationsOf = (view) => (data, removed) => {
-  data[view].relacoes = data[view].relacoes.filter((r) => r.de !== removed.id && r.para !== removed.id);
+const removeRelationsOf = (viewKey) => (data, removed) => {
+  const view = getIn(data, viewKey);
+  view.relacoes = view.relacoes.filter((r) => r.de !== removed.id && r.para !== removed.id);
 };
-// Fronteiras do diagrama de conteiner: cada uma vira uma tabela de elementos
-// (groupBy) e uma opcao da coluna "Fronteira", que move o elemento.
+// Fronteiras de um diagrama de conteiner: cada uma vira uma tabela de
+// elementos (groupBy) e uma opcao da coluna "Fronteira", que move o elemento.
 const FORA = 'Fora das fronteiras';
-const boundaryOptions = (data) => [...data.conteineres.fronteiras.map((b) => [b.id, b.nome || b.id]), ['', FORA]];
+const boundaryOptions = (viewKey) => (data) => [...getIn(data, viewKey).fronteiras.map((b) => [b.id, b.nome || b.id]), ['', FORA]];
 // Apagar uma fronteira nao apaga os elementos: eles vao para "fora" (com o
 // aviso de conteiner fora de fronteira) e podem ser movidos depois.
-const releaseElementsOf = (data, removed) => {
-  for (const el of data.conteineres.elementos) if (el.fronteira === removed.id) el.fronteira = '';
+const releaseElementsOf = (viewKey) => (data, removed) => {
+  for (const el of getIn(data, viewKey).elementos) if (el.fronteira === removed.id) el.fronteira = '';
 };
 // Modelo gravado antes das fronteiras: uma so, a do sistema em escopo, com os
-// conteineres dentro — o mesmo desenho que ele ja tinha (ArchModel).
+// conteineres dentro — o mesmo desenho que ele ja tinha (ArchModel). E antes
+// das visoes detalhadas: nenhuma (ArtifactSave aceita a chave nova).
 function normalizeModelo(data) {
+  if (!Array.isArray(data.detalhes)) data.detalhes = [];
   const view = data.conteineres;
   if (!view || Array.isArray(view.fronteiras)) return;
   view.fronteiras = [{ id: 'sistema', nome: data.sistema?.nome ?? '', descricao: '', fontes: data.sistema?.fontes ?? ['gap'] }];
@@ -65,12 +71,162 @@ function normalizeModelo(data) {
 }
 const NORMALIZE = { modelo: normalizeModelo };
 
-const relationFields = (view, withTecnologia) => [
-  f('de', 'De', { type: 'select', options: elementOptions(view), initialIndex: 0 }),
-  f('para', 'Para', { type: 'select', options: elementOptions(view), initialIndex: 1 }),
+const relationFields = (viewKey, withTecnologia) => [
+  f('de', 'De', { type: 'select', options: elementOptions(viewKey), initialIndex: 0 }),
+  f('para', 'Para', { type: 'select', options: elementOptions(viewKey), initialIndex: 1 }),
   f('descricao', 'Descrição', { long: true }),
   ...(withTecnologia ? [f('tecnologia', 'Tecnologia / protocolo')] : []),
 ];
+
+// ---- Visoes detalhadas do modelo (ArchModel.detalhes) ----
+// Um diagrama de conteineres nasce de um sistema do contexto (o sistema em
+// escopo — N recortes, um por jornada — ou um sistema externo); um diagrama
+// de componentes nasce de um conteiner de aplicacao (do principal ou de outra
+// visao detalhada). `detail` numa secao de elementos diz que linhas ganham o
+// botao "Detalhar" e que tipo de visao ele cria.
+const DETAIL_COMPONENT = { tipo: 'c4-component', when: (item) => item.tipo === 'container', title: (item) => `Novo diagrama de componentes de ${item.nome || item.id}` };
+const DETAIL_CONTAINER = { tipo: 'c4-container', when: (item) => item.tipo === 'sistema_externo', title: (item) => `Novo diagrama de contêineres de ${item.nome || item.id}` };
+
+// O elemento de origem como esta agora (null = sumiu: a visao ficou orfa).
+function originOf(data, d) {
+  const { visao, elemento } = d.origem ?? {};
+  if (visao === 'contexto' && elemento === 'sistema') return { id: 'sistema', tipo: 'sistema', nome: data.sistema?.nome ?? '', descricao: data.sistema?.descricao ?? '' };
+  const view = visao === 'contexto' ? data.contexto : visao === 'conteineres' ? data.conteineres : data.detalhes.find((x) => x.id === visao);
+  return view?.elementos.find((el) => el.id === elemento) ?? null;
+}
+const detailKind = (d) => (d.tipo === 'c4-component' ? 'Componentes' : 'Contêineres');
+const detailLabel = (data, d) => `${detailKind(d)} · ${d.titulo?.trim() || originOf(data, d)?.nome || d.origem?.nome || d.id}`;
+// Chave da visao -> o `origem.visao` de quem nasce dela.
+const visaoOf = (data, viewKey) => (viewKey.startsWith('detalhes.') ? getIn(data, viewKey).id : viewKey);
+const visaoLabel = (data, visao) => {
+  if (visao === 'contexto') return 'Contexto';
+  if (visao === 'conteineres') return 'Contêineres';
+  const pai = data.detalhes.find((x) => x.id === visao);
+  return pai ? detailLabel(data, pai) : 'visão removida';
+};
+const sameName = (a, b) => (a ?? '').trim().toLowerCase() === (b ?? '').trim().toLowerCase();
+const copyElement = (el, fronteira = '') => ({ id: el.id, nome: el.nome ?? '', tipo: el.tipo, tecnologia: el.tecnologia ?? '', descricao: el.descricao ?? '', fronteira, fontes: clone(el.fontes ?? ['gap']) });
+
+// Os vizinhos de `item` na visao (as outras pontas das relacoes dele) e as
+// relacoes religadas a `novoId` — o ponto de partida da visao filha.
+function rewire(view, item, novoId, mapNeighbor) {
+  const vizinhos = [];
+  const relacoes = [];
+  for (const r of view.relacoes) {
+    if (r.de !== item.id && r.para !== item.id) continue;
+    const outro = r.de === item.id ? r.para : r.de;
+    if (outro === item.id) continue;
+    if (!vizinhos.some((v) => v.id === outro)) {
+      const viz = mapNeighbor(view.elementos.find((e) => e.id === outro) ?? null, outro);
+      if (viz) vizinhos.push(viz);
+    }
+    // Ponta que nao existe na visao (relacao quebrada): nao vem junto.
+    if (!vizinhos.some((v) => v.id === outro)) continue;
+    relacoes.push({ de: r.de === item.id ? novoId : r.de, para: r.para === item.id ? novoId : r.para, descricao: r.descricao ?? '', tecnologia: r.tecnologia ?? '', fontes: clone(r.fontes ?? ['gap']) });
+  }
+  return { vizinhos, relacoes };
+}
+
+// newDetail: a visao filha pre-preenchida por codigo (sem LLM). `llm`: os
+// diagramas de componente gerados no lote — o do conteiner, se houver, vira
+// o ponto de partida (e sai do lote ao salvar: ArchModel.optional_diagrams).
+function newDetail(data, tipo, viewKey, item, llm) {
+  const base = {
+    id: nextId(data.detalhes, 'DET'), tipo, titulo: '', descricao: '', fontes: ['gap'],
+    origem: { visao: visaoOf(data, viewKey), elemento: item.id, nome: item.nome ?? '' },
+    fronteiras: [], elementos: [], relacoes: [],
+  };
+  if (tipo === 'c4-component') {
+    const gerado = llm.find((g) => sameName(g.escopo?.nome, item.nome));
+    if (gerado) {
+      return {
+        detail: Object.assign(base, {
+          descricao: gerado.descricao ?? '',
+          fontes: clone(gerado.descricao_fontes?.length ? gerado.descricao_fontes : ['gap']),
+          elementos: (gerado.elementos ?? []).map((el) => copyElement(el)),
+          relacoes: clone(gerado.relacoes ?? []).map((r) => ({ de: r.de, para: r.para, descricao: r.descricao ?? '', tecnologia: r.tecnologia ?? '', fontes: r.fontes ?? ['gap'] })),
+        }),
+        adopted: gerado.titulo || 'diagrama gerado',
+      };
+    }
+    const view = getIn(data, viewKey);
+    const novoId = nextId(view.elementos, 'EL');
+    const { vizinhos, relacoes } = rewire(view, item, novoId, (el) => (el ? copyElement(el) : null));
+    base.elementos = [...vizinhos, { id: novoId, nome: 'Novo componente', tipo: 'componente', tecnologia: item.tecnologia ?? '', descricao: '', fronteira: '', fontes: ['gap'] }];
+    base.relacoes = relacoes;
+    return { detail: base };
+  }
+  // Recorte do sistema em escopo: parte do diagrama de conteineres inteiro —
+  // a jornada e o que sobra depois de tirar o que nao participa dela.
+  if (item.id === 'sistema') {
+    const recortes = data.detalhes.filter((d) => d.origem?.visao === 'contexto' && d.origem?.elemento === 'sistema').length;
+    return { detail: Object.assign(base, { titulo: `Recorte ${recortes + 1}`, fronteiras: clone(data.conteineres.fronteiras), elementos: clone(data.conteineres.elementos), relacoes: clone(data.conteineres.relacoes) }) };
+  }
+  // Sistema externo: a fronteira dele, um conteiner provisorio e os vizinhos
+  // do contexto (o sistema em escopo, visto de la, e um sistema externo).
+  const novoId = nextId(data.contexto.elementos, 'EL');
+  const { vizinhos, relacoes } = rewire(data.contexto, item, novoId, (el, outroId) =>
+    el ? copyElement(el) : outroId !== 'sistema' ? null : { id: outroId, nome: data.sistema?.nome ?? '', tipo: 'sistema_externo', tecnologia: '', descricao: data.sistema?.descricao ?? '', fronteira: '', fontes: clone(data.sistema?.fontes ?? ['gap']) },
+  );
+  base.fronteiras = [{ id: item.id, nome: item.nome ?? '', descricao: item.descricao ?? '', fontes: clone(item.fontes ?? ['gap']) }];
+  base.elementos = [...vizinhos, { id: novoId, nome: 'Novo contêiner', tipo: 'container', tecnologia: '', descricao: '', fronteira: item.id, fontes: ['gap'] }];
+  base.relacoes = relacoes;
+  return { detail: base };
+}
+
+// Secoes de um diagrama de conteiner (o principal e as visoes detalhadas).
+// `extra` vai em todas (tab, changeLabel/noDirective).
+function containerSections(viewKey, extra, labelOf) {
+  return [
+    {
+      key: `${viewKey}.fronteiras`, label: 'Fronteiras', changeLabel: labelOf?.('fronteiras'), noun: 'fronteira', idPrefix: 'SIS', table: true,
+      fields: [id(), f('nome', 'Sistema de software'), f('descricao', 'Descrição', { long: true })],
+      onRemove: releaseElementsOf(viewKey), ...extra,
+    },
+    {
+      key: `${viewKey}.elementos`, label: 'Elementos', changeLabel: labelOf?.('elementos'), noun: 'elemento', idPrefix: 'EL', table: true,
+      fields: [id(), f('nome', 'Nome'), f('tipo', 'Tipo', { type: 'select', options: TIPOS_ELEMENTO, initial: 'container' }), f('tecnologia', 'Tecnologia'), f('descricao', 'Descrição', { long: true }), f('fronteira', 'Fronteira', { type: 'select', options: boundaryOptions(viewKey), regroup: true })],
+      groupBy: {
+        field: 'fronteira',
+        groups: (data) => boundaryOptions(viewKey)(data).map(([gid, nome]) => [gid, gid ? `Fronteira: ${nome}` : FORA]),
+        // Dentro de uma fronteira entra um conteiner; fora, uma pessoa.
+        defaults: (gid) => ({ tipo: gid ? 'container' : 'pessoa' }),
+      },
+      onRemove: removeRelationsOf(viewKey), detail: DETAIL_COMPONENT, ...extra,
+    },
+    {
+      key: `${viewKey}.relacoes`, label: 'Relações', changeLabel: labelOf?.('relações'), noun: 'relação', table: true,
+      fields: relationFields(viewKey, true), ...extra,
+    },
+  ];
+}
+
+// Secoes de uma aba de visao detalhada. Nao viram diretiva de regeneracao
+// (noDirective): a LLM do modelo nao escreve visoes detalhadas, e regerar o
+// modelo as preserva (ArtifactCommit.modelo).
+function detailSections(data) {
+  return data.detalhes.flatMap((d, i) => {
+    const viewKey = `detalhes.${i}`;
+    const extra = { tab: `det-${d.id}`, noDirective: true };
+    const header = { key: viewKey, label: 'Visão', object: true, colsClass: 'ae-cols-scope', detailHeader: d.id, fields: [f('titulo', 'Título'), f('descricao', 'Descrição')], ...extra };
+    if (d.tipo !== 'c4-component') return [header, ...containerSections(viewKey, extra)];
+    return [
+      header,
+      {
+        key: `${viewKey}.elementos`, label: 'Elementos', noun: 'elemento', idPrefix: 'EL', table: true,
+        fields: [id(), f('nome', 'Nome'), f('tipo', 'Tipo', { type: 'select', options: TIPOS_COMPONENTE, initial: 'componente' }), f('tecnologia', 'Tecnologia'), f('descricao', 'Descrição', { long: true })],
+        defaults: { fronteira: '' }, onRemove: removeRelationsOf(viewKey), ...extra,
+      },
+      { key: `${viewKey}.relacoes`, label: 'Relações', noun: 'relação', table: true, fields: relationFields(viewKey, true), ...extra },
+    ];
+  });
+}
+// Secoes que dependem dos dados (uma aba por visao detalhada). A secao
+// sintetica "detalhes" (sem aba, nunca desenhada) so detecta criar/remover
+// uma visao como alteracao.
+const DYNAMIC = {
+  modelo: (data) => [...detailSections(data), { key: 'detalhes', label: 'Visões detalhadas', noDirective: true }],
+};
 
 // Cada secao: `text` (um paragrafo + suas fontes), `object` (um cartao so) ou
 // lista de itens — cartoes, ou uma linha por item com `table: true` (listas
@@ -100,36 +256,19 @@ const SPECS = {
   // relacoes (ids de cada diagrama; repetir uma pessoa nos dois e normal).
   // `key` com ponto aponta para dentro do JSON (contexto.elementos).
   modelo: [
-    { key: 'sistema', tab: 'contexto', label: 'Sistema em escopo', object: true, fields: [f('nome', 'Nome'), f('descricao', 'Descrição', { long: true })] },
+    // Nome e descricao lado a lado, com a mesma altura de uma linha (ae-cols-scope).
+    // O botao do cartao cria um recorte do diagrama de conteineres (newDetail).
+    { key: 'sistema', tab: 'contexto', label: 'Sistema em escopo', object: true, colsClass: 'ae-cols-scope', detailScope: true, fields: [f('nome', 'Nome'), f('descricao', 'Descrição')] },
     {
       key: 'contexto.elementos', tab: 'contexto', label: 'Pessoas e sistemas externos', changeLabel: 'Contexto — elementos', noun: 'elemento', idPrefix: 'EL', table: true,
       fields: [id(), f('nome', 'Nome'), f('tipo', 'Tipo', { type: 'select', options: TIPOS_CONTEXTO, initial: 'pessoa' }), f('descricao', 'Descrição', { long: true })],
-      defaults: { tecnologia: '' }, onRemove: removeRelationsOf('contexto'),
+      defaults: { tecnologia: '' }, onRemove: removeRelationsOf('contexto'), detail: DETAIL_CONTAINER,
     },
     {
       key: 'contexto.relacoes', tab: 'contexto', label: 'Relações', changeLabel: 'Contexto — relações', noun: 'relação', table: true,
       fields: relationFields('contexto', false), defaults: { tecnologia: '' },
     },
-    {
-      key: 'conteineres.fronteiras', tab: 'conteineres', label: 'Fronteiras', changeLabel: 'Contêineres — fronteiras', noun: 'fronteira', idPrefix: 'SIS', table: true,
-      fields: [id(), f('nome', 'Sistema de software'), f('descricao', 'Descrição', { long: true })],
-      onRemove: releaseElementsOf,
-    },
-    {
-      key: 'conteineres.elementos', tab: 'conteineres', label: 'Elementos', changeLabel: 'Contêineres — elementos', noun: 'elemento', idPrefix: 'EL', table: true,
-      fields: [id(), f('nome', 'Nome'), f('tipo', 'Tipo', { type: 'select', options: TIPOS_ELEMENTO, initial: 'container' }), f('tecnologia', 'Tecnologia'), f('descricao', 'Descrição', { long: true }), f('fronteira', 'Fronteira', { type: 'select', options: boundaryOptions, regroup: true })],
-      groupBy: {
-        field: 'fronteira',
-        groups: (data) => boundaryOptions(data).map(([gid, nome]) => [gid, gid ? `Fronteira: ${nome}` : FORA]),
-        // Dentro de uma fronteira entra um conteiner; fora, uma pessoa.
-        defaults: (gid) => ({ tipo: gid ? 'container' : 'pessoa' }),
-      },
-      onRemove: removeRelationsOf('conteineres'),
-    },
-    {
-      key: 'conteineres.relacoes', tab: 'conteineres', label: 'Relações', changeLabel: 'Contêineres — relações', noun: 'relação', table: true,
-      fields: relationFields('conteineres', true),
-    },
+    ...containerSections('conteineres', { tab: 'conteineres' }, (what) => `Contêineres — ${what}`),
     { key: 'gaps', tab: 'lacunas', label: 'Lacunas', noun: 'lacuna', table: true, fields: texto },
   ],
   requisitos: [
@@ -207,7 +346,7 @@ function shown(field, value, source) {
 // Secoes de lista entram inteiras: adicionar, remover e editar itens mudam a
 // lista toda, e a geracao seguinte so enxerga este texto.
 function describeChanges(sections, source) {
-  return sections.map((section) => {
+  return sections.filter((section) => !section.noDirective).map((section) => {
     if (section.text) return { titulo: section.label, conteudo: String(source[section.key] ?? '') };
     const line = (item) => section.fields.map((fl) => `${fl.label}: ${shown(fl, item[fl.key], source)}`).join('; ');
     if (section.object) return { titulo: section.label, conteudo: line(source[section.key]) };
@@ -248,9 +387,42 @@ export function mountArtifactEditor(host, { projectId, artifact, draftKey, origi
   let error = '';
   // Linhas de tabela com as fontes abertas (caminho "secao.indice").
   const openSources = new Set();
-  const tabs = TABS[artifact] ?? null;
+  // Secoes e abas que dependem dos dados (visoes detalhadas do modelo).
+  const specAll = () => [...spec, ...(DYNAMIC[artifact]?.(data) ?? [])];
+  const baseTabs = TABS[artifact] ?? null;
+  const tabsNow = () => {
+    if (!baseTabs || artifact !== 'modelo') return baseTabs;
+    const detalhes = data.detalhes.map((d) => ({ id: `det-${d.id}`, label: detailLabel(data, d), preview: 'modelo_detalhe', detail: d.id }));
+    return [...baseTabs.slice(0, -1), ...detalhes, baseTabs.at(-1)];
+  };
+  const tabs = baseTabs;
   let activeTab = tabs?.[0].id ?? null;
-  const visible = () => (tabs ? spec.filter((s) => s.tab === activeTab) : spec);
+  const visible = () => (tabs ? specAll().filter((s) => s.tab === activeTab) : spec);
+  // Diagramas de componente gerados pela LLM no lote: detalhar o conteiner
+  // de um deles parte dele (newDetail). Carregados em segundo plano.
+  let llmComponents = [];
+  let removingDetail = null;
+  let notice = '';
+  if (artifact === 'modelo') loadLlmComponents();
+  async function loadLlmComponents() {
+    try {
+      const nodes = await listProjectDir(projectId, 'artifacts', 'diagramas');
+      const found = [];
+      for (const node of nodes) {
+        if (node.isDir || !node.name.endsWith('.json')) continue;
+        try {
+          const d = JSON.parse(await readProjectFile(projectId, 'artifacts', `diagramas/${node.name}`));
+          if (d?.diagram_type === 'c4-component' && !d.derivado_do_modelo) found.push(d);
+        } catch {
+          // um diagrama ilegivel so nao serve de ponto de partida
+        }
+      }
+      llmComponents = found;
+      if (ae.isConnected && found.length) buildForm();
+    } catch {
+      llmComponents = [];
+    }
+  }
 
   host.className = 'doc-body ae-host';
   host.innerHTML = `
@@ -306,7 +478,7 @@ export function mountArtifactEditor(host, { projectId, artifact, draftKey, origi
     const parts = pathStr.split('.');
     const key = parts.pop();
     parts.pop();
-    return spec.find((s) => s.key === parts.join('.'))?.fields?.find((fl) => fl.key === key);
+    return specAll().find((s) => s.key === parts.join('.'))?.fields?.find((fl) => fl.key === key);
   }
   function refreshDynamicSelects() {
     formEl.querySelectorAll('select[data-dynamic]').forEach((el) => {
@@ -323,7 +495,7 @@ export function mountArtifactEditor(host, { projectId, artifact, draftKey, origi
   // linha logo abaixo (o mesmo editor de chips dos cartoes).
   function tableHTML(section) {
     const cols = section.fields.filter((fl) => fl.type !== 'id');
-    const head = cols.map((fl) => `<th${fl.long ? ' class="wide"' : ''}>${fl.label}</th>`).join('') + '<th class="ae-t-src">Fontes</th><th class="ae-t-act"></th>';
+    const head = cols.map((fl) => `<th${fl.long ? ' class="wide"' : ''}>${fl.label}</th>`).join('') + `<th class="ae-t-src">Fontes</th><th class="ae-t-act${section.detail ? ' has-detail' : ''}"></th>`;
     const rowHTML = (item, i) => {
       const p = `${section.key}.${i}`;
       const open = openSources.has(p);
@@ -331,7 +503,7 @@ export function mountArtifactEditor(host, { projectId, artifact, draftKey, origi
       const cells = cols.map((fl) => `<td>${control(`${p}.${fl.key}`, fl, item[fl.key])}</td>`).join('');
       const toggle = `<button type="button" class="ae-src-toggle${fontes.includes('gap') ? ' gap' : ''}" data-togglesrc="${p}" aria-expanded="${open}" title="${esc(fontes.join(', ') || 'Sem fontes')}">${fontes.length}</button>`;
       const remove = `<button type="button" class="ae-rm-row" data-rmrow="${p}" title="Remover ${section.noun}" aria-label="Remover ${section.noun}">${icon('trash', 14)}</button>`;
-      const row = `<tr${item.id ? ` title="id: ${esc(item.id)}"` : ''}>${cells}<td class="ae-t-src">${toggle}</td><td class="ae-t-act">${remove}</td></tr>`;
+      const row = `<tr${item.id ? ` title="id: ${esc(item.id)}"` : ''}>${cells}<td class="ae-t-src">${toggle}</td><td class="ae-t-act">${detailButton(section, item, p)}${remove}</td></tr>`;
       return open ? `${row}<tr class="ae-t-sources"><td colspan="${cols.length + 2}">${chips(`${p}.fontes`, fontes)}</td></tr>` : row;
     };
     // `pairs`: [item, indice na lista inteira] — o caminho de cada campo usa
@@ -360,11 +532,35 @@ export function mountArtifactEditor(host, { projectId, artifact, draftKey, origi
     return `<section class="ae-sec" id="ae-s-${sidOf(section)}" data-sec="${sidOf(section)}"><h3>${section.label}<span class="ae-count">${list.length}</span></h3>
       ${body}</section>`;
   }
+  // "Detalhar": cria a visao de nivel abaixo a partir da linha. Um conteiner
+  // com diagrama de componentes gerado pela LLM avisa que parte dele.
+  function detailButton(section, item, p) {
+    if (!section.detail?.when(item)) return '';
+    const gerado = section.detail.tipo === 'c4-component' && llmComponents.some((g) => sameName(g.escopo?.nome, item.nome));
+    const title = gerado ? `Editar o diagrama de componentes gerado para ${item.nome || item.id}` : section.detail.title(item);
+    return `<button type="button" class="ae-detail${gerado ? ' generated' : ''}" data-detail="${p}" title="${esc(title)}" aria-label="${esc(title)}">${icon('layers', 14)}</button>`;
+  }
+  // Cabecalho da aba de uma visao detalhada: de onde ela nasceu e o remover
+  // (em dois passos — a visao some com tudo o que foi desenhado nela).
+  function detailHeaderHTML(detailId) {
+    const d = data.detalhes.find((x) => x.id === detailId);
+    const origem = originOf(data, d);
+    const nome = origem ? origem.nome || origem.id : `${d.origem?.nome || d.origem?.elemento} (inexistente)`;
+    const remove = removingDetail === detailId
+      ? `<span class="ae-detail-confirm">Remover esta visão? <button type="button" class="button secondary small" data-rmdetail-cancel>Manter</button><button type="button" class="button danger small" data-rmdetail-confirm="${esc(detailId)}">Remover</button></span>`
+      : `<button type="button" class="button tertiary small" data-rmdetail="${esc(detailId)}">${icon('trash', 13)} Remover visão</button>`;
+    return `<div class="ae-detail-head"><span class="ae-origin${origem ? '' : ' orphan'}">Detalha “${esc(nome)}” · ${esc(visaoLabel(data, d.origem?.visao))}</span>${remove}</div>`;
+  }
   function sectionHTML(section) {
     if (section.table) return tableHTML(section);
     if (section.object) {
-      return `<section class="ae-sec" id="ae-s-${section.key}" data-sec="${section.key}"><h3>${section.label}</h3>
-        <div class="ae-card"><div class="ae-cols">${fieldsHTML(section.key, section.fields, data[section.key])}</div><div><span class="ae-lbl">Fontes</span>${chips(`${section.key}.fontes`, data[section.key].fontes)}</div></div></section>`;
+      const source = getIn(data, section.key);
+      const head = section.detailHeader ? detailHeaderHTML(section.detailHeader) : '';
+      const scope = section.detailScope
+        ? `<button type="button" class="ae-add" data-detail="sistema" title="Um recorte do diagrama de contêineres — por exemplo, os contêineres de uma jornada">${icon('layers', 13)} Novo diagrama de contêineres</button>`
+        : '';
+      return `<section class="ae-sec" id="ae-s-${sidOf(section)}" data-sec="${sidOf(section)}"><h3>${section.label}</h3>${head}
+        <div class="ae-card"><div class="ae-cols${section.colsClass ? ` ${section.colsClass}` : ''}">${fieldsHTML(section.key, section.fields, source)}</div><div><span class="ae-lbl">Fontes</span>${chips(`${section.key}.fontes`, source.fontes)}</div></div>${scope}</section>`;
     }
     if (section.text) {
       return `<section class="ae-sec" id="ae-s-${section.key}" data-sec="${section.key}"><h3>${section.label}</h3>
@@ -387,7 +583,10 @@ export function mountArtifactEditor(host, { projectId, artifact, draftKey, origi
     formEl.querySelectorAll('textarea').forEach(autosize);
     formEl.scrollTop = scroll;
   }
+  // Na tabela e no card do sistema em escopo o campo tem altura fixa de uma
+  // linha (style.css, .ae-table / .ae-cols-scope).
   function autosize(el) {
+    if (el.closest('.ae-table, .ae-cols-scope')) return;
     el.style.height = 'auto';
     el.style.height = `${el.scrollHeight + 2}px`;
   }
@@ -397,7 +596,7 @@ export function mountArtifactEditor(host, { projectId, artifact, draftKey, origi
     const last = parts.pop();
     return [parts.reduce((o, k) => o[k], data), last];
   }
-  const dirtySections = () => spec.filter((s) => !same(sectionData(data, s), sectionData(saved, s)));
+  const dirtySections = () => specAll().filter((s) => !same(sectionData(data, s), sectionData(saved, s)));
   function sectionData(source, s) {
     return s.text ? [source[s.key], source[s.fontes]] : getIn(source, s.key);
   }
@@ -408,10 +607,10 @@ export function mountArtifactEditor(host, { projectId, artifact, draftKey, origi
     const keys = new Set(dirty.map((s) => s.key));
     const dot = '<i class="ae-dot" title="Alterada"></i>';
     $('.ae-nav').innerHTML = tabs
-      ? tabs.map((t) => `<button type="button" role="tab" data-tab="${t.id}" aria-selected="${t.id === activeTab}">${t.label}${tabDirty(t.id) ? dot : ''}</button>`).join('')
+      ? tabsNow().map((t) => `<button type="button" role="tab" data-tab="${t.id}" aria-selected="${t.id === activeTab}">${t.label}${tabDirty(t.id) ? dot : ''}</button>`).join('')
       : spec.map((s) => `<button type="button" data-go="${s.key}">${s.label}${keys.has(s.key) ? dot : ''}</button>`).join('');
     const status = $('.ae-status');
-    status.textContent = error || (dirty.length ? `${dirty.length} ${dirty.length > 1 ? 'seções alteradas' : 'seção alterada'}${restored ? ' · rascunho restaurado' : ''}` : 'Nenhuma alteração');
+    status.textContent = error || notice || (dirty.length ? `${dirty.length} ${dirty.length > 1 ? 'seções alteradas' : 'seção alterada'}${restored ? ' · rascunho restaurado' : ''}` : 'Nenhuma alteração');
     status.classList.toggle('error', Boolean(error));
     $('[data-save]').disabled = !dirty.length || saving;
     $('[data-save]').textContent = saving ? 'Salvando…' : 'Salvar alterações';
@@ -430,7 +629,8 @@ export function mountArtifactEditor(host, { projectId, artifact, draftKey, origi
     if (!frame || !ae.isConnected) return;
     const seq = ++previewSeq;
     try {
-      const html = await artifactPreview(tabs?.find((t) => t.id === activeTab).preview ?? artifact, data);
+      const tab = tabsNow()?.find((t) => t.id === activeTab);
+      const html = await artifactPreview(tab?.preview ?? artifact, tab?.detail ? { ...data, detalhe_ativo: tab.detail } : data);
       if (seq !== previewSeq || !ae.isConnected) return;
       frame.innerHTML = '';
       // O modelo traz as visoes de contexto e conteiner em Mermaid: o iframe
@@ -448,6 +648,7 @@ export function mountArtifactEditor(host, { projectId, artifact, draftKey, origi
     const [obj, key] = path(e.target.dataset.path);
     obj[key] = e.target.value;
     error = '';
+    notice = '';
     // Trocar a fronteira muda a tabela onde a linha mora.
     if (e.target.matches('select') && fieldAt(e.target.dataset.path)?.regroup) return rebuild();
     refreshDynamicSelects();
@@ -479,12 +680,25 @@ export function mountArtifactEditor(host, { projectId, artifact, draftKey, origi
       const [list, index] = path(rmRow.dataset.rmrow);
       const [removed] = list.splice(Number(index), 1);
       const listKey = rmRow.dataset.rmrow.split('.').slice(0, -1).join('.');
-      spec.find((s) => s.key === listKey)?.onRemove?.(data, removed);
+      specAll().find((s) => s.key === listKey)?.onRemove?.(data, removed);
       return rebuild();
     }
+    const detail = e.target.closest('[data-detail]');
+    if (detail) return createDetail(detail.dataset.detail);
+    const rmDetail = e.target.closest('[data-rmdetail]');
+    if (rmDetail) {
+      removingDetail = rmDetail.dataset.rmdetail;
+      return rebuild();
+    }
+    if (e.target.closest('[data-rmdetail-cancel]')) {
+      removingDetail = null;
+      return rebuild();
+    }
+    const rmConfirm = e.target.closest('[data-rmdetail-confirm]');
+    if (rmConfirm) return removeDetail(rmConfirm.dataset.rmdetailConfirm);
     const add = e.target.closest('[data-add]');
     if (add) {
-      const section = spec.find((s) => sidOf(s) === add.dataset.add);
+      const section = specAll().find((s) => sidOf(s) === add.dataset.add);
       const list = getIn(data, section.key);
       const item = blankItem(section, list, data);
       if (add.dataset.group !== undefined) Object.assign(item, section.groupBy.defaults(add.dataset.group), { [section.groupBy.field]: add.dataset.group });
@@ -493,6 +707,47 @@ export function mountArtifactEditor(host, { projectId, artifact, draftKey, origi
       rebuild(`textarea[data-path^="${p}"]:not([readonly]), select[data-path^="${p}"]`);
     }
   });
+  // `where`: "sistema" (cartao do sistema em escopo) ou "<lista>.<indice>"
+  // (linha de uma tabela de elementos com `detail`).
+  function createDetail(where) {
+    let item;
+    let viewKey;
+    let tipo;
+    if (where === 'sistema') {
+      item = { id: 'sistema', nome: data.sistema?.nome ?? '', tipo: 'sistema' };
+      viewKey = 'contexto';
+      tipo = 'c4-container';
+    } else {
+      const listKey = where.split('.').slice(0, -1).join('.');
+      const section = specAll().find((s) => s.key === listKey);
+      item = getIn(data, where);
+      viewKey = listKey.split('.').slice(0, -1).join('.');
+      tipo = section.detail.tipo;
+    }
+    const { detail, adopted } = newDetail(data, tipo, viewKey, item, llmComponents);
+    data.detalhes.push(detail);
+    notice = adopted ? `Visão criada a partir de “${adopted}” — ao salvar, ela substitui o diagrama gerado.` : '';
+    activeTab = `det-${detail.id}`;
+    openSources.clear();
+    formEl.scrollTop = 0;
+    rebuild(`textarea[data-path="detalhes.${data.detalhes.length - 1}.titulo"]`);
+    renderPreview();
+  }
+  // Remover uma visao nao apaga as que nasceram dela: elas ficam orfas (com
+  // aviso), como quando o elemento de origem some.
+  function removeDetail(detailId) {
+    const i = data.detalhes.findIndex((d) => d.id === detailId);
+    const origem = data.detalhes[i]?.origem?.visao;
+    if (i >= 0) data.detalhes.splice(i, 1);
+    removingDetail = null;
+    notice = '';
+    openSources.clear();
+    // Volta para a aba de onde a visao nasceu, se ela ainda existir.
+    const back = origem === 'contexto' || origem === 'conteineres' ? origem : `det-${origem}`;
+    activeTab = tabsNow().some((t) => t.id === back) ? back : 'conteineres';
+    rebuild();
+    renderPreview();
+  }
   formEl.addEventListener('keydown', (e) => {
     if (!e.target.matches('[data-addchip]') || (e.key !== 'Enter' && e.key !== ',')) return;
     e.preventDefault();
@@ -508,6 +763,7 @@ export function mountArtifactEditor(host, { projectId, artifact, draftKey, origi
     const tab = e.target.closest('[data-tab]');
     if (tab && tab.dataset.tab !== activeTab) {
       activeTab = tab.dataset.tab;
+      removingDetail = null;
       openSources.clear();
       formEl.scrollTop = 0;
       rebuild();

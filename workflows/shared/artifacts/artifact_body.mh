@@ -14,6 +14,7 @@ import { Cite } from "cite.mh"
 import { ArtifactHtml } from "artifact_html.mh"
 import { C4Diagram } from "c4_diagram.mh"
 import { ArchModel } from "arch_model.mh"
+import { ArchConformance } from "arch_conformance.mh"
 import { DerModel } from "der_model.mh"
 import { Traceability, Contracts, Scenarios, SpikeSpec } from "historia_spec.mh"
 import { PlanoModel } from "plano_model.mh"
@@ -128,9 +129,24 @@ export tool ArtifactBody {
             contexto_tabelas: self.view_tables(contexto),
             container_mermaid: html.escape(C4Diagram.mermaid_source(conteineres)),
             container_tabelas: self.view_tables(conteineres),
+            detalhes_html: self.model_details(data),
             legenda_html: ArchModel.legend(data),
             gaps_lista: Cite.list(data?.gaps ?? [])
         ))
+    }
+
+    // Visoes detalhadas (ArchModel): titulo, de onde nasceram, desenho e
+    // tabelas — na ordem em que foram criadas.
+    internal model_details(data: any): string -> {
+        var out = ""
+        for (var d in ArchModel.detalhes(data)) {
+            var v = ArchModel.detail_view(data, d)
+            var descricao = (v.descricao ?? "").trim()
+            out = out + "<h2>" + html.escape(v.titulo) + "</h2>" + ArchModel.origin_html(data, d) +
+                (if (descricao.is_empty()) "" else "<p>" + html.escape(descricao) + "</p>") +
+                "<pre class=\"mermaid\">" + html.escape(C4Diagram.mermaid_source(v)) + "</pre>" + self.view_tables(v)
+        }
+        return out
     }
 
     // Tabelas de uma visao um nivel abaixo do titulo dela.
@@ -160,8 +176,10 @@ export tool ArtifactBody {
         return AutoReview.note_html(data)
     }
 
+    // Coerencia do item (sem contexto) + aderencia a arquitetura (calculada
+    // no *Generate contra os artefatos do work-item — ver ArchConformance).
     internal feature_warnings(data: any): string -> {
-        var avisos = FeatureRules.check(data)
+        var avisos = FeatureRules.check(data) + (data?.avisos_arquitetura ?? [])
         if (avisos.is_empty()) return ""
         return "<h2>Conformidade do item</h2><ul class=\"c4-warnings\">" + avisos.map((a) -> "<li>" + html.escape(a) + "</li>").join("") + "</ul>"
     }
@@ -193,6 +211,7 @@ export tool ArtifactBody {
             fora_escopo_lista: Cite.list(data.fora_escopo),
             regras_lista: BacklogHtml.change_list(data.regras_negocio),
             interacoes_lista: BacklogHtml.change_list(data.interacoes_entidades_dados),
+            aderencia_html: ArchConformance.html(data),
             criterios_lista: Cite.list(data.criterios_aceite),
             historias_lista: BacklogHtml.proposals(data.historias_propostas),
             dependencias_lista: Cite.list(data.dependencias_integridade),
@@ -288,6 +307,7 @@ export tool ArtifactBody {
         mapa_tabela: ArtifactHtml.dependency_map(data.features),
         ordem_tabela: ArtifactHtml.execution_order(data.ordem_execucao),
         diagrama_mermaid: html.escape(data.diagrama_mermaid),
+        cobertura_html: ArchConformance.coverage_html(data?.avisos_cobertura ?? []),
         gaps_lista: Cite.list(data.gaps)
     ))
 

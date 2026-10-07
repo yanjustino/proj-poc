@@ -18,7 +18,7 @@ import { Context } from "context.mh"
 import { PageShell, ArtifactMeta } from "page_shell.mh"
 import { SpecFiles } from "historia_spec.mh"
 import { HistoriaAnexos } from "historia_anexos.mh"
-import { Draft } from "draft.mh"
+import { Draft, Drafts } from "draft.mh"
 import { RadahnModel } from "../radahn/radahn_model.mh"
 
 export tool ArtifactCommit {
@@ -53,9 +53,33 @@ export tool ArtifactCommit {
 
     // O modelo aprovado redesenha na hora as visoes que projeta (model_views).
     modelo(project_id: string, draft: Draft): any -> {
-        var result = self.single(project_id, "modelo", "Modelo arquitetural", ArtifactBody.modelo(draft.data), draft)
-        result["diagramas"] = self.model_views(project_id, draft.data)
+        var final = self.keep_details(project_id, draft)
+        var result = self.single(project_id, "modelo", "Modelo arquitetural", ArtifactBody.modelo(final.data), final)
+        result["diagramas"] = self.model_views(project_id, final.data)
         return result
+    }
+
+    // A LLM do modelo nao escreve visoes detalhadas (ArchModel): regerar o
+    // modelo carrega as do modelo gravado. As que perderam a origem (um id
+    // que a nova geracao nao repetiu) ficam, com o aviso de orfa.
+    internal keep_details(project_id: string, draft: Draft): Draft -> {
+        if (draft.data?.detalhes != null) return draft
+        var path = Paths.artifact(project_id, "modelo.json")
+        var anterior = if (fs.exists(path)) json.parse(fs.read(path)) else null
+        return Drafts.with(draft, {detalhes: anterior?.detalhes ?? []})
+    }
+
+    // Slug unico no lote: duas visoes com o mesmo titulo (dois diagramas de
+    // componente do mesmo conteiner sem titulo proprio) nao se sobrescrevem.
+    internal unique_slug(titulo: string, used: string[]): string -> {
+        var base = Slug.from_title(titulo)
+        var slug = base
+        var n = 2
+        while (used.contains(slug)) {
+            slug = base + "-" + n
+            n = n + 1
+        }
+        return slug
     }
 
     // model_views: contexto e conteiner sempre espelham o modelo gravado.
@@ -77,7 +101,7 @@ export tool ArtifactCommit {
                 if (fs.exists(html_path)) {
                     existia = true
                     var data = json.parse(fs.read(file_path))
-                    if ((data?.derivado_do_modelo ?? false) || ArchModel.optional_diagrams([data]).is_empty()) {
+                    if ((data?.derivado_do_modelo ?? false) || ArchModel.optional_diagrams([data], modelo).is_empty()) {
                         fs.delete(file_path)
                         fs.delete(html_path)
                     } else {
@@ -90,7 +114,7 @@ export tool ArtifactCommit {
         if (!existia) return []
 
         var views = ArchModel.views(modelo)
-        var lote = C4Diagram.annotate({diagramas: views + outros}, C4Diagram.infra_hint(Context.adr_context(project_id))).diagramas
+        var lote = ArchModel.annotated(modelo, outros, C4Diagram.infra_hint(Context.adr_context(project_id)))
         var meta_time = time.format(time.now(), "yyyy-MM-dd HH:mm")
         var written = []
         var i = 0
@@ -98,7 +122,7 @@ export tool ArtifactCommit {
             var item = d
             var slug = ""
             if (i < views.size()) {
-                slug = Slug.from_title(d.titulo)
+                slug = self.unique_slug(d.titulo, written + slugs)
             } else {
                 slug = slugs[i - views.size()]
                 // annotate reconstroi o item campo a campo; o registro da
@@ -130,7 +154,7 @@ export tool ArtifactCommit {
         self.reset(project_id, "diagramas")
         var written = []
         for (var diagrama in draft.data.diagramas) {
-            var slug = Slug.from_title(diagrama.titulo)
+            var slug = self.unique_slug(diagrama.titulo, written)
             self.page(project_id, "diagramas/${slug}.html", html.escape(diagrama.titulo), ArtifactBody.diagrama(diagrama), diagrama, draft)
             written += [slug]
         }
@@ -258,6 +282,20 @@ test ArtifactCommitSpec {
         var result = ArtifactCommit.adr(id, draft)
         are_equal(result.written, ["ADR-001-banco", "ADR-002-banco"])
         are_equal(dir.list(Paths.artifact(id, "adr")).filter((p) -> p.ends_with(".html")).size(), 2)
+        Fixture.drop(id)
+    }
+
+    // Regerar o modelo (a LLM nao escreve `detalhes`) mantem as visoes
+    // detalhadas do modelo gravado.
+    describe regenerating_the_model_keeps_the_saved_details {
+        var id = Fixture.project("spec-test-commit-modelo-detalhes")
+        ArtifactData.write(id, "modelo.html", {sistema: {nome: "Loja", descricao: "", fontes: ["gap"]}, detalhes: [{id: "DET-001", tipo: "c4-component", titulo: "", descricao: "", fontes: ["gap"], origem: {visao: "conteineres", elemento: "api", nome: "API"}, fronteiras: [], elementos: [], relacoes: []}]})
+        var novo = {sistema: {nome: "Loja", descricao: "", fontes: ["gap"]}, contexto: {elementos: [], relacoes: []}, conteineres: {fronteiras: [], elementos: [], relacoes: []}, gaps: []}
+        ArtifactCommit.modelo(id, {data: novo, tokens_in: 1, tokens_out: 1})
+        var gravado = json.parse(fs.read(Paths.artifact(id, "modelo.json")))
+        are_equal(gravado.detalhes.size(), 1)
+        are_equal(gravado.detalhes[0].id, "DET-001")
+        is_true(fs.read(Paths.artifact(id, "modelo.html")).contains("não existe mais"))
         Fixture.drop(id)
     }
 

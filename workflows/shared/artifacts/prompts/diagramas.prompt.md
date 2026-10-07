@@ -22,6 +22,7 @@ Para os tipos `c4-*`, você **não** escreve Mermaid (`diagrama_mermaid` fica va
 
 ### `c4-component` — componentes (opcional)
 
+- Não gere `c4-component` para um contêiner que já tem visão de componentes no modelo (`detalhes` com `tipo: "c4-component"`): ela é editada pelo usuário e substitui a sua.
 - Só produza se agregar valor real ao entendimento — em Discovery normalmente ainda não há código, então prefira não gerar, a menos que requisitos, atributos ou ADRs já determinem a decomposição interna de um contêiner.
 - Escopo: **um único contêiner do modelo** (`escopo.nome` igual ao `nome` dele em `conteineres`). Um diagrama por contêiner.
 - Elementos principais: os `componente` dentro desse contêiner, cada um com responsabilidade e tecnologia/implementação. Elementos de apoio: outros contêineres do mesmo sistema, pessoas e sistemas externos ligados diretamente aos componentes — todos do modelo, com o mesmo `id` e `nome`.

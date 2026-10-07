@@ -1424,7 +1424,6 @@ export async function renderArtefatosTab(container, project, { onChanged }) {
           ${vm.stale?.stale ? `<span class="artifact-card-stale" title="${escapeAttribute(vm.staleTitle)}">${icon('alertCircle', 12)} Desatualizado</span>` : ''}
         </td>
         <td class="data-row-classification">${vm.classificationLabel ? `<span class="artifact-card-classification ${vm.classification.tipoItem === 'enabler' ? 'enabler' : 'business'}">${escapeHtml(vm.classificationLabel)}</span>` : ''}${dorBadgeHtml(readinessFor(row))}${radahnBadgeHtml(row)}${rejectedBadgeHtml(vm)}</td>
-        <td class="data-row-category">${escapeHtml(row.category || labelFor(vm.artifactName))}</td>
         <td class="data-row-status">${escapeHtml(vm.statusText)}</td>
         <td class="data-row-when">${escapeHtml(when)}</td>
         <td class="data-row-actions">
@@ -1448,7 +1447,7 @@ export async function renderArtefatosTab(container, project, { onChanged }) {
   }
 
   function statusHeaderRowHtml(row) {
-    return `<tr class="data-row feature-status-header ${escapeAttribute(row.status)}"><td colspan="7"><span class="feature-review-dot ${escapeAttribute(row.status)}"></span>${escapeHtml(statusHeaderLabel(row))}</td></tr>`;
+    return `<tr class="data-row feature-status-header ${escapeAttribute(row.status)}"><td colspan="6"><span class="feature-review-dot ${escapeAttribute(row.status)}"></span>${escapeHtml(statusHeaderLabel(row))}</td></tr>`;
   }
 
   function statusHeaderCardHtml(row) {
@@ -1484,7 +1483,6 @@ export async function renderArtefatosTab(container, project, { onChanged }) {
             <th></th>
             <th>Nome</th>
             <th>Classificação</th>
-            <th>Categoria</th>
             <th>Status</th>
             <th>Última geração</th>
             <th>Ações</th>

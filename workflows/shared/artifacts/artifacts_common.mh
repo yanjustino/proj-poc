@@ -62,14 +62,14 @@ export prompt DerBody(modo: string, nivel: string, contexto: string, contexto_fo
 // DER gravado antes do modelo estruturado (DerModel) — Mermaid livre e
 // relacionamentos em texto; so renderiza, com um aviso pedindo regeneracao.
 export prompt DerLegacyBody(modo: string, contexto: string, contexto_fontes: string, diagrama_mermaid: string, entidades_tabela: string, confirmados_tabela: string, inferidos_tabela: string, atributos_tabela: string, delta_lista: string, gaps_lista: string, questoes_lista: string) from "templates/der_legacy_body.html"
-export prompt ModeloBody(escopo_html: string, avisos_html: string, contexto_mermaid: string, contexto_tabelas: string, container_mermaid: string, container_tabelas: string, legenda_html: string, gaps_lista: string) from "templates/modelo_body.html"
+export prompt ModeloBody(escopo_html: string, avisos_html: string, contexto_mermaid: string, contexto_tabelas: string, container_mermaid: string, container_tabelas: string, detalhes_html: string, legenda_html: string, gaps_lista: string) from "templates/modelo_body.html"
 export prompt DiagramaBody(tipo_label: string, hierarchy_level: string, escopo_html: string, descricao: string, descricao_fontes: string, avisos_html: string, diagrama_mermaid: string, legenda_html: string, elementos_html: string, relacoes_html: string) from "templates/diagrama_body.html"
 
 // FeatureBody/HistoriaBody sao o corpo de UM item de feature/historia — o
 // mesmo formato serve tanto pro item dentro do backlog do Discovery quanto
 // pro detalhamento final do Delivery (a diferenca entre os dois nunca esta
 // na FORMA renderizada, so em quais dados entram e onde o arquivo e gravado).
-export prompt FeatureBody(avisos_html: string, classificacao_lista: string, hipotese_beneficio: string, hipotese_beneficio_fontes: string, itens_habilitados_lista: string, resumo: string, resumo_fontes: string, objetivo: string, objetivo_fontes: string, personas_tabela: string, em_escopo_lista: string, fora_escopo_lista: string, regras_lista: string, interacoes_lista: string, criterios_lista: string, historias_lista: string, dependencias_lista: string, dependencias_sistema_lista: string, gaps_lista: string, questoes_lista: string) from "templates/feature_body.html"
+export prompt FeatureBody(avisos_html: string, classificacao_lista: string, hipotese_beneficio: string, hipotese_beneficio_fontes: string, itens_habilitados_lista: string, resumo: string, resumo_fontes: string, objetivo: string, objetivo_fontes: string, personas_tabela: string, em_escopo_lista: string, fora_escopo_lista: string, regras_lista: string, interacoes_lista: string, aderencia_html: string, criterios_lista: string, historias_lista: string, dependencias_lista: string, dependencias_sistema_lista: string, gaps_lista: string, questoes_lista: string) from "templates/feature_body.html"
 export prompt HistoriaBody(statement: string, statement_fontes: string, avisos_html: string, atributos_lista: string, contexto_html: string, criterios_lista: string, cenarios_html: string, regras_html: string, dod_html: string, dependencias_html: string, fora_escopo_html: string, exemplo_html: string, rastreabilidade_html: string, contratos_html: string, gaps_html: string, questoes_html: string) from "templates/historia_body.html"
 
 // PlanoBody — o plano mora na pasta da historia (historias/<...>/<USxxx>/
@@ -83,7 +83,7 @@ export prompt PlanoBody(historia_titulo: string, radahn_badge: string, avisos_ht
 // outros pela mesma razão que FeatureBody/HistoriaBody moram: é a única
 // parte compartilhável entre o que gera o artefato (discovery.partial.
 // backlog.mh, ao lado de Features) e como ele vira HTML.
-export prompt DependenciasBody(mapa_tabela: string, ordem_tabela: string, diagrama_mermaid: string, gaps_lista: string) from "templates/dependencias_body.html"
+export prompt DependenciasBody(mapa_tabela: string, ordem_tabela: string, diagrama_mermaid: string, cobertura_html: string, gaps_lista: string) from "templates/dependencias_body.html"
 
 test SchemaFileSpec {
     describe exposes_schema_content_and_codex_file_path {

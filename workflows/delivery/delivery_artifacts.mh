@@ -20,6 +20,7 @@ import { ChangesBlock } from "../shared/artifacts/changes_log.mh"
 import { CommonDrafts, TechContext } from "../shared/artifacts/common_drafts.mh"
 import { Drafts, Draft } from "../shared/artifacts/draft.mh"
 import { Traceability, SpecFiles } from "../shared/artifacts/historia_spec.mh"
+import { ArchConformance } from "../shared/artifacts/arch_conformance.mh"
 import { ArtifactSchema, SpecConventions } from "../shared/artifacts/artifacts_common.mh"
 
 export enum DeliveryMode { feature, historia }
@@ -120,6 +121,7 @@ export tool DeliveryDrafts {
 
     internal feature(project_id: string, autorrevisao: bool): Draft -> {
         var ctx = self.final_context(project_id, "feature")
+        var known = Traceability.known(project_id)
         return Drafts.reviewed(AutoReview.generate(
             enabled: autorrevisao,
             prompt: FeatureInstruction(
@@ -131,7 +133,7 @@ export tool DeliveryDrafts {
                 feedback_content: ChangesBlock.for_artifact(project_id, "feature", "")
             ),
             schema_file: FeatureSchema, project_id:, artifact: "feature",
-            prepare: (raw) -> json.parse(raw),
+            prepare: (raw) -> ArchConformance.annotate_item(json.parse(raw), known),
             check: (d) -> ArtifactChecks.feature(d)
         ))
     }

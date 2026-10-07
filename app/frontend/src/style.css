@@ -1163,6 +1163,9 @@ select.ae-field { height: var(--control-md); padding-block: 0; }
 .ae-card { position: relative; border: 1px solid var(--line); border-radius: var(--radius-md); padding: 12px; display: flex; flex-direction: column; gap: 10px; background: var(--surface); }
 .ae-cols { display: grid; grid-template-columns: repeat(auto-fit, minmax(190px, 1fr)); gap: 10px; padding-right: 32px; }
 .ae-col.wide { grid-column: 1 / -1; }
+.ae-cols.ae-cols-scope { grid-template-columns: minmax(0, 1fr) minmax(0, 2fr); padding-right: 0; }
+.ae-cols-scope .ae-field { box-sizing: border-box; height: var(--control-md); padding-block: 0; line-height: calc(var(--control-md) - 2px); white-space: pre; overflow: hidden; }
+@media (max-width: 720px) { .ae-cols.ae-cols-scope { grid-template-columns: minmax(0, 1fr); } }
 .ae-rm { position: absolute; top: 8px; right: 8px; width: 28px; height: 28px; display: grid; place-items: center; border: 0; background: none; color: var(--muted); border-radius: var(--radius-sm); }
 .ae-rm:hover { background: var(--surface-2); color: var(--red); }
 .ae-table-wrap { overflow-x: auto; border: 1px solid var(--line); border-radius: var(--radius-md); background: var(--surface); }
@@ -1171,19 +1174,33 @@ select.ae-field { height: var(--control-md); padding-block: 0; }
 .ae-table th.wide { width: auto; }
 .ae-table th.ae-t-src { width: 58px; text-align: center; }
 .ae-table th.ae-t-act { width: 36px; }
-.ae-table td { padding: 4px 3px; vertical-align: top; border-bottom: 1px solid var(--line); }
+.ae-table td { padding: 2px 3px; vertical-align: top; border-bottom: 1px solid var(--line); }
 .ae-table tbody tr:last-child td { border-bottom: 0; }
 .ae-table td:first-child, .ae-table th:first-child { padding-left: 8px; }
-.ae-table .ae-field { padding: 5px 7px; font-size: 13px; border-radius: var(--radius-sm); background: transparent; border-color: transparent; }
+/* Tabela: todo campo numa linha so, mesma altura e padding (sem quebra; o
+   texto longo rola dentro do campo). autosize ignora campos da tabela. */
+.ae-table .ae-field { box-sizing: border-box; height: 28px; padding: 4px 6px; font-size: 13px; line-height: 18px; white-space: pre; overflow: hidden; border-radius: var(--radius-sm); background: transparent; border-color: transparent; }
 .ae-table .ae-field:hover { border-color: var(--line); }
 .ae-table .ae-field:focus { background: var(--surface); border-color: var(--vermilion); }
-.ae-table select.ae-field { height: 32px; }
+.ae-table select.ae-field { padding-block: 0; }
 .ae-table td.ae-t-src { text-align: center; }
-.ae-src-toggle { min-width: 30px; margin-top: 4px; border: 1px solid var(--line); background: var(--surface-2); color: var(--muted); border-radius: 99px; font-family: var(--mono); font-size: 11px; padding: 1px 8px; }
+.ae-src-toggle { min-width: 30px; margin-top: 3px; border: 1px solid var(--line); background: var(--surface-2); color: var(--muted); border-radius: 99px; font-family: var(--mono); font-size: 11px; padding: 1px 8px; }
 .ae-src-toggle.gap { color: var(--amber); }
 .ae-src-toggle[aria-expanded='true'] { border-color: var(--vermilion); color: var(--ink); }
-.ae-rm-row { width: 28px; height: 28px; margin-top: 2px; display: grid; place-items: center; border: 0; background: none; color: var(--muted); border-radius: var(--radius-sm); }
+.ae-rm-row { width: 24px; height: 24px; margin-top: 1px; display: grid; place-items: center; border: 0; background: none; color: var(--muted); border-radius: var(--radius-sm); }
 .ae-rm-row:hover { background: var(--surface-2); color: var(--red); }
+/* Visoes detalhadas do modelo: o botao "Detalhar" da linha, o cabecalho da
+   aba (origem + remover) e a confirmacao. */
+.ae-table th.ae-t-act.has-detail { width: 62px; }
+.ae-table td.ae-t-act { white-space: nowrap; }
+.ae-table td.ae-t-act > button { display: inline-grid; vertical-align: top; }
+.ae-detail { width: 24px; height: 24px; margin-top: 1px; place-items: center; border: 0; background: none; color: var(--muted); border-radius: var(--radius-sm); }
+.ae-detail:hover { background: var(--surface-2); color: var(--ink); }
+.ae-detail.generated { color: var(--vermilion); }
+.ae-detail-head { display: flex; align-items: center; justify-content: space-between; gap: 12px; flex-wrap: wrap; }
+.ae-origin { font-size: 12px; color: var(--muted); }
+.ae-origin.orphan { color: var(--amber); }
+.ae-detail-confirm { display: inline-flex; align-items: center; gap: 8px; font-size: 12px; }
 .ae-t-sources td { background: var(--surface-2); padding: 8px 8px 10px; }
 .ae-tabs { gap: 4px; }
 .ae-tabs button { font-size: 13px; padding: 6px 12px; }

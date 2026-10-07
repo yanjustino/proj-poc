@@ -29,8 +29,26 @@
 // ou mais) e cada elemento diz em qual esta (`fronteira`, vazio = fora de
 // todas). Um modelo sem fronteiras usa a fronteira unica do escopo.
 //
-// Fora do modelo: componentes e nos de implantacao. Os dois sao opcionais e
-// dependem de evidencia nos artefatos; continuam no lote de diagramas.
+// Visoes detalhadas (`detalhes`): diagramas que o usuario cria no editor a
+// partir de um elemento da visao de nivel acima — N diagramas de conteiner
+// de um sistema do contexto (o sistema em escopo, para recortar uma jornada,
+// ou um sistema externo) e diagramas de componente de um conteiner de
+// aplicacao (do conteiner principal ou de outra visao detalhada). Cada uma:
+//   {id, tipo: "c4-container" | "c4-component", titulo, descricao, fontes,
+//    origem: {visao: "contexto" | "conteineres" | <id de outro detalhe>,
+//             elemento: <id do elemento>, nome: <nome quando nasceu>},
+//    fronteiras (so conteiner), elementos, relacoes}
+// O escopo da visao e o elemento de origem, lido na hora: renomear o
+// conteiner renomeia a fronteira do diagrama de componente. Um elemento de
+// origem que sumiu deixa a visao orfa — aviso, nunca apagada (o nome
+// guardado em origem.nome continua desenhando a fronteira). A LLM do modelo
+// nao escreve `detalhes`: regerar o modelo preserva os do modelo anterior
+// (ArtifactCommit.modelo), e os que perderam a origem viram aviso.
+//
+// Fora do modelo: nos de implantacao (opcionais, dependem de evidencia) e os
+// componentes de conteineres sem visao detalhada — continuam no lote de
+// diagramas, gerados pela LLM. Um conteiner detalhado aqui nao recebe
+// diagrama de componente da LLM (optional_diagrams).
 
 import { C4Diagram } from "c4_diagram.mh"
 import { Cite } from "cite.mh"
@@ -101,13 +119,128 @@ export tool ArchModel {
         return v
     }
 
-    views(data: any): any[] -> [self.context(data), self.container(data)]
+    views(data: any): any[] -> [self.context(data), self.container(data)] + self.detail_views(data)
 
     // Diagramas que a LLM pode devolver no lote: contexto e conteiner vem
     // sempre do modelo, mesmo que a resposta traga um (o schema ja nao
-    // aceita esses tipos; isto protege contra um checkpoint antigo).
-    optional_diagrams(diagramas: any[]): any[] ->
-        diagramas.filter((d) -> d.diagram_type != "c4-context" && d.diagram_type != "c4-container")
+    // aceita esses tipos; isto protege contra um checkpoint antigo). Um
+    // diagrama de componente de um conteiner que ja tem visao de componentes
+    // no modelo tambem sai — o editado a mao prevalece.
+    optional_diagrams(diagramas: any[], modelo: any = null): any[] -> {
+        var detalhados = self.detail_views(modelo ?? {}).filter((v) -> v.diagram_type == "c4-component").map((v) -> self.normalized(v.escopo.nome))
+        return diagramas.filter((d) -> d.diagram_type != "c4-context" && d.diagram_type != "c4-container" &&
+            !(d.diagram_type == "c4-component" && detalhados.contains(self.normalized(d?.escopo?.nome ?? ""))))
+    }
+
+    internal normalized(text: string): string -> text.to_lower().trim()
+
+    // --- Visoes detalhadas ------------------------------------------------
+
+    detalhes(data: any): any[] -> data?.detalhes ?? []
+
+    // origin: o elemento de onde a visao nasceu, como esta hoje no modelo, ou
+    // null se ele (ou a visao que o continha) nao existe mais. No contexto, o
+    // sistema em escopo responde pelo id reservado.
+    origin(data: any, d: any): any -> {
+        var visao = d?.origem?.visao ?? ""
+        var elemento = d?.origem?.elemento ?? ""
+        var elementos = []
+        if (visao == "contexto") {
+            if (elemento == self.sistema_id()) {
+                var s = self.sistema(data)
+                return {id: self.sistema_id(), nome: s?.nome ?? "", tipo: "sistema", tecnologia: "", descricao: s?.descricao ?? ""}
+            }
+            elementos = data?.contexto?.elementos ?? []
+        } else if (visao == "conteineres") {
+            elementos = data?.conteineres?.elementos ?? []
+        } else {
+            var pais = self.detalhes(data).filter((p) -> (p?.id ?? "") == visao)
+            if (pais.is_empty()) return null
+            elementos = pais[0]?.elementos ?? []
+        }
+        var achados = elementos.filter((el) -> (el?.id ?? "") == elemento)
+        if (achados.is_empty()) return null
+        return achados[0]
+    }
+
+    // detail_view: a visao no formato de um diagrama. Titulo: "Contêineres —
+    // <titulo>" ou "Componentes — <titulo>"; sem titulo, o nome da origem.
+    detail_view(data: any, d: any): any -> {
+        var o = self.origin(data, d)
+        var nome = if (o == null) (d?.origem?.nome ?? "") else (o?.nome ?? "")
+        var descricao_escopo = if (o == null) "" else (o?.descricao ?? "")
+        var componente = (d?.tipo ?? "") == "c4-component"
+        var rotulo = (d?.titulo ?? "").trim()
+        if (rotulo.is_empty()) rotulo = nome
+        var v = {
+            titulo: (if (componente) "Componentes" else "Contêineres") + " — " + rotulo,
+            diagram_type: if (componente) "c4-component" else "c4-container",
+            descricao: d?.descricao ?? "",
+            descricao_fontes: d?.fontes ?? [],
+            escopo: {nome, descricao: descricao_escopo, fontes: d?.fontes ?? []},
+            ambiente: "",
+            elementos: (d?.elementos ?? []).map((el) -> self.element(el)),
+            relacoes: (d?.relacoes ?? []).map((r) -> self.relation(r)),
+            diagrama_mermaid: "",
+            derivado_do_modelo: true,
+        }
+        if (!componente) v["fronteiras"] = (d?.fronteiras ?? []).map((f) -> {id: f?.id ?? "", nome: f?.nome ?? "", descricao: f?.descricao ?? "", fontes: f?.fontes ?? []})
+        return v
+    }
+
+    detail_views(data: any): any[] -> self.detalhes(data).map((d) -> self.detail_view(data, d))
+
+    internal visao_label(data: any, visao: string): string -> {
+        if (visao == "contexto") return "Contexto"
+        if (visao == "conteineres") return "Contêineres"
+        var pais = self.detalhes(data).filter((p) -> (p?.id ?? "") == visao)
+        if (pais.is_empty()) return "visão removida"
+        return self.detail_view(data, pais[0]).titulo
+    }
+
+    // Avisos que so a visao detalhada tem: origem que sumiu (orfa) ou que
+    // mudou de tipo e nao comporta mais o nivel.
+    origin_warnings(data: any, d: any): string[] -> {
+        var titulo = self.detail_view(data, d).titulo
+        var o = self.origin(data, d)
+        if (o == null) {
+            var nome = d?.origem?.nome ?? (d?.origem?.elemento ?? "")
+            return ["“" + titulo + "”: o elemento de origem (" + nome + ", em " + self.visao_label(data, d?.origem?.visao ?? "") + ") não existe mais — a visão ficou órfã."]
+        }
+        var tipo = o?.tipo ?? ""
+        if ((d?.tipo ?? "") == "c4-component" && tipo != "container") {
+            return ["“" + titulo + "”: um diagrama de componentes nasce de um contêiner de aplicação, mas a origem (" + (o?.nome ?? "") + ") agora é do tipo " + tipo + "."]
+        }
+        if ((d?.tipo ?? "") == "c4-container" && tipo != "sistema" && tipo != "sistema_externo") {
+            return ["“" + titulo + "”: um diagrama de contêineres nasce de um sistema de software, mas a origem (" + (o?.nome ?? "") + ") é do tipo " + tipo + "."]
+        }
+        return []
+    }
+
+    // annotated: as visoes do modelo (e `extra`, os diagramas opcionais do
+    // lote) anotadas como um lote — a coerencia entre os niveis — com os
+    // avisos de origem pendurados em cada visao detalhada.
+    annotated(data: any, extra: any[], infra: bool): any[] -> {
+        var lote = C4Diagram.annotate({diagramas: self.views(data) + extra}, infra).diagramas
+        var detalhes = self.detalhes(data)
+        var out = []
+        var i = 0
+        for (var d in lote) {
+            var item = d
+            if (i >= 2 && i < 2 + detalhes.size()) item["avisos_lote"] = item.avisos_lote + self.origin_warnings(data, detalhes[i - 2])
+            out += [item]
+            i = i + 1
+        }
+        return out
+    }
+
+    // A visao detalhada `id`, anotada (previa de uma aba do editor).
+    annotated_detail(data: any, id: string): any -> {
+        var ids = self.detalhes(data).map((d) -> d?.id ?? "")
+        var i = ids.index_of(id)
+        if (i < 0) fail("visão detalhada inexistente: '" + id + "'")
+        return self.annotated(data, [], false)[2 + i]
+    }
 
     // --- Conformidade -----------------------------------------------------
 
@@ -119,9 +252,15 @@ export tool ArchModel {
         if ((self.sistema(data)?.nome ?? "").trim().is_empty()) out += ["Informe o nome do sistema de software em escopo."]
         var reservado = (data?.contexto?.elementos ?? []).filter((el) -> el.id == self.sistema_id()).map((el) -> el.nome).join(", ")
         if (!reservado.is_empty()) out += ["Contexto: o id “sistema” é reservado para o sistema em escopo — use outro id em " + reservado + "."]
-        var lote = C4Diagram.annotate({diagramas: self.views(data)}).diagramas
+        var lote = self.annotated(data, [], false)
         out += C4Diagram.check(lote[0]).map((a) -> "Contexto: " + a) + lote[0].avisos_lote
         out += C4Diagram.check(lote[1]).map((a) -> "Contêineres: " + a) + lote[1].avisos_lote
+        var i = 2
+        while (i < lote.size()) {
+            var v = lote[i]
+            out += C4Diagram.check(v).map((a) -> v.titulo + ": " + a) + v.avisos_lote
+            i = i + 1
+        }
         return out
     }
 
@@ -140,16 +279,28 @@ export tool ArchModel {
             (if (descricao.is_empty()) "" else " — " + html.escape(descricao)) + " " + Cite.badges(s?.fontes ?? []) + "</p>"
     }
 
-    // Legenda unica das duas visoes: os tipos presentes em qualquer uma.
+    // Legenda unica das visoes: os tipos presentes em qualquer uma.
     legend(data: any): string -> {
-        var ctx = self.context(data)
-        var cont = self.container(data)
-        return C4Diagram.legend({diagram_type: "c4-container", elementos: ctx.elementos + cont.elementos, relacoes: ctx.relacoes + cont.relacoes})
+        var elementos = []
+        var relacoes = []
+        for (var v in self.views(data)) {
+            elementos = elementos + v.elementos
+            relacoes = relacoes + v.relacoes
+        }
+        return C4Diagram.legend({diagram_type: "c4-container", elementos, relacoes})
+    }
+
+    // "Detalha “API de Pedidos” (Contêineres)" — a linha de origem de uma
+    // visao detalhada na pagina do modelo.
+    origin_html(data: any, d: any): string -> {
+        var o = self.origin(data, d)
+        var nome = if (o == null) (d?.origem?.nome ?? "") + " (inexistente)" else (o?.nome ?? "")
+        return "<p class=\"fontes\">Detalha “" + html.escape(nome) + "” (" + html.escape(self.visao_label(data, d?.origem?.visao ?? "")) + ") " + Cite.badges(d?.fontes ?? []) + "</p>"
     }
 }
 
 tool ArchModelFixtures {
-    internal loja(): any -> {
+    loja(): any -> {
         sistema: {nome: "Loja", descricao: "Vende online", fontes: ["brief"]},
         contexto: {
             elementos: [
@@ -178,6 +329,130 @@ tool ArchModelFixtures {
             ],
         },
         gaps: [],
+    }
+}
+
+// Loja com um diagrama de componentes da API e um de conteineres do ERP.
+tool ArchDetailFixtures {
+    componentes_api(): any -> {
+        id: "DET-001", tipo: "c4-component", titulo: "", descricao: "Recebimento de pedidos", fontes: ["inferência"],
+        origem: {visao: "conteineres", elemento: "api", nome: "API de Pedidos"},
+        fronteiras: [],
+        elementos: [
+            {id: "web", nome: "Loja Web", tipo: "container", tecnologia: "React", descricao: "Vitrine", fronteira: "", fontes: ["modelo"]},
+            {id: "ctrl", nome: "Controlador de Pedidos", tipo: "componente", tecnologia: "JAX-RS", descricao: "Recebe pedidos", fronteira: "", fontes: ["inferência"]},
+        ],
+        relacoes: [{de: "web", para: "ctrl", descricao: "Envia pedidos para", tecnologia: "HTTPS/JSON", fontes: ["inferência"]}],
+    }
+
+    conteineres_erp(): any -> {
+        id: "DET-002", tipo: "c4-container", titulo: "ERP por dentro", descricao: "", fontes: ["inferência"],
+        origem: {visao: "contexto", elemento: "erp", nome: "ERP"},
+        fronteiras: [{id: "erp", nome: "ERP", descricao: "", fontes: ["inferência"]}],
+        elementos: [
+            {id: "loja", nome: "Loja", tipo: "sistema_externo", tecnologia: "", descricao: "Envia faturas", fronteira: "", fontes: ["modelo"]},
+            {id: "fat", nome: "Faturador", tipo: "container", tecnologia: "SAP", descricao: "Emite notas", fronteira: "erp", fontes: ["inferência"]},
+        ],
+        relacoes: [{de: "loja", para: "fat", descricao: "Envia faturas para", tecnologia: "REST", fontes: ["inferência"]}],
+    }
+
+    loja(): any -> {
+        var m = ArchModelFixtures.loja()
+        m["detalhes"] = [self.componentes_api(), self.conteineres_erp()]
+        return m
+    }
+}
+
+test ArchModelDetailSpec {
+    describe details_become_views_after_context_and_container {
+        var views = ArchModel.views(ArchDetailFixtures.loja())
+        are_equal(views.map((v) -> v.titulo), ["Contexto de sistema — Loja", "Contêineres — Loja", "Componentes — API de Pedidos", "Contêineres — ERP por dentro"])
+        are_equal(views[2].diagram_type, "c4-component")
+        are_equal(views[2].escopo.nome, "API de Pedidos")
+        are_equal(views[2].escopo.descricao, "Recebe pedidos")
+        is_true(views[2].derivado_do_modelo)
+        are_equal(views[3].fronteiras.size(), 1)
+    }
+
+    describe a_clean_model_with_details_has_no_warnings {
+        are_equal(ArchModel.check(ArchDetailFixtures.loja()), [])
+    }
+
+    describe renaming_the_origin_renames_the_scope {
+        var m = ArchDetailFixtures.loja()
+        var conteineres = m.conteineres
+        var elementos = []
+        for (var el in conteineres.elementos) {
+            var e = el
+            if (e.id == "api") e["nome"] = "API de Vendas"
+            elementos += [e]
+        }
+        conteineres["elementos"] = elementos
+        m["conteineres"] = conteineres
+        var v = ArchModel.views(m)[2]
+        are_equal(v.titulo, "Componentes — API de Vendas")
+        are_equal(v.escopo.nome, "API de Vendas")
+    }
+
+    describe a_detail_whose_origin_is_gone_is_orphan_but_still_drawn {
+        var m = ArchDetailFixtures.loja()
+        var conteineres = m.conteineres
+        conteineres["elementos"] = conteineres.elementos.filter((el) -> el.id != "api")
+        conteineres["relacoes"] = conteineres.relacoes.filter((r) -> r.de != "api" && r.para != "api")
+        m["conteineres"] = conteineres
+        var avisos = ArchModel.check(m).join(" | ")
+        is_true(avisos.contains("“Componentes — API de Pedidos”: o elemento de origem (API de Pedidos, em Contêineres) não existe mais — a visão ficou órfã."))
+        are_equal(ArchModel.views(m)[2].escopo.nome, "API de Pedidos")
+        is_true(ArchModel.origin_html(m, m.detalhes[0]).contains("API de Pedidos (inexistente)"))
+    }
+
+    describe a_component_view_needs_an_application_container {
+        var m = ArchDetailFixtures.loja()
+        var d = ArchDetailFixtures.componentes_api()
+        d["origem"] = {visao: "conteineres", elemento: "db", nome: "Banco de Pedidos"}
+        m["detalhes"] = [d]
+        is_true(ArchModel.check(m).join(" | ").contains("nasce de um contêiner de aplicação, mas a origem (Banco de Pedidos) agora é do tipo banco_dados"))
+    }
+
+    describe a_container_view_of_an_external_system_is_coherent_with_the_context {
+        var lote = ArchModel.annotated(ArchDetailFixtures.loja(), [], false)
+        are_equal(lote[3].avisos_lote, [])
+    }
+
+    describe a_component_view_can_be_born_from_another_detail {
+        var m = ArchDetailFixtures.loja()
+        var d = ArchDetailFixtures.componentes_api()
+        d["id"] = "DET-003"
+        d["origem"] = {visao: "DET-002", elemento: "fat", nome: "Faturador"}
+        d["elementos"] = [{id: "nf", nome: "Emissor de NF", tipo: "componente", tecnologia: "ABAP", descricao: "Gera a nota", fronteira: "", fontes: ["inferência"]}]
+        d["relacoes"] = []
+        m["detalhes"] = m.detalhes + [d]
+        var v = ArchModel.views(m)[4]
+        are_equal(v.titulo, "Componentes — Faturador")
+        is_true(ArchModel.origin_html(m, d).contains("(Contêineres — ERP por dentro)"))
+        are_equal(ArchModel.origin_warnings(m, d), [])
+    }
+
+    describe annotated_detail_finds_the_view_by_id {
+        var v = ArchModel.annotated_detail(ArchDetailFixtures.loja(), "DET-002")
+        are_equal(v.titulo, "Contêineres — ERP por dentro")
+        var raised = ""
+        try { ArchModel.annotated_detail(ArchDetailFixtures.loja(), "DET-999") } catch (e) { raised = "${e}" }
+        is_true(raised.contains("visão detalhada inexistente"))
+    }
+
+    describe the_llm_component_diagram_of_a_detailed_container_is_dropped {
+        var lote = [
+            {diagram_type: "c4-component", escopo: {nome: "api de pedidos"}},
+            {diagram_type: "c4-component", escopo: {nome: "Loja Web"}},
+            {diagram_type: "sequence"},
+        ]
+        are_equal(ArchModel.optional_diagrams(lote, ArchDetailFixtures.loja()).map((d) -> d?.escopo?.nome ?? d.diagram_type), ["Loja Web", "sequence"])
+        are_equal(ArchModel.optional_diagrams(lote).size(), 3)
+    }
+
+    describe the_legend_covers_components {
+        is_true(ArchModel.legend(ArchDetailFixtures.loja()).contains("Componente"))
     }
 }
 
