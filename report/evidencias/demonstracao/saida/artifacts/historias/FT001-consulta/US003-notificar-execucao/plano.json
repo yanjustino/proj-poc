@@ -1,1 +1,0 @@
-{"abordagem":"Consulta síncrona","avisos_contexto":[],"criterios_total":1,"tarefas":[{"criterios":["CA1"],"depende_de":[],"descricao":"","id":"T0","tipo":"teste","titulo":"Testes de aceitação"},{"criterios":["CA1"],"depende_de":["T0"],"descricao":"","id":"T1","tipo":"implementacao","titulo":"Implementar consulta"}],"testes":[]}
