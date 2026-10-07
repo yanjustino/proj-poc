@@ -21,8 +21,22 @@ export tool WikiPages {
     // all_pages concatena pra brief/atributos/requisitos, entao o rotulo
     // precisa estar aqui pra chegar citavel a esses artefatos mesmo quando
     // ninguem le o indice separadamente.
-    write_source(project_id: string, slug: string, title: string, summary: string, natureza: string) ->
-        fs.write(Paths.wiki(project_id, "sources/" + slug + ".md"), "# " + title + "\n\n" + self.natureza_line(natureza) + summary + "\n")
+    write_source(project_id: string, slug: string, title: string, summary: string, natureza: string, snippets: any[] = []) ->
+        fs.write(Paths.wiki(project_id, "sources/" + slug + ".md"), "# " + title + "\n\n" + self.natureza_line(natureza) + summary + "\n" + self.snippets_section(snippets))
+
+    // Trechos de codigo da fonte, copiados literalmente pela LLM
+    // (ingest.schema.json code_snippets) — a sintese em prosa diz o que o
+    // codigo faz; aqui fica o codigo em si, para os artefatos citarem.
+    internal snippets_section(snippets: any[]): string -> {
+        var kept = snippets.filter((s) -> !(s?.code ?? "").trim().is_empty())
+        if (kept.is_empty()) return ""
+        var blocks = kept.map((s) -> {
+            var caption = (s?.caption ?? "").trim()
+            var block = Markdown.code_block(s?.language ?? "", s.code)
+            return if (caption.is_empty()) block else caption + "\n\n" + block
+        })
+        return "\n## Trechos de código\n\n" + blocks.join("\n\n") + "\n"
+    }
 
     // Texto puro, sem `**negrito**`: WikiHtmlExport.md_to_html so interpreta
     // #/##/listas — negrito dentro de paragrafo sairia como asteriscos
@@ -61,7 +75,8 @@ export memory WikiLog {
 // Sem `test` pro resto do tool: cada outro metodo e I/O (fs.write/fs.append)
 // sobre um caminho real — cobertura fica pro `mhl run` de ponta a ponta do
 // workflow Wiki (mesmo padrao do WorkItem na Fase 1), nao um `test` fingindo
-// I/O. natureza_line e a unica logica pura aqui, entao ganha teste normal.
+// I/O. natureza_line e snippets_section sao a logica pura aqui, entao ganham
+// teste normal.
 test WikiPagesSpec {
     describe natureza_line_labels_each_known_value {
         is_true(WikiPages.natureza_line("sistema_atual").contains("Sistema atual"))
@@ -72,5 +87,19 @@ test WikiPagesSpec {
     describe natureza_line_is_empty_for_an_unknown_or_missing_value {
         are_equal(WikiPages.natureza_line(""), "")
         are_equal(WikiPages.natureza_line("bogus"), "")
+    }
+
+    describe snippets_section_writes_each_snippet_as_a_fenced_block_under_its_caption {
+        are_equal(
+            WikiPages.snippets_section([
+                {language: "sql", caption: "Tabela de pedidos", code: "CREATE TABLE pedido (\n  id INT\n);"},
+                {language: "", caption: "", code: "   "},
+            ]),
+            "\n## Trechos de código\n\nTabela de pedidos\n\n```sql\nCREATE TABLE pedido (\n  id INT\n);\n```\n"
+        )
+    }
+
+    describe snippets_section_is_empty_without_snippets {
+        are_equal(WikiPages.snippets_section([]), "")
     }
 }

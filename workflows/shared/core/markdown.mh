@@ -5,6 +5,20 @@
 export tool Markdown {
     list(items: string[]): string ->
         items.map((item) -> "- " + item).join("\n")
+
+    // Bloco cercado com o codigo intacto. A cerca cresce ate nao aparecer no
+    // proprio codigo — um trecho que ja traz ``` (ex.: um README) nao fecha
+    // o bloco no meio.
+    code_block(language: string, code: string): string -> {
+        var fence = "```"
+        while (code.contains(fence)) fence = fence + "`"
+        var lang = language.trim().to_lower().replace(" ", "-")
+        // So quebras de linha nas pontas: a indentacao da primeira linha fica.
+        var body = code.replace("\r\n", "\n")
+        while (body.starts_with("\n")) body = body.substring(1, body.size())
+        while (body.ends_with("\n")) body = body.substring(0, body.size() - 1)
+        return fence + lang + "\n" + body + "\n" + fence
+    }
 }
 
 test MarkdownSpec {
@@ -18,5 +32,16 @@ test MarkdownSpec {
 
     describe empty_list_is_empty_string {
         are_equal(Markdown.list([]), "")
+    }
+
+    describe code_block_keeps_the_code_intact {
+        are_equal(
+            Markdown.code_block("Python", "def f(x):\n\n    return x\n"),
+            "```python\ndef f(x):\n\n    return x\n```"
+        )
+    }
+
+    describe code_block_grows_the_fence_past_one_inside_the_code {
+        are_equal(Markdown.code_block("", "a ``` b"), "````\na ``` b\n````")
     }
 }
