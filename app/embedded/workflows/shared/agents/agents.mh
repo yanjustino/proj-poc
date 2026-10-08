@@ -25,6 +25,7 @@ import { Usage, UsageParser, UsageCost, PromptLog } from "usage.mh"
 import { StructuredOutput } from "structured_output.mh"
 import { WorkflowsRoot, SchemaFile } from "../core/workflows_root.mh"
 import { Paths } from "../core/paths.mh"
+import { AgentConfig } from "agent_config.mh"
 
 // Backend usado no ambiente alvo. O Devin CLI nao oferece uma flag de
 // JSON Schema equivalente a `codex --output-schema`/`claude --json-schema`;
@@ -47,7 +48,7 @@ export agent Devin {
     // acima. Restaurar --config assim que os logs (em andamento) mostrarem a
     // causa raiz real.
     args: [
-        "--model", env("SENPAI_DEVIN_MODEL", "swe-1-6-slow"),
+        "--model", AgentConfig.devin_model(),
         "--respect-workspace-trust", "false",
         "--permission-mode", "auto",
         "--prompt-file", "${prompt}",
@@ -87,7 +88,7 @@ export agent Claude {
         "Leia o conteúdo abaixo e responda exatamente como ele pede.",
         "--output-format", "json",
         "--json-schema", "${schema}",
-        "--model", env("SENPAI_CLAUDE_MODEL", "sonnet"),
+        "--model", AgentConfig.claude_model(),
         "--disallowed-tools", "Bash,Read,Write,Edit,MultiEdit,NotebookEdit,WebFetch,WebSearch,Glob,Grep,Task"
     ]
     stdin: "${prompt}"
@@ -145,7 +146,7 @@ export agent Codex {
         "--ignore-user-config",
         "--ignore-rules",
         "--color", "never",
-        "--model", env("SENPAI_CODEX_MODEL", "gpt-5.6-luna"),
+        "--model", AgentConfig.codex_model(),
         "--json",
         "--output-schema", "${schema}",
         "-"
@@ -178,7 +179,7 @@ export agent Codex {
 // cada agente resolve isso sem esbarrar nesse limite.
 export tool AgentSelector {
     pick(): string {
-        var selected = match env("SENPAI_AGENT", "codex") {
+        var selected = match AgentConfig.agent() {
             "devin" -> nameof(Devin)
             "claude" -> nameof(Claude)
             "codex" -> nameof(Codex)
@@ -189,11 +190,11 @@ export tool AgentSelector {
     }
 
     pick_model(): string {
-        var model = match env("SENPAI_AGENT", "codex") {
-            "devin" -> env("SENPAI_DEVIN_MODEL", "swe-1-6-slow")
-            "claude" -> env("SENPAI_CLAUDE_MODEL", "sonnet")
-            "codex" -> env("SENPAI_CODEX_MODEL", "gpt-5.6-luna")
-            _ -> env("SENPAI_CODEX_MODEL", "gpt-5.6-luna")
+        var model = match AgentConfig.agent() {
+            "devin" -> AgentConfig.devin_model()
+            "claude" -> AgentConfig.claude_model()
+            "codex" -> AgentConfig.codex_model()
+            _ -> AgentConfig.codex_model()
         }
 
         return model

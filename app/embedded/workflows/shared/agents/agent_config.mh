@@ -1,0 +1,50 @@
+// AgentConfig: agente, modelos e precos do Devin escolhidos no app. Lido a
+// cada chamada de LLM (os `args:` de um `agent` sao avaliados a cada .run()),
+// entao trocar o modelo no app vale para a proxima chamada sem reiniciar o
+// mhl — antes eram so variaveis de ambiente, fixas no inicio do processo, e
+// cada troca custava uma reconexao inteira (~7s validando os workflows).
+//
+// O app grava .senpai-agent.json na pasta de dados, que e o CWD do mhl
+// (app/agent_config.go). Sem o arquivo (mhl pela CLI, na raiz do repo), ou
+// com um campo vazio ou um JSON ilegivel, vale a variavel de ambiente e
+// depois o padrao — o mesmo comportamento de antes.
+
+export tool AgentConfig {
+    file(): string -> ".senpai-agent.json"
+
+    agent(): string -> self.value("agent", "SENPAI_AGENT", "codex")
+    devin_model(): string -> self.value("devin_model", "SENPAI_DEVIN_MODEL", "swe-1-6-slow")
+    devin_pricing(): string -> self.value("devin_pricing", "SENPAI_DEVIN_PRICING", "")
+    claude_model(): string -> self.value("claude_model", "SENPAI_CLAUDE_MODEL", "sonnet")
+    codex_model(): string -> self.value("codex_model", "SENPAI_CODEX_MODEL", "gpt-5.6-luna")
+
+    internal value(key: string, env_key: string, fallback: string): string {
+        var saved = self.saved(self.file(), key)
+        return if (saved.is_empty()) env(env_key, fallback) else saved
+    }
+
+    internal saved(path: string, key: string): string {
+        if (!fs.exists(path)) return ""
+        try {
+            var value = json.parse(fs.read(path)).get(key, "")
+            return if (type_of(value) == "string") value.trim() else ""
+        } catch (err) {
+            return ""
+        }
+    }
+}
+
+test AgentConfigSpec {
+    describe reads_the_saved_value_and_falls_back_when_absent_or_unreadable {
+        var path = "spec-test-agent-config.json"
+        fs.write(path, "{\"agent\": \"devin\", \"devin_model\": \"  swe-2  \", \"codex_model\": \"\"}")
+        are_equal(AgentConfig.saved(path, "agent"), "devin")
+        are_equal(AgentConfig.saved(path, "devin_model"), "swe-2")
+        are_equal(AgentConfig.saved(path, "codex_model"), "")
+        are_equal(AgentConfig.saved(path, "claude_model"), "")
+        fs.write(path, "{nao e json")
+        are_equal(AgentConfig.saved(path, "agent"), "")
+        fs.delete(path)
+        are_equal(AgentConfig.saved(path, "agent"), "")
+    }
+}
