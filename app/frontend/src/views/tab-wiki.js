@@ -1,4 +1,6 @@
-import { listProjectDir, readProjectFile, startAndWatch, watchExistingRun, isFullyTerminal, wikiSyncHtml, cancelRun } from '../api.js';
+import { listProjectDir, readProjectFile, startAndWatch, watchExistingRun, isFullyTerminal, wikiSyncHtml, cancelRun, wikiStaleSources } from '../api.js';
+import { ingestQueueSnapshot, subscribeIngestQueue } from '../ingest-queue.js';
+import { confirmRebuildWiki } from './rebuild-wiki.js';
 import { setActiveRun, getActiveRun, clearActiveRun } from '../active-runs.js';
 import { renderMarkdown } from '../markdown.js';
 import { createRunTracker } from '../run-tracker.js';
@@ -58,6 +60,7 @@ export async function renderWikiTab(container, project) {
       </div>
       <div class="collection-map-actions">
         <button class="button tertiary small" data-lint-open hidden>${icon('fileText', 14)} Última verificação</button>
+        <button class="button tertiary small" data-rebuild-btn title="Apaga a wiki e processa de novo as fontes ingeridas">${icon('refreshCw', 14)} Reprocessar</button>
         <button class="button tertiary small" data-lint-btn>${icon('checkCircle', 14)} Verificar wiki</button>
         <div class="view-toggle" data-view-toggle>
           <button class="view-toggle-btn" data-view="cards" title="Ver como cards">${icon('grid', 15)}</button>
@@ -65,6 +68,7 @@ export async function renderWikiTab(container, project) {
         </div>
       </div>
     </div>
+    <p class="wiki-lint-stale" data-wiki-stale hidden>${icon('alertCircle', 13)}<span data-wiki-stale-text></span></p>
     <p class="wiki-lint-stale" data-lint-stale hidden>${icon('alertCircle', 13)}<span>A wiki recebeu conteúdo depois da última verificação. Verifique de novo para fechar os alertas que as fontes novas resolveram.</span></p>
     <label class="wiki-search-box">
       ${icon('search', 14)}
@@ -119,6 +123,8 @@ export async function renderWikiTab(container, project) {
   const searchInput = container.querySelector('[data-wiki-search]');
   const lintStaleEl = container.querySelector('[data-lint-stale]');
   const lintOpenButton = container.querySelector('[data-lint-open]');
+  const rebuildButton = container.querySelector('[data-rebuild-btn]');
+  const wikiStaleEl = container.querySelector('[data-wiki-stale]');
   showEmpty('Selecione uma página da wiki para ler.');
 
   // latestByName is listProjectDir's own result, keyed by top-level name
@@ -646,6 +652,26 @@ export async function renderWikiTab(container, project) {
     });
   }
 
+  // Removed sources the wiki still carries content from (or the rebuild
+  // running right now) — see ingest-queue.js's rebuildWiki.
+  async function renderRebuildState() {
+    const rebuild = ingestQueueSnapshot(project.id).rebuild;
+    rebuildButton.disabled = Boolean(rebuild);
+    let stale = [];
+    try {
+      stale = await wikiStaleSources(project.id);
+    } catch (err) {
+      console.error('wikiStaleSources', err);
+    }
+    const text = rebuild
+      ? 'Reprocessando a wiki — as páginas voltam conforme cada fonte é processada de novo.'
+      : stale.length
+        ? `A wiki ainda contém conteúdo de ${stale.length === 1 ? 'uma fonte removida' : `${stale.length} fontes removidas`} (${stale.join(', ')}). Use "Reprocessar" para tirá-lo.`
+        : '';
+    wikiStaleEl.querySelector('[data-wiki-stale-text]').textContent = text;
+    wikiStaleEl.hidden = !text;
+  }
+
   async function buildTree() {
     let nodes;
     try {
@@ -657,6 +683,7 @@ export async function renderWikiTab(container, project) {
     }
     latestByName = Object.fromEntries(nodes.map((n) => [n.name, n]));
     lintStaleEl.hidden = !lintIsBehind(latestByName);
+    await renderRebuildState();
     lintOpenButton.hidden = !latestByName['lint.json'] && !latestByName['lint.md'];
     const pageCount = nodes.reduce((total, node) => total + (node.isDir ? (node.children || []).filter((child) => !child.isDir).length : node.name === 'index.md' ? 1 : 0), 0);
     wikiCountEl.textContent = `${pageCount} ${pageCount === 1 ? 'página' : 'páginas'}`;
@@ -773,6 +800,21 @@ export async function renderWikiTab(container, project) {
     followRun(lintKey, lintButton, lintTrackerEl, (onUpdate) => startAndWatch('Wiki', { project_id: project.id, action: 'lint' }, onUpdate), showLintReport);
   });
   lintOpenButton.addEventListener('click', () => openLintReport());
+  rebuildButton.addEventListener('click', () => confirmRebuildWiki(project.id));
+
+  // A rebuild runs in ingest-queue.js, not here: the pages come back as each
+  // source finishes, and its closing verification is followed like one this
+  // tab started (same lint key, same report).
+  const unsubscribeQueue = subscribeIngestQueue(project.id, async (event) => {
+    if (!active) return;
+    if (event.type === 'rebuild' && event.runId && !lintButton.disabled) {
+      followRun(lintKey, lintButton, lintTrackerEl, (onUpdate) => watchExistingRun(event.runId, onUpdate), showLintReport, { reattached: true });
+    }
+    if (event.type === 'rebuild' || event.type === 'done') {
+      await loadSearchIndex();
+      if (active) await buildTree();
+    }
+  });
 
   // "Última verificação": wiki/lint.json (gravado por WikiLint.apply) vira
   // o relatório com ações; uma wiki verificada antes do lint.json existir
@@ -948,6 +990,7 @@ export async function renderWikiTab(container, project) {
 
   return () => {
     active = false;
+    unsubscribeQueue();
     try {
       localStorage.setItem(seenKey, String(Date.now()));
     } catch {

@@ -170,6 +170,14 @@ export function RemoveHistoriaAttachment(arg1, arg2, arg3) {
   return window['go']['main']['App']['RemoveHistoriaAttachment'](arg1, arg2, arg3);
 }
 
+export function RemoveRawSource(arg1, arg2) {
+  return window['go']['main']['App']['RemoveRawSource'](arg1, arg2);
+}
+
+export function ResetIngestedRaw(arg1) {
+  return window['go']['main']['App']['ResetIngestedRaw'](arg1);
+}
+
 export function ResumeRun(arg1, arg2) {
   return window['go']['main']['App']['ResumeRun'](arg1, arg2);
 }
@@ -224,4 +232,8 @@ export function ToggleMaximise() {
 
 export function WatchRun(arg1) {
   return window['go']['main']['App']['WatchRun'](arg1);
+}
+
+export function WikiStaleSources(arg1) {
+  return window['go']['main']['App']['WikiStaleSources'](arg1);
 }

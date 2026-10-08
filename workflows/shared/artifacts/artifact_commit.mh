@@ -25,16 +25,16 @@ export tool ArtifactCommit {
     page(project_id: string, relative: string, title: string, body: string, data: any, draft: Draft) ->
         self.page_with_meta(project_id, relative, title, body, data, ArtifactMeta.line("artifacts/${relative}", draft.tokens_in, draft.tokens_out))
 
-    internal page_with_meta(project_id: string, relative: string, title: string, body: string, data: any, meta: string) -> {
+    internal page_with_meta(project_id: string, relative: string, title: string, body: string, data: any, meta: string) {
         ArtifactData.write(project_id, relative, data)
         fs.write(Paths.artifact(project_id, relative), PageShell(title:, body:, meta:))
     }
 
-    internal reset(project_id: string, relative_dir: string) -> {
+    internal reset(project_id: string, relative_dir: string) {
         dir.clear(Paths.artifact(project_id, relative_dir))
     }
 
-    internal single(project_id: string, artifact: string, title: string, body: string, draft: Draft): any -> {
+    internal single(project_id: string, artifact: string, title: string, body: string, draft: Draft): any {
         self.page(project_id, "${artifact}.html", title, body, draft.data, draft)
         return {artifact, path: "artifacts/${artifact}.html"}
     }
@@ -52,7 +52,7 @@ export tool ArtifactCommit {
         self.single(project_id, "der", "DER", ArtifactBody.der(draft.data), draft)
 
     // O modelo aprovado redesenha na hora as visoes que projeta (model_views).
-    modelo(project_id: string, draft: Draft): any -> {
+    modelo(project_id: string, draft: Draft): any {
         var final = self.keep_details(project_id, draft)
         var result = self.single(project_id, "modelo", "Modelo arquitetural", ArtifactBody.modelo(final.data), final)
         result["diagramas"] = self.model_views(project_id, final.data)
@@ -62,7 +62,7 @@ export tool ArtifactCommit {
     // A LLM do modelo nao escreve visoes detalhadas (ArchModel): regerar o
     // modelo carrega as do modelo gravado. As que perderam a origem (um id
     // que a nova geracao nao repetiu) ficam, com o aviso de orfa.
-    internal keep_details(project_id: string, draft: Draft): Draft -> {
+    internal keep_details(project_id: string, draft: Draft): Draft {
         if (draft.data?.detalhes != null) return draft
         var path = Paths.artifact(project_id, "modelo.json")
         var anterior = if (fs.exists(path)) json.parse(fs.read(path)) else null
@@ -71,7 +71,7 @@ export tool ArtifactCommit {
 
     // Slug unico no lote: duas visoes com o mesmo titulo (dois diagramas de
     // componente do mesmo conteiner sem titulo proprio) nao se sobrescrevem.
-    internal unique_slug(titulo: string, used: string[]): string -> {
+    internal unique_slug(titulo: string, used: string[]): string {
         var base = Slug.from_title(titulo)
         var slug = base
         var n = 2
@@ -89,7 +89,7 @@ export tool ArtifactCommit {
     // hora. Um contexto/conteiner legado (sintetizado pela LLM antes do
     // modelo existir) tambem e substituido. Sem nenhum diagrama gravado
     // ainda, nada a fazer: o primeiro lote ja nasce do modelo.
-    model_views(project_id: string, modelo: any): string[] -> {
+    model_views(project_id: string, modelo: any): string[] {
         var base = Paths.artifact(project_id, "diagramas")
         if (!dir.exists(base)) return []
         var existia = false
@@ -138,7 +138,7 @@ export tool ArtifactCommit {
         return written
     }
 
-    adr(project_id: string, draft: Draft): any -> {
+    adr(project_id: string, draft: Draft): any {
         self.reset(project_id, "adr")
         var written = []
         for (var decision in draft.data.decisions) {
@@ -150,7 +150,7 @@ export tool ArtifactCommit {
         return {artifact: "adr", written}
     }
 
-    diagramas(project_id: string, draft: Draft): any -> {
+    diagramas(project_id: string, draft: Draft): any {
         self.reset(project_id, "diagramas")
         var written = []
         for (var diagrama in draft.data.diagramas) {
@@ -165,7 +165,7 @@ export tool ArtifactCommit {
     // deixou de existir ficariam orfas em disco. O mapa de dependencias vem
     // no mesmo rascunho e e gravado depois das features; um rascunho sem ele
     // (gerado por uma versao anterior) apaga o mapa do backlog antigo.
-    features(project_id: string, draft: Draft): any -> {
+    features(project_id: string, draft: Draft): any {
         self.reset(project_id, "features")
         var historias = Paths.artifact(project_id, "historias")
         if (dir.exists(historias)) dir.clear(historias)
@@ -192,7 +192,7 @@ export tool ArtifactCommit {
     // Delivery, gravadas direto em historias/. Os anexos do usuario
     // (historia_anexos.mh) nao sao regeraveis: sobrevivem ao lote novo na
     // historia de mesmo codigo (US001 -> US001).
-    historias(project_id: string, feature_dir: string, draft: Draft): any -> {
+    historias(project_id: string, feature_dir: string, draft: Draft): any {
         var base = if (feature_dir.is_empty()) "historias" else "historias/${feature_dir}"
         var anexos = HistoriaAnexos.snapshot(project_id, base)
         self.reset(project_id, base)
@@ -210,7 +210,7 @@ export tool ArtifactCommit {
     }
 
     // `assets_prefix` e o caminho de volta ate artifacts/ (mermaid.min.js).
-    plano(project_id: string, relative: string, assets_prefix: string, draft: Draft): any -> {
+    plano(project_id: string, relative: string, assets_prefix: string, draft: Draft): any {
         var data = draft.data
         self.page(project_id, relative, "Plano de implementação — ${html.escape(data.historia_titulo)}", ArtifactBody.plano(data, assets_prefix), data, draft)
         var radahn_yaml = RadahnModel.persist(project_id, relative, data)

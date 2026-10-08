@@ -10,14 +10,14 @@
 export tool WikiAlerts {
     heading(): string -> "## Alertas da revisão"
 
-    strip(page: string): string -> {
+    strip(page: string): string {
         var marker = "\n" + self.heading()
         if (!page.contains(marker)) return page
         return page.split(marker)[0].trim() + "\n\n"
     }
 
     // O bloco inteiro ("" quando a página não tem alertas).
-    tail(page: string): string -> {
+    tail(page: string): string {
         var marker = "\n" + self.heading()
         if (!page.contains(marker)) return ""
         return self.heading() + page.split(marker)[1]

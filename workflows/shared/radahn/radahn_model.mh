@@ -41,7 +41,7 @@ export tool RadahnModel {
     }
 
     // Valor de todo `kind:` do YAML (com ou sem "- " na frente, sem aspas nem comentario).
-    internal yaml_kinds(yaml: string): string[] -> {
+    internal yaml_kinds(yaml: string): string[] {
         var out = []
         for (var line in yaml.split("\n")) {
             var t = line.trim()
@@ -57,7 +57,7 @@ export tool RadahnModel {
     // Chaves que jamais podem ter valor literal no YAML (vem de FROM_ENV).
     internal secret_keys(): string[] -> ["password:", "secret:", "clientsecret:", "apikey:", "authorization:"]
 
-    internal literal_secrets(yaml: string): string[] -> {
+    internal literal_secrets(yaml: string): string[] {
         var out = []
         for (var line in yaml.split("\n")) {
             var t = line.trim()
@@ -73,7 +73,7 @@ export tool RadahnModel {
         return out
     }
 
-    internal check_yaml(yaml: string): string[] -> {
+    internal check_yaml(yaml: string): string[] {
         var out = []
         if (yaml.contains("\t")) out += ["radahn.yaml usa tabs — o YAML aceita só espaços."]
         if (!yaml.contains("kind: ApplicationWorkflow") && !yaml.contains("kind: ApiWorkflow")) out += ["radahn.yaml sem `kind: ApplicationWorkflow`."]
@@ -89,7 +89,7 @@ export tool RadahnModel {
 
     check_assessment(radahn: any): string[] -> self.check({radahn})
 
-    check(data: any): string[] -> {
+    check(data: any): string[] {
         var radahn = data?.radahn
         if (!(data?.radahn_erro ?? "").is_empty()) return ["A avaliação de aderência ao Radahn falhou e foi ignorada: " + data.radahn_erro]
         if (radahn == null) return []
@@ -102,24 +102,24 @@ export tool RadahnModel {
 
     // --- Renderizacao -------------------------------------------------------------
 
-    warnings_html(data: any): string -> {
+    warnings_html(data: any): string {
         var avisos = self.check(data)
         if (avisos.is_empty()) return ""
         return "<h2>Conformidade do radahn.yaml</h2><ul class=\"c4-warnings\">" + avisos.map((a) -> "<li>" + html.escape(a) + "</li>").join("") + "</ul>"
     }
 
-    badge_html(data: any): string -> {
+    badge_html(data: any): string {
         if (!self.applicable(data)) return ""
         return "<span class=\"radahn-badge\" title=\"Esta história pode ser implementada com o Radahn — veja o radahn.yaml gerado junto com o plano.\">Radahn aplicável · " +
             html.escape(self.aderencia_label(data?.radahn?.aderencia ?? "")) + "</span>"
     }
 
-    internal list_html(itens: any[]): string -> {
+    internal list_html(itens: any[]): string {
         if (itens.is_empty()) return "<p>—</p>"
         return "<ul>" + itens.map((i) -> "<li>" + html.escape(i) + "</li>").join("") + "</ul>"
     }
 
-    section_html(data: any): string -> {
+    section_html(data: any): string {
         var radahn = data?.radahn
         if (radahn == null) return ""
         var out = "<h2>Aderência ao Radahn</h2><p>" + (if (self.applicable(data)) self.badge_html(data) else "<strong>" + html.escape(self.aderencia_label(radahn?.aderencia ?? "nao_aplicavel")) + "</strong>") + "</p>" +
@@ -139,7 +139,7 @@ export tool RadahnModel {
 
     // Grava (ou remove, se nao aplicavel mais) o radahn.yaml ao lado do
     // plano.html. `plano_relative` e o caminho do plano sob artifacts/.
-    persist(project_id: string, plano_relative: string, data: any): string -> {
+    persist(project_id: string, plano_relative: string, data: any): string {
         var relative = plano_relative.replace("plano.html", "radahn.yaml")
         var path = Paths.artifact(project_id, relative)
         if (self.applicable(data)) {

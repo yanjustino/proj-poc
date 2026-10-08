@@ -88,7 +88,7 @@ export tool CommonDrafts {
     // diagramas opcionais. C4Diagram.annotate anexa a cada diagrama os avisos
     // que so o lote inteiro revela (nomes divergentes do modelo, falta de
     // implantacao).
-    diagramas(project_id: string, autorrevisao: bool, requisitos: string, atributos: string, adr: string, modelo: string): Draft -> {
+    diagramas(project_id: string, autorrevisao: bool, requisitos: string, atributos: string, adr: string, modelo: string): Draft {
         var modelo_data = json.parse(modelo)
         var views = ArchModel.views(modelo_data)
         return Drafts.reviewed_items(AutoReview.generate(
@@ -110,7 +110,7 @@ export tool CommonDrafts {
     // `scope` separa o historico de pedidos de mudanca de cada feature.
     // `propostas` sao as historias_propostas do item ({tipo, titulo,
     // resultado}): o roteiro da quebra, detalhado em paginas (ver paginate).
-    historias(project_id: string, autorrevisao: bool, feature: string, tech: TechContext, propostas: any[], scope: string): Draft -> {
+    historias(project_id: string, autorrevisao: bool, feature: string, tech: TechContext, propostas: any[], scope: string): Draft {
         var known = Traceability.known(project_id)
         return self.paginate(propostas, (anteriores, pagina) -> Drafts.reviewed_items(AutoReview.generate(
             enabled: autorrevisao,
@@ -144,7 +144,7 @@ export tool CommonDrafts {
     // teto de paginas limita o custo se ele nunca disser que terminou.
     // `fetch(anteriores, pagina)` gera uma pagina; `pagina` e a fatia de
     // propostas, vazia no modo aberto.
-    internal paginate(propostas: any[], fetch: any): Draft -> {
+    internal paginate(propostas: any[], fetch: any): Draft {
         var historias = []
         var tokens_in = 0
         var tokens_out = 0
@@ -176,7 +176,7 @@ export tool CommonDrafts {
     // Bloco do prompt de cada pagina: as propostas a detalhar (ou o limite
     // de tamanho, no modo aberto) e, da segunda pagina em diante, o que ja
     // foi gerado, para o modelo continuar sem repetir.
-    internal lote(anteriores: any[], pagina: any[]): string -> {
+    internal lote(anteriores: any[], pagina: any[]): string {
         var geradas = if (anteriores.is_empty()) "" else
             "## Histórias já geradas para este item\n\nEstas já existem: não as repita nem as reescreva; cite-as pelo título em dependências.\n\n${anteriores.map((h) -> "- ${h.titulo}").join("\n")}\n\n"
         if (pagina.is_empty()) {
@@ -188,7 +188,7 @@ export tool CommonDrafts {
 
     // Duas etapas: o plano e, com ele pronto, a aderencia ao Radahn
     // (data.radahn). `titulo` identifica a historia no cabecalho do plano.
-    plano(project_id: string, autorrevisao: bool, historia: any, historia_content: string, feature: string, titulo: string, tech: TechContext, scope: string): Draft -> {
+    plano(project_id: string, autorrevisao: bool, historia: any, historia_content: string, feature: string, titulo: string, tech: TechContext, scope: string): Draft {
         var known = Traceability.known(project_id)
         var draft = Drafts.reviewed(AutoReview.generate(
             enabled: autorrevisao,

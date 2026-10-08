@@ -10,7 +10,7 @@
 export type SchemaFile = {content: string, path: string}
 
 export tool WorkflowsRoot {
-    resolve(relative: string): string -> {
+    resolve(relative: string): string {
         var root = env("SENPAI_WORKFLOWS_ROOT")
         if (root.is_empty()) return "workflows/" + relative
         return root + "/" + relative

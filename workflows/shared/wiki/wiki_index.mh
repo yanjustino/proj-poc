@@ -19,9 +19,17 @@ export tool WikiIndex {
     upsert_answer(project_id: string, entry: {slug: string, title: string, summary: string}) ->
         self.upsert(project_id, "answers", entry)
 
+    // Reconstrucao da wiki (WikiActions.reset): zera fontes, entidades e
+    // conceitos e fica so com as respostas arquivadas recebidas.
+    reset(project_id: string, answers: any[]) {
+        var state = {sources: [], entities: [], concepts: [], answers}
+        self.save(project_id, state)
+        self.render(project_id, state)
+    }
+
     // Uma pagina que ja existe mantem o resumo original (o primeiro fato que
     // a definiu) e acumula os aliases de cada ingestao.
-    upsert(project_id: string, category: string, entry: any) -> {
+    upsert(project_id: string, category: string, entry: any) {
         var state = self.load(project_id)
         var list = state.get(category, [])
         var existing = list.find((e) -> e.slug == entry.slug)
@@ -41,7 +49,7 @@ export tool WikiIndex {
 
     // Sem repeticao e sem o proprio titulo, comparando pelo slug (ignora
     // caixa, acento e pontuacao).
-    internal merge_aliases(title: string, current: string[], incoming: string[]): string[] -> {
+    internal merge_aliases(title: string, current: string[], incoming: string[]): string[] {
         var seen = [Slug.from_title(title)]
         var out = []
         for (var alias in current + incoming) {
@@ -58,7 +66,7 @@ export tool WikiIndex {
     // titulo ou alias tem o mesmo slug; senao, o proprio titulo recebido.
     // E a rede de seguranca deterministica para a LLM que nao reaproveitou
     // o titulo do catalogo.
-    canonical_title(project_id: string, category: string, title: string): string -> {
+    canonical_title(project_id: string, category: string, title: string): string {
         var key = Slug.from_title(title)
         var match = self.load(project_id).get(category, []).find((e) ->
             e.slug == key || (e?.aliases ?? []).any((a) -> Slug.from_title(a) == key)
@@ -68,13 +76,13 @@ export tool WikiIndex {
 
     // Catalogo de entidades e conceitos para o prompt de ingestao: a LLM
     // reaproveita estes titulos em vez de criar uma pagina por variacao.
-    catalog(project_id: string): string -> {
+    catalog(project_id: string): string {
         var state = self.load(project_id)
         var out = self.catalog_section("Entidades", state.get("entities", [])) + self.catalog_section("Conceitos", state.get("concepts", []))
         return if (out.is_empty()) "(nenhuma página ainda — todas as entidades e conceitos desta fonte são novos)" else out
     }
 
-    internal catalog_section(label: string, entries: any[]): string -> {
+    internal catalog_section(label: string, entries: any[]): string {
         if (entries.is_empty()) return ""
         var lines = entries.map((e) -> {
             var aliases = e?.aliases ?? []
@@ -83,7 +91,7 @@ export tool WikiIndex {
         return "### ${label}\n\n${lines.join("\n")}\n\n"
     }
 
-    load(project_id: string): any -> {
+    load(project_id: string): any {
         var path = Paths.index_state_file(project_id)
         if (!fs.exists(path)) return {sources: [], entities: [], concepts: [], answers: []}
         return json.parse(fs.read(path))
@@ -92,7 +100,7 @@ export tool WikiIndex {
     internal save(project_id: string, state: any) ->
         fs.write(Paths.index_state_file(project_id), json.stringify(state))
 
-    internal render(project_id: string, state: any) -> {
+    internal render(project_id: string, state: any) {
         var body = "# Índice da Wiki\n\n"
         body = body + self.render_section("Fontes", "sources", state.get("sources", []))
         body = body + self.render_section("Entidades", "entities", state.get("entities", []))
@@ -101,7 +109,7 @@ export tool WikiIndex {
         fs.write(Paths.wiki(project_id, "index.md"), body)
     }
 
-    internal render_section(title: string, dir: string, entries: any[]): string -> {
+    internal render_section(title: string, dir: string, entries: any[]): string {
         if (entries.is_empty()) return ""
         var lines = "## " + title + "\n\n"
         for (var entry in entries) {
@@ -110,7 +118,7 @@ export tool WikiIndex {
         return lines + "\n"
     }
 
-    internal natureza_badge(entry: any): string -> {
+    internal natureza_badge(entry: any): string {
         var n = entry?.natureza ?? ""
         if (n.is_empty()) return ""
         return " `[" + self.natureza_label(n) + "]`"

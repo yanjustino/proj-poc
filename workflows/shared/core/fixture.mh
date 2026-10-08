@@ -6,19 +6,19 @@
 import { Paths } from "paths.mh"
 
 export tool Fixture {
-    project(project_id: string): string -> {
+    project(project_id: string): string {
         self.drop(project_id)
         dir.create(Paths.artifacts_dir(project_id))
         return project_id
     }
 
-    artifact(project_id: string, relative: string, content: string) -> {
+    artifact(project_id: string, relative: string, content: string) {
         var parts = relative.split("/")
         if (parts.size() > 1) dir.create(Paths.artifact(project_id, parts[0..^1].join("/")))
         fs.write(Paths.artifact(project_id, relative), content)
     }
 
-    drop(project_id: string) -> {
+    drop(project_id: string) {
         var root = Paths.root(project_id)
         if (dir.exists(root)) {
             dir.clear(root)

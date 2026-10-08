@@ -20,7 +20,7 @@ import { ArtifactChecks } from "artifact_checks.mh"
 import { StoryRules } from "backlog_rules.mh"
 
 export tool Readiness {
-    read_json(path: string): any -> {
+    read_json(path: string): any {
         if (!fs.exists(path)) return null
         try {
             return json.parse(fs.read(path))
@@ -32,7 +32,7 @@ export tool Readiness {
     // Estruturada = gerada com contratos/cenarios/rastreabilidade.
     internal is_structured(h: any): bool -> h?.contratos != null && h?.cenarios != null && h?.rastreabilidade != null && !StoryRules.is_legacy(h)
 
-    internal evaluate(h: any, plano: any): any -> {
+    internal evaluate(h: any, plano: any): any {
         var bloqueios = []
         var ressalvas = []
         if (!self.is_structured(h)) {
@@ -47,7 +47,7 @@ export tool Readiness {
         return {status: self.status_of(bloqueios, ressalvas), bloqueios, ressalvas}
     }
 
-    internal status_of(bloqueios: string[], ressalvas: string[]): string -> {
+    internal status_of(bloqueios: string[], ressalvas: string[]): string {
         if (!bloqueios.is_empty()) return "nao_pronta"
         if (!ressalvas.is_empty()) return "pronta_com_ressalvas"
         return "pronta"
@@ -55,7 +55,7 @@ export tool Readiness {
 
     // item: uma historia avaliada, com onde ela esta (`path` relativo a
     // artifacts/, "" para a historia unica do Delivery na raiz).
-    internal item(dir_path: string, relative: string, feature_dir: string): any -> {
+    internal item(dir_path: string, relative: string, feature_dir: string): any {
         var h = self.read_json(dir_path + "/historia.json")
         if (h == null) return null
         var plano = self.read_json(dir_path + "/plano.json")
@@ -78,7 +78,7 @@ export tool Readiness {
     // batch: todas as historias do work-item — Discovery (historias/<feature>/
     // <historia>/), Delivery em lote (historias/<historia>/) e a historia
     // unica do Delivery (historia.json na raiz de artifacts/).
-    batch(project_id: string): any[] -> {
+    batch(project_id: string): any[] {
         var base = Paths.artifacts_dir(project_id)
         var out = []
         if (fs.exists(base + "/historia.json")) {
@@ -106,7 +106,7 @@ export tool Readiness {
     // Dependencia (depende_de) de uma historia do MESMO lote que ainda nao
     // esta pronta vira ressalva — o desenvolvimento pode comecar, mas a
     // ordem importa.
-    internal with_dependencies(items: any[]): any[] -> {
+    internal with_dependencies(items: any[]): any[] {
         var out = []
         for (var it in items) {
             var pendentes = []

@@ -2,7 +2,7 @@ import { SenpaiConfig } from "../core/senpai_config.mh"
 import { AgentSelector } from "../agents/agents.mh"
 
 export tool TelemetryClient {
-    send (data: any) : boolean -> {
+    send (data: any) : boolean {
         try
         {
             if (!SenpaiConfig.get(key: "telemetry_enabled")) return false
@@ -38,7 +38,7 @@ export enum TelemetryStatus { Success, Fail }
 // que lanca erro aborta a run (Docs-Reference §14, LIFECYCLE HOOKS), e
 // telemetria nao pode derrubar uma geracao.
 export tool Telemetry {
-    step_end(ctx: StepContext, project_id: string, artifact: string, tokens_in: number, tokens_out: number) -> {
+    step_end(ctx: StepContext, project_id: string, artifact: string, tokens_in: number, tokens_out: number) {
         try {
             TelemetryClient.send(self.event(ctx, project_id, artifact, tokens_in, tokens_out))
         } catch (e) {

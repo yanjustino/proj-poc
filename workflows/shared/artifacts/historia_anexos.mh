@@ -23,7 +23,7 @@ export tool HistoriaAnexos {
 
     // list: nomes dos anexos, em ordem alfabetica. Arquivos ocultos (".x")
     // ficam de fora — sao do sistema operacional, nao do usuario.
-    list(project_id: string, historia_rel: string): string[] -> {
+    list(project_id: string, historia_rel: string): string[] {
         var anexos_dir = self.dir_of(project_id, historia_rel)
         if (!dir.exists(anexos_dir)) return []
         var names = []
@@ -35,7 +35,7 @@ export tool HistoriaAnexos {
     }
 
     // copy_to copia os anexos para `dest_dir`/anexos/ e devolve os nomes.
-    copy_to(project_id: string, historia_rel: string, dest_dir: string): string[] -> {
+    copy_to(project_id: string, historia_rel: string, dest_dir: string): string[] {
         var names = self.list(project_id, historia_rel)
         if (names.is_empty()) return []
         var source = self.dir_of(project_id, historia_rel)
@@ -47,7 +47,7 @@ export tool HistoriaAnexos {
     // snapshot guarda em memoria os anexos de cada historia sob `base`
     // ("historias/<feature>" ou "historias"), por codigo ("US001"), antes de
     // ArtifactCommit.historias limpar a pasta para gravar o lote novo.
-    snapshot(project_id: string, base: string): any[] -> {
+    snapshot(project_id: string, base: string): any[] {
         var base_dir = Paths.artifact(project_id, base)
         if (!dir.exists(base_dir)) return []
         var out = []
@@ -64,7 +64,7 @@ export tool HistoriaAnexos {
 
     // restore devolve os anexos guardados por snapshot a historia nova de
     // mesmo codigo. Uma historia que deixou de existir perde os seus.
-    restore(project_id: string, saved: any[], codigo: string, historia_rel: string) -> {
+    restore(project_id: string, saved: any[], codigo: string, historia_rel: string) {
         var match = saved.filter((s) -> s.codigo == codigo)
         if (match.is_empty()) { return }
         var anexos_dir = self.dir_of(project_id, historia_rel)

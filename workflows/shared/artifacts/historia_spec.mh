@@ -24,7 +24,7 @@ export tool Traceability {
     // known: os identificadores que existem hoje nos artefatos do work-item,
     // lidos do JSON semantico de cada um (ArtifactData). Um artefato ausente
     // so deixa sua lista vazia — Delivery nao tem atributos, DER e opcional.
-    known(project_id: string): any -> {
+    known(project_id: string): any {
         var requisitos = self.ids_of(self.read_json(project_id, "requisitos.json"), ["funcionais", "integracoes", "dados", "negocio", "regras_negocio"])
         var atributos_json = self.read_json(project_id, "atributos.json")
         var atributos = self.ids_of(atributos_json, ["requisitos_nao_funcionais", "restricoes_arquiteturais", "compliance"])
@@ -42,7 +42,7 @@ export tool Traceability {
 
     // Features do backlog (Discovery): codigo ("FT006") e titulo — destinos
     // validos de uma dependencia de historia. Delivery nao tem pasta features/.
-    internal features(project_id: string): string[] -> {
+    internal features(project_id: string): string[] {
         var base = Paths.artifact(project_id, "features")
         if (!dir.exists(base)) return []
         var out = []
@@ -57,7 +57,7 @@ export tool Traceability {
         return out
     }
 
-    internal read_json(project_id: string, relative: string): any -> {
+    internal read_json(project_id: string, relative: string): any {
         var path = Paths.artifact(project_id, relative)
         if (!fs.exists(path)) return null
         try {
@@ -67,7 +67,7 @@ export tool Traceability {
         }
     }
 
-    internal ids_of(data: any, keys: string[]): string[] -> {
+    internal ids_of(data: any, keys: string[]): string[] {
         if (data == null) return []
         var out = []
         for (var key in keys) {
@@ -80,7 +80,7 @@ export tool Traceability {
     }
 
     // "ADR-001" de cada arquivo "ADR-001-slug.json" em adr/.
-    internal adr_ids(project_id: string): string[] -> {
+    internal adr_ids(project_id: string): string[] {
         var base = Paths.artifact(project_id, "adr")
         if (!dir.exists(base)) return []
         var out = []
@@ -97,7 +97,7 @@ export tool Traceability {
     // DER estruturado (DerModel: entidades[].id e .nome) ou legado
     // (entidades[].entidade). Id e nome valem como referencia: o modelo cita
     // pelo id que ve no JSON ("trilha-auditoria") tanto quanto pelo nome.
-    internal der_entities(der: any): string[] -> {
+    internal der_entities(der: any): string[] {
         if (der == null) return []
         var out = []
         for (var e in (der?.entidades ?? [])) {
@@ -113,7 +113,7 @@ export tool Traceability {
     // conteineres e bancos, e tambem pessoas e sistemas externos: uma
     // historia que cita o sistema externo com que integra ("bureau-credito")
     // esta referenciando algo que existe, nao inventando.
-    internal containers(project_id: string): string[] -> {
+    internal containers(project_id: string): string[] {
         var base = Paths.artifact(project_id, "diagramas")
         if (!dir.exists(base)) return []
         var out = []
@@ -138,14 +138,14 @@ export tool Traceability {
     internal normalized(text: string): string -> text.to_lower().trim()
 
     // Aceita "FR-001" ou a forma de citacao "requisitos/FR-001".
-    internal strip_prefix(ref: string): string -> {
+    internal strip_prefix(ref: string): string {
         var parts = ref.split("/")
         return parts[parts.size() - 1].trim()
     }
 
     // missing: as referencias de `refs` que nao existem em `known` — comparacao
     // sem caixa/espacos; para ADRs, pelo prefixo "ADR-NNN".
-    missing(refs: string[], known: string[], adr: bool): string[] -> {
+    missing(refs: string[], known: string[], adr: bool): string[] {
         if (known.is_empty()) return []
         var known_norm = known.map((k) -> self.normalized(k))
         var out = []
@@ -163,7 +163,7 @@ export tool Traceability {
     // check: avisos de rastreabilidade de UMA historia contra `known`. Uma
     // historia funcional sem nenhum requisito citado tambem e sinalizada — e o
     // vinculo que diz POR QUE ela existe.
-    internal check(rastreabilidade: any, known: any, story_type: string): string[] -> {
+    internal check(rastreabilidade: any, known: any, story_type: string): string[] {
         if (rastreabilidade == null) return []
         var out = []
         var requisitos = rastreabilidade?.requisitos ?? []
@@ -192,7 +192,7 @@ export tool Traceability {
     // annotate: o que HistoriasGenerate guarda em pending_data — cada historia
     // com os avisos que dependem do contexto do work-item (avisos_rastreabilidade),
     // para o preview de UMA historia e o arquivo final mostrarem o mesmo.
-    annotate(data: any, known: any): any -> {
+    annotate(data: any, known: any): any {
         var out = []
         var dependencias = DependencyRules.check_batch(data.historias, (known?.features ?? []) + (known?.conteineres ?? []))
         var i = 0
@@ -208,7 +208,7 @@ export tool Traceability {
         return data
     }
 
-    html(rastreabilidade: any): string -> {
+    html(rastreabilidade: any): string {
         if (rastreabilidade == null) return ""
         var rows = [
             {label: "Requisitos", key: "requisitos"},
@@ -240,7 +240,7 @@ export tool Contracts {
         _          -> {type: campo?.tipo ?? "string", description: campo?.descricao ?? ""}
     }
 
-    internal object_schema(campos: any[]): any -> {
+    internal object_schema(campos: any[]): any {
         var properties = {}
         var required = []
         for (var c in campos) {
@@ -250,7 +250,7 @@ export tool Contracts {
         return {type: "object", required, properties}
     }
 
-    internal operation_id(endpoint: any): string -> {
+    internal operation_id(endpoint: any): string {
         var id = endpoint?.id ?? ""
         if (!id.is_empty()) return id
         return (endpoint.metodo + " " + endpoint.caminho).to_lower().replace("/", "_").replace("{", "").replace("}", "").replace(" ", "")
@@ -258,7 +258,7 @@ export tool Contracts {
 
     // --- OpenAPI / AsyncAPI ----------------------------------------------------
 
-    openapi(historia: any): any -> {
+    openapi(historia: any): any {
         var endpoints = historia?.contratos?.endpoints ?? []
         if (endpoints.is_empty()) return null
         var paths = {}
@@ -298,7 +298,7 @@ export tool Contracts {
         }
     }
 
-    asyncapi(historia: any): any -> {
+    asyncapi(historia: any): any {
         var eventos = historia?.contratos?.eventos ?? []
         if (eventos.is_empty()) return null
         var channels = {}
@@ -320,7 +320,7 @@ export tool Contracts {
     // e estes arquivos vao para o repositorio para serem lidos.
     pretty(value: any): string -> self.pretty_at(value, "")
 
-    internal pretty_at(value: any, indent: string): string -> {
+    internal pretty_at(value: any, indent: string): string {
         var t = type_of(value)
         var inner = indent + "  "
         if (t == "object") {
@@ -337,7 +337,7 @@ export tool Contracts {
 
     // --- Conformidade -----------------------------------------------------------
 
-    internal path_params(caminho: string): string[] -> {
+    internal path_params(caminho: string): string[] {
         var out = []
         for (var part in caminho.split("/")) {
             if (part.starts_with("{") && part.ends_with("}")) out += [part.substring(1, part.size() - 1)]
@@ -346,7 +346,7 @@ export tool Contracts {
     }
 
     // check: coerencia do contrato de UMA historia, sem depender de contexto.
-    check(historia: any): string[] -> {
+    check(historia: any): string[] {
         if (!self.is_structured(historia)) return []
         var out = []
         var endpoints = historia?.contratos?.endpoints ?? []
@@ -402,7 +402,7 @@ export tool Contracts {
 
     // --- Renderizacao -----------------------------------------------------------
 
-    internal fields_html(campos: any[]): string -> {
+    internal fields_html(campos: any[]): string {
         if (campos.is_empty()) return "<p>—</p>"
         return "<table><thead><tr><th>Campo</th><th>Tipo</th><th>Obrigatório</th><th>Descrição</th></tr></thead><tbody>" +
             campos.map((c) -> "<tr><td><code>" + html.escape(c.nome) + "</code>" + (if ((c?.local ?? "") == "") "" else " <small>(" + html.escape(c.local) + ")</small>") +
@@ -411,7 +411,7 @@ export tool Contracts {
             "</tbody></table>"
     }
 
-    html(historia: any): string -> {
+    html(historia: any): string {
         var endpoints = historia?.contratos?.endpoints ?? []
         var eventos = historia?.contratos?.eventos ?? []
         var integracoes = historia?.contratos?.integracoes ?? []
@@ -455,7 +455,7 @@ export tool Contracts {
 export tool Scenarios {
     is_structured(historia: any): bool -> historia?.cenarios != null
 
-    internal steps(keyword: string, items: string[]): string -> {
+    internal steps(keyword: string, items: string[]): string {
         var out = ""
         var first = true
         for (var item in items) {
@@ -468,7 +468,7 @@ export tool Scenarios {
     internal tags(criterios: string[]): string ->
         criterios.map((c) -> "@" + c.to_upper().trim()).join(" ")
 
-    gherkin(historia: any): string -> {
+    gherkin(historia: any): string {
         var out = "# language: pt\nFuncionalidade: " + (historia?.titulo ?? "") + "\n"
         for (var c in (historia?.cenarios ?? [])) {
             var tags = self.tags(c?.criterios ?? [])
@@ -481,7 +481,7 @@ export tool Scenarios {
         return out
     }
 
-    check(historia: any): string[] -> {
+    check(historia: any): string[] {
         if (!self.is_structured(historia)) return []
         var out = []
         var total = (historia?.criterios_aceite ?? []).size()
@@ -513,7 +513,7 @@ export tool Scenarios {
         return out
     }
 
-    html(historia: any): string -> {
+    html(historia: any): string {
         var cenarios = historia?.cenarios ?? []
         if (cenarios.is_empty()) return ""
         var fontes = []
@@ -532,7 +532,7 @@ export tool Scenarios {
 export tool SpikeSpec {
     is_structured(historia: any): bool -> !((historia?.spike?.pergunta ?? "").trim().is_empty())
 
-    html(spike: any): string -> {
+    html(spike: any): string {
         var rows = [
             {label: "Pergunta de investigação", value: spike?.pergunta ?? ""},
             {label: "Timebox", value: spike?.timebox ?? ""},
@@ -549,7 +549,7 @@ export tool SpikeSpec {
 // para o repositorio de codigo leva adiante: openapi.json/asyncapi.json (so
 // com endpoints/eventos) e historia.feature (os cenarios em Gherkin).
 export tool SpecFiles {
-    write(project_id: string, relative_dir: string, historia: any) -> {
+    write(project_id: string, relative_dir: string, historia: any) {
         var prefix = if (relative_dir.is_empty()) "" else relative_dir + "/"
         var openapi = Contracts.openapi(historia)
         if (openapi != null) fs.write(Paths.artifact(project_id, prefix + "openapi.json"), Contracts.pretty(openapi))

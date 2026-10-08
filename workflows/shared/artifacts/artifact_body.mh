@@ -82,7 +82,7 @@ export tool ArtifactBody {
     // DER estruturado (DerModel): diagramas, legenda, tabelas e
     // conformidade gerados por codigo. Um DER legado (Mermaid livre) ainda
     // renderiza pelo template antigo, com o aviso de DerModel.check no topo.
-    der(data: any): string -> {
+    der(data: any): string {
         if (!DerModel.is_structured(data)) {
             return Cite.finalize(DerModel.warnings_html(data) + DerLegacyBody(
                 modo: html.escape(data.modo),
@@ -119,7 +119,7 @@ export tool ArtifactBody {
     // Modelo arquitetural (ArchModel): as duas visoes, cada uma com as suas
     // tabelas, saem das mesmas funcoes dos diagramas C4 — o que se ve aqui e
     // exatamente o que diagramas/ vai mostrar.
-    modelo(data: any): string -> {
+    modelo(data: any): string {
         var contexto = ArchModel.context(data)
         var conteineres = ArchModel.container(data)
         return Cite.finalize(ModeloBody(
@@ -137,7 +137,7 @@ export tool ArtifactBody {
 
     // Visoes detalhadas (ArchModel): titulo, de onde nasceram, desenho e
     // tabelas — na ordem em que foram criadas.
-    internal model_details(data: any): string -> {
+    internal model_details(data: any): string {
         var out = ""
         for (var d in ArchModel.detalhes(data)) {
             var v = ArchModel.detail_view(data, d)
@@ -171,20 +171,20 @@ export tool ArtifactBody {
 
     // Uma visao derivada do modelo nao passou pela LLM dos diagramas: no
     // lugar da nota de autorrevisao, diz onde muda-la.
-    internal diagram_origin(data: any): string -> {
+    internal diagram_origin(data: any): string {
         if (data?.derivado_do_modelo ?? false) return "<p class=\"autorrevisao\">Visão derivada do modelo arquitetural — para mudar este diagrama, edite o modelo.</p>"
         return AutoReview.note_html(data)
     }
 
     // Coerencia do item (sem contexto) + aderencia a arquitetura (calculada
     // no *Generate contra os artefatos do work-item — ver ArchConformance).
-    internal feature_warnings(data: any): string -> {
+    internal feature_warnings(data: any): string {
         var avisos = FeatureRules.check(data) + (data?.avisos_arquitetura ?? [])
         if (avisos.is_empty()) return ""
         return "<h2>Conformidade do item</h2><ul class=\"c4-warnings\">" + avisos.map((a) -> "<li>" + html.escape(a) + "</li>").join("") + "</ul>"
     }
 
-    feature(data: any): string -> {
+    feature(data: any): string {
         // Checkpoints anteriores a classificacao Feature/Enabler nao tem
         // estes seis campos. Eles continuam aprovaveis: o antigo contrato
         // so gerava features de negocio, e objetivo era a melhor hipotese
@@ -223,14 +223,14 @@ export tool ArtifactBody {
 
     // Contratos estruturados (Contracts, historia_spec.mh) ou, numa historia
     // gravada antes deles, o texto livre de contratos_interface.
-    internal historia_contracts(data: any): string -> {
+    internal historia_contracts(data: any): string {
         if (Contracts.is_structured(data)) return Contracts.html(data)
         return "<h2>Contratos de Interface</h2><pre><code class=\"language-json\">" + html.escape(data?.contratos_interface ?? "") + "</code></pre>" + Cite.note(data?.contratos_fontes ?? [])
     }
 
     // Coerencia do contrato (sem contexto) + rastreabilidade (calculada no
     // *Generate contra os artefatos do work-item — ver Traceability.annotate).
-    internal historia_warnings(data: any): string -> {
+    internal historia_warnings(data: any): string {
         var avisos = StoryRules.check(data) + Scenarios.check(data) + Contracts.check(data) + (data?.avisos_rastreabilidade ?? [])
         if (avisos.is_empty()) return ""
         return "<h2>Conformidade da especificação</h2><ul class=\"c4-warnings\">" + avisos.map((a) -> "<li>" + html.escape(a) + "</li>").join("") + "</ul>"
@@ -238,7 +238,7 @@ export tool ArtifactBody {
 
     // Criterios numerados CA1, CA2… — a referencia que o plano de
     // implementacao usa para ligar tarefas e testes a cada criterio.
-    internal numbered_criteria(itens: any[]): string -> {
+    internal numbered_criteria(itens: any[]): string {
         var out = []
         var n = 1
         for (var item in itens) {
@@ -251,17 +251,17 @@ export tool ArtifactBody {
     // Secoes que nao se aplicam somem da pagina em vez de aparecerem com um
     // titulo e um bloco vazio — "nao se aplica" nao e o mesmo que "falta"
     // (o que falta vai para Lacunas).
-    internal list_section(title: string, items: any[]): string -> {
+    internal list_section(title: string, items: any[]): string {
         if (items.is_empty()) return ""
         return "<h2>" + title + "</h2>" + Cite.list(items)
     }
 
-    internal text_section(title: string, body: string, content: string): string -> {
+    internal text_section(title: string, body: string, content: string): string {
         if (content.trim().is_empty()) return ""
         return "<h2>" + title + "</h2>" + body
     }
 
-    historia(data: any): string -> {
+    historia(data: any): string {
         // O schema antigo ja possuia story_type, mas toda historia ainda
         // usava Como/Quero/Para. A ausencia dos novos campos tecnicos e o
         // discriminador confiavel para manter essa apresentacao.

@@ -4,7 +4,7 @@
 // de arquivo, sempre igual para o mesmo titulo.
 
 export tool Slug {
-    from_title(title: string): string -> {
+    from_title(title: string): string {
         var lowered = Slug.strip_accents(title.to_lower())
         var allowed = "abcdefghijklmnopqrstuvwxyz0123456789"
         var slug = ""

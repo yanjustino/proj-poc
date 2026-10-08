@@ -19,7 +19,7 @@ export tool LiteralBlocks {
     // Todos os trechos marcados, na ordem, separados por linha em branco.
     // Um marcador aberto sem fechamento e ignorado (nunca engole o resto da
     // fonte).
-    extract(text: string): string -> {
+    extract(text: string): string {
         var out = []
         var parts = text.split(self.open())
         var i = 1

@@ -34,11 +34,13 @@ const WIKI_ACTION_TITLE = {
   lint: () => 'Verificação da wiki',
   sync_html: () => 'Sincronização da wiki',
   snapshot_repo: () => 'Retrato do repositório',
+  reset: () => 'Reprocessamento da wiki (limpeza)',
   create_concept: (m) => `${m.approved ? 'Gravação' : 'Criação'} de conceito${m.concept_title ? `: ${m.concept_title}` : ''}`,
 };
 const STEP_TITLE = [
   ['SyncHtml', 'Sincronização da wiki'],
   ['SnapshotRepo', 'Retrato do repositório'],
+  ['Reset', 'Reprocessamento da wiki (limpeza)'],
   ['IngestGenerate', 'Ingestão na wiki'],
   ['IngestCommit', 'Ingestão na wiki'],
   ['Query', 'Pergunta à wiki'],

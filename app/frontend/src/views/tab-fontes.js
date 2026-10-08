@@ -7,7 +7,10 @@ import {
   isFullyTerminal,
   listIngestedRaw,
   markRawIngested,
+  removeRawSource,
+  wikiStaleSources,
 } from '../api.js';
+import { openConfirmModal } from './confirm-modal.js';
 import { openAddTextSourceModal } from './add-text-source-modal.js';
 import { openAddUrlSourceModal } from './add-url-source-modal.js';
 import { openAddRepoSourceModal } from './add-repo-source-modal.js';
@@ -17,6 +20,7 @@ import { createRunTracker } from '../run-tracker.js';
 import { icon } from '../icons.js';
 import { getActiveRun, clearActiveRun } from '../active-runs.js';
 import { enqueueIngest, ingestFailure, ingestQueueSnapshot, isQueuedOrRunning, subscribeIngestQueue } from '../ingest-queue.js';
+import { confirmRebuildWiki } from './rebuild-wiki.js';
 import { formatRelativeTime } from '../time-format.js';
 
 // renderFontesTab owns the "upload de arquivos-base → Wiki ingest" flow
@@ -45,6 +49,11 @@ import { formatRelativeTime } from '../time-format.js';
 // The batch loop itself lives in ingest-queue.js, not here — see that
 // file's comment for the duplicate-ingest incident a mount-owned loop
 // caused. This tab only renders the queue's state and enqueues into it.
+//
+// Removing a source that was already ingested can't take its facts out of
+// the wiki (pages don't record which source said what): the wiki is flagged
+// as carrying content from removed sources until the person rebuilds it
+// (rebuildWiki — see app/wiki_rebuild.go).
 export async function renderFontesTab(container, project, { onChanged }) {
   // Flipped off by the dispose() this returns — guards a status callback
   // that outlives this mount from touching torn-down DOM.
@@ -70,6 +79,7 @@ export async function renderFontesTab(container, project, { onChanged }) {
       <button class="collection-filter" data-source-filter="ready">Ingeridas</button>
       <button class="collection-filter" data-source-filter="pending">Pendentes</button>
     </div>
+    <div class="wiki-rebuild-banner" data-rebuild-banner hidden></div>
     <div class="list-area" data-sources></div>
   `;
 
@@ -77,6 +87,7 @@ export async function renderFontesTab(container, project, { onChanged }) {
   const addButton = container.querySelector('[data-add]');
   const ingestPendingButton = container.querySelector('[data-ingest-pending]');
   const sourceCountEl = container.querySelector('[data-source-count]');
+  const rebuildBannerEl = container.querySelector('[data-rebuild-banner]');
   const filterButtons = [...container.querySelectorAll('[data-source-filter]')];
   const viewButtons = [...container.querySelectorAll('[data-view]')];
 
@@ -107,6 +118,8 @@ export async function renderFontesTab(container, project, { onChanged }) {
   let rawNodes = []; // full listProjectDir() nodes (name + modifiedAt), not just names — the table view's "Última atualização" column needs the timestamp too
   let rawNames = [];
   let ingestedNames = new Set();
+  // Ingested sources removed since the last rebuild (raw/.wiki-stale.json).
+  let staleSources = [];
   let activeFilter = 'all';
   // trackers: filename -> live tracker. Either the queue's current run
   // (mirrored from ingest-queue.js's status events, one tracker per mount)
@@ -144,6 +157,10 @@ export async function renderFontesTab(container, project, { onChanged }) {
       render();
       return;
     }
+    if (event.type === 'rebuild') {
+      refresh().then(() => onChanged());
+      return;
+    }
     if (event.type === 'done') {
       trackers.get(event.name)?.dispose();
       trackers.delete(event.name);
@@ -169,6 +186,12 @@ export async function renderFontesTab(container, project, { onChanged }) {
     } catch (err) {
       console.error('listIngestedRaw', err);
     }
+    try {
+      staleSources = await wikiStaleSources(project.id);
+    } catch (err) {
+      console.error('wikiStaleSources', err);
+      staleSources = [];
+    }
     rawNodes = nodes;
     rawNames = nodes.map((node) => node.name);
     ingestedNames = new Set(ingestedList);
@@ -181,6 +204,16 @@ export async function renderFontesTab(container, project, { onChanged }) {
 
   function isBusy(name) {
     return trackers.has(name) || isQueuedOrRunning(project.id, name);
+  }
+
+  function rebuildState() {
+    return ingestQueueSnapshot(project.id).rebuild;
+  }
+
+  // A source can go while nothing is ingesting it and no rebuild is running
+  // (a rebuild re-reads the ingested list it is working through).
+  function canRemove(name) {
+    return !isBusy(name) && !rebuildState();
   }
 
   function pendingNames() {
@@ -212,11 +245,74 @@ export async function renderFontesTab(container, project, { onChanged }) {
     } else {
       renderCards(visibleNames);
     }
+    renderRebuildBanner();
     const pending = pendingNames();
     ingestPendingButton.disabled = pending.length === 0;
     ingestPendingButton.innerHTML = pending.length
       ? `${icon('inbox', 14)} Ingerir pendentes (${pending.length})`
       : `${icon('inbox', 14)} Ingerir pendentes`;
+  }
+
+  // renderRebuildBanner: the rebuild's progress while it runs; otherwise,
+  // which removed sources the wiki still carries content from.
+  function renderRebuildBanner() {
+    const rebuild = rebuildState();
+    if (rebuild) {
+      const done = rebuild.phase === 'ingest' ? (rebuild.names || []).filter((name) => ingestedNames.has(name)).length : 0;
+      const text = rebuild.phase === 'reset'
+        ? 'Apagando a wiki para reprocessar as fontes…'
+        : rebuild.phase === 'ingest'
+          ? `Reprocessando a wiki: ${done} de ${rebuild.total} ${rebuild.total === 1 ? 'fonte' : 'fontes'}.`
+          : 'Verificando a wiki reprocessada…';
+      rebuildBannerEl.innerHTML = `${icon('refreshCw', 13)}<span>${escapeHtml(text)}</span>`;
+      rebuildBannerEl.hidden = false;
+      return;
+    }
+    if (staleSources.length === 0) {
+      rebuildBannerEl.hidden = true;
+      rebuildBannerEl.innerHTML = '';
+      return;
+    }
+    const names = staleSources.map((name) => `<strong>${escapeHtml(name)}</strong>`).join(', ');
+    rebuildBannerEl.innerHTML = `
+      ${icon('alertCircle', 13)}
+      <span>A wiki ainda contém conteúdo de ${staleSources.length === 1 ? 'uma fonte removida' : `${staleSources.length} fontes removidas`}: ${names}. Reprocesse a wiki para tirá-lo.</span>
+      <button class="button tertiary small" data-rebuild>${icon('refreshCw', 14)} Reprocessar wiki</button>
+    `;
+    rebuildBannerEl.hidden = false;
+    rebuildBannerEl.querySelector('[data-rebuild]').addEventListener('click', () => confirmRebuildWiki(project.id));
+  }
+
+  async function confirmRemove(name) {
+    if (!canRemove(name)) return;
+    const ingested = ingestedNames.has(name);
+    const ok = await openConfirmModal({
+      title: 'Remover fonte',
+      body: ingested
+        ? `<p><strong>${escapeHtml(name)}</strong> já foi ingerida. O arquivo sai das fontes, mas o que ele trouxe continua na wiki até você reprocessá-la.</p>`
+        : `<p><strong>${escapeHtml(name)}</strong> ainda não foi ingerida — sai das fontes sem afetar a wiki.</p>`,
+      confirmLabel: 'Remover',
+      danger: true,
+    });
+    if (!ok) return;
+    try {
+      await removeRawSource(project.id, name);
+    } catch (err) {
+      window.alert(`Erro ao remover "${name}": ` + (err.message || err));
+    }
+    await refresh();
+    onChanged();
+  }
+
+  function bindRemoveButtons() {
+    sourcesEl.querySelectorAll('[data-remove-one]').forEach((button) => {
+      button.addEventListener('click', () => confirmRemove(button.dataset.removeOne));
+    });
+  }
+
+  function removeButtonHtml(name, className) {
+    if (!canRemove(name)) return '';
+    return `<button class="${className}" data-remove-one="${escapeAttribute(name)}" title="Remover fonte" aria-label="Remover ${escapeAttribute(name)}">${icon('trash', 13)}</button>`;
   }
 
   // renderOnboarding: an empty project shows the source-kind gallery inline
@@ -258,6 +354,7 @@ export async function renderFontesTab(container, project, { onChanged }) {
         if (ingestButton) ingestButton.addEventListener('click', () => enqueueIngest(project.id, [name]));
       }
     }
+    bindRemoveButtons();
   }
 
   // renderTable: the dense alternative to renderCards, same reasoning as
@@ -291,6 +388,7 @@ export async function renderFontesTab(container, project, { onChanged }) {
     sourcesEl.querySelectorAll('[data-ingest-one]').forEach((button) => {
       button.addEventListener('click', () => enqueueIngest(project.id, [button.dataset.ingestOne]));
     });
+    bindRemoveButtons();
   }
 
   function tableRowHtml(name) {
@@ -311,6 +409,7 @@ export async function renderFontesTab(container, project, { onChanged }) {
         <td class="data-row-when">${escapeHtml(when)}</td>
         <td class="data-row-actions">
           ${canIngest ? `<button data-ingest-one="${escapeAttribute(name)}">${failure ? 'Tentar novamente' : 'Ingerir →'}</button>` : ''}
+          ${removeButtonHtml(name, 'source-remove')}
         </td>
       </tr>
     `;
@@ -322,7 +421,7 @@ export async function renderFontesTab(container, project, { onChanged }) {
       <div class="source-card-kind"><i>${icon(kindOfFile(name)?.icon || 'fileText', 15)}</i><span>${escapeHtml(extension)}</span></div>
       <strong title="${escapeHtml(name)}">${escapeHtml(name)}</strong>
       <p>${state === 'done' ? 'Disponível como contexto na wiki.' : state === 'failed' ? 'A última tentativa de ingestão falhou.' : 'Aguardando processamento para entrar no contexto.'}</p>
-      <footer><span class="status-dot ${state}"></span><span>${escapeHtml(status)}</span>${action}</footer>
+      <footer><span class="status-dot ${state}"></span><span>${escapeHtml(status)}</span><span class="source-card-actions">${action}${state === 'working' || state === 'queued' ? '' : removeButtonHtml(name, 'source-card-remove')}</span></footer>
     `;
   }
 

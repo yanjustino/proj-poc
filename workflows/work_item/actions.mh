@@ -13,7 +13,7 @@ export tool WorkItemActions {
     // que nunca gera brief/DER (ambos opcionais) ainda carrega o sinal de
     // continuidade nos artefatos que sempre leem a wiki (brief, atributos,
     // requisitos).
-    create(name: string, item_type: string, continuidade_de: string = ""): any -> {
+    create(name: string, item_type: string, continuidade_de: string = ""): any {
         if (name.is_empty()) fail("'name' e obrigatorio para action: \"create\"")
 
         var new_id = uuid.v7()
@@ -32,7 +32,7 @@ export tool WorkItemActions {
         return record
     }
 
-    list(): any[] -> {
+    list(): any[] {
         var projects = []
         if (!dir.exists("projects")) return projects
 
@@ -48,12 +48,12 @@ export tool WorkItemActions {
         return projects.sort_by((project) -> project.created_at)
     }
 
-    get(project_id: string): any -> {
+    get(project_id: string): any {
         var path = self.existing_project_file(project_id)
         return json.parse(fs.read(path))
     }
 
-    archive(project_id: string): any -> {
+    archive(project_id: string): any {
         var path = self.existing_project_file(project_id)
         var record = json.parse(fs.read(path))
         record["archived"] = true
@@ -61,7 +61,7 @@ export tool WorkItemActions {
         return record
     }
 
-    usage(project_id: string): any -> {
+    usage(project_id: string): any {
         project_id = Paths.ensure_valid(project_id)
         var path = Paths.usage_file(project_id)
         if (!fs.exists(path)) return self.summarize_usage([])
@@ -76,7 +76,7 @@ export tool WorkItemActions {
     // quem chama) — usado pela tela de Logs do frontend pra mostrar o que
     // uma geracao especifica realmente fez, nao so o progresso tecnico do
     // mhl.
-    prompt_log(project_id: string): any[] -> {
+    prompt_log(project_id: string): any[] {
         project_id = Paths.ensure_valid(project_id)
         var path = Paths.prompt_log_file(project_id)
         if (!fs.exists(path)) return []
@@ -101,14 +101,14 @@ export tool WorkItemActions {
     // primeiro, mesma convenção de prompt_log acima) — usado pela aba
     // Mudanças do frontend pra mostrar, por artefato, o histórico completo
     // de diretivas já aplicadas.
-    changes_log(project_id: string): any[] -> {
+    changes_log(project_id: string): any[] {
         project_id = Paths.ensure_valid(project_id)
         var path = Paths.changes_file(project_id)
         if (!fs.exists(path)) return []
         return self.format_changes_log(json.parse_lines(fs.read(path)))
     }
 
-    internal format_changes_log(lines: any[]): any[] -> {
+    internal format_changes_log(lines: any[]): any[] {
         var entries = lines.map((line) -> {
             artifact: line.value.artifact,
             feature_id: line.value?.feature_id ?? "",
@@ -119,7 +119,7 @@ export tool WorkItemActions {
         return entries.sort_by((entry) -> entry.at)
     }
 
-    internal format_prompt_log(lines: any[]): any[] -> {
+    internal format_prompt_log(lines: any[]): any[] {
         var entries = lines.map((line) -> {
             artifact: line.value.artifact,
             backend: line.value.backend,
@@ -143,13 +143,13 @@ export tool WorkItemActions {
     // placeholder usado por Devin/Codex quando nao havia custo. Preserva a
     // informacao que de fato existe sem converter esse zero legado em valor
     // informado.
-    internal cost_source(entry: any): string -> {
+    internal cost_source(entry: any): string {
         var source = entry?.cost_source ?? ""
         if (source == "reported" || source == "estimated" || source == "unavailable") return source
         return if ((entry?.cost_usd ?? 0) > 0) "reported" else "unavailable"
     }
 
-    internal level_for(item_type: string): string -> {
+    internal level_for(item_type: string): string {
         var valid_types = ["oportunidade", "feature", "historia"]
         if (!valid_types.contains(item_type)) {
             fail(
@@ -168,7 +168,7 @@ export tool WorkItemActions {
     // `entry?.x` reads it as null instead of throwing when absent, `?? 0`
     // turns that null into zero. `cost_source`, however, keeps absence
     // distinguishable from an actual reported cost of US$ 0.
-    internal summarize_usage(lines: any[]): any -> {
+    internal summarize_usage(lines: any[]): any {
         var total_in = 0
         var total_out = 0
         var total_cache_creation = 0
@@ -226,7 +226,7 @@ export tool WorkItemActions {
     // (activity.jsonl) e pedidos de mudanca (changes.jsonl). Nunca falha por
     // um arquivo ausente: work-items anteriores a esses registros so mostram
     // zeros (e `timed_calls` < `total_calls` sinaliza historico parcial).
-    productivity(project_id: string): any -> {
+    productivity(project_id: string): any {
         project_id = Paths.ensure_valid(project_id)
         return self.summarize_productivity(
             self.read_lines(Paths.usage_file(project_id)),
@@ -235,7 +235,7 @@ export tool WorkItemActions {
         )
     }
 
-    internal read_lines(path: string): any[] -> {
+    internal read_lines(path: string): any[] {
         if (!fs.exists(path)) return []
         return json.parse_lines(fs.read(path))
     }
@@ -252,7 +252,7 @@ export tool WorkItemActions {
     //              primeira", mais que 1 houve "Regerar".
     // Um ciclo sem "started"/"draft_ready" registrados (aprovado antes de
     // activity.jsonl existir) conta como aprovado mas fica fora das medias.
-    internal summarize_productivity(usage_lines: any[], activity_lines: any[], changes_lines: any[]): any -> {
+    internal summarize_productivity(usage_lines: any[], activity_lines: any[], changes_lines: any[]): any {
         var processing_seconds = 0
         var timed_calls = 0
         for (var line in usage_lines) {
@@ -329,14 +329,14 @@ export tool WorkItemActions {
         }
     }
 
-    internal create_directories(project_id: string) -> {
+    internal create_directories(project_id: string) {
         dir.create(Paths.root(project_id))
         dir.create(Paths.raw_dir(project_id))
         dir.create(Paths.wiki_dir(project_id))
         dir.create(Paths.artifacts_dir(project_id))
     }
 
-    internal existing_project_file(project_id: string): string -> {
+    internal existing_project_file(project_id: string): string {
         project_id = Paths.ensure_valid(project_id)
         var path = Paths.project_file(project_id)
         if (!fs.exists(path)) fail("work-item nao encontrado: '" + project_id + "'")

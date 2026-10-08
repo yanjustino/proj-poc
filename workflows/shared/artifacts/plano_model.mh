@@ -50,7 +50,7 @@ export tool PlanoModel {
         text.replace("#", "#35;").replace(";", "#59;").replace("<", "#lt;").replace(">", "#gt;")
             .replace("\r", " ").replace("\n", " ")
 
-    internal participants(fluxo: any[]): string[] -> {
+    internal participants(fluxo: any[]): string[] {
         var out = []
         for (var passo in fluxo) {
             if (!out.contains(passo.de)) out += [passo.de]
@@ -59,7 +59,7 @@ export tool PlanoModel {
         return out
     }
 
-    sequence(data: any): string -> {
+    sequence(data: any): string {
         var fluxo = data?.fluxo ?? []
         if (fluxo.is_empty()) return ""
         var nomes = self.participants(fluxo)
@@ -80,7 +80,7 @@ export tool PlanoModel {
 
     // Criterios de aceite da historia citados (CA1, CA2…) por tarefas de teste
     // e pela estrategia de testes — o que conta como "coberto por teste".
-    internal tested_criteria(data: any): string[] -> {
+    internal tested_criteria(data: any): string[] {
         var out = []
         for (var t in (data?.tarefas ?? [])) {
             if (t?.tipo == "teste") out = out + (t?.criterios ?? [])
@@ -89,14 +89,14 @@ export tool PlanoModel {
         return out.map((c) -> c.to_upper().trim())
     }
 
-    internal all_criteria_refs(data: any): string[] -> {
+    internal all_criteria_refs(data: any): string[] {
         var out = []
         for (var t in (data?.tarefas ?? [])) out = out + (t?.criterios ?? [])
         for (var t in (data?.testes ?? [])) out = out + (t?.criterios ?? [])
         return out.map((c) -> c.to_upper().trim())
     }
 
-    coverage_html(data: any): string -> {
+    coverage_html(data: any): string {
         var total = data?.criterios_total ?? 0
         if (total == 0) return ""
         var rows = ""
@@ -116,7 +116,7 @@ export tool PlanoModel {
 
     // --- Conformidade ------------------------------------------------------------
 
-    check(data: any): string[] -> {
+    check(data: any): string[] {
         var out = []
         var total = data?.criterios_total ?? 0
         var tested = self.tested_criteria(data)
@@ -159,7 +159,7 @@ export tool PlanoModel {
     // check_context: referencias do plano que nao existem nos artefatos do
     // work-item — calculado no *Generate (precisa de Traceability.known) e
     // guardado em avisos_contexto, como Traceability.annotate faz nas historias.
-    check_context(data: any, known: any): string[] -> {
+    check_context(data: any, known: any): string[] {
         var out = []
         var conteineres = Traceability.missing((data?.componentes ?? []).map((c) -> c.conteiner), known?.conteineres ?? [], false)
         if (!conteineres.is_empty()) out += ["Contêiner que não existe no diagrama C4: " + conteineres.join(", ") + "."]
@@ -170,7 +170,7 @@ export tool PlanoModel {
         return out
     }
 
-    warnings_html(data: any): string -> {
+    warnings_html(data: any): string {
         var avisos = self.check(data) + (data?.avisos_contexto ?? [])
         if (avisos.is_empty()) return ""
         return "<h2>Conformidade do plano</h2><ul class=\"c4-warnings\">" + avisos.map((a) -> "<li>" + html.escape(a) + "</li>").join("") + "</ul>"
@@ -178,28 +178,28 @@ export tool PlanoModel {
 
     // --- Tabelas -------------------------------------------------------------------
 
-    components_html(itens: any[]): string -> {
+    components_html(itens: any[]): string {
         if (itens.is_empty()) return "<p>—</p>"
         return "<table><thead><tr><th>Contêiner</th><th>Componente</th><th>Mudança</th><th>Fontes</th></tr></thead><tbody>" +
             itens.map((c) -> "<tr><td>" + html.escape(c.conteiner) + "</td><td>" + html.escape(c?.componente ?? "") + "</td><td>" + html.escape(c?.mudanca ?? "") + "</td><td>" + Cite.badges(c?.fontes ?? []) + "</td></tr>").join("") +
             "</tbody></table>"
     }
 
-    adrs_html(itens: any[]): string -> {
+    adrs_html(itens: any[]): string {
         if (itens.is_empty()) return "<p>—</p>"
         return "<table><thead><tr><th>ADR</th><th>Como se aplica</th><th>Fontes</th></tr></thead><tbody>" +
             itens.map((a) -> "<tr><td>" + html.escape(a.adr) + "</td><td>" + html.escape(a?.aplicacao ?? "") + "</td><td>" + Cite.badges(a?.fontes ?? []) + "</td></tr>").join("") +
             "</tbody></table>"
     }
 
-    data_html(itens: any[]): string -> {
+    data_html(itens: any[]): string {
         if (itens.is_empty()) return "<p>—</p>"
         return "<table><thead><tr><th>Entidade</th><th>Operação</th><th>Detalhe</th><th>Fontes</th></tr></thead><tbody>" +
             itens.map((d) -> "<tr><td>" + html.escape(d.entidade) + "</td><td>" + self.operation_label(d?.operacao ?? "") + "</td><td>" + html.escape(d?.detalhe ?? "") + "</td><td>" + Cite.badges(d?.fontes ?? []) + "</td></tr>").join("") +
             "</tbody></table>"
     }
 
-    tasks_html(itens: any[]): string -> {
+    tasks_html(itens: any[]): string {
         if (itens.is_empty()) return "<p>—</p>"
         return "<table><thead><tr><th>#</th><th>Tarefa</th><th>Tipo</th><th>Critérios</th><th>Depende de</th><th>Fontes</th></tr></thead><tbody>" +
             itens.map((t) -> "<tr><td>" + html.escape(t.id) + "</td><td><strong>" + html.escape(t.titulo) + "</strong><br>" + html.escape(t?.descricao ?? "") +
@@ -209,14 +209,14 @@ export tool PlanoModel {
             "</tbody></table>"
     }
 
-    tests_html(itens: any[]): string -> {
+    tests_html(itens: any[]): string {
         if (itens.is_empty()) return "<p>—</p>"
         return "<table><thead><tr><th>Nível</th><th>O que testa</th><th>Critérios</th><th>Fontes</th></tr></thead><tbody>" +
             itens.map((t) -> "<tr><td>" + self.level_label(t.nivel) + "</td><td>" + html.escape(t?.descricao ?? "") + "</td><td>" + html.escape((t?.criterios ?? []).join(", ")) + "</td><td>" + Cite.badges(t?.fontes ?? []) + "</td></tr>").join("") +
             "</tbody></table>"
     }
 
-    sequence_html(data: any): string -> {
+    sequence_html(data: any): string {
         var mermaid = self.sequence(data)
         if (mermaid.is_empty()) return "<p>—</p>"
         return "<pre class=\"mermaid\">" + html.escape(mermaid) + "</pre>" + Cite.note(data?.fluxo_fontes ?? [])
@@ -228,7 +228,7 @@ export tool PlanoModel {
 // dependem do contexto do work-item. Discovery e Delivery acrescentam depois
 // so onde o plano e gravado.
 export tool PlanoPrep {
-    annotate(data: any, historia: any, titulo: string, known: any): any -> {
+    annotate(data: any, historia: any, titulo: string, known: any): any {
         data["criterios_total"] = (historia?.criterios_aceite ?? []).size()
         data["historia_titulo"] = titulo
         data["avisos_contexto"] = PlanoModel.check_context(data, known)

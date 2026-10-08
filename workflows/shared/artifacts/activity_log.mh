@@ -26,7 +26,7 @@ export memory ActivityLog {
 // dependencia de cada *Generate, e a memory criaria projects/<id>/ para um
 // id inexistente (os testes de workflow usam exatamente isso).
 export tool Activity {
-    record(project_id: string, event: string, artifact: string, feature_id: string) -> {
+    record(project_id: string, event: string, artifact: string, feature_id: string) {
         if (dir.exists(Paths.root(project_id))) {
             ActivityLog.append({event, artifact, feature_id})
         }

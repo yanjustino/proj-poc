@@ -85,6 +85,10 @@ export function ReconnectMCP():Promise<string>;
 
 export function RemoveHistoriaAttachment(arg1:string,arg2:string,arg3:string):Promise<void>;
 
+export function RemoveRawSource(arg1:string,arg2:string):Promise<string>;
+
+export function ResetIngestedRaw(arg1:string):Promise<string>;
+
 export function ResumeRun(arg1:string,arg2:string):Promise<string>;
 
 export function RetryStartup():Promise<string>;
@@ -112,3 +116,5 @@ export function StartupStatus():Promise<string>;
 export function ToggleMaximise():Promise<void>;
 
 export function WatchRun(arg1:string):Promise<void>;
+
+export function WikiStaleSources(arg1:string):Promise<string>;

@@ -22,7 +22,7 @@ export enum DiscoveryArtifact { brief, atributos, requisitos, adr, der, modelo, 
 
 export tool DiscoveryKinds {
     // historias sao uma colecao por feature; o plano e de uma historia.
-    check(artifact: DiscoveryArtifact, feature_id: string, historia_id: string) -> {
+    check(artifact: DiscoveryArtifact, feature_id: string, historia_id: string) {
         if (artifact == DiscoveryArtifact.historias && feature_id.is_empty()) fail("'feature_id' e obrigatorio para artifact: \"historias\"")
         if (artifact == DiscoveryArtifact.plano && (feature_id.is_empty() || historia_id.is_empty())) fail("'feature_id' e 'historia_id' sao obrigatorios para artifact: \"plano\"")
     }
@@ -101,30 +101,30 @@ export tool DiscoveryDrafts {
 
     // Requisitos e atributos obrigatorios, sem os campos que os dois repetem
     // (Context.dedupe_shared_fields).
-    internal quality(project_id: string, before: string): any -> {
+    internal quality(project_id: string, before: string): any {
         var requisitos = Require.artifact(project_id, "requisitos", before)
         var atributos = Require.artifact(project_id, "atributos", before)
         return {requisitos: Context.dedupe_shared_fields(atributos, requisitos), atributos}
     }
 
-    internal adr(project_id: string): Draft -> {
+    internal adr(project_id: string): Draft {
         var q = self.quality(project_id, "adr")
         return CommonDrafts.adr(project_id, q.requisitos, q.atributos)
     }
 
     // O nivel do DER (fisico so com banco escolhido) e as tecnologias dos
     // diagramas saem das ADRs, por isso elas sao obrigatorias aqui.
-    internal der(project_id: string, autorrevisao: bool): Draft -> {
+    internal der(project_id: string, autorrevisao: bool): Draft {
         var q = self.quality(project_id, "der")
         return CommonDrafts.der(project_id, autorrevisao, q.requisitos, q.atributos, Require.adr(project_id, "der"))
     }
 
-    internal modelo(project_id: string, autorrevisao: bool): Draft -> {
+    internal modelo(project_id: string, autorrevisao: bool): Draft {
         var q = self.quality(project_id, "modelo")
         return CommonDrafts.modelo(project_id, autorrevisao, q.requisitos, q.atributos, Require.adr(project_id, "modelo"))
     }
 
-    internal diagramas(project_id: string, autorrevisao: bool): Draft -> {
+    internal diagramas(project_id: string, autorrevisao: bool): Draft {
         var q = self.quality(project_id, "diagramas")
         var adr = Require.adr(project_id, "diagramas")
         return CommonDrafts.diagramas(project_id, autorrevisao, q.requisitos, q.atributos, adr, Require.artifact(project_id, "modelo", "diagramas"))
@@ -139,7 +139,7 @@ export tool DiscoveryDrafts {
     // As verificacoes (FeatureRules) sao por item, entao a autorrevisao de
     // cada pagina continua valendo. Por fim, uma chamada monta o mapa de
     // dependencias entre os itens detalhados; o Commit grava os dois juntos.
-    internal features(project_id: string, autorrevisao: bool): Draft -> {
+    internal features(project_id: string, autorrevisao: bool): Draft {
         var q = self.quality(project_id, "features")
         var adr = Require.adr(project_id, "features")
         var der = Require.optional(Context.artifact(project_id, "der.html"), "esta oportunidade")
@@ -198,7 +198,7 @@ export tool DiscoveryDrafts {
 
     // `fetch(pagina)` detalha uma fatia do roteiro; junta as features na
     // ordem e soma o consumo de todas as chamadas.
-    internal paginate_features(itens: any[], fetch: any): Draft -> {
+    internal paginate_features(itens: any[], fetch: any): Draft {
         var features = []
         var tokens_in = 0
         var tokens_out = 0
@@ -217,7 +217,7 @@ export tool DiscoveryDrafts {
 
     // Bloco do prompt de cada pagina: o roteiro inteiro (para citar os
     // outros itens pelo titulo exato) e os itens que esta resposta detalha.
-    internal features_lote(itens: any[], pagina: any[]): string -> {
+    internal features_lote(itens: any[], pagina: any[]): string {
         var roteiro = itens.map((f) -> {
             var tipo = if ((f?.subtipo_enabler ?? "nao_aplicavel") == "nao_aplicavel") f?.tipo_item ?? "" else "${f?.tipo_item ?? ""}/${f.subtipo_enabler}"
             var cobre = f?.requisitos ?? []
@@ -234,7 +234,7 @@ export tool DiscoveryDrafts {
     // Bloco do prompt do mapa: cada item com o codigo que o Commit vai cunhar
     // (ArtifactCommit.features grava na ordem, a partir de FT001) e so as
     // secoes que dizem quem depende de quem.
-    internal dependencias_content(features: any[]): string -> {
+    internal dependencias_content(features: any[]): string {
         var blocos = []
         var n = 1
         for (var f in features) {
@@ -260,7 +260,7 @@ export tool DiscoveryDrafts {
         diagramas: ContextSlice.diagramas(project_id, refs),
     }
 
-    internal historias(project_id: string, feature_id: string, autorrevisao: bool): Draft -> {
+    internal historias(project_id: string, feature_id: string, autorrevisao: bool): Draft {
         var feature_dir = ArtifactId.find_feature_dir(project_id, feature_id)
         FeatureReview.ensure_not_rejected(project_id, feature_dir)
         var feature = Context.artifact(project_id, "features/${feature_dir}/feature.html")
@@ -270,13 +270,13 @@ export tool DiscoveryDrafts {
     }
 
     // Pasta da historia (historias/<feature>/<USxxx>), onde o plano e gravado.
-    historia_rel(project_id: string, feature_id: string, historia_id: string): string -> {
+    historia_rel(project_id: string, feature_id: string, historia_id: string): string {
         var historias_rel = "historias/${ArtifactId.find_feature_dir(project_id, feature_id)}"
         return "${historias_rel}/${ArtifactId.find_historia_dir(project_id, historias_rel, historia_id)}"
     }
 
     // Gravado ao lado da historia: historias/<feature>/<USxxx>/plano.html.
-    internal plano(project_id: string, feature_id: string, historia_id: string, autorrevisao: bool): Draft -> {
+    internal plano(project_id: string, feature_id: string, historia_id: string, autorrevisao: bool): Draft {
         var feature_dir = ArtifactId.find_feature_dir(project_id, feature_id)
         FeatureReview.ensure_not_rejected(project_id, feature_dir)
         var historia_rel = self.historia_rel(project_id, feature_id, historia_id)
@@ -311,13 +311,13 @@ export tool DiscoveryCommits {
 
     // Os caminhos vem do rascunho quando ele os traz; senao sao recalculados
     // a partir dos ids — um rascunho gerado sem eles ainda pode ser aprovado.
-    feature_dir(project_id: string, feature_id: string, draft: Draft): string -> {
+    feature_dir(project_id: string, feature_id: string, draft: Draft): string {
         var saved = draft.data?.feature_dir
         return if (saved == null) ArtifactId.find_feature_dir(project_id, feature_id) else saved
     }
 
     // Rejeitada enquanto o rascunho esperava aprovacao: nao grava.
-    internal historias(project_id: string, feature_id: string, draft: Draft): any -> {
+    internal historias(project_id: string, feature_id: string, draft: Draft): any {
         var feature_dir = self.feature_dir(project_id, feature_id, draft)
         FeatureReview.ensure_not_rejected(project_id, feature_dir)
         var result = ArtifactCommit.historias(project_id, feature_dir, draft)
@@ -325,7 +325,7 @@ export tool DiscoveryCommits {
         return result
     }
 
-    internal plano(project_id: string, feature_id: string, historia_id: string, draft: Draft): any -> {
+    internal plano(project_id: string, feature_id: string, historia_id: string, draft: Draft): any {
         var saved = draft.data?.historia_dir
         var historia_rel = if (saved == null) DiscoveryDrafts.historia_rel(project_id, feature_id, historia_id) else saved
         FeatureReview.ensure_not_rejected(project_id, historia_rel.split("/")[1])

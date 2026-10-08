@@ -39,7 +39,7 @@ export tool Cite {
     // is assembled — see finalize's own doc comment. Escaped immediately,
     // same as every other LLM-sourced field (C3) — finalize() only ever
     // moves this already-safe text around, it never escapes it again.
-    badge(fonte: string): string -> {
+    badge(fonte: string): string {
         var normalized = fonte.to_lower().trim()
         if (normalized == "gap") return "<span class=\"cite cite-gap\">gap</span>"
         if (normalized == "inferência" || normalized == "inferencia") return "<span class=\"cite cite-inferencia\">inferência</span>"
@@ -80,7 +80,7 @@ export tool Cite {
     // contributes was already turned into "&lt;"/"&gt;" before reaching
     // here (both by badge() itself and by every other field's own
     // html.escape() call).
-    finalize(html: string): string -> {
+    finalize(html: string): string {
         var open = "<citemark>"
         var close = "</citemark>"
         var seen = []

@@ -9,7 +9,7 @@ export tool Markdown {
     // Bloco cercado com o codigo intacto. A cerca cresce ate nao aparecer no
     // proprio codigo — um trecho que ja traz ``` (ex.: um README) nao fecha
     // o bloco no meio.
-    code_block(language: string, code: string): string -> {
+    code_block(language: string, code: string): string {
         var fence = "```"
         while (code.contains(fence)) fence = fence + "`"
         var lang = language.trim().to_lower().replace(" ", "-")

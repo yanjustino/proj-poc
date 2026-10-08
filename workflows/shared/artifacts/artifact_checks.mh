@@ -17,7 +17,7 @@ export tool ArtifactChecks {
     // diagramas nao as escreve e nao pode corrigi-las (os avisos delas sao
     // os do proprio modelo, ver modelo abaixo) — so os avisos de lote
     // pendurados nelas (ex.: falta o diagrama de implantacao) contam.
-    diagramas(data: any): string[] -> {
+    diagramas(data: any): string[] {
         var out = []
         for (var d in (data?.diagramas ?? [])) {
             if (!(d?.derivado_do_modelo ?? false)) out = out + C4Diagram.check(d)
@@ -33,7 +33,7 @@ export tool ArtifactChecks {
     // Feature ja anotada (ArchConformance.annotate: avisos_arquitetura).
     feature(data: any): string[] -> FeatureRules.check(data) + (data?.avisos_arquitetura ?? [])
 
-    features(data: any): string[] -> {
+    features(data: any): string[] {
         var out = []
         for (var f in (data?.features ?? [])) out = out + self.feature(f)
         return out
@@ -43,7 +43,7 @@ export tool ArtifactChecks {
     historia(h: any): string[] ->
         StoryRules.check(h) + Scenarios.check(h) + Contracts.check(h) + (h?.avisos_rastreabilidade ?? [])
 
-    historias(data: any): string[] -> {
+    historias(data: any): string[] {
         var out = []
         for (var h in (data?.historias ?? [])) out = out + self.historia(h)
         return out

@@ -1725,8 +1725,12 @@ func readIngestedRaw(rawDir string) ([]string, error) {
 	return names, nil
 }
 
+// writeIngestedRaw keeps names in ingest order (no sorting): rebuilding the
+// wiki (wiki_rebuild.go) re-ingests the sources in this same order, since
+// each ingest's catalog — and so the canonical titles — depends on what came
+// before. Markers written before this rule are alphabetical; that order is
+// just reused as is.
 func writeIngestedRaw(rawDir string, names []string) error {
-	sort.Strings(names)
 	body, err := json.Marshal(names)
 	if err != nil {
 		return fmt.Errorf("encode ingested marker: %w", err)

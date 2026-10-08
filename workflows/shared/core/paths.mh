@@ -4,18 +4,18 @@
 // caminho passa por is_valid_id, cujo padrao ancorado rejeita "/", "\" e "..".
 
 export tool Paths {
-    is_valid_id(project_id: string): bool -> {
+    is_valid_id(project_id: string): bool {
         if (project_id.is_empty()) return false
         if (project_id.size() > 128) return false
         return project_id.matches("^[A-Za-z0-9_-]+$")
     }
 
-    ensure_valid(project_id: string): string -> {
+    ensure_valid(project_id: string): string {
         if (!self.is_valid_id(project_id)) fail("project_id invalido ou potencialmente malicioso: '" + project_id + "'")
         return project_id
     }
 
-    internal ensure_safe_relative(relative: string): string -> {
+    internal ensure_safe_relative(relative: string): string {
         if (relative.contains("..")) fail("caminho relativo invalido (contem '..'): '" + relative + "'")
         if (relative.starts_with("/")) fail("caminho relativo nao pode ser absoluto: '" + relative + "'")
         return relative

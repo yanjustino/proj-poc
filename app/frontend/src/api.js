@@ -279,6 +279,19 @@ export async function markRawIngested(projectId, filename) {
   return parseJSON(await App.MarkRawIngested(projectId, filename), 'MarkRawIngested');
 }
 
+// removeRawSource: {wasIngested, staleSources} — see app/wiki_rebuild.go.
+export async function removeRawSource(projectId, filename) {
+  return parseJSON(await App.RemoveRawSource(projectId, filename), 'RemoveRawSource');
+}
+
+export async function wikiStaleSources(projectId) {
+  return parseJSON(await App.WikiStaleSources(projectId), 'WikiStaleSources');
+}
+
+export async function resetIngestedRaw(projectId) {
+  return parseJSON(await App.ResetIngestedRaw(projectId), 'ResetIngestedRaw');
+}
+
 export async function listProjectDir(projectId, root, relative = '') {
   return parseJSON(await App.ListProjectDir(projectId, root, relative), 'ListProjectDir');
 }
