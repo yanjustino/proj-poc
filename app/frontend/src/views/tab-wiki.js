@@ -225,8 +225,12 @@ export async function renderWikiTab(container, project) {
 
   async function showPage(root, relative, label) {
     try {
-      const html = await readProjectFile(project.id, root, htmlRelativeFor(relative));
-      showHtmlDoc(label, html, { allowScripts: true });
+      const [html, markdown] = await Promise.all([
+        readProjectFile(project.id, root, htmlRelativeFor(relative)),
+        // O .md é só para "ver markdown" — se faltar, a página abre sem o botão.
+        readProjectFile(project.id, root, relative).catch(() => undefined),
+      ]);
+      showHtmlDoc(label, html, { allowScripts: true, markdown });
     } catch {
       // wiki/html pode ainda não existir pra um work-item cuja wiki foi
       // ingerida antes de sync_html existir e cujo sync no mount (abaixo)
@@ -234,7 +238,7 @@ export async function renderWikiTab(container, project) {
       // página vazia.
       try {
         const text = await readProjectFile(project.id, root, relative);
-        showMarkdownDoc(label, renderMarkdown(text));
+        showMarkdownDoc(label, renderMarkdown(text), { markdown: text });
       } catch (err) {
         showMarkdownDoc(label, `<p class="doc-empty">Não foi possível abrir "${escapeHtml(label)}": ${escapeHtml(String(err))}</p>`);
       }
@@ -755,7 +759,7 @@ export async function renderWikiTab(container, project) {
     paneView = null;
     openPath = null;
     markActiveRow();
-    showMarkdownDoc(title, renderMarkdown(answer.answer_body || ''));
+    showMarkdownDoc(title, renderMarkdown(answer.answer_body || ''), { markdown: answer.answer_body || '' });
     // Keeps the composer under the answer, for a follow-up question.
     questionInput.value = '';
     syncAskComposer();
@@ -829,7 +833,7 @@ export async function renderWikiTab(container, project) {
     } catch {
       try {
         const text = await readProjectFile(project.id, 'wiki', 'lint.md');
-        if (active) showMarkdownDoc('Última verificação', renderMarkdown(text));
+        if (active) showMarkdownDoc('Última verificação', renderMarkdown(text), { markdown: text });
       } catch {
         if (active) showEmpty('A wiki ainda não foi verificada.');
       }

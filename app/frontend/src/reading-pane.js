@@ -9,6 +9,7 @@
 import { icon } from './icons.js';
 import { OpenHTMLInBrowser } from '../wailsjs/go/main/App';
 import { inlineMermaidStandalone } from './mermaid-inline.js';
+import { htmlToMarkdown } from './html-to-markdown.js';
 import artifactShellTemplate from '../../../workflows/shared/artifacts/page_shell.prompt.md?raw';
 
 let els = null;
@@ -172,12 +173,70 @@ export function showLoading(title, message = 'Carregando…') {
   return els.body;
 }
 
-export function showMarkdownDoc(title, html) {
+// `markdown`: o texto .md de onde `html` foi renderizado — quando presente,
+// ganha o mesmo toggle "ver fonte" do showHtmlDoc, mostrando o markdown cru.
+export function showMarkdownDoc(title, html, { markdown } = {}) {
   setHeader(title, 'MD');
   els.tools.innerHTML = '';
-  els.body.className = 'doc-body wiki-doc';
-  els.body.innerHTML = html;
   setExternalHtml(`<!doctype html><html><head><meta charset="utf-8"><title>${escapeHtml(title || '')}</title></head><body>${html}</body></html>`);
+  mountSourceToggles(markdown == null ? [] : ['markdown'], (mode) => {
+    if (mode === 'markdown') {
+      els.body.className = 'doc-body';
+      els.body.innerHTML = `<pre class="doc-source">${escapeHtml(markdown)}</pre>`;
+      return markdown;
+    }
+    els.body.className = 'doc-body wiki-doc';
+    els.body.innerHTML = html;
+  });
+}
+
+// mountSourceToggles appends one "ver fonte" button per source kind
+// ('html' and/or 'markdown') to the toolbar and calls render(mode) —
+// 'preview', 'html' or 'markdown' — now and on every click. Clicking a
+// source's button shows it; clicking it again returns to preview. For a
+// source mode, render returns the text it showed, which the "Copiar" button
+// (visible only while a source is shown) puts on the clipboard.
+function mountSourceToggles(kinds, render) {
+  if (!kinds.length) return render('preview');
+  const labels = { html: 'Ver HTML', markdown: 'Ver markdown' };
+  let mode = 'preview';
+  let sourceText = '';
+  const copyButton = document.createElement('button');
+  copyButton.className = 'button tertiary small';
+  copyButton.title = 'Copiar para a área de transferência';
+  copyButton.addEventListener('click', () => {
+    navigator.clipboard
+      .writeText(sourceText)
+      .then(() => {
+        copyButton.innerHTML = `${icon('checkCircle', 14)} Copiado!`;
+        setTimeout(() => {
+          copyButton.innerHTML = `${icon('copy', 14)} Copiar`;
+        }, 1500);
+      })
+      .catch(() => {
+        // Sem permissão de clipboard: o texto continua selecionável na tela.
+      });
+  });
+  els.tools.appendChild(copyButton);
+  const buttons = kinds.map((kind) => {
+    const button = document.createElement('button');
+    button.className = 'button tertiary small';
+    button.addEventListener('click', () => {
+      mode = mode === kind ? 'preview' : kind;
+      paint();
+    });
+    els.tools.appendChild(button);
+    return [kind, button];
+  });
+  function paint() {
+    for (const [kind, button] of buttons) {
+      button.innerHTML = mode === kind ? `${icon('eye', 14)} Ver preview` : `${icon('code', 14)} ${labels[kind]}`;
+    }
+    sourceText = render(mode) ?? '';
+    copyButton.hidden = mode === 'preview';
+    copyButton.innerHTML = `${icon('copy', 14)} Copiar`;
+  }
+  paint();
 }
 
 // Every artifact's own HTML has a fixed body{max-width:...} baked in at
@@ -263,10 +322,13 @@ export function buildDocFrame(rawHtml, { mermaid, inlineMermaid, autoHeight, all
 
 // showHtmlDoc renders a generated artifact's HTML in a sandboxed iframe
 // (srcdoc, never the artifact's raw markup as our own DOM) with a
-// "ver fonte" toggle. `mermaid` inlines the bundled mermaid.min.js in place
-// of the artifact's asset-relative <script> (see mermaid-inline.js) so a
-// diagram renders inside the app without depending on any file on disk.
-export function showHtmlDoc(title, rawHtml, { mermaid, inlineMermaid, allowScripts, onEdit } = {}) {
+// "ver HTML" and a "ver markdown" toggle — `markdown` is the .md the HTML
+// was exported from (a wiki page); without it, the Markdown is converted
+// from the HTML itself on first view (an artifact). `mermaid` inlines
+// the bundled mermaid.min.js in place of the artifact's asset-relative
+// <script> (see mermaid-inline.js) so a diagram renders inside the app
+// without depending on any file on disk.
+export function showHtmlDoc(title, rawHtml, { mermaid, inlineMermaid, allowScripts, onEdit, markdown } = {}) {
   setHeader(title, 'HTML');
   // A standalone file opened by an external browser process can't resolve
   // the Blob URL buildDocFrame's own inlineMermaid produces below (scoped to
@@ -274,31 +336,22 @@ export function showHtmlDoc(title, rawHtml, { mermaid, inlineMermaid, allowScrip
   // instead, the one setExternalHtml hands to "abrir no navegador".
   const restyled = restyleArtifact(rawHtml);
   setExternalHtml(mermaid ? inlineMermaidStandalone(restyled) : restyled);
-  let showingSource = false;
 
-  function render() {
+  // onEdit: artefatos editaveis ganham o lapis ao lado de "ver HTML".
+  els.tools.innerHTML = onEdit ? `<button class="button tertiary small" data-rp-edit title="Editar este artefato">${icon('edit', 14)} Editar</button>` : '';
+  if (onEdit) els.tools.querySelector('[data-rp-edit]').addEventListener('click', onEdit);
+  let markdownText = markdown;
+  mountSourceToggles(['html', 'markdown'], (mode) => {
     els.body.className = 'doc-body';
-    if (showingSource) {
-      els.body.innerHTML = `<pre class="doc-source">${escapeHtml(rawHtml)}</pre>`;
-      return;
+    if (mode !== 'preview') {
+      if (mode === 'markdown') markdownText ??= htmlToMarkdown(rawHtml);
+      const text = mode === 'markdown' ? markdownText : rawHtml;
+      els.body.innerHTML = `<pre class="doc-source">${escapeHtml(text)}</pre>`;
+      return text;
     }
     els.body.innerHTML = '';
     els.body.appendChild(buildDocFrame(rawHtml, { mermaid, inlineMermaid, allowScripts }));
-  }
-
-  function toggleLabel() {
-    return showingSource ? `${icon('eye', 14)} Ver preview` : `${icon('code', 14)} Ver fonte`;
-  }
-
-  // onEdit: artefatos editaveis ganham o lapis ao lado de "ver fonte".
-  els.tools.innerHTML = `${onEdit ? `<button class="button tertiary small" data-rp-edit title="Editar este artefato">${icon('edit', 14)} Editar</button>` : ''}<button class="button tertiary small" data-rp-toggle-source>${toggleLabel()}</button>`;
-  if (onEdit) els.tools.querySelector('[data-rp-edit]').addEventListener('click', onEdit);
-  els.tools.querySelector('[data-rp-toggle-source]').addEventListener('click', (event) => {
-    showingSource = !showingSource;
-    event.currentTarget.innerHTML = toggleLabel();
-    render();
   });
-  render();
 }
 
 function escapeHtml(text) {
