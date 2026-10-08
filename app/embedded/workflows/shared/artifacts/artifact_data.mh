@@ -9,7 +9,7 @@
 import { Paths } from "../core/paths.mh"
 
 export tool ArtifactData {
-    json_relative(html_relative: string): string -> {
+    json_relative(html_relative: string): string {
         if (!html_relative.ends_with(".html")) {
             fail("caminho de artefato deve terminar em .html: '" + html_relative + "'")
         }

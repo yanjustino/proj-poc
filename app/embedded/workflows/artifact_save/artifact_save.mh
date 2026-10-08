@@ -34,7 +34,7 @@ tool ArtifactEdit {
     // Mesmas chaves de topo, sem faltar nem sobrar nenhuma. `optional`: chaves
     // que o editor pode acrescentar a um JSON gravado antes delas (as visoes
     // detalhadas do modelo) — nao contam de nenhum dos lados.
-    check_shape(current: any, edited: any, optional: string[] = []): bool -> {
+    check_shape(current: any, edited: any, optional: string[] = []): bool {
         var current_keys = current.keys().filter((k) -> !optional.contains(k))
         var edited_keys = edited.keys().filter((k) -> !optional.contains(k))
         if (current_keys.size() != edited_keys.size()) return false
@@ -48,7 +48,7 @@ tool ArtifactEdit {
     // a partir dos predecessores e so enxerga estas diretivas (ChangesBlock),
     // nunca o conteudo anterior; por isso o texto editado viaja inteiro aqui.
     // Assim uma regeneracao posterior reaplica a edicao em vez de descarta-la.
-    directive(sections: {titulo: string, conteudo: string}[]): string -> {
+    directive(sections: {titulo: string, conteudo: string}[]): string {
         var body = ""
         for (var section in sections) {
             body = body + "\n### " + section.titulo + "\n" + section.conteudo

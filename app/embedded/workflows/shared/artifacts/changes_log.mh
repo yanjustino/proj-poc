@@ -59,7 +59,7 @@ export tool ChangesBlock {
     // feature tem seu próprio histórico — um pedido de mudança na história
     // da FT001 não deve vazar pra regeneração da FT002); "" pra todo outro
     // artefato, que não tem essa subdivisão.
-    for_artifact(project_id: string, artifact: string, feature_id: string): string -> {
+    for_artifact(project_id: string, artifact: string, feature_id: string): string {
         var path = Paths.changes_file(project_id)
         if (!fs.exists(path)) return ""
         var entries = json.parse_lines(fs.read(path)).filter((line) ->

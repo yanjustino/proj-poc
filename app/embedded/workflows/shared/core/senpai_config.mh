@@ -8,7 +8,7 @@
 // app/embedded/README.md sobre esse tipo de descompasso de versao.
 export tool SenpaiConfig {
 
-    get(key: string): any -> {
+    get(key: string): any {
         if (key.is_empty()) fail("SenpaiConfig.get: key is empty")
 
         var config_file = self.config_file()
@@ -21,7 +21,7 @@ export tool SenpaiConfig {
     internal config_file(): string -> "${os.home_dir()}/.senpai/senpai-config.json"
     certif_file(): string -> "${os.home_dir()}/.senpai/ca_bundle.pem"
 
-    internal create_if_not_exists(config_file: string) -> {
+    internal create_if_not_exists(config_file: string) {
         if (!fs.exists(config_file)) {
             var default_config = {
                 telemetry_enabled: false

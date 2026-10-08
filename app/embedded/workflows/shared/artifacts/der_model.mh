@@ -61,7 +61,7 @@ export tool DerModel {
 
     // Identificador de atributo/tipo no erDiagram: so letras, digitos e "_",
     // comecando por letra — o nome legivel vai no comentario do atributo.
-    internal token(text: string): string -> {
+    internal token(text: string): string {
         var slug = Slug.from_title(text).replace("-", "_")
         if ("0123456789".contains(slug.substring(0, 1))) return "a_" + slug
         return slug
@@ -71,7 +71,7 @@ export tool DerModel {
     // escapadas dentro dele.
     internal comment(text: string): string -> text.replace("\"", "'").replace("\r", " ").replace("\n", " ")
 
-    internal index_of(entidades: any[], id: string): int -> {
+    internal index_of(entidades: any[], id: string): int {
         var i = 0
         for (var e in entidades) {
             if (e.id == id) return i
@@ -80,7 +80,7 @@ export tool DerModel {
         return -1
     }
 
-    internal name_of(entidades: any[], id: string): string -> {
+    internal name_of(entidades: any[], id: string): string {
         var i = self.index_of(entidades, id)
         if (i < 0) return id
         return entidades[i].nome
@@ -88,17 +88,17 @@ export tool DerModel {
 
     // Marcadores pe-de-galinha. O da esquerda descreve quantos "de" existem
     // por "para" (min_de/max_de); o da direita, quantos "para" por "de".
-    internal left_marker(min: string, max: string): string -> {
+    internal left_marker(min: string, max: string): string {
         if (max == "1") return if (min == "1") "||" else "|o"
         return if (min == "1") "}|" else "}o"
     }
 
-    right_marker(min: string, max: string): string -> {
+    right_marker(min: string, max: string): string {
         if (max == "1") return if (min == "1") "||" else "o|"
         return if (min == "1") "|{" else "o{"
     }
 
-    entity_block(data: any, e: any, node: string, with_attributes: bool): string -> {
+    entity_block(data: any, e: any, node: string, with_attributes: bool): string {
         var head = "    " + node + "[\"" + self.mm(e.nome) + "\"]"
         var attrs = (data?.atributos ?? []).filter((a) -> a.entidade == e.id)
         if (!with_attributes || attrs.is_empty()) return head + "\n"
@@ -113,7 +113,7 @@ export tool DerModel {
         return head + " {\n" + lines + "    }\n"
     }
 
-    relation_line(entidades: any[], r: any, prefix: string): string -> {
+    relation_line(entidades: any[], r: any, prefix: string): string {
         var de = self.index_of(entidades, r.de)
         var para = self.index_of(entidades, r.para)
         if (de < 0 || para < 0) return ""
@@ -131,7 +131,7 @@ export tool DerModel {
     // mesma pagina tambem precisam ser renderizados um de cada vez (ver o
     // script de der_body.html): com startOnLoad, o Mermaid 12 desenhava o
     // segundo sobreposto e o terceiro em branco.
-    mermaid_for(data: any, ids: string[], detailed: string[], prefix: string): string -> {
+    mermaid_for(data: any, ids: string[], detailed: string[], prefix: string): string {
         var entidades = data.entidades
         var out = "erDiagram\n"
         var i = 0
@@ -149,7 +149,7 @@ export tool DerModel {
     // completo. Varias -> visao geral (todas as entidades, sem atributos) e
     // um diagrama por area (as entidades dela com atributos, mais as
     // vizinhas diretas de outras areas so pelo nome).
-    diagrams(data: any): any[] -> {
+    diagrams(data: any): any[] {
         var entidades = data.entidades
         var all_ids = entidades.map((e) -> e.id)
         var areas = data?.areas ?? []
@@ -171,7 +171,7 @@ export tool DerModel {
         return out
     }
 
-    diagrams_html(data: any): string -> {
+    diagrams_html(data: any): string {
         var diagrams = self.diagrams(data)
         return diagrams.map((d) ->
             (if (d.titulo.is_empty()) "" else "<h3>" + html.escape(d.titulo) + "</h3>") +
@@ -193,14 +193,14 @@ export tool DerModel {
 
     // --- Tabelas -------------------------------------------------------------
 
-    area_name(data: any, id: string): string -> {
+    area_name(data: any, id: string): string {
         for (var a in (data?.areas ?? [])) {
             if (a.id == id) return a.nome
         }
         return ""
     }
 
-    entities_table(data: any): string -> {
+    entities_table(data: any): string {
         var has_areas = (data?.areas ?? []).size() > 1
         var rows = ""
         for (var e in data.entidades) {
@@ -213,7 +213,7 @@ export tool DerModel {
             "<th>Descrição</th><th>Fontes</th></tr></thead><tbody>" + rows + "</tbody></table>"
     }
 
-    attributes_table(data: any): string -> {
+    attributes_table(data: any): string {
         var atributos = data?.atributos ?? []
         if (atributos.is_empty()) return "<p>Nenhum atributo documentado neste nível.</p>"
         var fisico = data.nivel == "fisico"
@@ -235,7 +235,7 @@ export tool DerModel {
     cardinality(r: any): string ->
         (r?.min_de ?? "0") + ".." + (r?.max_de ?? "N") + " : " + (r?.min_para ?? "0") + ".." + (r?.max_para ?? "N")
 
-    relations_table(data: any, evidencia: string): string -> {
+    relations_table(data: any, evidencia: string): string {
         var relacoes = (data?.relacionamentos ?? []).filter((r) -> (r?.evidencia ?? "confirmado") == evidencia)
         if (relacoes.is_empty()) return "<p>Nenhum.</p>"
         var entidades = data.entidades
@@ -255,7 +255,7 @@ export tool DerModel {
 
     // check: violacoes das regras de modelagem. Texto cru (nomes da LLM sem
     // escape) — warnings_html escapa na renderizacao.
-    check(data: any): string[] -> {
+    check(data: any): string[] {
         if (!self.is_structured(data)) return ["DER no formato anterior (Mermaid livre, sem modelo de entidades) — regenere o DER para validá-lo contra as regras de modelagem."]
         var entidades = data?.entidades ?? []
         var atributos = data?.atributos ?? []
@@ -330,7 +330,7 @@ export tool DerModel {
         return out
     }
 
-    warnings_html(data: any): string -> {
+    warnings_html(data: any): string {
         var avisos = self.check(data)
         if (avisos.is_empty()) return ""
         return "<h2>Conformidade do modelo</h2><ul class=\"c4-warnings\">" + avisos.map((a) -> "<li>" + html.escape(a) + "</li>").join("") + "</ul>"

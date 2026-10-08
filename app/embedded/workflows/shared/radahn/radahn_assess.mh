@@ -24,7 +24,7 @@ export tool RadahnAssess {
     // attach: o plano com o assessment (ou o erro) anexado. Mapas passados a uma
     // tool chegam por valor — alterar `plano` la dentro nao muda o do chamador —,
     // entao o plano anotado e DEVOLVIDO, nunca mutado no lugar.
-    internal attach(plano: any, assessment: any, erro: string): any -> {
+    internal attach(plano: any, assessment: any, erro: string): any {
         if (assessment != null) plano["radahn"] = assessment
         if (!erro.is_empty()) plano["radahn_erro"] = erro
         return plano
@@ -33,7 +33,7 @@ export tool RadahnAssess {
     // annotate: roda o assessment e devolve {data, tokens_in, tokens_out}: `data`
     // e o plano com data.radahn (use-o no lugar do original) e os tokens sao
     // a somar aos da geracao do plano.
-    annotate(plano: any, historia_content: string, der_content: string, adr_content: string, autorrevisao: bool, project_id: string): any -> {
+    annotate(plano: any, historia_content: string, der_content: string, adr_content: string, autorrevisao: bool, project_id: string): any {
         try {
             var review = AutoReview.generate(
                 enabled: autorrevisao,

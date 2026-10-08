@@ -22,7 +22,7 @@ export tool Context {
     // continuidade tambem aparece, sao pulados (opcionais em Delivery).
     wiki(project_id: string): string -> self.continuity_block(project_id) + WikiContext.all_pages(project_id)
 
-    internal continuity_block(project_id: string): string -> {
+    internal continuity_block(project_id: string): string {
         var path = Paths.project_file(project_id)
         if (!fs.exists(path)) return ""
         var texto = json.parse(fs.read(path)).get("continuidade_de", "")
@@ -34,7 +34,7 @@ export tool Context {
     // continua sendo o marcador de commit e a projecao visual do frontend,
     // mas o contexto do LLM prefere o JSON estruturado adjacente. Artefatos
     // legados sem JSON continuam funcionando pelo fallback ao body do HTML.
-    artifact(project_id: string, relative: string): string -> {
+    artifact(project_id: string, relative: string): string {
         var html_path = Paths.artifact(project_id, relative)
         if (!fs.exists(html_path)) return ""
         var json_path = Paths.artifact(project_id, ArtifactData.json_relative(relative))
@@ -66,7 +66,7 @@ export tool Context {
     // de cada ADR, a maior fatia de longe (61,8% de reducao no total ao
     // remover os tres campos). Um item cujo JSON nao dá parse (formato
     // inesperado) entra por extenso em vez de arriscar perder conteudo.
-    adr_context(project_id: string): string -> {
+    adr_context(project_id: string): string {
         var dir_path = Paths.artifact(project_id, "adr")
         if (!dir.exists(dir_path)) return ""
         var base_dir = Paths.artifacts_dir(project_id)
@@ -114,7 +114,7 @@ export tool Context {
     // pulada silenciosamente em vez de quebrar a concatenacao inteira.
     // Cabecalho de cada item vira "relative_dir/subpasta", mesmo formato de
     // referencia que artifact_dir usa.
-    artifact_dir_of_dirs(project_id: string, relative_dir: string, item_file: string): string -> {
+    artifact_dir_of_dirs(project_id: string, relative_dir: string, item_file: string): string {
         var base = Paths.artifact(project_id, relative_dir)
         if (!dir.exists(base)) return ""
         var out = ""
@@ -141,7 +141,7 @@ export tool Context {
     // fontes/gaps próprios) e nunca são tocados aqui. Falha fechado: um JSON
     // inválido em qualquer um dos dois devolve `requisitos_json` sem
     // alteração — nunca perde conteúdo por causa de um parse que deu errado.
-    dedupe_shared_fields(atributos_json: string, requisitos_json: string): string -> {
+    dedupe_shared_fields(atributos_json: string, requisitos_json: string): string {
         if (atributos_json.is_empty() || requisitos_json.is_empty()) return requisitos_json
         try {
             var atributos = json.parse(atributos_json)

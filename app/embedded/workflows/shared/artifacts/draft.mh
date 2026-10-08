@@ -10,14 +10,14 @@ import { AutoReview } from "auto_review.mh"
 export type Draft = {data: any, tokens_in: number, tokens_out: number}
 
 export tool Drafts {
-    generate(prompt: string, schema_file: SchemaFile, project_id: string, artifact: string): Draft -> {
-        var response = Writer.generate(prompt: prompt, schema_file:, project_id:, artifact:)
+    generate(prompt: string, schema_file: SchemaFile, project_id: string, artifact: string): Draft {
+        var response = Writer.generate(prompt:, schema_file:, project_id:, artifact:)
         return {data: json.parse(response.content), tokens_in: response.tokens_in, tokens_out: response.tokens_out}
     }
 
     // Resultado de AutoReview.generate com o registro da revisao no proprio
     // documento (der, feature, historia, plano).
-    reviewed(review: any): Draft -> {
+    reviewed(review: any): Draft {
         var data = review.data
         data["autorrevisao"] = review.revisao
         return {data, tokens_in: review.tokens_in, tokens_out: review.tokens_out}
@@ -25,7 +25,7 @@ export tool Drafts {
 
     // Mesmo registro copiado em cada item de uma colecao (diagramas,
     // features, historias), para o preview de um item sozinho.
-    reviewed_items(review: any, field: string): Draft -> {
+    reviewed_items(review: any, field: string): Draft {
         var data = review.data
         data[field] = AutoReview.tag_items(data[field], review.revisao)
         return {data, tokens_in: review.tokens_in, tokens_out: review.tokens_out}
@@ -34,7 +34,7 @@ export tool Drafts {
     // Rascunho com campos que o codigo acrescenta ao dado (ex.: a pasta onde
     // o Commit grava). Sempre por aqui: `var data = draft.data` e uma COPIA
     // em mhl, entao alterar `data` e devolver `draft` perde os campos.
-    with(draft: Draft, fields: any): Draft -> {
+    with(draft: Draft, fields: any): Draft {
         var data = draft.data
         for (var key in fields.keys()) data[key] = fields[key]
         return {data, tokens_in: draft.tokens_in, tokens_out: draft.tokens_out}

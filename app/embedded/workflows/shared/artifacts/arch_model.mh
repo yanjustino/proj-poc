@@ -79,7 +79,7 @@ export tool ArchModel {
     internal relation(r: any): any ->
         {de: r?.de ?? "", para: r?.para ?? "", descricao: r?.descricao ?? "", tecnologia: r?.tecnologia ?? "", fontes: r?.fontes ?? []}
 
-    internal view(data: any, diagram_type: string, titulo: string, descricao: string, elementos: any[], relacoes: any[]): any -> {
+    internal view(data: any, diagram_type: string, titulo: string, descricao: string, elementos: any[], relacoes: any[]): any {
         var s = self.sistema(data)
         var nome = (s?.nome ?? "").trim()
         return {
@@ -98,7 +98,7 @@ export tool ArchModel {
 
     // context: os elementos do contexto com o sistema em escopo como caixa
     // central, logo depois das pessoas (a ordem guia o layout do Mermaid).
-    context(data: any): any -> {
+    context(data: any): any {
         var contexto = data?.contexto ?? self.vazio()
         var s = self.sistema(data)
         var sistema_el = {id: self.sistema_id(), nome: s?.nome ?? "", tipo: "sistema", tecnologia: "", descricao: s?.descricao ?? "", no_pai: "", fontes: s?.fontes ?? []}
@@ -110,7 +110,7 @@ export tool ArchModel {
             pessoas + [sistema_el] + demais, (contexto?.relacoes ?? []).map((r) -> self.relation(r)))
     }
 
-    container(data: any): any -> {
+    container(data: any): any {
         var conteineres = data?.conteineres ?? self.vazio()
         var v = self.view(data, "c4-container", "Contêineres",
             "Aplicações e armazenamentos de dados do sistema e como se comunicam.",
@@ -126,7 +126,7 @@ export tool ArchModel {
     // aceita esses tipos; isto protege contra um checkpoint antigo). Um
     // diagrama de componente de um conteiner que ja tem visao de componentes
     // no modelo tambem sai — o editado a mao prevalece.
-    optional_diagrams(diagramas: any[], modelo: any = null): any[] -> {
+    optional_diagrams(diagramas: any[], modelo: any = null): any[] {
         var detalhados = self.detail_views(modelo ?? {}).filter((v) -> v.diagram_type == "c4-component").map((v) -> self.normalized(v.escopo.nome))
         return diagramas.filter((d) -> d.diagram_type != "c4-context" && d.diagram_type != "c4-container" &&
             !(d.diagram_type == "c4-component" && detalhados.contains(self.normalized(d?.escopo?.nome ?? ""))))
@@ -141,7 +141,7 @@ export tool ArchModel {
     // origin: o elemento de onde a visao nasceu, como esta hoje no modelo, ou
     // null se ele (ou a visao que o continha) nao existe mais. No contexto, o
     // sistema em escopo responde pelo id reservado.
-    origin(data: any, d: any): any -> {
+    origin(data: any, d: any): any {
         var visao = d?.origem?.visao ?? ""
         var elemento = d?.origem?.elemento ?? ""
         var elementos = []
@@ -165,7 +165,7 @@ export tool ArchModel {
 
     // detail_view: a visao no formato de um diagrama. Titulo: "Contêineres —
     // <titulo>" ou "Componentes — <titulo>"; sem titulo, o nome da origem.
-    detail_view(data: any, d: any): any -> {
+    detail_view(data: any, d: any): any {
         var o = self.origin(data, d)
         var nome = if (o == null) (d?.origem?.nome ?? "") else (o?.nome ?? "")
         var descricao_escopo = if (o == null) "" else (o?.descricao ?? "")
@@ -190,7 +190,7 @@ export tool ArchModel {
 
     detail_views(data: any): any[] -> self.detalhes(data).map((d) -> self.detail_view(data, d))
 
-    internal visao_label(data: any, visao: string): string -> {
+    internal visao_label(data: any, visao: string): string {
         if (visao == "contexto") return "Contexto"
         if (visao == "conteineres") return "Contêineres"
         var pais = self.detalhes(data).filter((p) -> (p?.id ?? "") == visao)
@@ -200,7 +200,7 @@ export tool ArchModel {
 
     // Avisos que so a visao detalhada tem: origem que sumiu (orfa) ou que
     // mudou de tipo e nao comporta mais o nivel.
-    origin_warnings(data: any, d: any): string[] -> {
+    origin_warnings(data: any, d: any): string[] {
         var titulo = self.detail_view(data, d).titulo
         var o = self.origin(data, d)
         if (o == null) {
@@ -220,7 +220,7 @@ export tool ArchModel {
     // annotated: as visoes do modelo (e `extra`, os diagramas opcionais do
     // lote) anotadas como um lote — a coerencia entre os niveis — com os
     // avisos de origem pendurados em cada visao detalhada.
-    annotated(data: any, extra: any[], infra: bool): any[] -> {
+    annotated(data: any, extra: any[], infra: bool): any[] {
         var lote = C4Diagram.annotate({diagramas: self.views(data) + extra}, infra).diagramas
         var detalhes = self.detalhes(data)
         var out = []
@@ -235,7 +235,7 @@ export tool ArchModel {
     }
 
     // A visao detalhada `id`, anotada (previa de uma aba do editor).
-    annotated_detail(data: any, id: string): any -> {
+    annotated_detail(data: any, id: string): any {
         var ids = self.detalhes(data).map((d) -> d?.id ?? "")
         var i = ids.index_of(id)
         if (i < 0) fail("visão detalhada inexistente: '" + id + "'")
@@ -247,7 +247,7 @@ export tool ArchModel {
     // check: as regras C4 de cada visao (C4Diagram.check), a coerencia entre
     // as duas (os avisos de lote de C4Diagram.annotate) e o que so o modelo
     // tem — o id reservado. Texto cru; warnings_html escapa.
-    check(data: any): string[] -> {
+    check(data: any): string[] {
         var out = []
         if ((self.sistema(data)?.nome ?? "").trim().is_empty()) out += ["Informe o nome do sistema de software em escopo."]
         var reservado = (data?.contexto?.elementos ?? []).filter((el) -> el.id == self.sistema_id()).map((el) -> el.nome).join(", ")
@@ -264,7 +264,7 @@ export tool ArchModel {
         return out
     }
 
-    warnings_html(data: any): string -> {
+    warnings_html(data: any): string {
         var avisos = self.check(data)
         if (avisos.is_empty()) return ""
         return "<h2>Conformidade do modelo</h2><ul class=\"c4-warnings\">" + avisos.map((a) -> "<li>" + html.escape(a) + "</li>").join("") + "</ul>"
@@ -272,7 +272,7 @@ export tool ArchModel {
 
     // --- Pagina do modelo ---------------------------------------------------
 
-    scope_html(data: any): string -> {
+    scope_html(data: any): string {
         var s = self.sistema(data)
         var descricao = s?.descricao ?? ""
         return "<p><strong>Sistema em escopo:</strong> " + html.escape(s?.nome ?? "") +
@@ -280,7 +280,7 @@ export tool ArchModel {
     }
 
     // Legenda unica das visoes: os tipos presentes em qualquer uma.
-    legend(data: any): string -> {
+    legend(data: any): string {
         var elementos = []
         var relacoes = []
         for (var v in self.views(data)) {
@@ -292,7 +292,7 @@ export tool ArchModel {
 
     // "Detalha “API de Pedidos” (Contêineres)" — a linha de origem de uma
     // visao detalhada na pagina do modelo.
-    origin_html(data: any, d: any): string -> {
+    origin_html(data: any, d: any): string {
         var o = self.origin(data, d)
         var nome = if (o == null) (d?.origem?.nome ?? "") + " (inexistente)" else (o?.nome ?? "")
         return "<p class=\"fontes\">Detalha “" + html.escape(nome) + "” (" + html.escape(self.visao_label(data, d?.origem?.visao ?? "")) + ") " + Cite.badges(d?.fontes ?? []) + "</p>"
@@ -356,7 +356,7 @@ tool ArchDetailFixtures {
         relacoes: [{de: "loja", para: "fat", descricao: "Envia faturas para", tecnologia: "REST", fontes: ["inferência"]}],
     }
 
-    loja(): any -> {
+    loja(): any {
         var m = ArchModelFixtures.loja()
         m["detalhes"] = [self.componentes_api(), self.conteineres_erp()]
         return m

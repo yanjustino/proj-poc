@@ -42,21 +42,21 @@ export tool RepoSnapshot {
     is_absolute(path: string): bool ->
         path.starts_with("/") || path.matches("^[A-Za-z]:[\\\\/].*") || path.starts_with("\\\\")
 
-    base_name(path: string): string -> {
+    base_name(path: string): string {
         var parts = path.replace("\\", "/").split("/").filter((p) -> !p.is_empty())
         return if (parts.is_empty()) "" else parts[parts.size() - 1]
     }
 
     internal lower_base(path: string): string -> self.base_name(path).to_lower()
 
-    internal extension(path: string): string -> {
+    internal extension(path: string): string {
         var name = self.lower_base(path)
         var parts = name.split(".")
         return if (parts.size() < 2 || name.starts_with(".") && parts.size() == 2) "" else "." + parts[parts.size() - 1]
     }
 
     // Nome de arquivo seguro para raw/: so letras, digitos, espaco, . _ -
-    safe_name(name: string): string -> {
+    safe_name(name: string): string {
         var out = ""
         for (var ch in name.split("")) {
             out = out + (if (ch.matches("^[A-Za-z0-9 ._-]$")) ch else "-")
@@ -68,7 +68,7 @@ export tool RepoSnapshot {
 
     // Pastas de terceiros/geradas que, mesmo versionadas, nao dizem nada
     // sobre o sistema — fora das linguagens e das buscas por manifesto/regra.
-    is_vendored(path: string): bool -> {
+    is_vendored(path: string): bool {
         var p = "/" + path.replace("\\", "/").to_lower()
         for (var seg in ["/node_modules/", "/vendor/", "/dist/", "/build/", "/target/", "/bin/", "/obj/", "/.venv/", "/venv/", "/__pycache__/", "/third_party/", "/wailsjs/"]) {
             if (p.contains(seg)) return true
@@ -76,7 +76,7 @@ export tool RepoSnapshot {
         return p.ends_with(".min.js") || p.ends_with(".min.css") || p.ends_with(".lock") || p.ends_with("-lock.json") || p.ends_with(".sum")
     }
 
-    is_secret_path(path: string): bool -> {
+    is_secret_path(path: string): bool {
         var name = self.lower_base(path)
         if (name.starts_with(".env")) return true
         for (var ext in [".pem", ".key", ".p12", ".pfx", ".jks", ".keystore", ".tfstate", ".tfvars", ".kdbx", ".asc", ".gpg"]) {
@@ -91,7 +91,7 @@ export tool RepoSnapshot {
     // ---- segredos dentro do texto -----------------------------------------
 
     // `matches` casa a string INTEIRA (ancorado) — por isso o `.*` nas pontas.
-    looks_like_secret(line: string): bool -> {
+    looks_like_secret(line: string): bool {
         var lower = line.to_lower()
         if (lower.contains("-----begin") && lower.contains("private key")) return true
         if (line.matches(".*AKIA[0-9A-Z]{16}.*")) return true
@@ -113,7 +113,7 @@ export tool RepoSnapshot {
 
     // ---- classificacao -----------------------------------------------------
 
-    language_of(path: string): string -> {
+    language_of(path: string): string {
         var name = self.lower_base(path)
         if (name == "dockerfile" || name.starts_with("dockerfile.")) return "Dockerfile"
         if (name == "makefile") return "Makefile"
@@ -167,7 +167,7 @@ export tool RepoSnapshot {
     // Linguagens com a contagem de arquivos, da mais presente para a menos.
     // Ordena os nomes e conta sequencias iguais num passo so — repositorios
     // grandes tem dezenas de milhares de arquivos.
-    languages(files: string[]): any[] -> {
+    languages(files: string[]): any[] {
         var names = files.filter((f) -> !self.is_vendored(f)).map((f) -> self.language_of(f)).filter((l) -> !l.is_empty()).sort_by((l) -> l)
         var out = []
         var current = ""
@@ -184,7 +184,7 @@ export tool RepoSnapshot {
         return out.sort_by((l) -> 0 - l.files)
     }
 
-    internal is_manifest(path: string): bool -> {
+    internal is_manifest(path: string): bool {
         var p = path.replace("\\", "/").to_lower()
         var name = self.lower_base(path)
         if (["go.mod", "package.json", "pom.xml", "build.gradle", "build.gradle.kts", "settings.gradle", "settings.gradle.kts", "requirements.txt", "pyproject.toml", "pipfile", "setup.py", "gemfile", "cargo.toml", "composer.json", "mix.exs", "pubspec.yaml", "makefile", "wails.json", "docker-compose.yml", "docker-compose.yaml", "compose.yml", "compose.yaml", ".gitlab-ci.yml", "jenkinsfile", "azure-pipelines.yml", "bitbucket-pipelines.yml", "serverless.yml", "chart.yaml"].contains(name)) return true
@@ -194,7 +194,7 @@ export tool RepoSnapshot {
         return name.ends_with(".tf")
     }
 
-    internal is_rule_doc(path: string): bool -> {
+    internal is_rule_doc(path: string): bool {
         var p = path.replace("\\", "/").to_lower()
         var name = self.lower_base(path)
         var depth = p.split("/").size()
@@ -205,7 +205,7 @@ export tool RepoSnapshot {
         return p.contains("/adr/") || p.starts_with("adr/") || p.contains("/adrs/") || p.starts_with("adrs/") || p.contains("/decisions/") || p.contains("architecture")
     }
 
-    internal is_entrypoint(path: string): bool -> {
+    internal is_entrypoint(path: string): bool {
         var name = self.lower_base(path)
         if (["main.go", "main.py", "app.py", "manage.py", "wsgi.py", "asgi.py", "program.cs", "startup.cs", "main.ts", "main.js", "index.ts", "index.js", "server.ts", "server.js", "app.ts", "app.js", "main.rs", "lib.rs", "main.kt", "application.java", "main.java", "main.swift", "main.dart"].contains(name)) return true
         return name.ends_with("application.java") || name.ends_with("application.kt")
@@ -213,7 +213,7 @@ export tool RepoSnapshot {
 
     // ---- arvore ------------------------------------------------------------
 
-    internal prefix(path: string, depth: number): string -> {
+    internal prefix(path: string, depth: number): string {
         var parts = path.replace("\\", "/").split("/")
         if (parts.size() <= depth) return ""
         return parts[0..depth].join("/") + "/"
@@ -227,7 +227,7 @@ export tool RepoSnapshot {
     // Caminhos com o mesmo
     // prefixo ficam contiguos numa lista ordenada, entao cada nivel e uma
     // passada de contagem de sequencias (sem mapa por pasta).
-    tree(files: string[]): string -> {
+    tree(files: string[]): string {
         var sorted = files.sort_by((f) -> f)
         var entries = []
         for (var depth in [1, 2, 3].filter((d) -> d <= self.tree_depth())) {
@@ -266,7 +266,7 @@ export tool RepoSnapshot {
 
     // ---- git ---------------------------------------------------------------
 
-    internal git(repo: string, args: string[]): string -> {
+    internal git(repo: string, args: string[]): string {
         var result = cmd.exec(["git", "-C", repo, "-c", "core.quotePath=false"] + args, timeout: 60s)
         if (result.exit_code != 0) fail("git " + args.join(" ") + " falhou em '" + repo + "': " + result.stderr.trim())
         return result.stdout
@@ -276,7 +276,7 @@ export tool RepoSnapshot {
     // feito com `https://token@host/...`, e o retrato vai parar num prompt.
     // A forma SSH curta (git@host:org/repo) nao tem segredo — o "git" e o
     // usuario fixo do servidor.
-    public_url(remote: string): string -> {
+    public_url(remote: string): string {
         var u = remote.trim()
         var parts = u.split("://")
         if (parts.size() != 2) return u
@@ -289,7 +289,7 @@ export tool RepoSnapshot {
         return parts[0] + "://" + authority + (if (rest.size() > 1) "/" + rest[1..rest.size()].join("/") else "")
     }
 
-    internal origin(repo: string): string -> {
+    internal origin(repo: string): string {
         var result = cmd.exec(["git", "-C", repo, "remote", "get-url", "origin"], timeout: 10s)
         return if (result.exit_code == 0) self.public_url(result.stdout) else ""
     }
@@ -297,7 +297,7 @@ export tool RepoSnapshot {
     internal non_empty_lines(text: string): string[] ->
         text.replace("\r\n", "\n").split("\n").filter((l) -> !l.trim().is_empty())
 
-    inspect(repo_path: string): any -> {
+    inspect(repo_path: string): any {
         if (!self.is_absolute(repo_path)) fail("repo_path precisa ser um caminho absoluto: '" + repo_path + "'")
         if (repo_path.replace("\\", "/").split("/").contains("..")) fail("repo_path nao pode conter '..': '" + repo_path + "'")
         if (!dir.exists(repo_path)) fail("pasta do repositorio nao encontrada: '" + repo_path + "'")
@@ -332,7 +332,7 @@ export tool RepoSnapshot {
         "> Repositório: `" + info.name + "`" + (if (info.origin.is_empty()) "" else " (" + info.origin + ")") + " · branch `" + info.branch + "` · commit `" + info.commit + "` de " + info.committed_at +
         (if (info.dirty > 0) " · " + info.dirty + " arquivo(s) com alterações não commitadas não refletidas aqui" else "") + "\n\n"
 
-    structure_source(info: any): string -> {
+    structure_source(info: any): string {
         var langs = self.languages(info.files)
         var total = langs.map((l) -> l.files).reduce((a, b) -> a + b, 0)
         var lang_lines = langs.map((l) -> "- " + l.language + ": " + l.files + (if (l.files == 1) " arquivo" else " arquivos") + (if (total > 0) " (" + self.percent(l.files, total) + "%)" else ""))
@@ -357,7 +357,7 @@ export tool RepoSnapshot {
 
     // Concatena arquivos do repositorio (redigidos e cortados) ate o teto da
     // fonte; o que nao couber vira so uma lista de nomes no fim.
-    files_source(info: any, repo_path: string, topic: string, intro: string, paths: string[]): string -> {
+    files_source(info: any, repo_path: string, topic: string, intro: string, paths: string[]): string {
         var out = self.header(info, topic) + intro + "\n\n"
         var skipped = []
         for (var path in paths) {
@@ -392,7 +392,7 @@ export tool RepoSnapshot {
         else
             Markdown.code_block(self.fence_language(path), text)
 
-    internal fence_language(path: string): string -> {
+    internal fence_language(path: string): string {
         var lang = self.language_of(path).to_lower()
         return match lang {
             "c#" -> "csharp"
@@ -408,7 +408,7 @@ export tool RepoSnapshot {
 
     // Nome livre em raw/ — nunca sobrescreve uma fonte (nem um retrato
     // anterior do mesmo repositorio: o ingest e marcado por nome de arquivo).
-    internal unique_name(project_id: string, stem: string): string -> {
+    internal unique_name(project_id: string, stem: string): string {
         var name = stem + ".md"
         var i = 2
         while (fs.exists(Paths.raw(project_id, name))) {
@@ -421,7 +421,7 @@ export tool RepoSnapshot {
     // Grava as fontes do retrato em raw/ e devolve {repo, commit, sources}.
     // Uma fonte sem conteudo (repositorio sem manifestos ou sem documentos
     // de regra) nao e gravada.
-    write(project_id: string, repo_path: string): any -> {
+    write(project_id: string, repo_path: string): any {
         var info = self.inspect(repo_path)
         var stem = self.safe_name(info.name)
         var sources = [{topic: "estrutura", text: self.structure_source(info)}]

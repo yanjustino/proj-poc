@@ -27,7 +27,7 @@ export tool RawExtract {
         ".swift", ".c", ".h", ".cpp", ".hpp", ".sh", ".xml", ".proto", ".graphql", ".tf",
     ]
 
-    text(path: string): string -> {
+    text(path: string): string {
         var lower = path.to_lower()
         for (var ext in self.plain_text_extensions()) {
             if (lower.ends_with(ext)) return fs.read(path)
@@ -36,7 +36,7 @@ export tool RawExtract {
         fail("tipo de arquivo nao suportado no ingest desta versao: '" + path + "' (use " + self.plain_text_extensions().join(", ") + " ou .pdf)")
     }
 
-    internal from_pdf(path: string): string -> {
+    internal from_pdf(path: string): string {
         var result = cmd.exec(["pdftotext", path, "-"], timeout: 30s)
         if (result.exit_code != 0) fail("falha ao extrair texto de '" + path + "' via pdftotext: " + result.stderr)
         return result.stdout

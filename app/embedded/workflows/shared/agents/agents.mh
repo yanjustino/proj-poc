@@ -177,7 +177,7 @@ export agent Codex {
 // essa decisao de fora. `tool AgentSelector` + `match` + `.run()` direto em
 // cada agente resolve isso sem esbarrar nesse limite.
 export tool AgentSelector {
-    pick(): string -> {
+    pick(): string {
         var selected = match env("SENPAI_AGENT", "codex") {
             "devin" -> nameof(Devin)
             "claude" -> nameof(Claude)
@@ -188,7 +188,7 @@ export tool AgentSelector {
         return selected
     }
 
-    pick_model(): string -> {
+    pick_model(): string {
         var model = match env("SENPAI_AGENT", "codex") {
             "devin" -> env("SENPAI_DEVIN_MODEL", "swe-1-6-slow")
             "claude" -> env("SENPAI_CLAUDE_MODEL", "sonnet")
@@ -200,6 +200,17 @@ export tool AgentSelector {
     }
 }
 
+// Resultado de Writer.generate: o conteudo gerado mais o consumo ja
+// resolvido (ParsedUsage sem `usage_available`, que so importa ao ledger).
+export type WriterResult = {
+    content: string, tokens_in: number, tokens_out: number,
+    cache_creation_tokens: number, cache_read_tokens: number,
+    cost_usd: number, cost_source: string
+}
+
+// Saida crua do Devin: stdout de `devin --print` e a trajetoria de `--export`.
+type DevinOutput = {raw: string, exported: string}
+
 // Adapter consumido pelos workflows. Ele absorve a diferenca de contrato do
 // Codex e mantem cada schema como {content, path}: Claude usa
 // `schema_file.content` (JSON inline); Codex usa `schema_file.path`
@@ -209,9 +220,7 @@ export tool Writer {
     // Writer e chamado por modulos importadores. `self` preserva o escopo do
     // adapter em runtime e evita que Discovery/Wiki/Delivery tentem resolver
     // um simbolo auxiliar como DevinPromptFile no proprio modulo.
-    internal generate_devin(instruction: string, schema: string, project_id: string): {
-        raw: string, exported: string
-    } -> {
+    internal generate_devin(instruction: string, schema: string, project_id: string): DevinOutput {
         var prompt = 
         """
         ${instruction}
@@ -220,8 +229,6 @@ export tool Writer {
         O objeto deve obedecer exatamente a este JSON Schema:
         ${schema}
         """
-
-        
 
         // Windows limita a linha de comando criada por CreateProcess a cerca
         // de 32K caracteres. Os dois arquivos ficam estritamente no work-item,
@@ -254,11 +261,7 @@ export tool Writer {
         return {raw, exported}
     }
 
-    generate(prompt: string, schema_file: SchemaFile, project_id: string, artifact: string): {
-        content: string, tokens_in: number, tokens_out: number,
-        cache_creation_tokens: number, cache_read_tokens: number,
-        cost_usd: number, cost_source: string
-    } -> {
+    generate(prompt: string, schema_file: SchemaFile, project_id: string, artifact: string): WriterResult {
         var picked = AgentSelector.pick()
         // Duracao da chamada (inclui as retentativas do proprio agent), em
         // segundos — alimenta o "tempo de processamento" do resumo de
@@ -277,8 +280,8 @@ export tool Writer {
         }
         var raw = match picked {
             nameof(Devin) -> devin_raw
-            nameof(Claude) -> Claude.run(prompt: prompt, schema: schema_file.content)
-            nameof(Codex) -> Codex.run(prompt: prompt, schema: schema_file.path)
+            nameof(Claude) -> Claude.run(prompt:, schema: schema_file.content)
+            nameof(Codex) -> Codex.run(prompt:, schema: schema_file.path)
         }
         var usage = match picked {
             nameof(Devin) -> UsageParser.extract_devin(raw, devin_exported)
@@ -311,7 +314,7 @@ export tool Writer {
         PromptLog.append({
             artifact,
             backend: picked,
-            prompt: prompt,
+            prompt,
             response: raw,
             tokens_in: usage.tokens_in,
             tokens_out: usage.tokens_out,
@@ -346,11 +349,11 @@ agent MockDevinExportPath {
 }
 
 tool MockWriter {
-    internal generate(prompt: string, schema_file: SchemaFile, project_id: string, artifact: string): string -> {
-        return MockCodexSchemaPath.run(prompt: prompt, schema: schema_file.path)
+    internal generate(prompt: string, schema_file: SchemaFile, project_id: string, artifact: string): string {
+        return MockCodexSchemaPath.run(prompt:, schema: schema_file.path)
     }
 
-    internal generate_devin(prompt_path: string, export_path: string): string -> {
+    internal generate_devin(prompt_path: string, export_path: string): string {
         return MockDevinExportPath.run(prompt: prompt_path, schema: export_path)
     }
 }

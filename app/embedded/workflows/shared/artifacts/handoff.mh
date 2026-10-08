@@ -32,7 +32,7 @@ export tool HandoffMd {
 
     internal line(text: any): string -> (text ?? "").replace("\r", " ").replace("\n", " ")
 
-    internal bullets(items: any[]): string -> {
+    internal bullets(items: any[]): string {
         if (items.is_empty()) return "—\n"
         return items.map((i) -> "- " + self.line(i?.texto ?? i)).join("\n") + "\n"
     }
@@ -50,7 +50,7 @@ export tool HandoffMd {
         _            -> ""
     }
 
-    internal statement(h: any): string -> {
+    internal statement(h: any): string {
         var tipo = h?.story_type ?? ""
         if (tipo == "spike" && h?.spike != null) {
             var s = h.spike
@@ -62,13 +62,13 @@ export tool HandoffMd {
         return "- **Resultado técnico:** " + self.line(h?.resultado_tecnico) + "\n- **Habilita:** " + self.line(h?.habilita) + "\n- **Evidenciado por:** " + self.line(h?.evidenciado_por) + "\n"
     }
 
-    internal fields(campos: any[]): string -> {
+    internal fields(campos: any[]): string {
         if (campos.is_empty()) return ""
         return "\n| Campo | Tipo | Obrigatório | Descrição |\n|---|---|---|---|\n" +
             campos.map((c) -> "| `" + self.cell(c.nome) + "`" + (if ((c?.local ?? "") == "") "" else " (" + c.local + ")") + " | " + self.cell(c?.tipo) + " | " + (if (c?.obrigatorio ?? false) "sim" else "não") + " | " + self.cell(c?.descricao) + " |").join("\n") + "\n"
     }
 
-    internal contracts(h: any): string -> {
+    internal contracts(h: any): string {
         var endpoints = h?.contratos?.endpoints ?? []
         var eventos = h?.contratos?.eventos ?? []
         var integracoes = h?.contratos?.integracoes ?? []
@@ -91,7 +91,7 @@ export tool HandoffMd {
         return out
     }
 
-    spec(h: any, codigo: string, feature: string, r: any): string -> {
+    spec(h: any, codigo: string, feature: string, r: any): string {
         var tipo = BacklogHtml.story_type_label(h?.story_type ?? "")
         var out = "# " + codigo + " — " + self.line(h?.titulo) + "\n\n" +
             "> " + (if (feature.is_empty()) "" else "Feature: " + feature + " · ") + "Tipo: " + tipo + " · Subclassificação: " + self.line(h?.subclassification) +
@@ -140,7 +140,7 @@ export tool HandoffMd {
         return out
     }
 
-    plan(p: any, codigo: string): string -> {
+    plan(p: any, codigo: string): string {
         var out = "# Plano de implementação — " + codigo + "\n\n## Abordagem\n\n" + self.line(p?.abordagem) + "\n\n"
         var comps = p?.componentes ?? []
         if (!comps.is_empty()) out = out + "## Componentes afetados\n\n| Contêiner | Componente | Mudança |\n|---|---|---|\n" + comps.map((c) -> "| " + self.cell(c.conteiner) + " | " + self.cell(c?.componente) + " | " + self.cell(c?.mudanca) + " |").join("\n") + "\n\n"
@@ -159,7 +159,7 @@ export tool HandoffMd {
 
     // Assessment de aderencia ao Radahn (plano.radahn). Aplicavel: aponta o
     // radahn.yaml que vai na mesma pasta; senao, so registra o porque.
-    internal radahn(p: any): string -> {
+    internal radahn(p: any): string {
         var r = p?.radahn
         if (r == null) return ""
         var out = "## Aderência ao Radahn\n\n"
@@ -181,7 +181,7 @@ export tool HandoffMd {
             (if ((t?.descricao ?? "").trim().is_empty()) "" else "\n  " + self.line(t.descricao))
         ).join("\n") + "\n"
 
-    adr(a: any, id: string): string -> {
+    adr(a: any, id: string): string {
         var out = "# " + id + " — " + self.line(a?.titulo) + "\n\n- Status: " + self.line(a?.status) + "\n\n## Contexto e problema\n\n" + self.line(a?.contexto_e_problema) + "\n\n" +
             "## Fatores de decisão\n\n" + self.bullets(a?.fatores_decisao ?? []) + "\n## Opções consideradas\n\n" + self.bullets(a?.opcoes_consideradas ?? []) + "\n" +
             "## Decisão\n\n**Opção escolhida:** " + self.line(a?.decisao_final?.opcao_escolhida) + " — " + self.line(a?.decisao_final?.justificativa) + "\n\n" +
@@ -196,7 +196,7 @@ export tool HandoffMd {
 
     // anexos: secao do spec.md que aponta os complementos anexados pelo
     // usuario (historia_anexos.mh), copiados para anexos/ ao lado dele.
-    anexos(names: string[]): string -> {
+    anexos(names: string[]): string {
         if (names.is_empty()) return ""
         return "\n## Complementos anexados\n\n" +
             "Arquivos anexados a esta história para cobrir dependências da feature que esta spec pode não refletir por completo. Eles fazem parte da especificação: leia-os antes de implementar e, se contradisserem a spec, pergunte a quem refinou.\n\n" +
@@ -231,7 +231,7 @@ export tool HandoffMd {
     // pasta de toda historia (agora todas tem uma); a secao de bloqueios
     // continua so como resumo rapido de "por que", sem precisar abrir cada
     // spec.md.
-    readme(nome: string, items: any[]): string -> {
+    readme(nome: string, items: any[]): string {
         var prontas = items.filter((i) -> i.status != "nao_pronta").size()
         var nao_prontas = items.filter((i) -> i.status == "nao_pronta")
         var out = "# " + nome + " — pacote de handoff\n\n" +
@@ -249,7 +249,7 @@ export tool HandoffMd {
         return out + "## Documentação\n\n- `docs/arquitetura.md` — diagramas C4 e modelo de dados\n- `docs/adr/` — decisões arquiteturais\n"
     }
 
-    architecture(project_id: string): string -> {
+    architecture(project_id: string): string {
         var out = "# Arquitetura\n\n"
         var base = Paths.artifact(project_id, "diagramas")
         if (dir.exists(base)) {
@@ -279,7 +279,7 @@ export tool HandoffMd {
 export tool Handoff {
     // build: (re)gera projects/<id>/handoff/ e devolve o resumo. A pasta e
     // limpa antes — o pacote sempre reflete o estado atual dos artefatos.
-    build(project_id: string): any -> {
+    build(project_id: string): any {
         project_id = Paths.ensure_valid(project_id)
         var root = Paths.root(project_id) + "/handoff"
         dir.clear(root)

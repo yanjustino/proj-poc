@@ -33,7 +33,7 @@ export tool WikiPages {
     // Trechos de codigo da fonte, copiados literalmente pela LLM
     // (ingest.schema.json code_snippets) — a sintese em prosa diz o que o
     // codigo faz; aqui fica o codigo em si, para os artefatos citarem.
-    internal snippets_section(snippets: any[]): string -> {
+    internal snippets_section(snippets: any[]): string {
         var kept = snippets.filter((s) -> !(s?.code ?? "").trim().is_empty())
         if (kept.is_empty()) return ""
         var blocks = kept.map((s) -> {
@@ -55,7 +55,7 @@ export tool WikiPages {
         _               -> ""
     }
 
-    upsert_fact_page(project_id: string, dir: string, title: string, facts: string[]) -> {
+    upsert_fact_page(project_id: string, dir: string, title: string, facts: string[]) {
         var slug = Slug.from_title(title)
         var path = Paths.wiki(project_id, dir + "/" + slug + ".md")
         if (!fs.exists(path)) fs.write(path, "# " + title + "\n\n")

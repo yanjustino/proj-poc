@@ -29,7 +29,7 @@ export tool AutoReview {
     // execute: o nucleo (nao "run": nome reservado do mhl para Workflow.run), com a chamada ao modelo injetada (`call(prompt)`) — e o
     // que o teste usa para provar o teto de duas chamadas com um modelo falso
     // que sempre devolve uma resposta com avisos.
-    internal execute(call: any, enabled: bool, prompt: string, prepare: any, check: any): any -> {
+    internal execute(call: any, enabled: bool, prompt: string, prepare: any, check: any): any {
         var first = call(prompt)
         var data = prepare(first.content)
         var avisos = check(data)
@@ -65,7 +65,7 @@ export tool AutoReview {
 
     // Os avisos (sem repeticao, no maximo 40) e a resposta anterior — o
     // modelo corrige o que foi apontado em vez de gerar do zero.
-    internal block(avisos: string[], previous: string): string -> {
+    internal block(avisos: string[], previous: string): string {
         var unicos = []
         for (var a in avisos) {
             if (!unicos.contains(a) && unicos.size() < 40) unicos += [a]
@@ -81,7 +81,7 @@ export tool AutoReview {
     // with_review: copia o registro da revisao para cada item de uma colecao
     // (diagramas, features, historias) — o preview e a pagina de UM item
     // mostram a nota sem precisar do lote.
-    tag_items(items: any[], revisao: any): any[] -> {
+    tag_items(items: any[], revisao: any): any[] {
         var out = []
         for (var item in items) {
             item["autorrevisao"] = revisao
@@ -90,7 +90,7 @@ export tool AutoReview {
         return out
     }
 
-    note_html(data: any): string -> {
+    note_html(data: any): string {
         var r = data?.autorrevisao
         if (r == null || !(r?.tentada ?? false)) return ""
         if (r?.aplicada ?? false) {

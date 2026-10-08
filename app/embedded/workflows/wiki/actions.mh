@@ -9,13 +9,15 @@ import { WikiPages, WikiLog } from "../shared/wiki/wiki_pages.mh"
 import { WikiLint } from "../shared/wiki/wiki_lint.mh"
 import { WikiHtmlExport } from "../shared/wiki/wiki_html_export.mh"
 
+export type IngestResult = {
+    source_title: string, source_slug: string,
+    entities_touched: number, concepts_touched: number
+}
+
+export type ConceptResult = {slug: string, title: string, facts_added: number}
+
 export tool WikiActions {
-    commit_ingest(project_id: string, data: any): {
-        source_title: string,
-        source_slug: string,
-        entities_touched: number,
-        concepts_touched: number
-    } -> {
+    commit_ingest(project_id: string, data: any): IngestResult {
         var source_slug = Slug.from_title(data.source_title)
         // `?? []`: um ingest pausado no Modo Buddy antes de code_snippets
         // existir retoma com o ingest_data antigo.
@@ -42,14 +44,14 @@ export tool WikiActions {
 
     // Uma entidade/conceito cujo titulo (ou alias) ja tem pagina entra nela;
     // o titulo usado pela fonte vira alias, para a busca e o proximo catalogo.
-    internal upsert_fact(project_id: string, category: string, item: any) -> {
+    internal upsert_fact(project_id: string, category: string, item: any) {
         var title = WikiIndex.canonical_title(project_id, category, item.title)
         var aliases = (item?.aliases ?? []) + (if (title == item.title) [] else [item.title])
         WikiPages.upsert_fact_page(project_id, category, title, item.facts)
         WikiIndex.upsert(project_id, category, {slug: Slug.from_title(title), title, summary: item.facts[0], aliases})
     }
 
-    file_answer(project_id: string, title: string, body: string, question: string): string -> {
+    file_answer(project_id: string, title: string, body: string, question: string): string {
         var slug = Slug.from_title(title)
         WikiPages.write_answer(project_id, slug, title, body)
         WikiIndex.upsert_answer(project_id, {
@@ -64,7 +66,7 @@ export tool WikiActions {
 
     // Verifica o relatorio da LLM, grava os alertas nas paginas afetadas e
     // wiki/lint.md, e regera o HTML (os alertas ficam visiveis la tambem).
-    record_lint(project_id: string, report: any): any -> {
+    record_lint(project_id: string, report: any): any {
         var applied = WikiLint.apply(project_id, report)
         self.log(
             project_id,
@@ -78,12 +80,52 @@ export tool WikiActions {
     // Grava a pagina de conceito aprovada (acao create_concept), pelo mesmo
     // caminho do ingest: um titulo ou alias ja conhecido recebe os fatos na
     // pagina existente em vez de ganhar outra.
-    commit_concept(project_id: string, data: any): {slug: string, title: string, facts_added: number} -> {
+    commit_concept(project_id: string, data: any): ConceptResult {
         self.upsert_fact(project_id, "concepts", data)
         var title = WikiIndex.canonical_title(project_id, "concepts", data.title)
         self.log(project_id, "concept", title)
         WikiHtmlExport.sync(project_id)
         return {slug: Slug.from_title(title), title, facts_added: data.facts.size()}
+    }
+
+    // Apaga o que a wiki derivou das fontes (fontes, entidades, conceitos,
+    // verificacao e HTML) para o app reingerir as fontes restantes do zero.
+    // Respostas arquivadas nao vem de nenhuma fonte, entao ficam, com um
+    // aviso de que citam a wiki anterior; log.md tambem fica (e historico).
+    reset(project_id: string): any {
+        for (var folder in ["sources", "entities", "concepts", "html"]) {
+            var folder_path = Paths.wiki(project_id, folder)
+            if (dir.exists(folder_path)) {
+                dir.clear(folder_path)
+                dir.delete(folder_path)
+            }
+        }
+        for (var file in ["index.md", "lint.md", "lint.json"]) {
+            var file_path = Paths.wiki(project_id, file)
+            if (fs.exists(file_path)) fs.delete(file_path)
+        }
+        var answers = WikiIndex.load(project_id).get("answers", [])
+        WikiIndex.reset(project_id, answers)
+        var answers_dir = Paths.wiki(project_id, "answers")
+        if (dir.exists(answers_dir)) {
+            var today = time.format(time.now(), "yyyy-MM-dd")
+            for (var answer_path in dir.list(answers_dir)) {
+                fs.write(answer_path, self.with_rebuild_notice(fs.read(answer_path), today))
+            }
+        }
+        self.log(project_id, "rebuild", "wiki apagada para reprocessar as fontes")
+        WikiHtmlExport.sync(project_id)
+        return {answers_kept: answers.size()}
+    }
+
+    // O aviso vai logo abaixo do titulo, como paragrafo — nao no bloco de
+    // alertas, que a verificacao apaga e regrava inteiro. Uma reconstrucao
+    // nova troca o aviso anterior em vez de empilhar outro.
+    internal with_rebuild_notice(page: string, date: string): string {
+        var prefix = "Aviso: resposta arquivada antes da reconstrução da wiki"
+        var parts = page.split("\n\n").filter((part) -> !part.starts_with(prefix))
+        var notice = prefix + " em " + date + " — as páginas que ela cita podem ter mudado ou deixado de existir."
+        return ([parts[0], notice] + parts[1..parts.size()]).join("\n\n")
     }
 
     // sync_html regera wiki/html/ sob demanda, sem depender de um novo
@@ -107,6 +149,46 @@ export tool WikiActions {
 }
 
 test WikiActionsSpec {
+    // Reprocessar a wiki: some tudo o que veio das fontes; a resposta
+    // arquivada fica, avisando que cita a wiki anterior.
+    describe reset_drops_what_came_from_the_sources_and_keeps_the_answers {
+        var id = Fixture.project("spec-test-wiki-reset")
+        dir.create(Paths.wiki(id, "sources"))
+        dir.create(Paths.wiki(id, "entities"))
+        dir.create(Paths.wiki(id, "concepts"))
+        WikiActions.commit_ingest(id, {
+            source_title: "Ata 1", source_summary: "Resumo 1", natureza: "pedido_novo", index_summary: "ata 1",
+            entities: [{title: "Backoffice", aliases: [], facts: ["Faz a liquidação"]}],
+            concepts: [{title: "Settlement", aliases: [], facts: ["Acontece em D+1"]}],
+        })
+        WikiActions.file_answer(id, "Quem liquida", "O backoffice (ver entities/backoffice).", "quem liquida?")
+        fs.write(Paths.wiki(id, "lint.md"), "# Verificação da wiki\n")
+
+        var r = WikiActions.reset(id)
+        are_equal(r.answers_kept, 1)
+        is_false(dir.exists(Paths.wiki(id, "sources")))
+        is_false(dir.exists(Paths.wiki(id, "entities")))
+        is_false(dir.exists(Paths.wiki(id, "concepts")))
+        is_false(fs.exists(Paths.wiki(id, "lint.md")))
+        is_false(fs.exists(Paths.wiki(id, "html/sources/ata-1.html")))
+        var state = WikiIndex.load(id)
+        is_true(state.sources.is_empty())
+        is_true(state.entities.is_empty())
+        are_equal(state.answers.size(), 1)
+        var answer = fs.read(Paths.wiki(id, "answers/quem-liquida.md"))
+        is_true(answer.starts_with("# Quem liquida\n\nAviso: resposta arquivada antes da reconstrução da wiki em "))
+        is_true(answer.contains("O backoffice (ver entities/backoffice)."))
+        is_true(fs.exists(Paths.wiki(id, "html/answers/quem-liquida.html")))
+        is_true(WikiIndex.catalog(id).starts_with("(nenhuma página ainda"))
+        Fixture.drop(id)
+    }
+
+    describe with_rebuild_notice_replaces_the_notice_of_an_earlier_rebuild {
+        var once = WikiActions.with_rebuild_notice("# R\n\ncorpo\n", "2026-01-01")
+        var twice = WikiActions.with_rebuild_notice(once, "2026-02-01")
+        are_equal(twice, "# R\n\nAviso: resposta arquivada antes da reconstrução da wiki em 2026-02-01 — as páginas que ela cita podem ter mudado ou deixado de existir.\n\ncorpo\n")
+    }
+
     // Conceito apontado pela verificacao: vira pagina em concepts/, entra no
     // indice e no HTML (busca do app) como qualquer conceito ingerido.
     describe commit_concept_writes_the_page_and_indexes_it {

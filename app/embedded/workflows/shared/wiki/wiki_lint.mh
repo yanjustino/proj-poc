@@ -29,20 +29,20 @@ import { WikiIndex } from "wiki_index.mh"
 export tool WikiLint {
     internal categories(): string[] -> ["sources", "entities", "concepts", "answers"]
 
-    internal normalize_ref(ref: string): string -> {
+    internal normalize_ref(ref: string): string {
         var r = ref.trim()
         if (r.starts_with("wiki/")) r = r.substring(5, r.size())
         if (r.ends_with(".md")) r = r.substring(0, r.size() - 3)
         return r
     }
 
-    internal valid_ref(project_id: string, ref: string): bool -> {
+    internal valid_ref(project_id: string, ref: string): bool {
         var r = self.normalize_ref(ref)
         if (!r.matches("^(sources|entities|concepts|answers)/[a-z0-9-]+$")) return false
         return fs.exists(Paths.wiki(project_id, r + ".md"))
     }
 
-    internal quote_in_page(project_id: string, ref: string, quote: string): bool -> {
+    internal quote_in_page(project_id: string, ref: string, quote: string): bool {
         if (quote.trim().is_empty()) return false
         if (!self.valid_ref(project_id, ref)) return false
         var text = WikiAlerts.strip(fs.read(Paths.wiki(project_id, self.normalize_ref(ref) + ".md")))
@@ -52,7 +52,7 @@ export tool WikiLint {
     // Um trecho de evidência está superado quando uma alegação superada
     // verificada cita a mesma página e o mesmo trecho (ou um que contém o
     // outro — a LLM às vezes recorta a citação de forma diferente).
-    internal superseding(stale_claims: any[], page: string, quote: string): string[] -> {
+    internal superseding(stale_claims: any[], page: string, quote: string): string[] {
         var q = WikiAlerts.squash(quote)
         return stale_claims
             .filter((s) -> s.page == page && (WikiAlerts.squash(s.quote).contains(q) || q.contains(WikiAlerts.squash(s.quote))))
@@ -74,7 +74,7 @@ export tool WikiLint {
 
     // Já existe página para este título: o arquivo com o slug dele, ou uma
     // entidade/conceito do índice cujo título ou alias tem o mesmo slug.
-    internal has_page(project_id: string, title: string): bool -> {
+    internal has_page(project_id: string, title: string): bool {
         var key = Slug.from_title(title)
         if (fs.exists(Paths.wiki(project_id, "concepts/" + key + ".md")) || fs.exists(Paths.wiki(project_id, "entities/" + key + ".md"))) return true
         var state = WikiIndex.load(project_id)
@@ -87,7 +87,7 @@ export tool WikiLint {
     // começando numa palavra (aceita plural e flexão no fim).
     internal quote_names(quote: string, key: string): bool -> ("-" + Slug.from_title(quote)).contains("-" + key)
 
-    internal verify_concepts(project_id: string, items: any[]): any -> {
+    internal verify_concepts(project_id: string, items: any[]): any {
         var kept = []
         var discarded = 0
         for (var m in items) {
@@ -113,7 +113,7 @@ export tool WikiLint {
 
     // Devolve o relatório só com o que passou na verificação, as linhas de
     // alerta por página e quantos achados foram descartados.
-    internal verify(project_id: string, report: any): any -> {
+    internal verify(project_id: string, report: any): any {
         var contradictions = []
         var resolved_contradictions = []
         var stale_claims = []
@@ -199,7 +199,7 @@ export tool WikiLint {
 
     // Remove os alertas antigos de toda a wiki e grava os novos — idempotente:
     // rodar o lint duas vezes nunca acumula blocos.
-    internal write_alerts(project_id: string, alerts: any[]): number -> {
+    internal write_alerts(project_id: string, alerts: any[]): number {
         for (var category in self.categories()) {
             var dir_path = Paths.wiki_dir(project_id) + "/" + category
             if (dir.exists(dir_path)) {
@@ -222,7 +222,7 @@ export tool WikiLint {
         return pages.size()
     }
 
-    internal render_report(report: any, discarded: number): string -> {
+    internal render_report(report: any, discarded: number): string {
         var out = "# Verificação da wiki\n\nGerado em " + time.format(time.now(), "yyyy-MM-dd") + ".\n\n"
         out = out + "## Contradições pendentes\n\n"
         if (report.contradictions.is_empty()) out = out + "Nenhuma.\n\n"
@@ -256,7 +256,7 @@ export tool WikiLint {
 
     // Alem do lint.md legivel, grava o mesmo resultado em wiki/lint.json —
     // e dele que o app monta a "Ultima verificacao" com as acoes por item.
-    apply(project_id: string, raw_report: any): any -> {
+    apply(project_id: string, raw_report: any): any {
         var verified = self.verify(project_id, raw_report)
         var annotated = self.write_alerts(project_id, verified.alerts)
         fs.write(Paths.wiki(project_id, "lint.md"), self.render_report(verified.report, verified.discarded))

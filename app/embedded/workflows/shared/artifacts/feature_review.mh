@@ -25,7 +25,7 @@ export tool FeatureReview {
 
     // status_of: "pendente" | "aprovada" | "rejeitada", pela pasta da
     // feature ("FT001-slug").
-    status_of(project_id: string, feature_dir: string): string -> {
+    status_of(project_id: string, feature_dir: string): string {
         var data = Readiness.read_json(self.status_path(project_id, feature_dir))
         var status = data?.status ?? ""
         if (status == "aprovada" || status == "rejeitada") return status
@@ -37,7 +37,7 @@ export tool FeatureReview {
 
     // Gate das historias e do plano de uma feature (gerar e aprovar): uma
     // feature rejeitada nao avanca ate ser reaberta.
-    ensure_not_rejected(project_id: string, feature_dir: string) -> {
+    ensure_not_rejected(project_id: string, feature_dir: string) {
         if (self.is_rejected(project_id, feature_dir)) {
             fail("a feature '" + feature_dir.split("-")[0] + "' foi rejeitada — reabra-a antes de gerar histórias ou planos")
         }
@@ -46,7 +46,7 @@ export tool FeatureReview {
     // decide aplica `decisao` ("aprovar" | "rejeitar" | "reabrir") a uma
     // feature e devolve o novo status. Rejeitar exige motivo; reabrir volta
     // a feature para "pendente".
-    decide(project_id: string, feature_id: string, decisao: string, motivo: string): any -> {
+    decide(project_id: string, feature_id: string, decisao: string, motivo: string): any {
         project_id = Paths.ensure_valid(project_id)
         if (!feature_id.matches("^FT[0-9]+$")) fail("'feature_id' invalido: '" + feature_id + "'")
         var feature_dir = ArtifactId.find_feature_dir(project_id, feature_id)
@@ -71,7 +71,7 @@ export tool FeatureReview {
     }
 
     // read: {feature_id, feature_dir, status, motivo} de uma feature.
-    read(project_id: string, feature_dir: string): any -> {
+    read(project_id: string, feature_dir: string): any {
         var data = Readiness.read_json(self.status_path(project_id, feature_dir))
         return {
             feature_id: feature_dir.split("-")[0],

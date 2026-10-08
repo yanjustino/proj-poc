@@ -6,7 +6,7 @@
 import { Context } from "context.mh"
 
 export tool Require {
-    present(content: string, need: string, before: string): string -> {
+    present(content: string, need: string, before: string): string {
         if (content.is_empty()) fail("gere '${need}' antes de '${before}'")
         return content
     }

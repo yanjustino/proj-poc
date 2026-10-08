@@ -11,7 +11,7 @@
 // compartilhado de citacao).
 
 export tool DirText {
-    concat_all(dir_path: string, base_dir: string): string -> {
+    concat_all(dir_path: string, base_dir: string): string {
         if (!dir.exists(dir_path)) return ""
         var out = ""
         for (var file_path in dir.list(dir_path)) {
@@ -26,7 +26,7 @@ export tool DirText {
     // legados sem JSON, preserva o fallback ao body do HTML. Um JSON orfao
     // sem o HTML correspondente e ignorado porque o HTML e o marcador de
     // disponibilidade do artefato (ArtifactData grava JSON primeiro).
-    concat_artifacts(dir_path: string, base_dir: string): string -> {
+    concat_artifacts(dir_path: string, base_dir: string): string {
         if (!dir.exists(dir_path)) return ""
         var out = ""
         for (var file_path in dir.list(dir_path)) {
@@ -57,7 +57,7 @@ export tool DirText {
     // wiki pages (sources/entities/concepts/answers) go through this same
     // concat_all as plain markdown, never HTML, and must pass through
     // untouched.
-    body_only(page: string): string -> {
+    body_only(page: string): string {
         if (!page.contains("<body>") || !page.contains("</body>")) return page
         var span = page.extract_content(from: "<body>", to: "</body>")
         return span.substring("<body>".size(), span.size() - "</body>".size())

@@ -24,7 +24,7 @@ export tool StoryRules {
     // mesmo discriminador de ArtifactBody.historia; nao e verificada.
     is_legacy(h: any): bool -> h?.resultado_tecnico == null && h?.habilita == null && h?.evidenciado_por == null
 
-    check(h: any): string[] -> {
+    check(h: any): string[] {
         if (self.is_legacy(h)) return []
         var out = []
         var tipo = h?.story_type ?? ""
@@ -53,7 +53,7 @@ export tool StoryRules {
     // de saida e a decisao que desbloqueia (spike estruturado; um spike
     // antigo, sem o objeto `spike`, usa resultado_tecnico/habilita/
     // evidenciado_por como pergunta/decisao/evidencia).
-    internal check_spike(h: any): string[] -> {
+    internal check_spike(h: any): string[] {
         var spike = h?.spike
         if (spike == null) {
             if (self.blank(h?.resultado_tecnico) || self.blank(h?.habilita) || self.blank(h?.evidenciado_por)) return ["Spike precisa da pergunta, da decisão habilitada e da evidência esperada."]
@@ -71,7 +71,7 @@ export tool StoryRules {
 }
 
 export tool FeatureRules {
-    check(f: any): string[] -> {
+    check(f: any): string[] {
         var tipo = f?.tipo_item
         if (tipo == null) return []
         var out = []
@@ -91,7 +91,7 @@ export tool FeatureRules {
 
     // Hipotese de beneficio verificavel: metrica e meta sempre; baseline ou
     // a lacuna registrada. Feature anterior a medicao_beneficio nao e checada.
-    internal check_measurement(f: any): string[] -> {
+    internal check_measurement(f: any): string[] {
         var m = f?.medicao_beneficio
         if (m == null) return []
         var out = []
@@ -108,7 +108,7 @@ export tool FeatureRules {
 export tool DependencyRules {
     // Um destino sem espaco e com digito ("FT003", "FR-012", "US0002") e um
     // identificador; com espaco, e o titulo de outra historia do lote.
-    internal is_identifier(destino: string): bool -> {
+    internal is_identifier(destino: string): bool {
         var d = destino.trim()
         if (d.is_empty() || d.contains(" ")) return false
         return "0123456789".split("").any((c) -> d.contains(c))
@@ -117,7 +117,7 @@ export tool DependencyRules {
     // `outros`: nomes validos fora do lote — features (codigo e titulo) e
     // elementos do C4 (conteineres, sistemas externos) —, destinos legitimos
     // de uma dependencia que nao sao historias deste lote.
-    check_batch(historias: any[], outros: string[]): any[] -> {
+    check_batch(historias: any[], outros: string[]): any[] {
         var titles = historias.map((h) -> (h?.titulo ?? "").to_lower().trim())
         var outros_norm = outros.map((o) -> o.to_lower().trim())
         var pares = self.gateway_backend_pairs(historias)
@@ -155,7 +155,7 @@ export tool DependencyRules {
 
     // Prefixos de roteamento que o gateway costuma acrescentar ("/api",
     // "/v1") nao fazem dois endpoints diferentes.
-    internal normalize_path(caminho: string): string -> {
+    internal normalize_path(caminho: string): string {
         var parts = caminho.split("/").filter((p) -> !p.is_empty())
         var out = []
         var skipping = true
@@ -175,7 +175,7 @@ export tool DependencyRules {
     // artefatos por endpoint REST) precisa expor o mesmo contrato: o gateway
     // depende do backend (dependencias_impedimentos) e os dois descrevem os
     // mesmos metodo+caminho. Avisos vao para a historia de gateway.
-    internal gateway_backend_pairs(historias: any[]): any[] -> {
+    internal gateway_backend_pairs(historias: any[]): any[] {
         var out = []
         for (var h in historias) {
             var avisos = []
@@ -224,14 +224,14 @@ export tool BacklogHtml {
         _                       -> tipo
     }
 
-    proposals(items: any[]): string -> {
+    proposals(items: any[]): string {
         if (items.is_empty() || items[0]?.tipo == null) return Cite.list(items)
         return "<table><thead><tr><th>Tipo</th><th>História</th><th>Resultado</th><th>Fontes</th></tr></thead><tbody>" +
             items.map((p) -> "<tr><td>" + self.story_type_label(p.tipo) + "</td><td>" + html.escape(p?.titulo ?? "") + "</td><td>" + html.escape(p?.resultado ?? "") + "</td><td>" + Cite.badges(p?.fontes ?? []) + "</td></tr>").join("") +
             "</tbody></table>"
     }
 
-    measurement(m: any): string -> {
+    measurement(m: any): string {
         if (m == null) return ""
         var guardrails = m?.guardrails ?? []
         return "<table><tbody>" +
@@ -251,7 +251,7 @@ export tool BacklogHtml {
         _                     -> tipo
     }
 
-    dependencies(items: any[]): string -> {
+    dependencies(items: any[]): string {
         if (items.is_empty() || items[0]?.tipo == null) return Cite.list(items)
         return "<table><thead><tr><th>Tipo</th><th>Destino</th><th>Justificativa</th><th>Fontes</th></tr></thead><tbody>" +
             items.map((d) -> "<tr><td>" + self.dependency_type_label(d.tipo) + "</td><td>" + self.change_badge(d?.mudanca ?? "") + html.escape(d?.destino ?? "") +

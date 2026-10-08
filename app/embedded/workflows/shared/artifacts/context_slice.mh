@@ -23,7 +23,7 @@ import { Context } from "context.mh"
 export tool ContextSlice {
     // refs: toda string citada em qualquer campo "fontes"/"*_fontes" do
     // artefato, e (numa historia) nas listas de `rastreabilidade`.
-    refs(value: any): string[] -> {
+    refs(value: any): string[] {
         var out = []
         for (var r in self.collect(value, false)) {
             if (!out.contains(r)) out += [r]
@@ -33,7 +33,7 @@ export tool ContextSlice {
 
     // Devolve as strings coletadas (arrays sao passados por copia no mhl —
     // anexar a um parametro dentro da recursao nao chegaria a quem chamou).
-    internal collect(value: any, is_source: bool): string[] -> {
+    internal collect(value: any, is_source: bool): string[] {
         var t = type_of(value)
         if (t == "string") return if (is_source) [value] else []
         var out = []
@@ -50,7 +50,7 @@ export tool ContextSlice {
 
     // ids citados de um artefato: "requisitos/FR-003" -> "FR-003"; um ID sem
     // prefixo ("FR-003", vindo da rastreabilidade) tambem conta.
-    internal ids_for(refs: string[], artifact: string, id_prefixes: string[]): string[] -> {
+    internal ids_for(refs: string[], artifact: string, id_prefixes: string[]): string[] {
         var out = []
         for (var r in refs) {
             var ref = r.trim()
@@ -62,7 +62,7 @@ export tool ContextSlice {
 
     internal cites_whole(refs: string[], artifact: string): bool -> refs.any((r) -> r.trim() == artifact)
 
-    read(project_id: string, relative: string): any -> {
+    read(project_id: string, relative: string): any {
         var path = Paths.artifact(project_id, relative)
         if (!fs.exists(path)) return null
         try {
@@ -74,7 +74,7 @@ export tool ContextSlice {
 
     internal filter_items(items: any[], ids: string[]): any[] -> items.filter((i) -> ids.contains(i?.id ?? ""))
 
-    requisitos(project_id: string, refs: string[]): string -> {
+    requisitos(project_id: string, refs: string[]): string {
         var full = Context.artifact(project_id, "requisitos.html")
         var data = self.read(project_id, "requisitos.json")
         var ids = self.ids_for(refs, "requisitos", ["FR-", "IR-", "DR-", "BR-", "RN-"])
@@ -90,7 +90,7 @@ export tool ContextSlice {
         return "(Recorte: só os requisitos citados — " + ids.join(", ") + ".)\n" + json.stringify(slice)
     }
 
-    atributos(project_id: string, refs: string[]): string -> {
+    atributos(project_id: string, refs: string[]): string {
         var full = Context.artifact(project_id, "atributos.html")
         var data = self.read(project_id, "atributos.json")
         var ids = self.ids_for(refs, "atributos", ["NFR-", "AC-", "CO-"])
@@ -104,7 +104,7 @@ export tool ContextSlice {
     }
 
     // ADRs por prefixo "ADR-NNN" do nome do arquivo.
-    adrs(project_id: string, refs: string[]): string -> {
+    adrs(project_id: string, refs: string[]): string {
         var full = Context.artifact_dir(project_id, "adr")
         var cited = self.ids_for(refs, "adr", ["ADR-"]).map((r) -> {
             var parts = r.split("-")
@@ -126,7 +126,7 @@ export tool ContextSlice {
     }
 
     // Diagramas de contexto e conteiner sempre; os demais so se citados.
-    diagramas(project_id: string, refs: string[]): string -> {
+    diagramas(project_id: string, refs: string[]): string {
         var base = Paths.artifact(project_id, "diagramas")
         if (!dir.exists(base)) return ""
         var cited = self.ids_for(refs, "diagramas", [""]).filter((r) -> !r.is_empty())

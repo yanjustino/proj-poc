@@ -40,6 +40,12 @@ export memory PromptLog {
 // campo existe pra esse backend?" com acesso opcional. `cost_source` separa
 // um custo realmente informado de zero usado como placeholder; sem isso nao
 // seria possivel aplicar com seguranca o fallback de preco do modelo.
+export type ParsedUsage = {
+    tokens_in: number, tokens_out: number, content: string,
+    cache_creation_tokens: number, cache_read_tokens: number,
+    usage_available: bool, cost_usd: number, cost_source: string
+}
+
 export tool UsageParser {
     // `devin --print` continua devolvendo apenas a resposta final no stdout,
     // mas `--export <path>` grava uma trajetoria ATIF com os totais em
@@ -53,11 +59,7 @@ export tool UsageParser {
     // A CLI pode envolver a resposta em uma cerca Markdown — ou abri-la com
     // prosa ("I'll ...") — mesmo quando instruida a nao faze-lo; ver
     // devin_json.
-    extract_devin(raw: string, exported: string): {
-        tokens_in: number, tokens_out: number, content: string,
-        cache_creation_tokens: number, cache_read_tokens: number,
-        usage_available: bool, cost_usd: number, cost_source: string
-    } -> {
+    extract_devin(raw: string, exported: string): ParsedUsage {
         var content = self.devin_json(raw)
 
         var tokens_in = 0
@@ -105,7 +107,7 @@ export tool UsageParser {
     // preservando chaves e backticks dentro dos campos. Sem objeto JSON
     // recuperavel (ex.: uma recusa em texto), falha mostrando o inicio da
     // resposta, que e o que se precisa ver para entender o que o modelo fez.
-    internal devin_json(raw: string): string -> {
+    internal devin_json(raw: string): string {
         var content = raw.trim()
         var start = content.split("{")[0].size()
         var closing = content.split("}")
@@ -142,11 +144,7 @@ export tool UsageParser {
     // SUBCONJUNTO de tokens_in, entao aqui tokens_in vira o input total
     // (novo + criacao + leitura de cache); sem isso, 15 tokens novos e 14.9k
     // lidos do cache davam "99647% do input veio do cache".
-    extract_claude(raw: string): {
-        tokens_in: number, tokens_out: number, content: string,
-        cache_creation_tokens: number, cache_read_tokens: number,
-        usage_available: bool, cost_usd: number, cost_source: string
-    } -> {
+    extract_claude(raw: string): ParsedUsage {
         var envelope = json.parse(raw)
         var content = envelope.result
         var structured = envelope.get("structured_output", null)
@@ -175,11 +173,7 @@ export tool UsageParser {
     // exec` com os mesmos flags do agent Codex, que devolveu ambos os
     // campos junto de input_tokens/output_tokens. Nenhum custo em dolar
     // exposto por este CLI — cost_usd fica 0 aqui, nao inventado.
-    extract_codex(raw: string): {
-        tokens_in: number, tokens_out: number, content: string,
-        cache_creation_tokens: number, cache_read_tokens: number,
-        usage_available: bool, cost_usd: number, cost_source: string
-    } -> {
+    extract_codex(raw: string): ParsedUsage {
         var tokens_in = 0
         var tokens_out = 0
         var cache_creation_tokens = 0
@@ -211,11 +205,13 @@ export tool UsageParser {
 // informa total_cost_usd o Devin pode usar a fotografia de precos do modelo
 // selecionado, validada pelo app antes de entrar em SENPAI_DEVIN_PRICING.
 // Outros backends ficam sem estimativa quando nao reportam o proprio custo.
+export type CostResolution = {
+    cost_usd: number, cost_source: string, cost_model: string,
+    cost_pricing_reference: string
+}
+
 export tool UsageCost {
-    resolve(usage: any, backend: string): {
-        cost_usd: number, cost_source: string, cost_model: string,
-        cost_pricing_reference: string
-    } -> {
+    resolve(usage: any, backend: string): CostResolution {
         var model_id = if (backend == "Devin") env("SENPAI_DEVIN_MODEL", "") else ""
         var pricing = if (backend == "Devin") env("SENPAI_DEVIN_PRICING", "") else ""
         return self.resolve_with_pricing(
@@ -226,10 +222,7 @@ export tool UsageCost {
         )
     }
 
-    internal resolve_with_pricing(usage: any, backend: string, model_id: string, pricing_json: string): {
-        cost_usd: number, cost_source: string, cost_model: string,
-        cost_pricing_reference: string
-    } -> {
+    internal resolve_with_pricing(usage: any, backend: string, model_id: string, pricing_json: string): CostResolution {
         if (usage.cost_source == "reported") {
             return {
                 cost_usd: usage.cost_usd,

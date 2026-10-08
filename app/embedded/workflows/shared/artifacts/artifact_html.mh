@@ -77,14 +77,14 @@ export tool ArtifactHtml {
         "<table><thead><tr><th>Persona</th><th>Papel</th><th>Interação</th><th>Fontes</th></tr></thead><tbody>" +
         items.map((x) -> "<tr><td>" + html.escape(x.persona) + "</td><td>" + html.escape(x.papel) + "</td><td>" + html.escape(x.interacao) + "</td><td>" + Cite.badges(x.fontes) + "</td></tr>").join("") + "</tbody></table>"
 
-    feature_classification(tipo_item: string, subtipo_enabler: string, fontes: string[]): string -> {
+    feature_classification(tipo_item: string, subtipo_enabler: string, fontes: string[]): string {
         var kind_label = if (tipo_item == "enabler") "Enabler" else "Feature de negócio"
         var kind_class = if (tipo_item == "enabler") " item-kind-enabler" else " item-kind-business"
         var subtype = if (tipo_item == "enabler") "<span class=\"item-kind item-kind-subtype\">" + html.escape(subtipo_enabler) + "</span>" else ""
         return "<p class=\"item-classification\"><span class=\"item-kind" + kind_class + "\">" + kind_label + "</span>" + subtype + " " + Cite.badges(fontes) + "</p>"
     }
 
-    story_statement(story_type: string, como: string, quero: string, para: string, resultado_tecnico: string, habilita: string, evidenciado_por: string): string -> {
+    story_statement(story_type: string, como: string, quero: string, para: string, resultado_tecnico: string, habilita: string, evidenciado_por: string): string {
         if (story_type == "historia_usuario") {
             return "<blockquote><strong>Como</strong> " + html.escape(como) + ", <strong>quero</strong> " + html.escape(quero) + ", <strong>para</strong> " + html.escape(para) + ".</blockquote>"
         }
@@ -144,7 +144,7 @@ export tool ArtifactHtml {
     // type has no confirmed map_indexed/enumerate — every other loop in
     // this codebase that needs a running total or index uses exactly this
     // shape, e.g. UsageParser.extract_codex/DirText.concat_all).
-    execution_order(items: {feature_codigo: string, feature_titulo: string}[]): string -> {
+    execution_order(items: {feature_codigo: string, feature_titulo: string}[]): string {
         var rows = ""
         var n = 1
         for (var x in items) {

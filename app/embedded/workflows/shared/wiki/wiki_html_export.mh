@@ -34,7 +34,7 @@ export tool WikiHtmlExport {
     // barato que tentar atualizar incrementalmente um HTML já escrito.
     // Navegação entre páginas (relacionadas, links nos alertas) precisa do
     // conjunto inteiro, então tudo parte de um catálogo lido uma única vez.
-    sync(project_id: string) -> {
+    sync(project_id: string) {
         var state = WikiIndex.load(project_id)
         var catalog = self.build_catalog(project_id, state)
         for (var item in catalog) {
@@ -76,7 +76,7 @@ export tool WikiHtmlExport {
 
     // Data do bloco "## Fatos (yyyy-MM-dd)" mais recente, ou "" (fontes e
     // respostas nao tem esses blocos — o app usa a data do arquivo).
-    internal last_facts_date(markdown: string): string -> {
+    internal last_facts_date(markdown: string): string {
         var dates = markdown.split("\n")
             .map((line) -> line.trim())
             .filter((line) -> line.starts_with("## Fatos (") && line.size() >= 20)
@@ -98,7 +98,7 @@ export tool WikiHtmlExport {
     // `alerts` são só as pendências — é o que marca a página (ponto, selo,
     // banner do índice); `superseded` são os trechos que uma fonte mais nova
     // já decidiu, mostrados à parte e sem contar como alerta.
-    internal build_catalog(project_id: string, state: any): any[] -> {
+    internal build_catalog(project_id: string, state: any): any[] {
         var catalog = []
         for (var category in self.categories()) {
             for (var entry in state.get(category.dir, [])) {
@@ -122,7 +122,7 @@ export tool WikiHtmlExport {
         return catalog
     }
 
-    internal alert_lines(markdown: string): string[] -> {
+    internal alert_lines(markdown: string): string[] {
         var marker = "\n" + WikiAlerts.heading()
         if (!markdown.contains(marker)) return []
         return markdown.split(marker)[1].split("\n")
@@ -140,7 +140,7 @@ export tool WikiHtmlExport {
     // duplicado no corpo). So remove quando o bloco bate com o titulo real
     // (nunca um chute — evita comer um heading legitimo que por acaso comece
     // igual, caso alguma pagina futura nao siga esse padrao).
-    internal strip_leading_title(markdown: string, title: string): string -> {
+    internal strip_leading_title(markdown: string, title: string): string {
         var trimmed = markdown.trim()
         var heading = "# " + title
         if (!trimmed.starts_with(heading)) return trimmed
@@ -153,7 +153,7 @@ export tool WikiHtmlExport {
     // Blocos separados por linha em branco, exceto dentro de um bloco
     // cercado (``` … ```, gravado por WikiPages a partir de code_snippets):
     // código com linha em branco no meio continua um bloco só, intacto.
-    internal split_blocks(markdown: string): string[] -> {
+    internal split_blocks(markdown: string): string[] {
         var blocks = []
         var current = []
         var fence = ""
@@ -182,13 +182,13 @@ export tool WikiHtmlExport {
 
     // As crases que abrem a cerca (3 ou mais) — o bloco fecha numa linha
     // só com essa mesma cerca.
-    internal fence_of(line: string): string -> {
+    internal fence_of(line: string): string {
         var fence = ""
         while (line.starts_with(fence + "`")) fence = fence + "`"
         return fence
     }
 
-    internal render_code_block(block: string): string -> {
+    internal render_code_block(block: string): string {
         var opening = block.split("\n")[0]
         if (opening.size() == block.size()) return "<pre><code></code></pre>"
         var fence = self.fence_of(block)
@@ -200,7 +200,7 @@ export tool WikiHtmlExport {
         return "<pre><code" + attr + ">" + html.escape(code) + "</code></pre>"
     }
 
-    internal render_block(block: string): string -> {
+    internal render_block(block: string): string {
         if (block.starts_with("```")) return self.render_code_block(block)
         if (block.starts_with("# ")) return "<h1>" + html.escape(block.substring(2, block.size())) + "</h1>"
         if (block.starts_with("## ")) return "<h2>" + html.escape(block.substring(3, block.size())) + "</h2>"
@@ -208,7 +208,7 @@ export tool WikiHtmlExport {
         return "<p>" + html.escape(block) + "</p>"
     }
 
-    internal render_list_block(block: string): string -> {
+    internal render_list_block(block: string): string {
         var items = block.split("\n")
             .map((line) -> line.trim())
             .filter((line) -> line.starts_with("- "))
@@ -220,7 +220,7 @@ export tool WikiHtmlExport {
 
     // Páginas que `item` menciona pelo título e páginas que o mencionam —
     // determinístico (título em minúsculas contido no texto), sem LLM.
-    internal related(item: any, catalog: any[]): any -> {
+    internal related(item: any, catalog: any[]): any {
         var mentions = []
         var cited_by = []
         var own = item.title.to_lower()
@@ -236,14 +236,14 @@ export tool WikiHtmlExport {
 
     internal page_href(item: any, prefix: string): string -> prefix + item.dir + "/" + item.slug + ".html"
 
-    internal link_item(item: any, prefix: string): string -> {
+    internal link_item(item: any, prefix: string): string {
         var dot = ""
         if (!item.alerts.is_empty()) dot = "<span class=\"wiki-dot\" title=\"Tem alertas da revisão\"></span>"
         return "<li><a href=\"" + self.page_href(item, prefix) + "\">" + dot + "<span class=\"wiki-kind\">" +
             html.escape(item.label) + "</span>" + html.escape(item.title) + "</a></li>"
     }
 
-    internal render_related(item: any, catalog: any[]): string -> {
+    internal render_related(item: any, catalog: any[]): string {
         var rel = self.related(item, catalog)
         if (rel.mentions.is_empty() && rel.cited_by.is_empty()) return ""
         var out = "<section class=\"wiki-related\"><h2>Navegar</h2>"
@@ -260,7 +260,7 @@ export tool WikiHtmlExport {
 
     // Referências "sources/slug" dentro de um alerta viram links para a
     // página (o relatório do lint sempre as cita nesse formato).
-    internal link_word(word: string, catalog: any[], prefix: string): string -> {
+    internal link_word(word: string, catalog: any[], prefix: string): string {
         var core = word
         var tail = ""
         if (core.ends_with(":") || core.ends_with(",") || core.ends_with(".")) {
@@ -280,7 +280,7 @@ export tool WikiHtmlExport {
     // “...”" / "Superado por X: ... — trecho: “...”". "Possivelmente superado
     // por X" é o formato anterior, que fica nas páginas até a próxima
     // verificação.
-    internal render_alert(line: string, catalog: any[]): string -> {
+    internal render_alert(line: string, catalog: any[]): string {
         var kind = "other"
         var tag = "Alerta"
         var text = line
@@ -304,7 +304,7 @@ export tool WikiHtmlExport {
         return out + "</li>"
     }
 
-    internal render_alerts(item: any, catalog: any[]): string -> {
+    internal render_alerts(item: any, catalog: any[]): string {
         var out = ""
         if (!item.alerts.is_empty()) {
             var n = item.alerts.size()
@@ -345,7 +345,7 @@ export tool WikiHtmlExport {
 
     // --- shells HTML (auto-contidos: CSS inline, sem asset externo) ---
 
-    internal render_page(item: any, catalog: any[]): string -> {
+    internal render_page(item: any, catalog: any[]): string {
         var escaped_title = html.escape(item.title)
         var badges = ""
         if (!item.natureza.is_empty()) badges = badges + self.natureza_html(item)
@@ -374,7 +374,7 @@ export tool WikiHtmlExport {
         """
     }
 
-    internal render_index(state: any, catalog: any[]): string -> {
+    internal render_index(state: any, catalog: any[]): string {
         var sections = self.categories()
             .filter((category) -> !state.get(category.dir, []).is_empty())
             .map((category) -> self.render_index_section(category, catalog.filter((item) -> item.dir == category.dir)))
@@ -460,7 +460,7 @@ export tool WikiHtmlExport {
         """
     }
 
-    internal render_index_section(category: {dir: string, label: string}, entries: any[]): string -> {
+    internal render_index_section(category: {dir: string, label: string}, entries: any[]): string {
         var items = entries
             .map((entry) -> "<li><a href=\"" + category.dir + "/" + entry.slug + ".html\"><strong>" +
                 html.escape(entry.title) + self.natureza_html(entry) + self.alert_badge(entry) + "</strong><small>" + html.escape(entry.summary) + "</small></a></li>")
@@ -469,12 +469,12 @@ export tool WikiHtmlExport {
             " <span class=\"wiki-count\">${entries.size()}</span></h2><ul class=\"wiki-index-list\">" + items + "</ul></section>"
     }
 
-    internal alert_count_label(n: number): string -> {
+    internal alert_count_label(n: number): string {
         if (n == 1) return "1 alerta"
         return "${n} alertas"
     }
 
-    internal alert_badge(entry: any): string -> {
+    internal alert_badge(entry: any): string {
         var n = (entry?.alerts ?? []).size()
         if (n == 0) return ""
         return " <span class=\"wiki-natureza wiki-badge-alert\">" + self.alert_count_label(n) + "</span>"
@@ -483,13 +483,13 @@ export tool WikiHtmlExport {
     // natureza (so em "sources") no indice estatico — o mesmo rotulo que
     // WikiIndex.render ja poe em wiki/index.md, so que aqui como <span> em
     // vez de crase, porque este HTML nao passa por md_to_html.
-    internal natureza_html(entry: any): string -> {
+    internal natureza_html(entry: any): string {
         var n = entry?.natureza ?? ""
         if (n.is_empty()) return ""
         return " <span class=\"wiki-natureza wiki-natureza-" + n.replace("_", "-") + "\">" + html.escape(WikiIndex.natureza_label(n)) + "</span>"
     }
 
-    internal build_search_entries(state: any): any[] -> {
+    internal build_search_entries(state: any): any[] {
         var entries = []
         for (var category in self.categories()) {
             for (var entry in state.get(category.dir, [])) {

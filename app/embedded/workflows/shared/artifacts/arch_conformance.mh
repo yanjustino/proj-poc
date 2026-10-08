@@ -31,7 +31,7 @@ export tool ArchConformance {
     // isso esta decidido (cita um ADR), quando ele proprio e a fundacao
     // tecnica (enabler de arquitetura/infraestrutura) ou quando a ausencia
     // esta registrada em Lacunas.
-    internal justified(f: any): bool -> {
+    internal justified(f: any): bool {
         var subtipo = f?.subtipo_enabler ?? "nao_aplicavel"
         if (!self.refs_of(f, "adr").is_empty()) return true
         if (!(f?.gaps ?? []).is_empty()) return true
@@ -39,7 +39,7 @@ export tool ArchConformance {
     }
 
     // check: avisos de UM item contra `known` (Traceability.known).
-    check(f: any, known: any): string[] -> {
+    check(f: any, known: any): string[] {
         var refs = f?.aderencia_arquitetural
         if (refs == null) return []
         var subtipo = f?.subtipo_enabler ?? "nao_aplicavel"
@@ -81,12 +81,12 @@ export tool ArchConformance {
         return out
     }
 
-    annotate_item(f: any, known: any): any -> {
+    annotate_item(f: any, known: any): any {
         f["avisos_arquitetura"] = self.check(f, known)
         return f
     }
 
-    annotate(data: any, known: any): any -> {
+    annotate(data: any, known: any): any {
         var out = []
         for (var f in (data?.features ?? [])) out += [self.annotate_item(f, known)]
         data["features"] = out
@@ -96,7 +96,7 @@ export tool ArchConformance {
     // coverage: ADRs e restricoes arquiteturais que nenhum item do lote cita
     // em aderencia_arquitetural. Um lote com item anterior ao campo nao e
     // verificado (a ausencia nao seria do backlog, e do formato).
-    coverage(features: any[], known: any): string[] -> {
+    coverage(features: any[], known: any): string[] {
         if (features.is_empty() || features.any((f) -> f?.aderencia_arquitetural == null)) return []
         var adrs_citados = []
         var atributos_citados = []
@@ -114,20 +114,20 @@ export tool ArchConformance {
 
     // Os ids de `existentes` que nao estao em `citados`, sem caixa/espacos.
     // (Traceability.missing nao serve: com pool vazio, ele nao confere nada.)
-    internal uncited(existentes: string[], citados: string[]): string[] -> {
+    internal uncited(existentes: string[], citados: string[]): string[] {
         var norm = citados.map((c) -> c.to_lower().trim())
         return existentes.filter((e) -> !norm.contains(e.to_lower().trim()))
     }
 
     // "atributos/RA-001" -> "RA-001" (a forma de citacao, como em
     // Traceability.missing).
-    internal last_segment(ref: string): string -> {
+    internal last_segment(ref: string): string {
         var parts = ref.split("/")
         return parts[parts.size() - 1].trim()
     }
 
     // "adr/ADR-003-postgres" -> "ADR-003".
-    internal adr_prefix(ref: string): string -> {
+    internal adr_prefix(ref: string): string {
         var parts = self.last_segment(ref).split("-")
         return if (parts.size() >= 2) parts[0] + "-" + parts[1] else ref.trim()
     }
@@ -151,7 +151,7 @@ export tool ArchConformance {
 
     // Tabela da secao "Aderência Arquitetural"; item anterior ao campo nao
     // tem a secao.
-    html(f: any): string -> {
+    html(f: any): string {
         var refs = f?.aderencia_arquitetural
         if (refs == null) return ""
         var body = if (refs.is_empty()) "<p>—</p>" else
@@ -161,7 +161,7 @@ export tool ArchConformance {
         return "<h2>Aderência Arquitetural</h2>" + body
     }
 
-    coverage_html(avisos: string[]): string -> {
+    coverage_html(avisos: string[]): string {
         if (avisos.is_empty()) return ""
         return "<h2>Cobertura da Arquitetura</h2><ul class=\"c4-warnings\">" + avisos.map((a) -> "<li>" + html.escape(a) + "</li>").join("") + "</ul>"
     }
