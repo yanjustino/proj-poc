@@ -10,14 +10,16 @@
 // `extensions` must stay a subset of what RawExtract accepts
 // (workflows/shared/wiki/raw_extract.mh: plain_text_extensions + .pdf) —
 // a file the picker offers but the ingest rejects only fails later, mid-run.
-// The exception is OFFICE_EXTENSIONS: AddRawFile converts those to Markdown
-// on upload (app/office_source.go), so RawExtract only ever sees the .md.
+// The exceptions are OFFICE_EXTENSIONS and HTML_EXTENSIONS: AddRawFile
+// converts those to Markdown on upload (app/office_source.go,
+// app/html_source.go), so RawExtract only ever sees the .md.
 const CODE_EXTENSIONS = [
   '.py', '.go', '.cs', '.java', '.kt', '.js', '.jsx', '.ts', '.tsx', '.rb', '.php', '.rs',
   '.swift', '.c', '.h', '.cpp', '.hpp', '.sh', '.xml', '.proto', '.graphql', '.tf',
 ];
 
 const OFFICE_EXTENSIONS = ['.docx', '.pptx', '.xlsx'];
+const HTML_EXTENSIONS = ['.html', '.htm', '.xhtml'];
 
 export const SOURCE_KINDS = [
   {
@@ -70,8 +72,9 @@ export const SOURCE_KINDS = [
       'Mantenha o nome de quem fala em cada trecho — ajuda a separar pedido de opinião.',
       'Corte conversa fiada e trechos fora de pauta; ruído vira custo de tokens.',
       'Legendas .vtt/.srt: salve como .txt antes de enviar.',
+      'Transcrição exportada como página .html (ex.: salva do navegador ou do Drive) também serve: é convertida em texto no envio.',
     ],
-    extensions: ['.txt', '.md'],
+    extensions: ['.txt', '.md', ...HTML_EXTENSIONS],
     actions: ['paste', 'files'],
     paste: {
       heading: 'Colar transcrição',
@@ -118,15 +121,15 @@ export const SOURCE_KINDS = [
     icon: 'globe',
     label: 'Página web',
     wish: 'Quero inserir uma página web',
-    teaser: 'Documentação online, artigos, wikis públicas.',
+    teaser: 'Documentação online, artigos, wikis públicas — por link ou arquivo .html salvo.',
     why: 'Boa parte do contexto mora na web: documentação de APIs, guias de produto e artigos que explicam o domínio.',
     tips: [
       'A página é baixada e convertida em texto no momento do envio — é uma foto, não um link vivo.',
-      'Páginas que exigem login ou só carregam via JavaScript não funcionam.',
+      'Páginas que exigem login ou só carregam via JavaScript não funcionam pelo link: salve a página (.html) no disco ou no Drive sincronizado e envie o arquivo.',
       'Prefira o link da seção específica em vez da página inicial do site.',
     ],
-    extensions: [],
-    actions: ['url'],
+    extensions: HTML_EXTENSIONS,
+    actions: ['url', 'files'],
   },
   {
     id: 'markdown',
@@ -189,12 +192,14 @@ export function sourceKind(id) {
 
 // kindOfFile: best-effort kind for an existing raw/ file, by extension —
 // only drives the icon on the Fontes cards/table. Converted Office files are
-// "<name>.docx.md" (or "<name>.docx (2).md" when de-duplicated). Pasted text
+// "<name>.docx.md" (or "<name>.docx (2).md" when de-duplicated), local HTML
+// pages "<name>.html.md". Pasted text
 // is always .md, so a pasted transcript or note shows as Markdown; that's fine.
 export function kindOfFile(name) {
   const lower = name.toLowerCase();
   const ext = lower.includes('.') ? lower.slice(lower.lastIndexOf('.')) : '';
   if (OFFICE_EXTENSIONS.includes(ext) || /\.(docx|pptx|xlsx)( \(\d+\))?\.md$/.test(lower)) return sourceKind('office');
+  if (HTML_EXTENSIONS.includes(ext) || /\.(html|htm|xhtml)( \(\d+\))?\.md$/.test(lower)) return sourceKind('web');
   if (ext === '.pdf') return sourceKind('pdf');
   if (ext === '.md') return sourceKind('markdown');
   if (ext === '.txt') return sourceKind('transcript');

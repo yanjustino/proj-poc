@@ -8,6 +8,8 @@
 // no primeiro step de todo workflow, antes de qualquer var `project_id` ser
 // usada aqui ou em qualquer outro lugar (ver FASE0-ACHADOS.md §10).
 
+import { AgentConfig } from "agent_config.mh"
+
 export memory Usage {
     type: "jsonl"
     path: "projects/${project_id}/usage.jsonl"
@@ -203,7 +205,8 @@ export tool UsageParser {
 // Resolve a procedencia do custo sem misturar "zero informado" com
 // "informacao ausente". A execucao sempre vence. Somente quando ela nao
 // informa total_cost_usd o Devin pode usar a fotografia de precos do modelo
-// selecionado, validada pelo app antes de entrar em SENPAI_DEVIN_PRICING.
+// selecionado, validada pelo app antes de entrar na configuracao do agente
+// (AgentConfig.devin_pricing).
 // Outros backends ficam sem estimativa quando nao reportam o proprio custo.
 export type CostResolution = {
     cost_usd: number, cost_source: string, cost_model: string,
@@ -212,8 +215,8 @@ export type CostResolution = {
 
 export tool UsageCost {
     resolve(usage: any, backend: string): CostResolution {
-        var model_id = if (backend == "Devin") env("SENPAI_DEVIN_MODEL", "") else ""
-        var pricing = if (backend == "Devin") env("SENPAI_DEVIN_PRICING", "") else ""
+        var model_id = if (backend == "Devin") AgentConfig.devin_model() else ""
+        var pricing = if (backend == "Devin") AgentConfig.devin_pricing() else ""
         return self.resolve_with_pricing(
             usage:,
             backend:,

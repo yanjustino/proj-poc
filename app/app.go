@@ -61,19 +61,19 @@ type App struct {
 	// agent is the LLM backend Writer.generate uses (workflows/shared/
 	// agents/agents.mh's AgentSelector) — "" | "codex" | "claude" | "devin",
 	// "" meaning "mhl's own default" (currently codex). Loaded from
-	// settings.json at startup, updated by SetAgent, and passed to every
-	// connectBridge() call as mhlbridge.Start's agent argument — kept on the
-	// struct for the same reason mhlPath/workflowsDir/... are: so
-	// ReconnectMCP (and SetAgent, which just changes this then calls it)
-	// can respawn mhl with the current value without re-deriving it.
+	// settings.json at startup, updated by SetAgent, and handed to the
+	// workflows through .senpai-agent.json (agent_config.go), read on every
+	// LLM call — plus SENPAI_AGENT at mhl startup, the fallback when that
+	// file is missing.
 	agent string
-	// devinModel is passed to the workflow as SENPAI_DEVIN_MODEL. It is kept
-	// independently from agent so a user's choice survives switching away
-	// from Devin and back.
+	// devinModel reaches the workflow the same way (devin_model /
+	// SENPAI_DEVIN_MODEL). It is kept independently from agent so a user's
+	// choice survives switching away from Devin and back.
 	devinModel       string
 	devinCostSummary string
-	// codexModel/claudeModel are passed to the workflow as SENPAI_CODEX_MODEL/
-	// SENPAI_CLAUDE_MODEL, same independence-from-agent reasoning as
+	// codexModel/claudeModel reach the workflow the same way (codex_model/
+	// claude_model, SENPAI_CODEX_MODEL/SENPAI_CLAUDE_MODEL), same
+	// independence-from-agent reasoning as
 	// devinModel above: a user's choice for one backend survives switching
 	// away and back.
 	codexModel  string
@@ -279,6 +279,11 @@ func (a *App) RetryStartup() (string, error) {
 // startup() and ReconnectMCP() spawn a bridge from, so the two can't drift
 // into starting it with different arguments.
 func (a *App) connectBridge() error {
+	// A file left by an earlier session would override the env vars below
+	// (agent_config.go), so it is rewritten with the current settings first.
+	if err := writeAgentConfig(a.dataDir, a.currentAgentConfig()); err != nil {
+		return err
+	}
 	client, err := mhlbridge.Start(
 		a.ctx, a.mhlPath, a.workflowsDir, a.stateDir, a.dataDir, a.codexCwdDir,
 		a.agent, a.devinModel, devinPricingJSON(a.devinModel, a.devinCostSummary),
@@ -381,26 +386,21 @@ func (a *App) GetAgent() string {
 	return a.agent
 }
 
-// SetAgent persists agent to settings.json, then reconnects the mhl bridge
-// so the change actually takes effect — SENPAI_AGENT is only read at mhl's
-// own startup (see mhlbridge.Start), so a running process never picks up a
-// change to it on its own. Returns the same shape as MCPStatus/ReconnectMCP
-// (the panel's normal "is mhl up" state), since switching agents always
-// reconnects; a bad agent value is the one real error case, returned before
-// anything is persisted or reconnected.
+// SetAgent persists agent to settings.json and to the file the workflows
+// read on every LLM call (applyAgentSettings) — no mhl restart: the next
+// call already goes to the new backend. Returns the same shape as MCPStatus
+// (the panel's normal "is mhl up" state); a bad agent value is the one real
+// error case, returned before anything is persisted.
 //
-// Reconnecting kills the current mhl process outright (mhlbridge.Client.Stop
-// -> terminate, no graceful drain) — anything it was doing dies with it. If
-// that's a work-item's LLM call actually in flight (state "working"/
-// "queued", not "paused" waiting on a review), that call is wasted and the
-// run is left interrupted for the user to notice and mhl_run_resume by
-// hand. So this refuses to switch while any run is active rather than
-// letting a routine backend swap silently interrupt a generation someone
-// else in the app started — checked against mhl itself (ActiveRuns), not
-// just this session's own WatchRun bookkeeping, since a run can be
-// in-flight without the UI currently polling it. If the check itself fails
-// (bridge already unhealthy), that's exactly what "Reconectar" is for, so
-// this fails open and logs rather than blocking the one way to recover.
+// It still refuses to switch while any run is active: a run in flight
+// (state "working"/"queued", not "paused" waiting on a review) would make
+// its remaining calls — the auto-review retry, the next source of an ingest
+// batch — on a different backend than its first ones, mixing two agents'
+// output and cost in one generation. Checked against mhl itself
+// (ActiveRuns), not just this session's own WatchRun bookkeeping, since a
+// run can be in-flight without the UI currently polling it. If the check
+// itself fails (bridge unhealthy), this fails open and logs rather than
+// blocking the switch.
 func (a *App) SetAgent(agent string) (string, error) {
 	agent = strings.ToLower(strings.TrimSpace(agent))
 	if !validAgents[agent] {
@@ -416,14 +416,14 @@ func (a *App) SetAgent(agent string) (string, error) {
 			)
 		}
 	}
-	if err := saveSettings(appSettings{
-		Agent: agent, DevinModel: a.devinModel, DevinCostSummary: a.devinCostSummary,
-		CodexModel: a.codexModel, ClaudeModel: a.claudeModel,
-	}); err != nil {
-		log.Printf("mhl bridge: save agent setting: %v", err)
-	}
+	previous := a.agent
 	a.agent = agent
-	return a.ReconnectMCP()
+	status, err := a.applyAgentSettings()
+	if err != nil {
+		a.agent = previous
+		return "", err
+	}
+	return status, nil
 }
 
 // ShowWarningDialog raises a native, blocking OS dialog (NSAlert on macOS,
@@ -627,8 +627,8 @@ func (a *App) GetDevinCostSummary() string {
 }
 
 // SetDevinModel persists the exact model_uid and cost_summary returned by
-// ListDevinModels, then restarts mhl because its environment is fixed when
-// the process starts. The summary is only accepted as a pricing reference if
+// ListDevinModels (applyAgentSettings — the next LLM call uses it, no mhl
+// restart). The summary is only accepted as a pricing reference if
 // parseDevinPricing recognizes the full format; otherwise calls are recorded
 // explicitly as having no estimate.
 func (a *App) SetDevinModel(model, costSummary string) (string, error) {
@@ -640,15 +640,15 @@ func (a *App) SetDevinModel(model, costSummary string) (string, error) {
 	if strings.ContainsAny(model, "\x00\r\n") || strings.ContainsRune(costSummary, '\x00') {
 		return "", fmt.Errorf("modelo do Devin inválido")
 	}
-	if err := saveSettings(appSettings{
-		Agent: a.agent, DevinModel: model, DevinCostSummary: costSummary,
-		CodexModel: a.codexModel, ClaudeModel: a.claudeModel,
-	}); err != nil {
-		return "", fmt.Errorf("salvar modelo do Devin: %w", err)
-	}
+	previousModel, previousCost := a.devinModel, a.devinCostSummary
 	a.devinModel = model
 	a.devinCostSummary = costSummary
-	return a.ReconnectMCP()
+	status, err := a.applyAgentSettings()
+	if err != nil {
+		a.devinModel, a.devinCostSummary = previousModel, previousCost
+		return "", fmt.Errorf("salvar modelo do Devin: %w", err)
+	}
+	return status, nil
 }
 
 // codexModelsResponse is `codex debug models`'s own shape (an undocumented
@@ -735,9 +735,8 @@ func (a *App) GetCodexModel() string {
 	return a.codexModel
 }
 
-// SetCodexModel persists model to settings.json, then restarts mhl (its
-// environment — SENPAI_CODEX_MODEL — is fixed when the process starts, same
-// as SetDevinModel). Accepts any non-empty value, not just one that came
+// SetCodexModel persists model the same way as SetDevinModel (no mhl
+// restart). Accepts any non-empty value, not just one that came
 // back from ListCodexModels: the picker also offers a free-text field
 // because ListCodexModels relies on an undocumented CLI subcommand that may
 // stop working, and `codex exec --model` itself accepts any slug.
@@ -749,14 +748,14 @@ func (a *App) SetCodexModel(model string) (string, error) {
 	if strings.ContainsAny(model, "\x00\r\n") {
 		return "", fmt.Errorf("modelo do Codex inválido")
 	}
-	if err := saveSettings(appSettings{
-		Agent: a.agent, DevinModel: a.devinModel, DevinCostSummary: a.devinCostSummary,
-		CodexModel: model, ClaudeModel: a.claudeModel,
-	}); err != nil {
+	previous := a.codexModel
+	a.codexModel = model
+	status, err := a.applyAgentSettings()
+	if err != nil {
+		a.codexModel = previous
 		return "", fmt.Errorf("salvar modelo do Codex: %w", err)
 	}
-	a.codexModel = model
-	return a.ReconnectMCP()
+	return status, nil
 }
 
 // listClaudeModels is the fixed catalog offered for Claude: the Claude Code
@@ -789,8 +788,8 @@ func (a *App) GetClaudeModel() string {
 	return a.claudeModel
 }
 
-// SetClaudeModel persists model to settings.json, then restarts mhl, same
-// rationale as SetCodexModel: a free-text value is accepted so a user can
+// SetClaudeModel persists model the same way as SetCodexModel: a free-text
+// value is accepted so a user can
 // pass a full model name (e.g. "claude-sonnet-5") that isn't one of
 // listClaudeModels's aliases.
 func (a *App) SetClaudeModel(model string) (string, error) {
@@ -801,14 +800,14 @@ func (a *App) SetClaudeModel(model string) (string, error) {
 	if strings.ContainsAny(model, "\x00\r\n") {
 		return "", fmt.Errorf("modelo do Claude inválido")
 	}
-	if err := saveSettings(appSettings{
-		Agent: a.agent, DevinModel: a.devinModel, DevinCostSummary: a.devinCostSummary,
-		CodexModel: a.codexModel, ClaudeModel: model,
-	}); err != nil {
+	previous := a.claudeModel
+	a.claudeModel = model
+	status, err := a.applyAgentSettings()
+	if err != nil {
+		a.claudeModel = previous
 		return "", fmt.Errorf("salvar modelo do Claude: %w", err)
 	}
-	a.claudeModel = model
-	return a.ReconnectMCP()
+	return status, nil
 }
 
 // LogFrontendError forwards an uncaught JS error/rejection (see
@@ -1582,7 +1581,8 @@ func (a *App) SelectRawFilesFiltered(title string, label string, pattern string)
 // returns the resulting basename — exactly the value a caller should put in
 // Wiki's `raw_paths: [...]` (Paths.raw only ever concatenates "raw/" + this
 // name; see workflows/shared/core/paths.mh). Office files (.docx/.pptx/.xlsx)
-// are converted to Markdown instead of copied, and saved as "<name>.md".
+// and local HTML pages (.html/.htm/.xhtml) are converted to Markdown instead
+// of copied, and saved as "<name>.md".
 func (a *App) AddRawFile(projectID string, sourcePath string) (string, error) {
 	rawDir, err := a.projectRootDir(projectID, "raw", []string{"raw"})
 	if err != nil {
@@ -1606,6 +1606,19 @@ func (a *App) AddRawFile(projectID string, sourcePath string) (string, error) {
 		dest := uniqueDestination(rawDir, base+".md")
 		if err := os.WriteFile(dest, body, 0o644); err != nil {
 			return "", fmt.Errorf("write converted office source: %w", err)
+		}
+		return filepath.Base(dest), nil
+	}
+
+	if isHTMLSource(base) {
+		// Same reason as Office: RawExtract never sees an .html (html_source.go).
+		body, err := convertHTMLSource(sourcePath)
+		if err != nil {
+			return "", err
+		}
+		dest := uniqueDestination(rawDir, base+".md")
+		if err := os.WriteFile(dest, body, 0o644); err != nil {
+			return "", fmt.Errorf("write converted html source: %w", err)
 		}
 		return filepath.Base(dest), nil
 	}

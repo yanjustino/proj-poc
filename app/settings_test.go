@@ -4,6 +4,7 @@ import (
 	"context"
 	"encoding/json"
 	"os"
+	"path/filepath"
 	"strings"
 	"testing"
 	"time"
@@ -188,16 +189,17 @@ func TestLoadSettingsIgnoresAMalformedFileRatherThanFailing(t *testing.T) {
 }
 
 // TestApp_SetAgent exercises the real path an agent switch takes: persist
-// to settings.json, then actually reconnect the mhl bridge (a fresh process
-// is the only way SENPAI_AGENT — read once at mhl's own startup — can pick
-// up a new value). newTestApp starts a real bridge, so this proves the
-// whole round trip, not just the file write.
+// to settings.json and to the .senpai-agent.json the workflows read on every
+// LLM call — without restarting mhl (the same bridge client keeps serving).
+// newTestApp starts a real bridge, so this proves the status still comes
+// back ready, not just the file writes.
 func TestApp_SetAgent(t *testing.T) {
 	app, _ := newTestApp(t)
 
 	if got := app.GetAgent(); got != "" {
 		t.Fatalf("GetAgent() before any SetAgent = %q, want \"\" (nothing chosen yet)", got)
 	}
+	bridgeBefore := app.bridge()
 
 	statusJSON, err := app.SetAgent("claude")
 	if err != nil {
@@ -210,7 +212,10 @@ func TestApp_SetAgent(t *testing.T) {
 		t.Fatalf("decode SetAgent result %q: %v", statusJSON, err)
 	}
 	if !status.Ready {
-		t.Errorf("SetAgent(claude) reconnected but bridge reports ready=false: %s", statusJSON)
+		t.Errorf("SetAgent(claude) but bridge reports ready=false: %s", statusJSON)
+	}
+	if app.bridge() != bridgeBefore {
+		t.Error("SetAgent restarted the mhl bridge — the switch must only rewrite the agent config file")
 	}
 	if got := app.GetAgent(); got != "claude" {
 		t.Errorf("GetAgent() after SetAgent(claude) = %q, want %q", got, "claude")
@@ -218,18 +223,60 @@ func TestApp_SetAgent(t *testing.T) {
 	if got := loadSettings().Agent; got != "claude" {
 		t.Errorf("loadSettings().Agent after SetAgent(claude) = %q, want %q (not persisted)", got, "claude")
 	}
+	if got := readAgentConfig(t, app.DataDir()).Agent; got != "claude" {
+		t.Errorf("%s agent after SetAgent(claude) = %q, want %q", agentConfigFile, got, "claude")
+	}
 
-	// Switching again reconnects a second time — the bridge must still come
-	// back up, not just the first switch.
+	if _, err := app.SetCodexModel("gpt-teste"); err != nil {
+		t.Fatalf("SetCodexModel: %v", err)
+	}
 	if _, err := app.SetAgent("codex"); err != nil {
 		t.Fatalf("SetAgent(codex): %v", err)
 	}
-	if got := app.GetAgent(); got != "codex" {
-		t.Errorf("GetAgent() after SetAgent(codex) = %q, want %q", got, "codex")
+	cfg := readAgentConfig(t, app.DataDir())
+	if cfg.Agent != "codex" || cfg.CodexModel != "gpt-teste" {
+		t.Errorf("%s after SetCodexModel+SetAgent = %+v, want agent codex and codex_model gpt-teste", agentConfigFile, cfg)
+	}
+	if app.bridge() != bridgeBefore {
+		t.Error("a model switch restarted the mhl bridge")
 	}
 }
 
-func TestApp_SetAgent_RejectsAnUnknownAgentWithoutPersistingOrReconnecting(t *testing.T) {
+func readAgentConfig(t *testing.T, dataDir string) agentConfig {
+	t.Helper()
+	data, err := os.ReadFile(filepath.Join(dataDir, agentConfigFile))
+	if err != nil {
+		t.Fatalf("read %s: %v", agentConfigFile, err)
+	}
+	var cfg agentConfig
+	if err := json.Unmarshal(data, &cfg); err != nil {
+		t.Fatalf("decode %s: %v", agentConfigFile, err)
+	}
+	return cfg
+}
+
+func TestWriteAgentConfig_ReplacesTheFileWithoutLeavingTempFiles(t *testing.T) {
+	dir := t.TempDir()
+	if err := writeAgentConfig(dir, agentConfig{Agent: "devin", DevinModel: "swe-1"}); err != nil {
+		t.Fatalf("first write: %v", err)
+	}
+	if err := writeAgentConfig(dir, agentConfig{Agent: "devin", DevinModel: "swe-2", DevinPricing: `{"input":1}`}); err != nil {
+		t.Fatalf("second write: %v", err)
+	}
+	cfg := readAgentConfig(t, dir)
+	if cfg.DevinModel != "swe-2" || cfg.DevinPricing != `{"input":1}` {
+		t.Errorf("config = %+v, want the second write", cfg)
+	}
+	entries, err := os.ReadDir(dir)
+	if err != nil {
+		t.Fatalf("read dir: %v", err)
+	}
+	if len(entries) != 1 {
+		t.Errorf("expected only %s in the dir, got %d entries", agentConfigFile, len(entries))
+	}
+}
+
+func TestApp_SetAgent_RejectsAnUnknownAgentWithoutPersisting(t *testing.T) {
 	app, _ := newTestApp(t)
 	if _, err := app.SetAgent("claude"); err != nil {
 		t.Fatalf("SetAgent(claude): %v", err)
@@ -247,17 +294,14 @@ func TestApp_SetAgent_RejectsAnUnknownAgentWithoutPersistingOrReconnecting(t *te
 		t.Errorf("loadSettings().Agent after a rejected SetAgent = %q, want %q unchanged", got, "claude")
 	}
 	if app.mhl != previousMHL {
-		t.Error("a rejected SetAgent reconnected the bridge anyway — it should have failed before touching it")
+		t.Error("a rejected SetAgent touched the bridge — it should have failed before anything")
 	}
 }
 
-// TestApp_SetAgent_RefusesWhileARunIsActive is the regression test for the
-// fragility this guard exists to close: SetAgent used to reconnect
-// unconditionally, and reconnecting kills the mhl child process outright
-// (mhlbridge.Client.Stop -> terminate, no graceful drain) — so switching
-// backends while a work-item generation was actually executing (state
-// "working"/"queued") killed that in-flight LLM call with nothing to
-// recover it automatically. Starts a real run via app.mhl.RunStart (not
+// TestApp_SetAgent_RefusesWhileARunIsActive covers the guard SetAgent keeps
+// even without restarting mhl: switching backends while a work-item
+// generation is executing (state "working"/"queued") would make its
+// remaining LLM calls on a different agent than its first ones. Starts a real run via app.mhl.RunStart (not
 // StartRun/WatchRun — this needs the raw pre-poll status, the instant after
 // mhl_run_start answers and before the step executor has necessarily
 // finished) and asserts SetAgent refuses it in exactly that window.
@@ -291,7 +335,7 @@ func TestApp_SetAgent_RefusesWhileARunIsActive(t *testing.T) {
 	}
 }
 
-func TestApp_SetDevinModelPersistsAndReconnects(t *testing.T) {
+func TestApp_SetDevinModelPersistsWithoutReconnecting(t *testing.T) {
 	app, _ := newTestApp(t)
 	previousMHL := app.mhl
 
@@ -312,8 +356,14 @@ func TestApp_SetDevinModelPersistsAndReconnects(t *testing.T) {
 	if got := loadSettings().DevinCostSummary; got != costSummary {
 		t.Errorf("persisted DevinCostSummary = %q, want %q", got, costSummary)
 	}
-	if app.mhl == previousMHL {
-		t.Error("SetDevinModel did not reconnect the bridge")
+	if got := readAgentConfig(t, app.DataDir()).DevinPricing; got != devinPricingJSON("swe-1-6-fast", costSummary) || got == "" {
+		t.Errorf("%s devin_pricing = %q, want the parsed pricing of the cost summary", agentConfigFile, got)
+	}
+	if app.mhl != previousMHL {
+		t.Error("SetDevinModel restarted the mhl bridge — the switch must only rewrite the agent config file")
+	}
+	if got := readAgentConfig(t, app.DataDir()).DevinModel; got != "swe-1-6-fast" {
+		t.Errorf("%s DevinModel = %q, want swe-1-6-fast", agentConfigFile, got)
 	}
 	var status struct {
 		Ready bool `json:"ready"`
@@ -323,7 +373,7 @@ func TestApp_SetDevinModelPersistsAndReconnects(t *testing.T) {
 	}
 }
 
-func TestApp_SetCodexModelPersistsAndReconnects(t *testing.T) {
+func TestApp_SetCodexModelPersistsWithoutReconnecting(t *testing.T) {
 	app, _ := newTestApp(t)
 	previousMHL := app.mhl
 
@@ -337,8 +387,11 @@ func TestApp_SetCodexModelPersistsAndReconnects(t *testing.T) {
 	if got := loadSettings().CodexModel; got != "gpt-5.5" {
 		t.Errorf("persisted CodexModel = %q, want gpt-5.5", got)
 	}
-	if app.mhl == previousMHL {
-		t.Error("SetCodexModel did not reconnect the bridge")
+	if app.mhl != previousMHL {
+		t.Error("SetCodexModel restarted the mhl bridge — the switch must only rewrite the agent config file")
+	}
+	if got := readAgentConfig(t, app.DataDir()).CodexModel; got != "gpt-5.5" {
+		t.Errorf("%s CodexModel = %q, want gpt-5.5", agentConfigFile, got)
 	}
 	var status struct {
 		Ready bool `json:"ready"`
@@ -355,7 +408,7 @@ func TestApp_SetCodexModelRejectsAnEmptyValue(t *testing.T) {
 	}
 }
 
-func TestApp_SetClaudeModelPersistsAndReconnects(t *testing.T) {
+func TestApp_SetClaudeModelPersistsWithoutReconnecting(t *testing.T) {
 	app, _ := newTestApp(t)
 	previousMHL := app.mhl
 
@@ -369,8 +422,11 @@ func TestApp_SetClaudeModelPersistsAndReconnects(t *testing.T) {
 	if got := loadSettings().ClaudeModel; got != "opus" {
 		t.Errorf("persisted ClaudeModel = %q, want opus", got)
 	}
-	if app.mhl == previousMHL {
-		t.Error("SetClaudeModel did not reconnect the bridge")
+	if app.mhl != previousMHL {
+		t.Error("SetClaudeModel restarted the mhl bridge — the switch must only rewrite the agent config file")
+	}
+	if got := readAgentConfig(t, app.DataDir()).ClaudeModel; got != "opus" {
+		t.Errorf("%s ClaudeModel = %q, want opus", agentConfigFile, got)
 	}
 	var status struct {
 		Ready bool `json:"ready"`

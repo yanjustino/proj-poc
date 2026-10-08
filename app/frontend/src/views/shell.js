@@ -342,14 +342,14 @@ export async function mountShell(root) {
 
   // Applies `id` (from the dropdown or the free-text field) as the current
   // agent's model. Shared by both, so a custom value goes through the exact
-  // same reconnect + status-render path as picking a listed one.
+  // same save + status-render path as picking a listed one. No mhl restart:
+  // the next LLM call reads the new model (app/agent_config.go).
   async function applyModel(id) {
     const picker = MODEL_PICKERS[agentSelectEl.value];
     if (!picker || !id) return;
     modelSelectEl.disabled = true;
     modelCustomApplyEl.disabled = true;
     reconnecting = true;
-    renderMcpStatus({ ready: false, error: 'Trocando modelo…' });
     try {
       const next = await picker.set(id, modelsById.get(id));
       renderMcpStatus(next);
@@ -363,7 +363,9 @@ export async function mountShell(root) {
     }
   }
 
-  async function refreshModelPicker() {
+  // `prefetched`: a list call already in flight for this agent (the agent
+  // switch starts it alongside SetAgent instead of after it).
+  async function refreshModelPicker(prefetched) {
     const picker = MODEL_PICKERS[agentSelectEl.value];
     modelRow.hidden = !picker;
     if (!picker) return;
@@ -377,7 +379,7 @@ export async function mountShell(root) {
 
     let models = [];
     try {
-      models = await picker.list();
+      models = await (prefetched ?? picker.list());
       modelsById = new Map(models.map((model) => [model.id, model]));
       modelSelectEl.innerHTML = [
         '<option value="">Selecione um modelo…</option>',
@@ -438,11 +440,14 @@ export async function mountShell(root) {
     const chosen = agentSelectEl.value;
     agentSelectEl.disabled = true;
     reconnecting = true;
-    renderMcpStatus({ ready: false, error: `Trocando para ${chosen}…` });
+    // The new agent's model list (Devin/Codex call their CLI, ~2s) loads
+    // while SetAgent runs, not after it. Discarded if the switch is refused.
+    const listing = MODEL_PICKERS[chosen]?.list();
+    listing?.catch(() => {});
     try {
       const next = await setAgent(chosen);
       renderMcpStatus(next);
-      await refreshModelPicker();
+      await refreshModelPicker(listing);
     } catch (err) {
       // SetAgent refuses to swap while a run is active (see app.go) rather
       // than silently killing it — nothing actually changed backend-side,
@@ -457,10 +462,8 @@ export async function mountShell(root) {
       // through app.go's native runtime.MessageDialog instead, which
       // actually raises something the user sees.
       showWarningDialog('Não foi possível trocar o agente', String(err));
-      // Nothing was actually touched — SetAgent refused before reconnecting
-      // — so restore the real, still-current status instead of the
-      // fabricated ready:false above, which would wrongly read as "the
-      // bridge just broke" when it never moved.
+      // Nothing was actually touched — SetAgent refused before saving — so
+      // just re-read the real, still-current status.
       renderMcpStatus(await mcpStatus().catch((statusErr) => ({ ready: false, error: String(statusErr) })));
       LogFrontendError(`setAgent: failed: ${err && err.stack ? err.stack : err}`).catch(() => {});
     } finally {

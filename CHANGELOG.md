@@ -18,7 +18,12 @@ O formato segue o [Keep a Changelog](https://keepachangelog.com/pt-BR/1.1.0/). C
   - artefato que cita uma ADR inexistente.
 
   O indicador "Artefatos materializados por padrão" e o tempo até produção, em dias, são calculados por código.
+- Páginas `.html`/`.htm`/`.xhtml` salvas no disco ou no Drive sincronizado viram fonte: o arquivo é convertido em Markdown no envio, com o mesmo conversor das páginas baixadas por link (`app/html_source.go`), e gravado como `<nome>.html.md`. Antes, o arquivo era copiado como estava e a ingestão o recusava. Os cards **Página web** e **Transcrição** da aba Fontes aceitam esses arquivos.
 - Export Markdown do comitê: cada aprovação refaz `artifacts/export/comite-arquitetura/` no layout `demandas/`, `decisoes/adr/`, `decisoes/rfc/`, `artefatos/` e `metricas/`. Cada documento leva o frontmatter da metodologia (`id`/`code`, `status`, `classification`, `strength`, `owners`, `related_projects`, `decision_link`…) e cada pasta tem um `README.md` de índice. O botão **Exportar Markdown** da aba Artefatos copia a pasta para onde o usuário escolher (`ExportComiteMarkdown`).
+
+#### Alterado
+- Trocar o agente ou o modelo (Devin, Codex, Claude) não reinicia mais o `mhl`, e a troca é instantânea; antes, cada troca custava ~7 s, revalidando todos os workflows. O app grava a escolha em `.senpai-agent.json`, na pasta de dados, e o `mhl` lê esse arquivo a cada chamada de LLM (`AgentConfig`, `workflows/shared/agents/agent_config.mh`). As variáveis `SENPAI_*` continuam como fallback para o uso pela CLI. A troca de agente segue recusada com uma geração em andamento.
+- Na troca de agente, a lista de modelos do novo agente é carregada em paralelo com a troca, não depois dela.
 
 ### 2026-10-07
 
