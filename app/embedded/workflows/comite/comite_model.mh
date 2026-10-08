@@ -1,0 +1,174 @@
+// Regras deterministicas do Comite de Arquitetura (WAR) e leitura dos seus
+// artefatos ja gravados. A LLM so classifica (forca, nivel do mecanismo,
+// status); se cada DEVE tem mecanismo, se cada ADR vigente esta materializada
+// e quantos artefatos cada padrao tem e sempre codigo (C3).
+
+import { Paths } from "../shared/core/paths.mh"
+
+export tool ComiteRules {
+    // Status em que a decisao vale e precisa estar materializada.
+    vigente(status: string): bool -> ["aprovada", "em-execucao", "em-homologacao"].contains(status)
+
+    // "ADR-0001-titulo" -> "ADR-0001".
+    id_of(folder: string): string {
+        var parts = folder.split("-")
+        if (parts.size() < 2) return folder
+        return parts[0] + "-" + parts[1]
+    }
+
+    // Avisos de uma ADR: "padrao sem mecanismo e so opiniao formatada".
+    // Texto cru; o HTML escapa na renderizacao.
+    decisao(d: any): string[] {
+        var out = []
+        var titulo = d?.titulo ?? ""
+        var forca = d?.strength ?? ""
+        var mecanismo = d?.mecanismo_conformidade
+        var descricao = (mecanismo?.descricao ?? "").trim()
+        if (descricao.is_empty()) out += ["“${titulo}”: sem mecanismo de conformidade descrito — padrão sem mecanismo é só opinião formatada."]
+        if (forca == "DEVE" && (mecanismo?.nivel ?? "documento") == "documento") {
+            out += ["“${titulo}”: é DEVE, mas o mecanismo é só um documento — DEVE exige uma verificação que impeça o desvio (artefato, gate ou controle preventivo)."]
+        }
+        if (forca == "DEVERIA" && (mecanismo?.caminho_excecao ?? "").trim().is_empty()) {
+            out += ["“${titulo}”: é DEVERIA, mas não define o caminho de exceção (ADR própria justificando o desvio)."]
+        }
+        if (self.vigente(d?.status ?? "") && (d?.artefatos_relacionados ?? []).is_empty()) {
+            out += ["“${titulo}”: está ${d.status}, mas não tem nenhum artefato executável relacionado."]
+        }
+        return out
+    }
+
+    decisoes(data: any): string[] {
+        var out = []
+        var titulos = []
+        for (var d in (data?.decisions ?? [])) {
+            out = out + self.decisao(d)
+            if (titulos.contains(d.titulo)) out += ["Título de ADR repetido no lote: “${d.titulo}”."]
+            titulos += [d.titulo]
+        }
+        return out
+    }
+
+    // `adrs`: ComiteStore.items(project_id, "decisoes"). Avisos de cobertura:
+    // ADR vigente sem artefato e artefato que cita uma ADR inexistente.
+    cobertura(adrs: any[], artefatos: any[]): string[] {
+        var ids = adrs.map((a) -> a.id)
+        var out = []
+        for (var c in self.materializados(adrs, artefatos)) {
+            if (c.quantidade == 0 && self.vigente(c.status)) out += ["${c.id} (“${c.titulo}”) está ${c.status} e nenhum artefato executável a materializa."]
+        }
+        for (var a in artefatos) {
+            for (var ref in (a?.adr_ids ?? [])) {
+                if (!ids.contains(ref)) out += ["O artefato “${a.nome}” cita ${ref}, que não existe entre as ADRs do comitê."]
+            }
+        }
+        return out
+    }
+
+    // Indicador "Artefatos materializados por padrao": artefatos que citam
+    // cada ADR.
+    materializados(adrs: any[], artefatos: any[]): any[] ->
+        adrs.map((a) -> {
+            id: a.id,
+            titulo: a.data?.titulo ?? "",
+            status: a.data?.status ?? "",
+            strength: a.data?.strength ?? "",
+            quantidade: artefatos.filter((x) -> (x?.adr_ids ?? []).contains(a.id)).size(),
+        })
+
+    // O dado do catalogo com os avisos e a contagem do momento da geracao.
+    annotate_artefatos(data: any, adrs: any[]): any {
+        var artefatos = data?.artefatos ?? []
+        data["avisos_cobertura"] = self.cobertura(adrs, artefatos)
+        data["materializados"] = self.materializados(adrs, artefatos)
+        return data
+    }
+}
+
+// Le os artefatos do comite ja gravados (JSON com o HTML ao lado: o HTML e o
+// marcador de disponibilidade, ver ArtifactData).
+export tool ComiteStore {
+    single(project_id: string, name: string): any {
+        var json_path = Paths.artifact(project_id, "${name}.json")
+        if (!fs.exists(json_path) || !fs.exists(Paths.artifact(project_id, "${name}.html"))) return null
+        return json.parse(fs.read(json_path))
+    }
+
+    // Itens de uma colecao (rfc/, decisoes/): [{id, folder, data}], em ordem
+    // de id. `nenhuma` e o marcador de lote vazio, nao um item.
+    items(project_id: string, relative_dir: string): any[] {
+        var base = Paths.artifact(project_id, relative_dir)
+        if (!dir.exists(base)) return []
+        var out = []
+        for (var file_path in dir.list(base)) {
+            if (file_path.ends_with(".json")) {
+                var folder = file_path.substring(base.size() + 1, file_path.size() - 5)
+                if (folder != "nenhuma" && fs.exists(base + "/" + folder + ".html")) {
+                    out += [{id: ComiteRules.id_of(folder), folder, data: json.parse(fs.read(file_path))}]
+                }
+            }
+        }
+        return out
+    }
+}
+
+import { Fixture } from "../shared/core/fixture.mh"
+
+export tool ComiteFixtures {
+    decisao(titulo: string, strength: string, status: string, nivel: string, artefatos: any[]): any -> {
+        titulo, status, classification: "compartilhado", strength, owners: ["Arquitetura"], related_projects: [], metadados_fontes: ["gap"],
+        rfc_origem: "", contexto: "c", contexto_fontes: ["gap"], decisao: "d", decisao_fontes: ["gap"],
+        reversibilidade: {custo_reversao: "trimestres", justificativa: "j", fontes: ["gap"]},
+        consequencias_positivas: [{texto: "p", fontes: ["gap"]}], consequencias_negativas: [{texto: "n", fontes: ["gap"]}],
+        mecanismo_conformidade: {nivel, descricao: "Gate no pipeline", caminho_excecao: "", fontes: ["gap"]},
+        artefatos_relacionados: artefatos,
+    }
+}
+
+test ComiteRulesSpec {
+    describe deve_backed_only_by_a_document_is_flagged {
+        var avisos = ComiteRules.decisao(ComiteFixtures.decisao("Observabilidade", "DEVE", "aprovada", "documento", [{nome: "Template", tipo: "template", fontes: ["gap"]}]))
+        are_equal(avisos.size(), 1)
+        is_true(avisos[0].contains("só um documento"))
+        are_equal(ComiteRules.decisao(ComiteFixtures.decisao("Observabilidade", "DEVE", "aprovada", "gate", [{nome: "T", tipo: "template", fontes: ["gap"]}])), [])
+    }
+
+    describe deveria_without_exception_path_and_approved_without_artifact_are_flagged {
+        var avisos = ComiteRules.decisao(ComiteFixtures.decisao("APIs", "DEVERIA", "aprovada", "artefato", []))
+        are_equal(avisos.size(), 2)
+        is_true(avisos[0].contains("caminho de exceção"))
+        is_true(avisos[1].contains("nenhum artefato executável"))
+        are_equal(ComiteRules.decisao(ComiteFixtures.decisao("APIs", "PODE", "proposta", "documento", [])), [])
+    }
+
+    describe a_repeated_title_is_flagged {
+        var d = ComiteFixtures.decisao("X", "PODE", "proposta", "documento", [])
+        is_true(ComiteRules.decisoes({decisions: [d, d]}).contains("Título de ADR repetido no lote: “X”."))
+    }
+
+    describe cobertura_counts_artifacts_per_adr_and_flags_unknown_references {
+        var adrs = [
+            {id: "ADR-0001", folder: "ADR-0001-a", data: {titulo: "A", status: "aprovada", strength: "DEVE"}},
+            {id: "ADR-0002", folder: "ADR-0002-b", data: {titulo: "B", status: "proposta", strength: "PODE"}},
+        ]
+        var artefatos = [{nome: "Pipeline", adr_ids: ["ADR-0002", "ADR-0009"]}]
+        var avisos = ComiteRules.cobertura(adrs, artefatos)
+        are_equal(avisos.size(), 2)
+        is_true(avisos[0].contains("ADR-0001"))
+        is_true(avisos[1].contains("ADR-0009"))
+        are_equal(ComiteRules.materializados(adrs, artefatos).map((m) -> m.quantidade), [0, 1])
+    }
+
+    describe store_items_skip_the_empty_batch_marker_and_orphan_json {
+        var id = Fixture.project("spec-test-comite-store")
+        Fixture.artifact(id, "rfc/nenhuma.json", "{\"rfcs\": []}")
+        Fixture.artifact(id, "rfc/nenhuma.html", "<html></html>")
+        Fixture.artifact(id, "rfc/RFC-0001-x.json", "{\"titulo\": \"X\"}")
+        Fixture.artifact(id, "rfc/RFC-0001-x.html", "<html></html>")
+        Fixture.artifact(id, "rfc/RFC-0002-y.json", "{\"titulo\": \"Y\"}")
+        var items = ComiteStore.items(id, "rfc")
+        are_equal(items.map((i) -> i.id), ["RFC-0001"])
+        are_equal(items[0].data.titulo, "X")
+        are_equal(ComiteStore.single(id, "demanda"), null)
+        Fixture.drop(id)
+    }
+}

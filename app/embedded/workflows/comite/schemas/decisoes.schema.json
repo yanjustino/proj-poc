@@ -1,0 +1,277 @@
+{
+  "type": "object",
+  "additionalProperties": false,
+  "required": [
+    "decisions"
+  ],
+  "properties": {
+    "decisions": {
+      "type": "array",
+      "items": {
+        "type": "object",
+        "additionalProperties": false,
+        "required": [
+          "titulo",
+          "status",
+          "classification",
+          "strength",
+          "owners",
+          "related_projects",
+          "metadados_fontes",
+          "rfc_origem",
+          "contexto",
+          "contexto_fontes",
+          "decisao",
+          "decisao_fontes",
+          "reversibilidade",
+          "consequencias_positivas",
+          "consequencias_negativas",
+          "mecanismo_conformidade",
+          "artefatos_relacionados"
+        ],
+        "properties": {
+          "titulo": {
+            "type": "string",
+            "description": "Título da decisão (sem o id; ADR-XXXX é atribuído pelo sistema)."
+          },
+          "status": {
+            "type": "string",
+            "enum": [
+              "proposta",
+              "em-analise",
+              "aprovada",
+              "rejeitada",
+              "em-execucao",
+              "em-homologacao",
+              "deprecada",
+              "arquivada"
+            ],
+            "description": "'aprovada' quando o comitê decidiu; 'em-execucao'/'em-homologacao' quando já está sendo materializada."
+          },
+          "classification": {
+            "type": "string",
+            "enum": [
+              "estratégico",
+              "compartilhado",
+              "crítico",
+              "experimental"
+            ]
+          },
+          "strength": {
+            "type": "string",
+            "enum": [
+              "DEVE",
+              "DEVERIA",
+              "PODE"
+            ],
+            "description": "Nível de força: DEVE (obrigatório), DEVERIA (padrão esperado, desvio só com ADR de exceção), PODE (recomendação)."
+          },
+          "owners": {
+            "type": "array",
+            "items": {
+              "type": "string"
+            },
+            "description": "Áreas/times responsáveis pela decisão."
+          },
+          "related_projects": {
+            "type": "array",
+            "items": {
+              "type": "string"
+            },
+            "description": "Projetos impactados."
+          },
+          "metadados_fontes": {
+            "type": "array",
+            "items": {
+              "type": "string"
+            },
+            "minItems": 1
+          },
+          "rfc_origem": {
+            "type": "string",
+            "description": "Título exato da RFC desta mesma reunião que a decisão resolve, ou \"\" se não veio de uma RFC."
+          },
+          "contexto": {
+            "type": "string",
+            "description": "Contexto: a situação e as forças que exigiram a decisão."
+          },
+          "contexto_fontes": {
+            "type": "array",
+            "items": {
+              "type": "string"
+            },
+            "minItems": 1
+          },
+          "decisao": {
+            "type": "string",
+            "description": "A decisão, de forma específica e verificável (o que DEVE/DEVERIA/PODE ser feito, por quem, a partir de quando)."
+          },
+          "decisao_fontes": {
+            "type": "array",
+            "items": {
+              "type": "string"
+            },
+            "minItems": 1
+          },
+          "reversibilidade": {
+            "type": "object",
+            "additionalProperties": false,
+            "required": [
+              "custo_reversao",
+              "justificativa",
+              "fontes"
+            ],
+            "properties": {
+              "custo_reversao": {
+                "type": "string",
+                "enum": [
+                  "dias",
+                  "semanas",
+                  "trimestres"
+                ],
+                "description": "Quanto custa reverter a decisão."
+              },
+              "justificativa": {
+                "type": "string"
+              },
+              "fontes": {
+                "type": "array",
+                "items": {
+                  "type": "string"
+                },
+                "minItems": 1
+              }
+            },
+            "description": "Reversibilidade decide quem decide: o que custa trimestres para reverter é central; o que se reverte em dias fica com o time."
+          },
+          "consequencias_positivas": {
+            "type": "array",
+            "items": {
+              "type": "object",
+              "additionalProperties": false,
+              "required": [
+                "texto",
+                "fontes"
+              ],
+              "properties": {
+                "texto": {
+                  "type": "string"
+                },
+                "fontes": {
+                  "type": "array",
+                  "items": {
+                    "type": "string"
+                  },
+                  "minItems": 1
+                }
+              }
+            },
+            "description": "Efeitos favoráveis.",
+            "minItems": 1
+          },
+          "consequencias_negativas": {
+            "type": "array",
+            "items": {
+              "type": "object",
+              "additionalProperties": false,
+              "required": [
+                "texto",
+                "fontes"
+              ],
+              "properties": {
+                "texto": {
+                  "type": "string"
+                },
+                "fontes": {
+                  "type": "array",
+                  "items": {
+                    "type": "string"
+                  },
+                  "minItems": 1
+                }
+              }
+            },
+            "description": "Custos e riscos honestos. Toda decisão real tem pelo menos um.",
+            "minItems": 1
+          },
+          "mecanismo_conformidade": {
+            "type": "object",
+            "additionalProperties": false,
+            "required": [
+              "nivel",
+              "descricao",
+              "caminho_excecao",
+              "fontes"
+            ],
+            "properties": {
+              "nivel": {
+                "type": "string",
+                "enum": [
+                  "documento",
+                  "artefato",
+                  "gate",
+                  "preventivo"
+                ],
+                "description": "Nível do mecanismo: documento → artefato reutilizável → gate no pipeline → controle preventivo."
+              },
+              "descricao": {
+                "type": "string",
+                "description": "O mecanismo concreto que garante a conformidade (revisão de arquitetura, checklist de homologação, lint, gate, policy...)."
+              },
+              "caminho_excecao": {
+                "type": "string",
+                "description": "Como um time pede exceção (obrigatório para DEVERIA: ADR própria justificando o desvio). \"\" se não se aplica."
+              },
+              "fontes": {
+                "type": "array",
+                "items": {
+                  "type": "string"
+                },
+                "minItems": 1
+              }
+            },
+            "description": "Padrão sem mecanismo é só opinião formatada."
+          },
+          "artefatos_relacionados": {
+            "type": "array",
+            "items": {
+              "type": "object",
+              "additionalProperties": false,
+              "required": [
+                "nome",
+                "tipo",
+                "fontes"
+              ],
+              "properties": {
+                "nome": {
+                  "type": "string"
+                },
+                "tipo": {
+                  "type": "string",
+                  "enum": [
+                    "template",
+                    "catalogo_servico",
+                    "runbook",
+                    "dashboard",
+                    "policy",
+                    "outro"
+                  ]
+                },
+                "fontes": {
+                  "type": "array",
+                  "items": {
+                    "type": "string"
+                  },
+                  "minItems": 1
+                }
+              }
+            },
+            "description": "Artefatos executáveis que materializam a decisão, citados na reunião."
+          }
+        }
+      },
+      "description": "Decisões arquiteturais tomadas pelo comitê na reunião, uma por item.",
+      "minItems": 1
+    }
+  }
+}

@@ -149,14 +149,17 @@ export tool WorkItemActions {
         return if ((entry?.cost_usd ?? 0) > 0) "reported" else "unavailable"
     }
 
+    // "comite": work-item do Comite de Arquitetura (WAR), cujas fontes sao
+    // transcricoes das reunioes (workflow Comite).
     internal level_for(item_type: string): string {
-        var valid_types = ["oportunidade", "feature", "historia"]
+        var valid_types = ["oportunidade", "feature", "historia", "comite"]
         if (!valid_types.contains(item_type)) {
             fail(
                 "'item_type' invalido: '" + item_type +
-                "' (use oportunidade | feature | historia)"
+                "' (use oportunidade | feature | historia | comite)"
             )
         }
+        if (item_type == "comite") return "comite"
         return if (item_type == "oportunidade") "discovery" else "delivery"
     }
 
@@ -425,6 +428,10 @@ test WorkItemActionsSpec {
     describe maps_delivery_item_types_to_delivery {
         are_equal(WorkItemActions.level_for("feature"), "delivery")
         are_equal(WorkItemActions.level_for("historia"), "delivery")
+    }
+
+    describe maps_the_architecture_committee_to_its_own_level {
+        are_equal(WorkItemActions.level_for("comite"), "comite")
     }
 
     describe rejects_an_unknown_item_type {

@@ -1,4 +1,4 @@
-// tool ArtifactId — geracao de id sequencial (FT00N/US00N/ADR-00N) + nome de
+// tool ArtifactId — geracao de id sequencial (FT00N/US00N/ADR-00N/RFC-000N) + nome de
 // pasta (id + slug). E trabalho deterministico (C3): a LLM nunca decide um
 // id ou conta quantas features ja existem — sempre este tool.
 //
@@ -56,6 +56,13 @@ export tool ArtifactId {
     next_adr_id(project_id: string): string ->
         self.next_sequential(Paths.artifact(project_id, "adr"), "ADR-")
 
+    // Comite de Arquitetura (WAR): RFC-0001/ADR-0001, quatro digitos como
+    // na numeracao do proprio comite.
+    next_comite_id(project_id: string, relative_dir: string, prefix: string): string ->
+        prefix + self.pad4(self.count_existing(Paths.artifact(project_id, relative_dir)) + 1)
+
+    internal pad4(n: number): string -> if (n < 1000) "0" + self.pad3(n) else "${n}"
+
     folder_name(id: string, title: string): string ->
         id + "-" + Slug.from_title(title)
 
@@ -94,6 +101,12 @@ test ArtifactIdSpec {
         are_equal(ArtifactId.pad3(99), "099")
         are_equal(ArtifactId.pad3(100), "100")
         are_equal(ArtifactId.pad3(999), "999")
+    }
+
+    describe pad4_zero_fills_to_four_digits {
+        are_equal(ArtifactId.pad4(1), "0001")
+        are_equal(ArtifactId.pad4(42), "0042")
+        are_equal(ArtifactId.pad4(1234), "1234")
     }
 
     describe folder_name_combines_id_and_slug {

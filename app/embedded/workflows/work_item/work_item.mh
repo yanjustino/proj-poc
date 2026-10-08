@@ -14,7 +14,7 @@ workflow WorkItem {
 
     input action: WorkItemAction
     input name: string = ""          // obrigatorio (valor) so para action:"create"
-    input item_type: string = ""     // "oportunidade" | "feature" | "historia"; so para action:"create"
+    input item_type: string = ""     // "oportunidade" | "feature" | "historia" | "comite"; so para action:"create"
     input continuidade_de: string = "" // opcional, so para action:"create" — sistema existente que este item evolui
     input project_id: string = ""    // obrigatorio (valor) para get/archive/usage/prompt_log/changes
     input feature_id: string = ""    // so para action:"feature_review" — "FT001"

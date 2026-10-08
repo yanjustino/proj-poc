@@ -1,6 +1,7 @@
 // O fluxo comum de geracao de artefatos: Dispatch -> Generate -> Gate (pausa
-// no Modo Buddy) -> Commit. Discovery e Delivery sao aliases deste workflow
-// interno (discovery.mh, delivery.mh), cada um fixando `level`; o que muda
+// no Modo Buddy) -> Commit. Discovery, Delivery e Comite sao aliases deste
+// workflow interno (discovery.mh, delivery.mh, comite.mh), cada um fixando
+// `level`; o que muda
 // por artefato mora nas tools de cada nivel, despachadas por ArtifactLevels.
 
 import { Paths } from "../shared/core/paths.mh"
@@ -10,38 +11,45 @@ import { Telemetry } from "../shared/telemetry/telemetry.mh"
 import { Draft } from "../shared/artifacts/draft.mh"
 import { DiscoveryArtifact, DiscoveryKinds, DiscoveryDrafts, DiscoveryCommits } from "../discovery/discovery_artifacts.mh"
 import { DeliveryArtifact, DeliveryMode, DeliveryKinds, DeliveryDrafts, DeliveryCommits } from "../delivery/delivery_artifacts.mh"
+import { ComiteArtifact, ComiteKinds, ComiteDrafts, ComiteCommits } from "../comite/comite_artifacts.mh"
 
-export enum Level { discovery, delivery }
+export enum Level { discovery, delivery, comite }
 
 // Todo artefato de algum nivel. A entrada recusa qualquer outro nome; cada
-// nivel aceita so os seus (DiscoveryArtifact / DeliveryArtifact).
-export enum Artifact { brief, atributos, requisitos, adr, der, modelo, diagramas, features, feature, historia, historias, plano }
+// nivel aceita so os seus (DiscoveryArtifact / DeliveryArtifact /
+// ComiteArtifact).
+export enum Artifact { brief, atributos, requisitos, adr, der, modelo, diagramas, features, feature, historia, historias, plano, demanda, rfc, decisoes, artefatos, metricas }
 
 export tool ArtifactLevels {
     // Valida a combinacao de entradas do nivel antes de qualquer geracao.
     check(level: Level, artifact: Artifact, mode: DeliveryMode, feature_id: string, historia_id: string) -> match level {
         Level.discovery -> DiscoveryKinds.check(self.discovery(artifact), feature_id, historia_id)
         Level.delivery  -> DeliveryKinds.check(mode, self.delivery(artifact))
+        Level.comite    -> ComiteKinds.check(self.comite(artifact))
     }
 
     // Chave que separa o historico (ChangesLog, ActivityLog) de cada item.
     scope(level: Level, artifact: Artifact, feature_id: string, historia_id: string): string -> match level {
         Level.discovery -> DiscoveryKinds.scope(self.discovery(artifact), feature_id, historia_id)
         Level.delivery  -> DeliveryKinds.scope(self.delivery(artifact), historia_id)
+        Level.comite    -> ComiteKinds.scope(self.comite(artifact))
     }
 
     draft(level: Level, artifact: Artifact, project_id: string, mode: DeliveryMode, feature_id: string, historia_id: string, autorrevisao: bool): Draft -> match level {
         Level.discovery -> DiscoveryDrafts.of(self.discovery(artifact), project_id, feature_id, historia_id, autorrevisao)
         Level.delivery  -> DeliveryDrafts.of(self.delivery(artifact), project_id, mode, historia_id, autorrevisao)
+        Level.comite    -> ComiteDrafts.of(self.comite(artifact), project_id, autorrevisao)
     }
 
     commit(level: Level, artifact: Artifact, project_id: string, mode: DeliveryMode, feature_id: string, historia_id: string, draft: Draft): any -> match level {
         Level.discovery -> DiscoveryCommits.of(self.discovery(artifact), project_id, feature_id, historia_id, draft)
         Level.delivery  -> DeliveryCommits.of(self.delivery(artifact), project_id, mode, historia_id, draft)
+        Level.comite    -> ComiteCommits.of(self.comite(artifact), project_id, draft)
     }
 
     internal discovery(artifact: Artifact): DiscoveryArtifact -> DiscoveryArtifact.parse("${artifact}")
     internal delivery(artifact: Artifact): DeliveryArtifact -> DeliveryArtifact.parse("${artifact}")
+    internal comite(artifact: Artifact): ComiteArtifact -> ComiteArtifact.parse("${artifact}")
 }
 
 export internal workflow ArtifactFlow {
@@ -49,7 +57,7 @@ export internal workflow ArtifactFlow {
     input project_id: string
     input artifact: Artifact
     // Delivery: o modo do projeto (o artefato final e o proprio modo).
-    // Discovery fixa um valor que nao usa.
+    // Discovery e Comite fixam um valor que nao usam.
     input mode: DeliveryMode
     // Discovery: a feature das historias e do plano. Delivery fixa "".
     input feature_id: string = ""

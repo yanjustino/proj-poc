@@ -11,8 +11,12 @@ import { ArtifactBody } from "../shared/artifacts/artifact_body.mh"
 import { PageShell } from "../shared/artifacts/page_shell.mh"
 import { ArchModel } from "../shared/artifacts/arch_model.mh"
 import { ArchConformance } from "../shared/artifacts/arch_conformance.mh"
+import { ComiteBody } from "../comite/comite_body.mh"
 
-enum PreviewArtifact { brief, atributos, requisitos, der, modelo, modelo_contexto, modelo_conteineres, modelo_detalhe, feature, historia, decisao, diagrama, adr, diagramas, features, dependencias, historias, plano }
+// demanda/rfc_item/decisao_comite/artefatos/metricas: Comite de Arquitetura
+// (comite_body.mh); rfc/decisoes juntam o lote, como adr/diagramas. O id de
+// RFC/ADR so existe depois da aprovacao.
+enum PreviewArtifact { brief, atributos, requisitos, der, modelo, modelo_contexto, modelo_conteineres, modelo_detalhe, feature, historia, decisao, diagrama, adr, diagramas, features, dependencias, historias, plano, demanda, rfc_item, decisao_comite, rfc, decisoes, artefatos, metricas }
 
 tool PreviewPages {
     // O caminho dos assets do plano nao importa: o app injeta o mermaid.
@@ -39,6 +43,13 @@ tool PreviewPages {
         PreviewArtifact.diagramas    -> self.batch("Diagramas C4", data.diagramas, (d) -> ArtifactBody.diagrama(d))
         PreviewArtifact.features     -> self.page("Backlog da solução", ArchConformance.coverage_html(data?.dependencias?.avisos_cobertura ?? []) + self.items(data.features, (f) -> ArtifactBody.feature(f)))
         PreviewArtifact.historias    -> self.batch("Histórias", data.historias, (h) -> ArtifactBody.historia(h))
+        PreviewArtifact.demanda        -> self.page(html.escape(data.titulo), ComiteBody.demanda("", data))
+        PreviewArtifact.rfc_item       -> self.page(html.escape(data.titulo), ComiteBody.rfc("", data))
+        PreviewArtifact.decisao_comite -> self.page(html.escape(data.titulo), ComiteBody.decisao("", data))
+        PreviewArtifact.rfc            -> if ((data?.rfcs ?? []).is_empty()) self.page("RFCs", ComiteBody.rfc_vazio()) else self.batch("RFCs", data.rfcs, (r) -> ComiteBody.rfc("", r))
+        PreviewArtifact.decisoes       -> self.batch("ADRs do comitê", data.decisions, (d) -> ComiteBody.decisao("", d))
+        PreviewArtifact.artefatos      -> self.page("Artefatos executáveis", ComiteBody.artefatos(data))
+        PreviewArtifact.metricas       -> self.page("Métricas", ComiteBody.metricas(data))
     }
 
     internal page(title: string, body: string): string -> PageShell(title:, body:, meta: "Rascunho — ainda não gravado")
@@ -519,5 +530,18 @@ test ArtifactPreviewSpec {
         var cont = ArtifactPreview.run(inputs: {artifact: "modelo_conteineres", data: modelo}).vars.preview_html
         is_true(cont.contains("Contêineres — Checkout"))
         is_true(cont.contains("[Contêiner: Go]"))
+    }
+
+    describe committee_drafts_render_without_ids {
+        var vazio = ArtifactPreview.run(inputs: {artifact: "rfc", data: {rfcs: []}}).vars.preview_html
+        is_true(vazio.contains("Nenhuma proposta em aberto"))
+        var metricas = ArtifactPreview.run(inputs: {artifact: "metricas", data: {
+            tempo_producao: {data_abertura: "2026-09-01", data_producao: "2026-10-01", situacao: "em_producao", observacao: "", fontes: ["sources/ata"]},
+            adocao: {periodo: "2026-10", percentual_decisoes_registradas: "80%", percentual_squads_templates: "", observacoes: "", fontes: ["sources/ata"]},
+            indicadores: [], gaps: [],
+            materializados: [{id: "ADR-0001", titulo: "APIs", status: "aprovada", strength: "DEVE", quantidade: 2}],
+        }}).vars.preview_html
+        is_true(metricas.contains("<th>Tempo em dias</th><td>30</td>"))
+        is_true(metricas.contains("<td>ADR-0001</td><td>APIs</td>"))
     }
 }

@@ -22,6 +22,7 @@
 #   dist/linux-arm64/senpai-app      (idem; Docker nativo num Mac Apple Silicon)
 #   dist/linux-amd64-rhel/senpai-app (RHEL 8/9; via Docker Rocky Linux 8)
 #   dist/darwin-arm64/senpai-app.app (só rodando em macOS)
+#   dist/darwin-arm64/senpai-app.dmg (idem; é o que deve ser distribuído)
 set -uo pipefail
 # Deliberadamente sem -e: uma plataforma falhando não deve impedir as
 # outras de serem tentadas — o resumo no final é o que decide o exit code.

@@ -1,0 +1,156 @@
+{
+  "type": "object",
+  "additionalProperties": false,
+  "required": [
+    "rfcs"
+  ],
+  "properties": {
+    "rfcs": {
+      "type": "array",
+      "items": {
+        "type": "object",
+        "additionalProperties": false,
+        "required": [
+          "titulo",
+          "status",
+          "classification",
+          "owners",
+          "related_projects",
+          "metadados_fontes",
+          "motivacao",
+          "motivacao_fontes",
+          "proposta",
+          "proposta_fontes",
+          "alternativas",
+          "questoes_abertas"
+        ],
+        "properties": {
+          "titulo": {
+            "type": "string",
+            "description": "Título da proposta (sem o id; RFC-XXXX é atribuído pelo sistema)."
+          },
+          "status": {
+            "type": "string",
+            "enum": [
+              "proposta",
+              "em-analise",
+              "aprovada",
+              "rejeitada",
+              "em-execucao",
+              "em-homologacao",
+              "deprecada",
+              "arquivada"
+            ],
+            "description": "Normalmente 'proposta' ou 'em-analise' — uma RFC é proposta ainda em discussão."
+          },
+          "classification": {
+            "type": "string",
+            "enum": [
+              "estratégico",
+              "compartilhado",
+              "crítico",
+              "experimental"
+            ]
+          },
+          "owners": {
+            "type": "array",
+            "items": {
+              "type": "string"
+            },
+            "description": "Áreas/times responsáveis pela proposta."
+          },
+          "related_projects": {
+            "type": "array",
+            "items": {
+              "type": "string"
+            },
+            "description": "Projetos impactados."
+          },
+          "metadados_fontes": {
+            "type": "array",
+            "items": {
+              "type": "string"
+            },
+            "minItems": 1
+          },
+          "motivacao": {
+            "type": "string",
+            "description": "Motivação: o problema ou oportunidade que a proposta endereça."
+          },
+          "motivacao_fontes": {
+            "type": "array",
+            "items": {
+              "type": "string"
+            },
+            "minItems": 1
+          },
+          "proposta": {
+            "type": "string",
+            "description": "A proposta em si, de forma específica: o que muda, onde, para quem."
+          },
+          "proposta_fontes": {
+            "type": "array",
+            "items": {
+              "type": "string"
+            },
+            "minItems": 1
+          },
+          "alternativas": {
+            "type": "array",
+            "items": {
+              "type": "object",
+              "additionalProperties": false,
+              "required": [
+                "alternativa",
+                "avaliacao",
+                "fontes"
+              ],
+              "properties": {
+                "alternativa": {
+                  "type": "string"
+                },
+                "avaliacao": {
+                  "type": "string",
+                  "description": "Por que foi (ou ainda está sendo) considerada e o que pesa contra ela."
+                },
+                "fontes": {
+                  "type": "array",
+                  "items": {
+                    "type": "string"
+                  },
+                  "minItems": 1
+                }
+              }
+            },
+            "description": "Alternativas consideradas na discussão."
+          },
+          "questoes_abertas": {
+            "type": "array",
+            "items": {
+              "type": "object",
+              "additionalProperties": false,
+              "required": [
+                "texto",
+                "fontes"
+              ],
+              "properties": {
+                "texto": {
+                  "type": "string"
+                },
+                "fontes": {
+                  "type": "array",
+                  "items": {
+                    "type": "string"
+                  },
+                  "minItems": 1
+                }
+              }
+            },
+            "description": "O que precisa ser respondido para a proposta virar decisão (ADR)."
+          }
+        }
+      },
+      "description": "Propostas ainda em discussão (sem decisão tomada). Vazio quando a transcrição não tem nenhuma proposta em aberto."
+    }
+  }
+}

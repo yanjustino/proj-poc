@@ -17,6 +17,11 @@
 #
 # Saída:
 #   dist/darwin-arm64/senpai-app.app
+#   dist/darwin-arm64/senpai-app.dmg  (o .app + atalho para /Applications)
+#
+# Distribua o .dmg, não o .app solto: zipar/copiar o bundle por Teams,
+# OneDrive, e-mail etc. costuma perder o bit de execução do binário e o
+# Finder passa a recusar abrir o app ("não pode ser aberto").
 set -euo pipefail
 
 ROOT="$(CDPATH= cd -P -- "$(dirname -- "${BASH_SOURCE[0]}")/.." && pwd)"
@@ -25,6 +30,8 @@ TARGET="darwin/arm64"
 OUTPUT_NAME="senpai-app"
 DIST_DIR="$ROOT/dist/darwin-arm64"
 FINAL_APP="$DIST_DIR/senpai-app.app"
+FINAL_DMG="$DIST_DIR/senpai-app.dmg"
+VOLUME_NAME="Senpai"
 APP_VERSION="${SENPAI_VERSION:-$(git -C "$ROOT" describe --tags --always --dirty 2>/dev/null || printf 'dev')}"
 
 mode="release"
@@ -100,9 +107,43 @@ fi
 
 mkdir -p "$DIST_DIR"
 rm -rf "$FINAL_APP"
-cp -R "$built_app" "$FINAL_APP"
+# ditto em vez de cp -R: preserva permissões, symlinks e a assinatura do
+# bundle exatamente como o Wails gerou.
+ditto "$built_app" "$FINAL_APP"
+
+step "empacotando $FINAL_DMG"
+staging="$(mktemp -d)"
+trap 'rm -rf "$staging"' EXIT
+ditto "$FINAL_APP" "$staging/senpai-app.app"
+ln -s /Applications "$staging/Applications"
+# O app é só ad-hoc (sem Developer ID/notarização), então o Gatekeeper
+# bloqueia a primeira abertura num Mac que baixou o .dmg. Vai junto no
+# volume o passo a passo para liberar.
+cat > "$staging/LEIA-ME.txt" <<'TXT'
+Senpai para macOS (Apple Silicon)
+
+1. Arraste senpai-app.app para a pasta Applications.
+2. O app não é assinado pela Apple. Na primeira vez, libere-o no Terminal:
+
+     xattr -dr com.apple.quarantine /Applications/senpai-app.app
+
+   ou tente abrir uma vez e depois vá em Ajustes do Sistema >
+   Privacidade e Segurança > "Abrir Mesmo Assim".
+
+Requer um Mac com chip Apple (M1 ou posterior).
+TXT
+rm -f "$FINAL_DMG"
+hdiutil create \
+  -volname "$VOLUME_NAME" \
+  -srcfolder "$staging" \
+  -fs HFS+ \
+  -format UDZO \
+  -ov \
+  "$FINAL_DMG" >/dev/null
+hdiutil verify "$FINAL_DMG" >/dev/null
 
 step "build concluído"
 echo "aplicativo: $FINAL_APP"
+echo "dmg:        $FINAL_DMG"
 echo "versão:     $APP_VERSION"
-echo "tamanho:    $(du -sh "$FINAL_APP" | cut -f1)"
+echo "tamanho:    $(du -sh "$FINAL_APP" | cut -f1) (app), $(du -sh "$FINAL_DMG" | cut -f1) (dmg)"
