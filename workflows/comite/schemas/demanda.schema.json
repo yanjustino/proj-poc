@@ -1,0 +1,247 @@
+{
+  "type": "object",
+  "additionalProperties": false,
+  "required": [
+    "titulo",
+    "status",
+    "priority",
+    "classification",
+    "classification_fontes",
+    "owner",
+    "requested_by",
+    "responsaveis_fontes",
+    "data_abertura",
+    "contexto",
+    "contexto_fontes",
+    "desafio",
+    "desafio_fontes",
+    "pontos_discussao",
+    "times_envolvidos",
+    "reuniao",
+    "gaps"
+  ],
+  "properties": {
+    "titulo": {
+      "type": "string",
+      "description": "Título claro e descritivo da demanda (sem o código; o código DEMANDA-XXXX é atribuído pelo sistema)."
+    },
+    "status": {
+      "type": "string",
+      "enum": [
+        "proposta",
+        "em-analise",
+        "aprovada",
+        "rejeitada",
+        "em-execucao",
+        "em-homologacao",
+        "deprecada",
+        "arquivada"
+      ],
+      "description": "Estado da demanda no ciclo do comitê, conforme a transcrição."
+    },
+    "priority": {
+      "type": "string",
+      "enum": [
+        "baixa",
+        "media",
+        "alta"
+      ],
+      "description": "Prioridade atribuída ou inferida da discussão."
+    },
+    "classification": {
+      "type": "string",
+      "enum": [
+        "estratégico",
+        "compartilhado",
+        "crítico",
+        "experimental"
+      ],
+      "description": "Criticidade/escopo da demanda."
+    },
+    "classification_fontes": {
+      "type": "array",
+      "items": {
+        "type": "string"
+      },
+      "minItems": 1
+    },
+    "owner": {
+      "type": "string",
+      "description": "Time responsável por conduzir a demanda."
+    },
+    "requested_by": {
+      "type": "string",
+      "description": "Time solicitante."
+    },
+    "responsaveis_fontes": {
+      "type": "array",
+      "items": {
+        "type": "string"
+      },
+      "minItems": 1
+    },
+    "data_abertura": {
+      "type": "string",
+      "description": "Data de abertura da demanda (AAAA-MM-DD) ou \"\" se a fonte não informar."
+    },
+    "contexto": {
+      "type": "string",
+      "description": "Contexto da demanda: situação atual e por que ela chegou ao comitê, em 2-4 frases."
+    },
+    "contexto_fontes": {
+      "type": "array",
+      "items": {
+        "type": "string"
+      },
+      "minItems": 1
+    },
+    "desafio": {
+      "type": "string",
+      "description": "O desafio e a discussão arquitetural: o problema central e as tensões debatidas."
+    },
+    "desafio_fontes": {
+      "type": "array",
+      "items": {
+        "type": "string"
+      },
+      "minItems": 1
+    },
+    "pontos_discussao": {
+      "type": "array",
+      "items": {
+        "type": "object",
+        "additionalProperties": false,
+        "required": [
+          "texto",
+          "fontes"
+        ],
+        "properties": {
+          "texto": {
+            "type": "string"
+          },
+          "fontes": {
+            "type": "array",
+            "items": {
+              "type": "string"
+            },
+            "minItems": 1
+          }
+        }
+      },
+      "description": "Pontos relevantes levantados na discussão, um por item (argumentos, preocupações, propostas, objeções)."
+    },
+    "times_envolvidos": {
+      "type": "array",
+      "items": {
+        "type": "object",
+        "additionalProperties": false,
+        "required": [
+          "time",
+          "papel",
+          "fontes"
+        ],
+        "properties": {
+          "time": {
+            "type": "string"
+          },
+          "papel": {
+            "type": "string",
+            "description": "Papel do time na demanda (solicitante, executor, impactado, revisor...)."
+          },
+          "fontes": {
+            "type": "array",
+            "items": {
+              "type": "string"
+            },
+            "minItems": 1
+          }
+        }
+      },
+      "description": "Times que participam ou são impactados."
+    },
+    "reuniao": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": [
+        "data",
+        "participantes",
+        "resumo",
+        "encaminhamentos",
+        "fontes"
+      ],
+      "properties": {
+        "data": {
+          "type": "string",
+          "description": "Data da reunião (AAAA-MM-DD) ou \"\"."
+        },
+        "participantes": {
+          "type": "array",
+          "items": {
+            "type": "string"
+          },
+          "description": "Participantes ou áreas presentes, como aparecem na transcrição."
+        },
+        "resumo": {
+          "type": "string",
+          "description": "Resumo da reunião em 2-4 frases."
+        },
+        "encaminhamentos": {
+          "type": "array",
+          "items": {
+            "type": "object",
+            "additionalProperties": false,
+            "required": [
+              "texto",
+              "fontes"
+            ],
+            "properties": {
+              "texto": {
+                "type": "string"
+              },
+              "fontes": {
+                "type": "array",
+                "items": {
+                  "type": "string"
+                },
+                "minItems": 1
+              }
+            }
+          },
+          "description": "Encaminhamentos e próximos passos acordados."
+        },
+        "fontes": {
+          "type": "array",
+          "items": {
+            "type": "string"
+          },
+          "minItems": 1
+        }
+      },
+      "description": "Registro da reunião do comitê que tratou a demanda."
+    },
+    "gaps": {
+      "type": "array",
+      "items": {
+        "type": "object",
+        "additionalProperties": false,
+        "required": [
+          "texto",
+          "fontes"
+        ],
+        "properties": {
+          "texto": {
+            "type": "string"
+          },
+          "fontes": {
+            "type": "array",
+            "items": {
+              "type": "string"
+            },
+            "minItems": 1
+          }
+        }
+      },
+      "description": "Lacunas: informações que a demanda precisaria e a transcrição não traz."
+    }
+  }
+}

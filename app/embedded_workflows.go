@@ -3,7 +3,7 @@ package main
 import "embed"
 
 // vendoredWorkflowsFS is a copy of the repo's own workflows/ tree — the
-// program mhl actually runs (WorkItem/Wiki/Discovery/Delivery, their
+// program mhl actually runs (WorkItem/Wiki/Discovery/Delivery/Comite, their
 // schemas/templates/prompts). resolveWorkflowsDir (vendor_extract.go) only
 // falls back to extracting this when no live workflows/ checkout can be
 // found next to the running binary — see that function's doc comment for

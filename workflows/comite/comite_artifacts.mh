@@ -1,0 +1,202 @@
+// O que muda por artefato no Comite de Arquitetura (WAR): quais
+// predecessores cada um exige, como e gerado e onde e gravado. O fluxo
+// (pausa, aprovacao, pedido de mudanca) fica em artifact_flow.mh.
+//
+// As fontes sao transcricoes das reunioes do comite. Cadeia: demanda -> rfc
+// -> decisoes (ADRs) -> artefatos -> metricas. Todo Commit refaz o export
+// Markdown (comite_export.mh).
+
+import { Paths } from "../shared/core/paths.mh"
+import { Context } from "../shared/artifacts/context.mh"
+import { Require } from "../shared/artifacts/require.mh"
+import { ArtifactId } from "../shared/artifacts/artifact_id.mh"
+import { ArtifactCommit } from "../shared/artifacts/artifact_commit.mh"
+import { AutoReview } from "../shared/artifacts/auto_review.mh"
+import { ChangesBlock } from "../shared/artifacts/changes_log.mh"
+import { Drafts, Draft } from "../shared/artifacts/draft.mh"
+import { ArtifactSchema } from "../shared/artifacts/artifacts_common.mh"
+import { ComiteRules, ComiteStore } from "comite_model.mh"
+import { ComiteBody } from "comite_body.mh"
+import { ComiteExport } from "comite_export.mh"
+
+export enum ComiteArtifact { demanda, rfc, decisoes, artefatos, metricas }
+
+prompt ComiteMetodologia() from "prompts/metodologia.prompt.md"
+
+// Demanda, RFCs, ADRs e metricas leem a transcricao inteira (a wiki): o
+// comite decide na reuniao, e o detalhe de quem disse o que e o que sustenta
+// cada registro. Os artefatos executaveis derivam so das ADRs.
+prompt DemandaInstruction(schema_conventions: prompt, metodologia: prompt, wiki_content: string, feedback_content: string) from "prompts/demanda.prompt.md"
+prompt RfcInstruction(schema_conventions: prompt, metodologia: prompt, demanda_content: string, wiki_content: string, feedback_content: string) from "prompts/rfc.prompt.md"
+prompt DecisoesInstruction(schema_conventions: prompt, metodologia: prompt, demanda_content: string, rfc_content: string, wiki_content: string, feedback_content: string) from "prompts/decisoes.prompt.md"
+prompt ArtefatosInstruction(schema_conventions: prompt, metodologia: prompt, decisoes_content: string, feedback_content: string) from "prompts/artefatos.prompt.md"
+prompt MetricasInstruction(schema_conventions: prompt, metodologia: prompt, demanda_content: string, decisoes_content: string, artefatos_content: string, wiki_content: string, feedback_content: string) from "prompts/metricas.prompt.md"
+
+schema DemandaSchema from "schemas/demanda.schema.json"
+schema RfcSchema from "schemas/rfc.schema.json"
+schema DecisoesSchema from "schemas/decisoes.schema.json"
+schema ArtefatosSchema from "schemas/artefatos.schema.json"
+schema MetricasSchema from "schemas/metricas.schema.json"
+
+export tool ComiteKinds {
+    // Nenhuma combinacao a validar alem do proprio nome (o parse do enum).
+    check(artifact: ComiteArtifact) {}
+
+    scope(artifact: ComiteArtifact): string -> ""
+}
+
+export tool ComiteDrafts {
+    of(kind: ComiteArtifact, project_id: string, autorrevisao: bool): Draft -> match kind {
+        ComiteArtifact.demanda   -> self.demanda(project_id)
+        ComiteArtifact.rfc       -> self.rfc(project_id)
+        ComiteArtifact.decisoes  -> self.decisoes(project_id, autorrevisao)
+        ComiteArtifact.artefatos -> self.artefatos(project_id, autorrevisao)
+        ComiteArtifact.metricas  -> self.metricas(project_id)
+    }
+
+    internal demanda(project_id: string): Draft -> Drafts.generate(
+        DemandaInstruction(
+            schema_conventions: ArtifactSchema(),
+            metodologia: ComiteMetodologia(),
+            wiki_content: Context.wiki(project_id),
+            feedback_content: ChangesBlock.for_artifact(project_id, "demanda", "")
+        ),
+        DemandaSchema, project_id, "demanda"
+    )
+
+    internal rfc(project_id: string): Draft -> Drafts.generate(
+        RfcInstruction(
+            schema_conventions: ArtifactSchema(),
+            metodologia: ComiteMetodologia(),
+            demanda_content: Require.artifact(project_id, "demanda", "rfc"),
+            wiki_content: Context.wiki(project_id),
+            feedback_content: ChangesBlock.for_artifact(project_id, "rfc", "")
+        ),
+        RfcSchema, project_id, "rfc"
+    )
+
+    internal decisoes(project_id: string, autorrevisao: bool): Draft {
+        var demanda = Require.artifact(project_id, "demanda", "decisoes")
+        var rfc = self.rfc_context(project_id, "decisoes")
+        return Drafts.reviewed_items(AutoReview.generate(
+            enabled: autorrevisao,
+            prompt: DecisoesInstruction(
+                schema_conventions: ArtifactSchema(),
+                metodologia: ComiteMetodologia(),
+                demanda_content: demanda,
+                rfc_content: rfc,
+                wiki_content: Context.wiki(project_id),
+                feedback_content: ChangesBlock.for_artifact(project_id, "decisoes", "")
+            ),
+            schema_file: DecisoesSchema, project_id:, artifact: "decisoes",
+            prepare: (raw) -> json.parse(raw),
+            check: (d) -> ComiteRules.decisoes(d)
+        ), "decisions")
+    }
+
+    // O lote de RFCs foi gerado (o marcador `nenhuma` conta), mesmo vazio.
+    internal rfc_context(project_id: string, before: string): string {
+        if (!dir.exists(Paths.artifact(project_id, "rfc")) || dir.list(Paths.artifact(project_id, "rfc")).filter((p) -> p.ends_with(".html")).is_empty()) {
+            fail("gere 'rfc' antes de '${before}'")
+        }
+        var items = Context.artifact_dir(project_id, "rfc")
+        return if (fs.exists(Paths.artifact(project_id, "rfc/nenhuma.html"))) "(nenhuma proposta em aberto nas reuniões)" else items
+    }
+
+    internal decisoes_context(project_id: string, before: string): string ->
+        Require.present(Context.artifact_dir(project_id, "decisoes"), "decisoes", before)
+
+    internal artefatos(project_id: string, autorrevisao: bool): Draft {
+        var decisoes = self.decisoes_context(project_id, "artefatos")
+        var adrs = ComiteStore.items(project_id, "decisoes")
+        return Drafts.reviewed(AutoReview.generate(
+            enabled: autorrevisao,
+            prompt: ArtefatosInstruction(
+                schema_conventions: ArtifactSchema(),
+                metodologia: ComiteMetodologia(),
+                decisoes_content: decisoes,
+                feedback_content: ChangesBlock.for_artifact(project_id, "artefatos", "")
+            ),
+            schema_file: ArtefatosSchema, project_id:, artifact: "artefatos",
+            prepare: (raw) -> ComiteRules.annotate_artefatos(json.parse(raw), adrs),
+            check: (d) -> d?.avisos_cobertura ?? []
+        ))
+    }
+
+    // "Artefatos materializados por padrao" e contado aqui, nao pela LLM.
+    internal metricas(project_id: string): Draft {
+        var demanda = Require.artifact(project_id, "demanda", "metricas")
+        var decisoes = self.decisoes_context(project_id, "metricas")
+        var artefatos = Require.artifact(project_id, "artefatos", "metricas")
+        var draft = Drafts.generate(
+            MetricasInstruction(
+                schema_conventions: ArtifactSchema(),
+                metodologia: ComiteMetodologia(),
+                demanda_content: demanda,
+                decisoes_content: decisoes,
+                artefatos_content: artefatos,
+                wiki_content: Context.wiki(project_id),
+                feedback_content: ChangesBlock.for_artifact(project_id, "metricas", "")
+            ),
+            MetricasSchema, project_id, "metricas"
+        )
+        var catalogo = ComiteStore.single(project_id, "artefatos")?.artefatos ?? []
+        return Drafts.with(draft, {materializados: ComiteRules.materializados(ComiteStore.items(project_id, "decisoes"), catalogo)})
+    }
+}
+
+export tool ComiteCommits {
+    of(kind: ComiteArtifact, project_id: string, draft: Draft): any {
+        var result = match kind {
+            ComiteArtifact.demanda   -> self.demanda(project_id, draft)
+            ComiteArtifact.rfc       -> self.rfc(project_id, draft)
+            ComiteArtifact.decisoes  -> self.decisoes(project_id, draft)
+            ComiteArtifact.artefatos -> self.single(project_id, "artefatos", "Artefatos executáveis", ComiteBody.artefatos(draft.data), draft)
+            ComiteArtifact.metricas  -> self.single(project_id, "metricas", "Métricas", ComiteBody.metricas(draft.data), draft)
+        }
+        result["export"] = ComiteExport.sync(project_id)
+        return result
+    }
+
+    internal single(project_id: string, artifact: string, title: string, body: string, draft: Draft): any {
+        ArtifactCommit.page(project_id, "${artifact}.html", title, body, draft.data, draft)
+        return {artifact, path: "artifacts/${artifact}.html"}
+    }
+
+    internal demanda(project_id: string, draft: Draft): any {
+        var code = ComiteExport.demanda_code()
+        return self.single(project_id, "demanda", html.escape("${code} — ${draft.data.titulo}"), ComiteBody.demanda(code, draft.data), draft)
+    }
+
+    // Colecoes sao sempre o lote inteiro (ver ArtifactCommit): os ids contam
+    // o que ja existe em disco. Um lote vazio de RFCs grava o marcador
+    // `nenhuma`, que satisfaz o gate das ADRs.
+    internal rfc(project_id: string, draft: Draft): any {
+        dir.clear(Paths.artifact(project_id, "rfc"))
+        var rfcs = draft.data?.rfcs ?? []
+        if (rfcs.is_empty()) {
+            ArtifactCommit.page(project_id, "rfc/nenhuma.html", "RFCs", ComiteBody.rfc_vazio(), {rfcs: []}, draft)
+            return {artifact: "rfc", written: []}
+        }
+        var written = []
+        for (var r in rfcs) {
+            var id = ArtifactId.next_comite_id(project_id, "rfc", "RFC-")
+            var folder = ArtifactId.folder_name(id, r.titulo)
+            ArtifactCommit.page(project_id, "rfc/${folder}.html", html.escape("${id} — ${r.titulo}"), ComiteBody.rfc(id, r), r, draft)
+            written += [folder]
+        }
+        return {artifact: "rfc", written}
+    }
+
+    internal decisoes(project_id: string, draft: Draft): any {
+        dir.clear(Paths.artifact(project_id, "decisoes"))
+        var written = []
+        for (var d in draft.data.decisions) {
+            var id = ArtifactId.next_comite_id(project_id, "decisoes", "ADR-")
+            var folder = ArtifactId.folder_name(id, d.titulo)
+            ArtifactCommit.page(project_id, "decisoes/${folder}.html", html.escape("${id} — ${d.titulo}"), ComiteBody.decisao(id, d), d, draft)
+            written += [folder]
+        }
+        return {artifact: "decisoes", written}
+    }
+}

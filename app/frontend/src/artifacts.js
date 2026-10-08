@@ -79,6 +79,30 @@ export const DELIVERY_SEQUENCE = [
   { artifact: 'historias', deps: ['final'], dir: 'historias', collectionKind: 'folders', itemFile: 'historia.html', category: 'Entrega' },
 ];
 
+// COMITE_SEQUENCE: Comitê de Arquitetura (WAR) — fontes são transcrições
+// das reuniões. Cada `deps` espelha 1:1 os fail() de comite_artifacts.mh.
+// `rfc` sempre fica pronto depois de gerado, mesmo sem nenhuma proposta em
+// aberto: o lote vazio grava rfc/nenhuma.html (que o .html da regra de
+// "pronto" abaixo conta). Os ADRs do comitê são `decisoes`, não `adr`: o
+// formato é outro (força, mecanismo de conformidade) e o preview do lote
+// pausado precisa do renderizador do comitê (PENDING_COLLECTION em
+// tab-artefatos.js).
+export const COMITE_SEQUENCE = [
+  { artifact: 'demanda', deps: [], readsWiki: true, path: 'demanda.html', category: 'Demanda' },
+  { artifact: 'rfc', deps: ['demanda'], readsWiki: true, dir: 'rfc', collectionKind: 'files', category: 'Decisões (RFC/ADR)' },
+  { artifact: 'decisoes', deps: ['demanda', 'rfc'], readsWiki: true, dir: 'decisoes', collectionKind: 'files', category: 'Decisões (RFC/ADR)' },
+  { artifact: 'artefatos', deps: ['decisoes'], path: 'artefatos.html', category: 'Materialização' },
+  { artifact: 'metricas', deps: ['demanda', 'decisoes', 'artefatos'], readsWiki: true, path: 'metricas.html', category: 'Métricas' },
+];
+
+// workflowFor names the generation workflow behind a work-item's level —
+// the `workflow` StartRun receives and checkpoint-recovery.js mirrors.
+export function workflowFor(project) {
+  if (project.level === 'discovery') return 'Discovery';
+  if (project.level === 'comite') return 'Comite';
+  return 'Delivery';
+}
+
 // finalArtifactName resolves Delivery's `mode`-shaped final artifact
 // ("feature" or "historia") to the exact string StartRun's `artifact` input
 // and the on-disk filename both use — they're the same word.
@@ -92,6 +116,9 @@ export function finalArtifactName(mode) {
 export function sequenceFor(project) {
   if (project.level === 'discovery') {
     return DISCOVERY_SEQUENCE;
+  }
+  if (project.level === 'comite') {
+    return COMITE_SEQUENCE;
   }
   const mode = project.type; // "feature" | "historia"
   const name = finalArtifactName(mode);

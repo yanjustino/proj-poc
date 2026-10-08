@@ -21,6 +21,8 @@ export function DeleteProject(arg1:string):Promise<void>;
 
 export function DiscardClone(arg1:string):Promise<void>;
 
+export function ExportComiteMarkdown(arg1:string):Promise<string>;
+
 export function ExportHandoff(arg1:string):Promise<string>;
 
 export function ExportProject(arg1:string):Promise<string>;

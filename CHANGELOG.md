@@ -11,6 +11,14 @@ O formato segue o [Keep a Changelog](https://keepachangelog.com/pt-BR/1.1.0/). C
 #### Adicionado
 - Botão **Ver markdown** no painel de leitura, ao lado de **Ver HTML** (antes "Ver fonte"): páginas da wiki mostram o `.md` de origem; artefatos, que não têm `.md`, são convertidos do HTML na hora (`turndown` + `turndown-plugin-gfm`, com diagramas Mermaid como blocos ` ```mermaid `). Respostas da wiki, o relatório de verificação e páginas abertas pelo `.md` também ganham o botão.
 - Botão **Copiar** no painel de leitura, visível enquanto o HTML ou o markdown está sendo exibido, que copia o código mostrado para a área de transferência.
+- Tipo de work-item **Comitê de Arquitetura (WAR)** (`item_type: "comite"`, nível `comite`), cujas fontes são as transcrições das reuniões do comitê. O workflow `Comite` (`workflows/comite/`) gera em cadeia **Demanda → RFCs → ADRs do comitê → Artefatos executáveis → Métricas**, seguindo a metodologia de governança do comitê: nível de força (DEVE/DEVERIA/PODE), mecanismo de conformidade, reversibilidade e materialização. As verificações sem LLM, que alimentam a autorrevisão, apontam:
+  - ADR `DEVE` sustentada só por um documento;
+  - ADR `DEVERIA` sem caminho de exceção;
+  - ADR aprovada sem artefato executável;
+  - artefato que cita uma ADR inexistente.
+
+  O indicador "Artefatos materializados por padrão" e o tempo até produção, em dias, são calculados por código.
+- Export Markdown do comitê: cada aprovação refaz `artifacts/export/comite-arquitetura/` no layout `demandas/`, `decisoes/adr/`, `decisoes/rfc/`, `artefatos/` e `metricas/`. Cada documento leva o frontmatter da metodologia (`id`/`code`, `status`, `classification`, `strength`, `owners`, `related_projects`, `decision_link`…) e cada pasta tem um `README.md` de índice. O botão **Exportar Markdown** da aba Artefatos copia a pasta para onde o usuário escolher (`ExportComiteMarkdown`).
 
 ### 2026-10-07
 

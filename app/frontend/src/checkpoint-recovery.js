@@ -27,7 +27,7 @@ export function approvalRecoveryArgs({ workflow, projectId, projectType, row, st
   if (workflow === 'Discovery') {
     if (row.plan) args.feature_id = row.plan.featureId;
     if (row.featureId) args.feature_id = row.featureId;
-  } else {
+  } else if (workflow !== 'Comite') {
     args.mode = projectType;
   }
   return args;

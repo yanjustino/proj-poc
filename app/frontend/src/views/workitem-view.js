@@ -18,7 +18,7 @@ import { summarizeCost } from '../cost.js';
 import { formatDurationShort, formatRelativeTime } from '../time-format.js';
 import { LogFrontendError } from '../../wailsjs/go/main/App';
 
-const LEVEL_LABEL = { discovery: 'Oportunidade · Discovery', delivery: 'Feature/Enabler/História · Delivery' };
+const LEVEL_LABEL = { discovery: 'Oportunidade · Discovery', delivery: 'Feature/Enabler/História · Delivery', comite: 'Comitê de Arquitetura (WAR)' };
 
 // renderWorkItemView mounts the hero + summary cards + tab switcher for one
 // work-item into `container`. `initialTab` lets the "criar work-item" flow

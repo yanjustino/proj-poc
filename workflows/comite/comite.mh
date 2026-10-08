@@ -1,0 +1,80 @@
+// Comite gera os artefatos de um work-item do Comite de Arquitetura (WAR) a
+// partir das transcricoes das reunioes: o fluxo comum (artifact_flow.mh) no
+// nivel comite. O que muda por artefato esta em comite_artifacts.mh.
+
+import { Paths } from "../shared/core/paths.mh"
+import { Fixture } from "../shared/core/fixture.mh"
+import { ArtifactFlow, Level } from "../artifact_flow/artifact_flow.mh"
+import { ComiteFixtures } from "comite_model.mh"
+
+// `mode` e do Delivery e `feature_id` do Discovery; fixados aqui so para
+// sair do contrato do Comite.
+workflow Comite = ArtifactFlow with { level: Level.comite, mode: "feature", feature_id: "" } {
+    description: "Artefatos do Comite de Arquitetura (WAR) a partir das transcricoes das reunioes: demanda, rfc, decisoes (ADRs), artefatos (executaveis), metricas; cada aprovacao refaz o export Markdown em artifacts/export/comite-arquitetura/."
+}
+
+// Cobre o que e deterministico: validacao de entrada, a cadeia de
+// predecessores (cada gate falha antes de qualquer chamada de LLM) e o
+// caminho de aprovacao, que grava sem chamar a LLM.
+test ComiteWorkflowSpec {
+    describe rejects_an_artifact_of_another_level_listing_its_own {
+        var run = Comite.run(inputs: {project_id: "spec-test-project", artifact: "brief"})
+        is_false(run.ok)
+        is_true(run.error.contains("\"brief\" is not a variant of enum ComiteArtifact (use demanda | rfc | decisoes | artefatos | metricas)"))
+    }
+
+    describe the_chain_fails_at_each_missing_predecessor {
+        var id = Fixture.project("spec-test-comite-chain")
+        are_equal(Comite.run(inputs: {project_id: id, artifact: "rfc"}).error.contains("gere 'demanda' antes de 'rfc'"), true)
+        are_equal(Comite.run(inputs: {project_id: id, artifact: "decisoes"}).error.contains("gere 'demanda' antes de 'decisoes'"), true)
+        Fixture.artifact(id, "demanda.html", "<html><body>demanda</body></html>")
+        are_equal(Comite.run(inputs: {project_id: id, artifact: "decisoes"}).error.contains("gere 'rfc' antes de 'decisoes'"), true)
+        are_equal(Comite.run(inputs: {project_id: id, artifact: "artefatos"}).error.contains("gere 'decisoes' antes de 'artefatos'"), true)
+        are_equal(Comite.run(inputs: {project_id: id, artifact: "metricas"}).error.contains("gere 'decisoes' antes de 'metricas'"), true)
+        Fixture.artifact(id, "decisoes/ADR-0001-x.html", "<html><body>ADR</body></html>")
+        are_equal(Comite.run(inputs: {project_id: id, artifact: "metricas"}).error.contains("gere 'artefatos' antes de 'metricas'"), true)
+        Fixture.drop(id)
+    }
+
+    // Lote vazio: o marcador satisfaz o gate das ADRs e nao consome id.
+    describe approving_an_empty_rfc_batch_writes_the_marker {
+        var id = Fixture.project("spec-test-comite-rfc-empty")
+        var run = Comite.run(inputs: {project_id: id, artifact: "rfc", approved: true, approval_data: {rfcs: []}})
+        is_true(run.ok)
+        is_true(fs.exists(Paths.artifact(id, "rfc/nenhuma.html")))
+        is_true(fs.read(Paths.artifact(id, "export/comite-arquitetura/decisoes/rfc/README.md")).contains("Nenhum documento"))
+        Fixture.drop(id)
+    }
+
+    // Aprovar o mesmo lote duas vezes substitui o anterior; o export
+    // acompanha o lote atual.
+    describe approving_decisions_twice_replaces_the_batch_and_the_export {
+        var id = Fixture.project("spec-test-comite-adr-approve")
+        var d = ComiteFixtures.decisao("Observabilidade padrão", "DEVE", "aprovada", "gate", [{nome: "Template OTel", tipo: "template", fontes: ["gap"]}])
+        var inputs = {project_id: id, artifact: "decisoes", approved: true, approval_data: {decisions: [d]}}
+        Comite.run(inputs:)
+        var run = Comite.run(inputs:)
+        is_true(run.ok)
+        are_equal(run.vars.result.written, ["ADR-0001-observabilidade-padrao"])
+        are_equal(dir.list(Paths.artifact(id, "decisoes")).filter((p) -> p.ends_with(".html")).size(), 1)
+        var md = fs.read(Paths.artifact(id, "export/comite-arquitetura/decisoes/adr/ADR-0001-observabilidade-padrao.md"))
+        is_true(md.starts_with("---\nid: \"ADR-0001\"\ntitle: \"Observabilidade padrão\"\nstatus: \"aprovada\"\nclassification: \"compartilhado\"\nstrength: \"DEVE\"\n"))
+        is_true(md.contains("## Mecanismo de conformidade\n\n**Nível:** Gate no pipeline"))
+        is_true(md.contains("- Template OTel (Template)"))
+        is_true(fs.read(Paths.artifact(id, "export/comite-arquitetura/decisoes/adr/README.md")).contains("[ADR-0001 — Observabilidade padrão](ADR-0001-observabilidade-padrao.md) — DEVE · aprovada"))
+        Fixture.drop(id)
+    }
+
+    describe the_catalog_links_artifacts_back_to_their_adrs {
+        var id = Fixture.project("spec-test-comite-artefatos")
+        var d = ComiteFixtures.decisao("APIs REST", "DEVERIA", "aprovada", "artefato", [])
+        Comite.run(inputs: {project_id: id, artifact: "decisoes", approved: true, approval_data: {decisions: [d]}})
+        var catalogo = {artefatos: [{nome: "Template de API", tipo: "template", nivel_mecanismo: "artefato", descricao: "d", situacao: "existente", responsavel: "Plataforma", localizacao: "", adr_ids: ["ADR-0001"], fontes: ["gap"]}], gaps: []}
+        var run = Comite.run(inputs: {project_id: id, artifact: "artefatos", approved: true, approval_data: catalogo})
+        is_true(run.ok)
+        var adr_md = fs.read(Paths.artifact(id, "export/comite-arquitetura/decisoes/adr/ADR-0001-apis-rest.md"))
+        is_true(adr_md.contains("[Template de API](../../artefatos/catalogo.md)"))
+        is_true(fs.read(Paths.artifact(id, "export/comite-arquitetura/artefatos/catalogo.md")).contains("[ADR-0001](../decisoes/adr/ADR-0001-apis-rest.md)"))
+        Fixture.drop(id)
+    }
+}

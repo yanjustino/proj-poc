@@ -489,6 +489,13 @@ export async function exportHandoff(projectId) {
   return App.ExportHandoff(projectId);
 }
 
+// exportComiteMarkdown copies a Comitê de Arquitetura work-item's Markdown
+// export (artifacts/export/comite-arquitetura, kept current by the Comite
+// workflow on every approval) to a folder the user picks; "" if canceled.
+export async function exportComiteMarkdown(projectId) {
+  return App.ExportComiteMarkdown(projectId);
+}
+
 // workItemFeatureReview approves, rejects (motivo required) or reopens one
 // Discovery feature (workflows/shared/artifacts/feature_review.mh) and
 // returns {feature_id, feature_dir, status, motivo}. `decisao` is

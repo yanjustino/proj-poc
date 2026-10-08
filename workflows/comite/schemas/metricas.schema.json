@@ -1,0 +1,151 @@
+{
+  "type": "object",
+  "additionalProperties": false,
+  "required": [
+    "tempo_producao",
+    "adocao",
+    "indicadores",
+    "gaps"
+  ],
+  "properties": {
+    "tempo_producao": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": [
+        "data_abertura",
+        "data_producao",
+        "situacao",
+        "observacao",
+        "fontes"
+      ],
+      "properties": {
+        "data_abertura": {
+          "type": "string",
+          "description": "AAAA-MM-DD ou \"\"."
+        },
+        "data_producao": {
+          "type": "string",
+          "description": "AAAA-MM-DD ou \"\" se a decisão ainda não chegou em produção."
+        },
+        "situacao": {
+          "type": "string",
+          "enum": [
+            "em_producao",
+            "em_andamento",
+            "sem_informacao"
+          ]
+        },
+        "observacao": {
+          "type": "string"
+        },
+        "fontes": {
+          "type": "array",
+          "items": {
+            "type": "string"
+          },
+          "minItems": 1
+        }
+      },
+      "description": "Tempo entre a abertura da demanda e a decisão chegar em produção."
+    },
+    "adocao": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": [
+        "periodo",
+        "percentual_decisoes_registradas",
+        "percentual_squads_templates",
+        "observacoes",
+        "fontes"
+      ],
+      "properties": {
+        "periodo": {
+          "type": "string",
+          "description": "Período da medição (AAAA-MM)."
+        },
+        "percentual_decisoes_registradas": {
+          "type": "string",
+          "description": "Ex.: \"80%\" ou \"\"."
+        },
+        "percentual_squads_templates": {
+          "type": "string",
+          "description": "Ex.: \"40%\" ou \"\"."
+        },
+        "observacoes": {
+          "type": "string"
+        },
+        "fontes": {
+          "type": "array",
+          "items": {
+            "type": "string"
+          },
+          "minItems": 1
+        }
+      },
+      "description": "Registro periódico de adoção."
+    },
+    "indicadores": {
+      "type": "array",
+      "items": {
+        "type": "object",
+        "additionalProperties": false,
+        "required": [
+          "indicador",
+          "valor",
+          "observacao",
+          "fontes"
+        ],
+        "properties": {
+          "indicador": {
+            "type": "string",
+            "enum": [
+              "Percentual de decisões registradas",
+              "Squads utilizando os templates",
+              "Taxa de conformidade por LOB",
+              "Equipes cadastradas"
+            ]
+          },
+          "valor": {
+            "type": "string",
+            "description": "Valor medido (ex.: \"3/4 (75%)\") ou \"\" quando a fonte não sustenta a medição."
+          },
+          "observacao": {
+            "type": "string"
+          },
+          "fontes": {
+            "type": "array",
+            "items": {
+              "type": "string"
+            },
+            "minItems": 1
+          }
+        }
+      },
+      "description": "Indicadores padronizados medidos a partir das fontes (o indicador 'Artefatos materializados por padrão' é calculado pelo sistema e não deve ser incluído)."
+    },
+    "gaps": {
+      "type": "array",
+      "items": {
+        "type": "object",
+        "additionalProperties": false,
+        "required": [
+          "texto",
+          "fontes"
+        ],
+        "properties": {
+          "texto": {
+            "type": "string"
+          },
+          "fontes": {
+            "type": "array",
+            "items": {
+              "type": "string"
+            },
+            "minItems": 1
+          }
+        }
+      },
+      "description": "Lacunas de medição."
+    }
+  }
+}

@@ -6,6 +6,7 @@ import {
   attachHistoriaFiles,
   removeHistoriaAttachment,
   exportHandoff,
+  exportComiteMarkdown,
   buildHandoff,
   workItemReadiness,
   workItemFeatureReview,
@@ -17,7 +18,7 @@ import {
   startAndWatch,
   watchExistingRun,
 } from '../api.js';
-import { sequenceFor, isReady, missingDeps, featureIdOf, featureTitleOf, computeStaleness, latestMtimeOf, staleHistoriaFeatureIds } from '../artifacts.js';
+import { sequenceFor, workflowFor, isReady, missingDeps, featureIdOf, featureTitleOf, computeStaleness, latestMtimeOf, staleHistoriaFeatureIds } from '../artifacts.js';
 import { createRunTracker } from '../run-tracker.js';
 import { inlineMermaid, hasMermaidDiagram } from '../mermaid-inline.js';
 import { beginCustom, buildDocFrame, showHtmlDoc, showEmpty, showAction, showLoading, setFooter, setToolbarAction, prependToolbarAction } from '../reading-pane.js';
@@ -45,6 +46,11 @@ const LABELS = {
   feature: 'Detalhamento da feature / enabler',
   historia: 'Detalhamento da história',
   plano: 'Plano de implementação',
+  demanda: 'Demanda',
+  rfc: 'RFCs',
+  decisoes: 'ADRs do comitê',
+  artefatos: 'Artefatos executáveis',
+  metricas: 'Métricas',
 };
 
 function labelFor(name) {
@@ -78,6 +84,11 @@ const ARTIFACT_DESCRIPTIONS = {
   feature: 'Detalhamento da entrega, classificação e critérios de aceite.',
   historia: 'Comportamento esperado, regras e critérios de aceite da história.',
   plano: 'Componentes, dados, fluxo, tarefas e testes para implementar a história.',
+  demanda: 'Solicitação que originou a discussão no comitê: contexto, desafio, times e reunião.',
+  rfc: 'Propostas ainda em discussão, com motivação, proposta e alternativas.',
+  decisoes: 'Decisões do comitê com nível de força (DEVE/DEVERIA/PODE) e mecanismo de conformidade.',
+  artefatos: 'Templates, catálogo de serviços, runbooks e dashboards que materializam as ADRs.',
+  metricas: 'Tempo até produção, adoção e indicadores que fecham o ciclo de governança.',
 };
 
 // GROUP_DESCRIPTIONS: the card description for a synthetic category-group
@@ -88,11 +99,13 @@ const ARTIFACT_DESCRIPTIONS = {
 const GROUP_DESCRIPTIONS = {
   'Decisões e modelos': 'Decisões arquiteturais (ADRs) e o modelo de entidades e relacionamentos (DER) da solução.',
   Diagramas: 'O modelo arquitetural e as visões dos componentes, limites e principais fluxos do sistema.',
+  'Decisões (RFC/ADR)': 'Propostas em discussão (RFCs) e decisões tomadas pelo comitê (ADRs).',
 };
 
 const ARTIFACT_ICONS = {
   brief: 'zap', atributos: 'checkCircle', requisitos: 'fileText', adr: 'layers', der: 'inbox', modelo: 'grid',
   diagramas: 'maximize', features: 'layers', dependencias: 'layers', historias: 'fileText', feature: 'layers', historia: 'fileText', plano: 'list',
+  demanda: 'inbox', rfc: 'fileText', decisoes: 'layers', artefatos: 'grid', metricas: 'checkCircle',
 };
 
 // ENABLER_SUBTYPE_LABELS: pt-BR display names for a feature's own
@@ -146,6 +159,8 @@ const PENDING_COLLECTION = {
   diagramas: { dataKey: 'diagramas', itemArtifact: 'diagrama' },
   features: { dataKey: 'features', itemArtifact: 'feature' },
   historias: { dataKey: 'historias', itemArtifact: 'historia' },
+  rfc: { dataKey: 'rfcs', itemArtifact: 'rfc_item' },
+  decisoes: { dataKey: 'decisions', itemArtifact: 'decisao_comite' },
 };
 
 // itemTitleFromFilename turns a generated file's own basename into a display
@@ -214,7 +229,7 @@ export async function renderArtefatosTab(container, project, { onChanged }) {
   // anything else in its place.
   let active = true;
   const sequence = sequenceFor(project);
-  const workflow = project.level === 'discovery' ? 'Discovery' : 'Delivery';
+  const workflow = workflowFor(project);
   // Fixed for the lifetime of this mount (sequenceFor's own order — Brief/
   // Contexto first, Entrega/Features last), unlike doneNames/collectionChildren
   // below: category is a static property of each sequence entry, not
@@ -231,6 +246,7 @@ export async function renderArtefatosTab(container, project, { onChanged }) {
       <div class="artifact-map-controls">
         <span class="dor-summary" data-dor-summary hidden></span>
         <button class="button secondary small" data-handoff hidden title="Gera o pacote de handoff (specs, planos, tarefas, contratos, ADRs e arquitetura) com todas as histórias — as que ainda não estão prontas entram marcadas, não ficam de fora — e exporta para uma pasta, para levar ao repositório de código.">${icon('layers', 14)} Pacote de handoff</button>
+        <button class="button secondary small" data-export-comite hidden title="Exporta os documentos aprovados (demanda, RFCs, ADRs, artefatos e métricas) em Markdown com frontmatter, no layout de docs/comite-arquitetura, para levar ao repositório de documentação do comitê.">${icon('download', 14)} Exportar Markdown</button>
         <button class="button secondary small" data-export-all title="Exportar o projeto (fontes, wiki, artefatos, histórico e uso) em um .zip">${icon('download', 14)} Exportar tudo</button>
         <div class="view-toggle" data-view-toggle>
           <button class="view-toggle-btn" data-view="cards" title="Ver como cards">${icon('grid', 15)}</button>
@@ -257,6 +273,8 @@ export async function renderArtefatosTab(container, project, { onChanged }) {
   const categoryFiltersEl = container.querySelector('[data-category-filters]');
   const exportAllButton = container.querySelector('[data-export-all]');
   const handoffButton = container.querySelector('[data-handoff]');
+  const exportComiteButton = container.querySelector('[data-export-comite]');
+  exportComiteButton.hidden = workflow !== 'Comite';
   const dorSummaryEl = container.querySelector('[data-dor-summary]');
   const exportStatusEl = container.querySelector('[data-export-status]');
   const viewButtons = [...container.querySelectorAll('[data-view]')];
@@ -423,6 +441,18 @@ export async function renderArtefatosTab(container, project, { onChanged }) {
       showExportStatus(`Não foi possível gerar o pacote de handoff: ${String(err.message || err)}`, 'error');
     } finally {
       handoffButton.disabled = false;
+    }
+  });
+
+  exportComiteButton.addEventListener('click', async () => {
+    exportComiteButton.disabled = true;
+    try {
+      const destination = await exportComiteMarkdown(project.id);
+      if (destination) showExportStatus(`Markdown do comitê exportado para ${destination}.`);
+    } catch (err) {
+      showExportStatus(`Não foi possível exportar o Markdown do comitê: ${String(err.message || err)}`, 'error');
+    } finally {
+      exportComiteButton.disabled = false;
     }
   });
 
@@ -2839,6 +2869,7 @@ export async function renderArtefatosTab(container, project, { onChanged }) {
       if (row.featureId) return { project_id: project.id, artifact: 'historias', feature_id: row.featureId };
       return { project_id: project.id, artifact: row.key };
     }
+    if (workflow === 'Comite') return { project_id: project.id, artifact: row.key };
     if (row.plan) return { project_id: project.id, mode: project.type, artifact: 'plano', historia_id: row.plan.historiaId };
     return { project_id: project.id, mode: project.type, artifact: row.key };
   }

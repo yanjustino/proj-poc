@@ -1,0 +1,115 @@
+{
+  "type": "object",
+  "additionalProperties": false,
+  "required": [
+    "artefatos",
+    "gaps"
+  ],
+  "properties": {
+    "artefatos": {
+      "type": "array",
+      "items": {
+        "type": "object",
+        "additionalProperties": false,
+        "required": [
+          "nome",
+          "tipo",
+          "nivel_mecanismo",
+          "descricao",
+          "situacao",
+          "responsavel",
+          "localizacao",
+          "adr_ids",
+          "fontes"
+        ],
+        "properties": {
+          "nome": {
+            "type": "string",
+            "description": "Nome do artefato executável."
+          },
+          "tipo": {
+            "type": "string",
+            "enum": [
+              "template",
+              "catalogo_servico",
+              "runbook",
+              "dashboard",
+              "policy",
+              "outro"
+            ]
+          },
+          "nivel_mecanismo": {
+            "type": "string",
+            "enum": [
+              "documento",
+              "artefato",
+              "gate",
+              "preventivo"
+            ]
+          },
+          "descricao": {
+            "type": "string",
+            "description": "O que o artefato faz e como torna o padrão o caminho mais rápido (paved road)."
+          },
+          "situacao": {
+            "type": "string",
+            "enum": [
+              "existente",
+              "em_construcao",
+              "necessario"
+            ],
+            "description": "Se já existe, está sendo construído ou ainda precisa ser criado."
+          },
+          "responsavel": {
+            "type": "string",
+            "description": "Time responsável pelo artefato, ou \"\"."
+          },
+          "localizacao": {
+            "type": "string",
+            "description": "Repositório, URL ou caminho, se a fonte informar; senão \"\"."
+          },
+          "adr_ids": {
+            "type": "array",
+            "items": {
+              "type": "string"
+            },
+            "minItems": 1,
+            "description": "Ids das ADRs que este artefato materializa (ex.: \"ADR-0001\")."
+          },
+          "fontes": {
+            "type": "array",
+            "items": {
+              "type": "string"
+            },
+            "minItems": 1
+          }
+        }
+      },
+      "description": "Artefatos executáveis que materializam as ADRs."
+    },
+    "gaps": {
+      "type": "array",
+      "items": {
+        "type": "object",
+        "additionalProperties": false,
+        "required": [
+          "texto",
+          "fontes"
+        ],
+        "properties": {
+          "texto": {
+            "type": "string"
+          },
+          "fontes": {
+            "type": "array",
+            "items": {
+              "type": "string"
+            },
+            "minItems": 1
+          }
+        }
+      },
+      "description": "Lacunas de materialização."
+    }
+  }
+}

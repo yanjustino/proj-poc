@@ -37,11 +37,11 @@ import { getPaneWidth, setPaneWidth } from '../preferences.js';
 import { visualScale, subscribeZoom } from '../zoom.js';
 import brandSymbol from '../assets/images/senpai-symbol.png';
 
-const LEVEL_SHORT = { discovery: 'Discovery', delivery: 'Delivery' };
+const LEVEL_SHORT = { discovery: 'Discovery', delivery: 'Delivery', comite: 'Comitê WAR' };
 
 // NAV_GROUP_ORDER: sidebar sections, in pipeline order. A level outside it
 // (older or future project.json) still gets its own section, after these.
-const NAV_GROUP_ORDER = ['discovery', 'delivery'];
+const NAV_GROUP_ORDER = ['discovery', 'delivery', 'comite'];
 const NAV_GROUPS_KEY = 'senpai-nav-collapsed-groups';
 // How often the sidebar re-checks the in-memory run registries for its
 // status dots (cheap: no backend call) and re-reads disk activity (one Go

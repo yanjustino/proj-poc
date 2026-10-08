@@ -42,6 +42,10 @@ export function DiscardClone(arg1) {
   return window['go']['main']['App']['DiscardClone'](arg1);
 }
 
+export function ExportComiteMarkdown(arg1) {
+  return window['go']['main']['App']['ExportComiteMarkdown'](arg1);
+}
+
 export function ExportHandoff(arg1) {
   return window['go']['main']['App']['ExportHandoff'](arg1);
 }

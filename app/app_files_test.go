@@ -406,6 +406,36 @@ func writeTempFile(t *testing.T, name string, content string) string {
 	return path
 }
 
+func TestExportComiteMarkdownToCopiesTheExport(t *testing.T) {
+	dataDir := t.TempDir()
+	app := &App{dataDir: dataDir}
+	projectID := "comite-export-test"
+	exportRoot := filepath.Join(dataDir, "projects", projectID, "artifacts", "export", "comite-arquitetura")
+
+	if _, err := app.exportComiteMarkdownTo(projectID, t.TempDir()); err == nil || !strings.Contains(err.Error(), "ainda nao gerado") {
+		t.Fatalf("exportComiteMarkdownTo without an export: err = %v, want 'ainda nao gerado'", err)
+	}
+
+	adrDir := filepath.Join(exportRoot, "decisoes", "adr")
+	if err := os.MkdirAll(adrDir, 0o755); err != nil {
+		t.Fatalf("mkdir: %v", err)
+	}
+	if err := os.WriteFile(filepath.Join(adrDir, "ADR-0001-a.md"), []byte("---\nid: \"ADR-0001\"\n---\n"), 0o644); err != nil {
+		t.Fatalf("write ADR: %v", err)
+	}
+
+	exported, err := app.exportComiteMarkdownTo(projectID, t.TempDir())
+	if err != nil {
+		t.Fatalf("exportComiteMarkdownTo: %v", err)
+	}
+	if filepath.Base(exported) != "comite-arquitetura-"+projectID {
+		t.Fatalf("unexpected export directory: %s", exported)
+	}
+	if body, err := os.ReadFile(filepath.Join(exported, "decisoes", "adr", "ADR-0001-a.md")); err != nil || !strings.Contains(string(body), "ADR-0001") {
+		t.Fatalf("ADR markdown not copied: %q, %v", body, err)
+	}
+}
+
 func TestExportHandoffToCopiesThePackage(t *testing.T) {
 	dataDir := t.TempDir()
 	app := &App{dataDir: dataDir}
@@ -440,5 +470,31 @@ func TestExportHandoffToCopiesThePackage(t *testing.T) {
 
 	if _, err := app.exportHandoffTo(projectID, specDir); err == nil {
 		t.Fatal("exportHandoffTo accepted a destination inside the package itself")
+	}
+}
+
+// TestComiteWorkItemRunsThroughTheBridge proves the "comite" item type gets
+// its own level and that the Comite workflow is published by the bridge and
+// gates on its predecessors before any LLM call.
+func TestComiteWorkItemRunsThroughTheBridge(t *testing.T) {
+	app, _ := newTestApp(t)
+	projectID := createTestProject(t, app, "Comitê WAR — observabilidade", "comite")
+	dataDir, err := app.resolvedDataDir()
+	if err != nil {
+		t.Fatalf("resolvedDataDir: %v", err)
+	}
+
+	record, err := os.ReadFile(filepath.Join(dataDir, "projects", projectID, "project.json"))
+	if err != nil || !strings.Contains(string(record), `"level":"comite"`) {
+		t.Fatalf("project.json level: %s, %v", record, err)
+	}
+
+	body, err := app.StartRun("Comite", `{"project_id":"`+projectID+`","artifact":"rfc"}`)
+	if err != nil {
+		t.Fatalf("StartRun(Comite): %v", err)
+	}
+	final := pollUntilTerminal(t, app, requireField(t, body, "runId"), 10*time.Second)
+	if !strings.Contains(final, "gere 'demanda' antes de 'rfc'") {
+		t.Fatalf("Comite rfc without demanda: %s", final)
 	}
 }

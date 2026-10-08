@@ -1,0 +1,231 @@
+// Corpo HTML dos artefatos do Comite de Arquitetura (WAR). Mesmo contrato de
+// ArtifactBody: todo texto da LLM e escapado aqui, as fontes viram selos
+// numerados por Cite.finalize, uma vez por documento.
+
+import { Cite } from "../shared/artifacts/cite.mh"
+import { AutoReview } from "../shared/artifacts/auto_review.mh"
+import { ComiteRules } from "comite_model.mh"
+
+prompt DemandaBody(cabecalho: string, contexto: string, contexto_fontes: string, desafio: string, desafio_fontes: string, pontos_lista: string, times_tabela: string, reuniao_html: string, gaps_lista: string) from "templates/demanda_body.html"
+prompt RfcBody(cabecalho: string, motivacao: string, motivacao_fontes: string, proposta: string, proposta_fontes: string, alternativas_tabela: string, questoes_lista: string) from "templates/rfc_body.html"
+prompt DecisaoBody(cabecalho: string, avisos_html: string, contexto: string, contexto_fontes: string, decisao: string, decisao_fontes: string, reversibilidade_html: string, consequencias_positivas_lista: string, consequencias_negativas_lista: string, mecanismo_html: string, artefatos_lista: string) from "templates/decisao_body.html"
+prompt ArtefatosBody(avisos_html: string, artefatos_tabela: string, cobertura_tabela: string, gaps_lista: string) from "templates/artefatos_body.html"
+prompt MetricasBody(tempo_html: string, adocao_html: string, indicadores_tabela: string, materializados_tabela: string, gaps_lista: string) from "templates/metricas_body.html"
+
+export tool ComiteBody {
+    // `code` e o id cunhado no Commit; vazio no rascunho (ArtifactPreview).
+    demanda(code: string, data: any): string -> Cite.finalize(DemandaBody(
+        cabecalho: self.meta([
+            ["Código", self.or_draft(code)],
+            ["Status", data.status],
+            ["Prioridade", data.priority],
+            ["Classificação", data.classification],
+            ["Owner", data.owner],
+            ["Solicitado por", data.requested_by],
+            ["Data de abertura", self.or_dash(data?.data_abertura ?? "")],
+        ], (data?.classification_fontes ?? []) + (data?.responsaveis_fontes ?? [])),
+        contexto: html.escape(data.contexto),
+        contexto_fontes: Cite.note(data.contexto_fontes),
+        desafio: html.escape(data.desafio),
+        desafio_fontes: Cite.note(data.desafio_fontes),
+        pontos_lista: self.list(data?.pontos_discussao ?? []),
+        times_tabela: self.table(["Time", "Papel", "Fontes"], (data?.times_envolvidos ?? []).map((t) -> [html.escape(t.time), html.escape(t.papel), Cite.badges(t.fontes)])),
+        reuniao_html: self.reuniao(data.reuniao),
+        gaps_lista: self.list(data?.gaps ?? [])
+    ))
+
+    rfc(id: string, data: any): string -> Cite.finalize(RfcBody(
+        cabecalho: self.meta([
+            ["Id", self.or_draft(id)],
+            ["Status", data.status],
+            ["Classificação", data.classification],
+            ["Owners", self.joined(data?.owners ?? [])],
+            ["Projetos relacionados", self.joined(data?.related_projects ?? [])],
+        ], data?.metadados_fontes ?? []),
+        motivacao: html.escape(data.motivacao),
+        motivacao_fontes: Cite.note(data.motivacao_fontes),
+        proposta: html.escape(data.proposta),
+        proposta_fontes: Cite.note(data.proposta_fontes),
+        alternativas_tabela: self.table(["Alternativa", "Avaliação", "Fontes"], (data?.alternativas ?? []).map((a) -> [html.escape(a.alternativa), html.escape(a.avaliacao), Cite.badges(a.fontes)])),
+        questoes_lista: self.list(data?.questoes_abertas ?? [])
+    ))
+
+    // Lote vazio de RFCs: a pagina que marca a etapa como feita.
+    rfc_vazio(): string -> "<p>Nenhuma proposta em aberto nas reuniões deste work-item: tudo o que foi discutido virou decisão (ADR) ou não exigiu registro.</p>"
+
+    decisao(id: string, data: any): string {
+        var mecanismo = data.mecanismo_conformidade
+        var reversao = data.reversibilidade
+        var custo = reversao?.custo_reversao ?? ""
+        var nota_reversao = if (custo == "dias") "<p class=\"autorrevisao\">Reversível em dias: pela fronteira de decisão, provavelmente pertence ao time, não ao comitê.</p>" else ""
+        return Cite.finalize(DecisaoBody(
+            cabecalho: self.meta([
+                ["Id", self.or_draft(id)],
+                ["Status", data.status],
+                ["Classificação", data.classification],
+                ["Força", data.strength],
+                ["Owners", self.joined(data?.owners ?? [])],
+                ["Projetos relacionados", self.joined(data?.related_projects ?? [])],
+                ["RFC de origem", self.or_dash(data?.rfc_origem ?? "")],
+            ], data?.metadados_fontes ?? []),
+            avisos_html: AutoReview.note_html(data) + self.warnings("Conformidade da decisão", ComiteRules.decisao(data)),
+            contexto: html.escape(data.contexto),
+            contexto_fontes: Cite.note(data.contexto_fontes),
+            decisao: html.escape(data.decisao),
+            decisao_fontes: Cite.note(data.decisao_fontes),
+            reversibilidade_html: "<p><strong>Custo de reversão:</strong> ${html.escape(custo)} — ${html.escape(reversao?.justificativa ?? "")} ${Cite.badges(reversao?.fontes ?? [])}</p>" + nota_reversao,
+            consequencias_positivas_lista: self.list(data?.consequencias_positivas ?? []),
+            consequencias_negativas_lista: self.list(data?.consequencias_negativas ?? []),
+            mecanismo_html: "<p><strong>Nível:</strong> ${html.escape(self.nivel_label(mecanismo?.nivel ?? ""))}</p><p>${html.escape(mecanismo?.descricao ?? "")} ${Cite.badges(mecanismo?.fontes ?? [])}</p>" +
+                (if ((mecanismo?.caminho_excecao ?? "").is_empty()) "" else "<p><strong>Caminho de exceção:</strong> ${html.escape(mecanismo.caminho_excecao)}</p>"),
+            artefatos_lista: self.table(["Artefato", "Tipo", "Fontes"], (data?.artefatos_relacionados ?? []).map((a) -> [html.escape(a.nome), html.escape(self.tipo_label(a.tipo)), Cite.badges(a.fontes)]))
+        ))
+    }
+
+    artefatos(data: any): string -> Cite.finalize(ArtefatosBody(
+        avisos_html: AutoReview.note_html(data) + self.warnings("Cobertura das ADRs", data?.avisos_cobertura ?? []),
+        artefatos_tabela: self.table(["Artefato", "Tipo", "Mecanismo", "Situação", "ADRs", "Responsável", "Localização", "Fontes"], (data?.artefatos ?? []).map((a) -> [
+            "<strong>${html.escape(a.nome)}</strong><br>${html.escape(a.descricao)}",
+            html.escape(self.tipo_label(a.tipo)),
+            html.escape(self.nivel_label(a.nivel_mecanismo)),
+            html.escape(a.situacao.replace("_", " ")),
+            html.escape(a.adr_ids.join(", ")),
+            html.escape(self.or_dash(a?.responsavel ?? "")),
+            html.escape(self.or_dash(a?.localizacao ?? "")),
+            Cite.badges(a.fontes),
+        ])),
+        cobertura_tabela: self.materializados(data?.materializados ?? []),
+        gaps_lista: self.list(data?.gaps ?? [])
+    ))
+
+    metricas(data: any): string {
+        var t = data.tempo_producao
+        var a = data.adocao
+        return Cite.finalize(MetricasBody(
+            tempo_html: self.meta([
+                ["Data de abertura", self.or_dash(t.data_abertura)],
+                ["Data em produção", self.or_dash(t.data_producao)],
+                ["Tempo em dias", self.or_dash(ComiteDates.days_between(t.data_abertura, t.data_producao))],
+                ["Situação", t.situacao.replace("_", " ")],
+            ], t.fontes) + (if (t.observacao.is_empty()) "" else "<p>${html.escape(t.observacao)}</p>"),
+            adocao_html: self.meta([
+                ["Período", self.or_dash(a.periodo)],
+                ["Percentual de decisões registradas", self.or_dash(a.percentual_decisoes_registradas)],
+                ["Squads utilizando os templates", self.or_dash(a.percentual_squads_templates)],
+            ], a.fontes) + (if (a.observacoes.is_empty()) "" else "<p>${html.escape(a.observacoes)}</p>"),
+            indicadores_tabela: self.table(["Indicador", "Valor", "Observação", "Fontes"], (data?.indicadores ?? []).map((i) -> [html.escape(i.indicador), html.escape(self.or_dash(i.valor)), html.escape(i.observacao), Cite.badges(i.fontes)])),
+            materializados_tabela: self.materializados(data?.materializados ?? []),
+            gaps_lista: self.list(data?.gaps ?? [])
+        ))
+    }
+
+    nivel_label(nivel: string): string -> match nivel {
+        "documento"  -> "Documento"
+        "artefato"   -> "Artefato reutilizável"
+        "gate"       -> "Gate no pipeline"
+        "preventivo" -> "Controle preventivo"
+        _            -> nivel
+    }
+
+    tipo_label(tipo: string): string -> match tipo {
+        "template"         -> "Template"
+        "catalogo_servico" -> "Catálogo de serviços"
+        "runbook"          -> "Runbook"
+        "dashboard"        -> "Dashboard"
+        "policy"           -> "Policy"
+        _                  -> "Outro"
+    }
+
+    internal materializados(items: any[]): string ->
+        if (items.is_empty()) "<p>—</p>" else self.table(["ADR", "Título", "Força", "Status", "Artefatos"], items.map((m) -> [html.escape(m.id), html.escape(m.titulo), html.escape(m.strength), html.escape(m.status), "${m.quantidade}"]))
+
+    // Ficha de metadados: pares [rotulo, valor] (valores crus, escapados aqui).
+    internal meta(pairs: any[], fontes: string[]): string ->
+        "<table class=\"comite-meta\"><tbody>" + pairs.map((p) -> "<tr><th>${html.escape(p[0])}</th><td>${html.escape(p[1])}</td></tr>").join("") + "</tbody></table>" +
+        (if (fontes.is_empty()) "" else Cite.note(fontes))
+
+    internal reuniao(r: any): string ->
+        self.meta([["Data", self.or_dash(r.data)], ["Participantes", self.joined(r.participantes)]], []) +
+        "<p>${html.escape(r.resumo)}</p>${Cite.note(r.fontes)}<h3>Encaminhamentos</h3>" + self.list(r?.encaminhamentos ?? [])
+
+    // Celulas ja escapadas por quem chama.
+    internal table(headers: string[], rows: any[]): string {
+        if (rows.is_empty()) return "<p>—</p>"
+        return "<table><thead><tr>" + headers.map((h) -> "<th>${h}</th>").join("") + "</tr></thead><tbody>" +
+            rows.map((r) -> "<tr>" + r.map((c) -> "<td>${c}</td>").join("") + "</tr>").join("") + "</tbody></table>"
+    }
+
+    internal list(items: any[]): string -> if (items.is_empty()) "<p>—</p>" else Cite.list(items)
+
+    internal warnings(titulo: string, avisos: string[]): string ->
+        if (avisos.is_empty()) "" else "<h2>${titulo}</h2><ul class=\"c4-warnings\">" + avisos.map((a) -> "<li>${html.escape(a)}</li>").join("") + "</ul>"
+
+    internal joined(items: string[]): string -> if (items.is_empty()) "—" else items.join(", ")
+    internal or_dash(text: string): string -> if (text.trim().is_empty()) "—" else text
+    internal or_draft(id: string): string -> if (id.is_empty()) "(atribuído na aprovação)" else id
+}
+
+// Tempo ate producao em dias, a partir de duas datas AAAA-MM-DD. Vazio se
+// alguma faltar ou nao estiver nesse formato — nunca um numero estimado.
+export tool ComiteDates {
+    days_between(inicio: string, fim: string): string {
+        if (!self.valid(inicio) || !self.valid(fim)) return ""
+        return "${self.day_number(fim) - self.day_number(inicio)}"
+    }
+
+    internal valid(d: string): bool -> d.matches("^[0-9]{4}-[0-9]{2}-[0-9]{2}$")
+
+    // Dias desde uma epoca fixa (algoritmo de dias civis de Howard Hinnant).
+    internal day_number(d: string): number {
+        var parts = d.split("-")
+        var y = self.to_int(parts[0])
+        var m = self.to_int(parts[1])
+        var day = self.to_int(parts[2])
+        if (m <= 2) y = y - 1
+        var era = self.floor_div(y, 400)
+        var yoe = y - era * 400
+        var mp = if (m > 2) m - 3 else m + 9
+        var doy = self.floor_div(153 * mp + 2, 5) + day - 1
+        var doe = yoe * 365 + self.floor_div(yoe, 4) - self.floor_div(yoe, 100) + doy
+        return era * 146097 + doe
+    }
+
+    internal floor_div(a: number, b: number): number {
+        var r = a % b
+        return (a - r) / b
+    }
+
+    // JSON nao aceita zero a esquerda ("08").
+    internal to_int(text: string): number {
+        var digits = text
+        while (digits.size() > 1 && digits.starts_with("0")) digits = digits.substring(1, digits.size())
+        return json.parse(digits)
+    }
+}
+
+test ComiteBodySpec {
+    describe days_between_counts_calendar_days {
+        are_equal(ComiteDates.days_between("2026-01-30", "2026-03-01"), "30")
+        are_equal(ComiteDates.days_between("2024-02-28", "2024-03-01"), "2")
+        are_equal(ComiteDates.days_between("2025-12-31", "2026-01-01"), "1")
+        are_equal(ComiteDates.days_between("2026-01-01", ""), "")
+        are_equal(ComiteDates.days_between("ontem", "2026-01-01"), "")
+    }
+
+    describe a_draft_decision_shows_its_warnings_and_escapes_text {
+        var d = {
+            titulo: "<APIs>", status: "aprovada", classification: "compartilhado", strength: "DEVE", owners: [], related_projects: [], metadados_fontes: ["gap"],
+            rfc_origem: "", contexto: "<b>c</b>", contexto_fontes: ["sources/ata"], decisao: "d", decisao_fontes: ["sources/ata"],
+            reversibilidade: {custo_reversao: "dias", justificativa: "j", fontes: ["gap"]},
+            consequencias_positivas: [], consequencias_negativas: [],
+            mecanismo_conformidade: {nivel: "documento", descricao: "Wiki", caminho_excecao: "", fontes: ["gap"]},
+            artefatos_relacionados: [],
+        }
+        var page = ComiteBody.decisao("", d)
+        is_true(page.contains("(atribuído na aprovação)"))
+        is_true(page.contains("&lt;b&gt;c&lt;/b&gt;"))
+        is_true(page.contains("Conformidade da decisão"))
+        is_true(page.contains("provavelmente pertence ao time"))
+        is_true(page.contains("Referências"))
+    }
+}

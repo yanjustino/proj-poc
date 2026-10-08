@@ -978,7 +978,7 @@ func (a *App) requireBridge() (*mhlbridge.Client, error) {
 }
 
 // ListWorkflows returns the raw tools/list result — every published tool,
-// the 4 workflows (WorkItem/Wiki/Discovery/Delivery) and the mhl_run_*
+// the workflows (WorkItem/Wiki/Discovery/Delivery/Comite) and the mhl_run_*
 // control tools alike, each already carrying its `inputSchema` (compact form
 // — enough to render a basic form; GetWorkflowManifest below gives the
 // fuller picture). Frontend decides what to filter/display (Fase 6).
@@ -1985,6 +1985,52 @@ func (a *App) exportHandoffTo(projectID string, destinationParent string) (strin
 	if err := copyDirectory(source, exportDir); err != nil {
 		_ = os.RemoveAll(exportDir)
 		return "", fmt.Errorf("exportar pacote de handoff: %w", err)
+	}
+	return exportDir, nil
+}
+
+// ExportComiteMarkdown copies a Comitê de Arquitetura work-item's Markdown
+// export (artifacts/export/comite-arquitetura, rewritten by the Comite
+// workflow on every approval — workflows/comite/comite_export.mh) to a
+// folder the user picks, ready for the committee's docs repository.
+func (a *App) ExportComiteMarkdown(projectID string) (string, error) {
+	if err := validateProjectID(projectID); err != nil {
+		return "", err
+	}
+	destination, err := runtime.OpenDirectoryDialog(a.ctx, runtime.OpenDialogOptions{
+		Title:                "Exportar Markdown do comitê",
+		CanCreateDirectories: true,
+	})
+	if err != nil {
+		return "", fmt.Errorf("selecionar pasta de exportacao: %w", err)
+	}
+	if destination == "" {
+		return "", nil
+	}
+	return a.exportComiteMarkdownTo(projectID, destination)
+}
+
+// exportComiteMarkdownTo is ExportComiteMarkdown's filesystem part, testable
+// headlessly.
+func (a *App) exportComiteMarkdownTo(projectID string, destinationParent string) (string, error) {
+	artifacts, err := a.projectRootDir(projectID, "artifacts", []string{"artifacts"})
+	if err != nil {
+		return "", err
+	}
+	source := filepath.Join(artifacts, "export", "comite-arquitetura")
+	if info, err := os.Stat(source); err != nil || !info.IsDir() {
+		return "", fmt.Errorf("export do comite ainda nao gerado para %q (aprove ao menos um artefato)", projectID)
+	}
+	if info, err := os.Stat(destinationParent); err != nil || !info.IsDir() {
+		return "", fmt.Errorf("destino nao e uma pasta: %q", destinationParent)
+	}
+	if pathIsWithin(source, destinationParent) {
+		return "", fmt.Errorf("a pasta de exportacao nao pode ficar dentro do proprio export")
+	}
+	exportDir := uniqueDirectoryDestination(destinationParent, "comite-arquitetura-"+projectID)
+	if err := copyDirectory(source, exportDir); err != nil {
+		_ = os.RemoveAll(exportDir)
+		return "", fmt.Errorf("exportar markdown do comite: %w", err)
 	}
 	return exportDir, nil
 }

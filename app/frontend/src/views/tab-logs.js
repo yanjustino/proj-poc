@@ -58,7 +58,7 @@ function runTitle(entry) {
       const title = (WIKI_ACTION_TITLE[m.action] || (() => `Wiki: ${m.action || 'execução'}`))(m);
       return { title, kind: 'Wiki', internal: m.action === 'sync_html' };
     }
-    if (m.workflow === 'Discovery' || m.workflow === 'Delivery') {
+    if (m.workflow === 'Discovery' || m.workflow === 'Delivery' || m.workflow === 'Comite') {
       const verb = m.approved ? 'Aprovação' : m.feedback ? 'Pedido de mudança' : 'Geração';
       const scope = [m.feature_id, m.historia_id].filter(Boolean).join(' / ');
       const name = ARTIFACT_LABELS[m.artifact] || m.artifact || 'artefato';

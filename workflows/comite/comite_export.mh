@@ -1,0 +1,212 @@
+// Export Markdown do Comite de Arquitetura (WAR): os artefatos aprovados no
+// layout de docs/comite-arquitetura/ (demandas, decisoes/adr, decisoes/rfc,
+// artefatos, metricas), cada documento com o frontmatter da metodologia do
+// comite, prontos para levar ao repositorio de documentacao.
+//
+// O Markdown e sempre derivado do JSON gravado: `sync` refaz a pasta inteira
+// a cada Commit, entao um id renumerado ou uma ADR removida nunca deixa um
+// .md orfao, e o link da demanda para a decisao acompanha o lote atual.
+
+import { Paths } from "../shared/core/paths.mh"
+import { Markdown } from "../shared/core/markdown.mh"
+import { ComiteRules, ComiteStore } from "comite_model.mh"
+import { ComiteBody, ComiteDates } from "comite_body.mh"
+
+export tool ComiteExport {
+    root(): string -> "export/comite-arquitetura"
+
+    sync(project_id: string): string {
+        var base = Paths.artifact(project_id, self.root())
+        dir.clear(base)
+        var demanda = ComiteStore.single(project_id, "demanda")
+        var rfcs = ComiteStore.items(project_id, "rfc")
+        var adrs = ComiteStore.items(project_id, "decisoes")
+        var artefatos = ComiteStore.single(project_id, "artefatos")
+        var metricas = ComiteStore.single(project_id, "metricas")
+        var lista_artefatos = artefatos?.artefatos ?? []
+
+        if (demanda != null) self.put(project_id, "demandas/${self.demanda_code()}.md", self.demanda(demanda, adrs, rfcs))
+        for (var r in rfcs) self.put(project_id, "decisoes/rfc/${r.folder}.md", self.rfc(r))
+        for (var a in adrs) self.put(project_id, "decisoes/adr/${a.folder}.md", self.adr(a, lista_artefatos))
+        if (artefatos != null) self.put(project_id, "artefatos/catalogo.md", self.artefatos(lista_artefatos, adrs))
+        if (metricas != null) {
+            self.put(project_id, "metricas/tempo-producao.md", self.tempo_producao(metricas, adrs))
+            self.put(project_id, "metricas/adoacao.md", self.adocao(metricas))
+            self.put(project_id, "metricas/indicadores.md", self.indicadores(metricas, adrs, lista_artefatos))
+        }
+
+        self.put(project_id, "demandas/README.md", self.readme("Demandas", if (demanda == null) [] else [{link: "${self.demanda_code()}.md", texto: "${self.demanda_code()} — ${demanda.titulo}", extra: demanda.status}]))
+        self.put(project_id, "decisoes/rfc/README.md", self.readme("RFCs", rfcs.map((r) -> ({link: "${r.folder}.md", texto: "${r.id} — ${r.data.titulo}", extra: r.data.status}))))
+        self.put(project_id, "decisoes/adr/README.md", self.readme("ADRs", adrs.map((a) -> ({link: "${a.folder}.md", texto: "${a.id} — ${a.data.titulo}", extra: "${a.data.strength} · ${a.data.status}"}))))
+        self.put(project_id, "artefatos/README.md", self.readme("Artefatos executáveis", if (artefatos == null) [] else [{link: "catalogo.md", texto: "Catálogo de artefatos executáveis", extra: "${lista_artefatos.size()} artefato(s)"}]))
+        self.put(project_id, "metricas/README.md", self.readme("Métricas", if (metricas == null) [] else [
+            {link: "tempo-producao.md", texto: "Tempo até produção", extra: ""},
+            {link: "adoacao.md", texto: "Adoção", extra: ""},
+            {link: "indicadores.md", texto: "Indicadores", extra: ""},
+        ]))
+        return "artifacts/${self.root()}"
+    }
+
+    // Um work-item do comite tem exatamente uma demanda.
+    demanda_code(): string -> "DEMANDA-0001"
+
+    internal put(project_id: string, relative: string, content: string) ->
+        fs.write(Paths.artifact(project_id, "${self.root()}/${relative}"), content)
+
+    // decision_link: a primeira ADR; sem ADR, a primeira RFC; senao vazio.
+    demanda(d: any, adrs: any[], rfcs: any[]): string {
+        var link = if (!adrs.is_empty()) "../decisoes/adr/${adrs[0].folder}.md" else if (!rfcs.is_empty()) "../decisoes/rfc/${rfcs[0].folder}.md" else ""
+        var times = (d?.times_envolvidos ?? []).map((t) -> "${t.time} — ${t.papel}")
+        var r = d.reuniao
+        return self.frontmatter([
+            ["code", self.demanda_code()],
+            ["title", d.titulo],
+            ["status", d.status],
+            ["priority", d.priority],
+            ["classification", d.classification],
+            ["owner", d.owner],
+            ["requested_by", d.requested_by],
+            ["decision_link", link],
+        ]) +
+        "# ${self.demanda_code()} — ${d.titulo}\n\n" +
+        "## Contexto\n\n${d.contexto}\n\n" +
+        "## O Desafio e a Discussão Arquitetural\n\n${d.desafio}\n\n" + self.items(d?.pontos_discussao ?? []) +
+        "## Times Envolvidos\n\n" + self.bullets(times) +
+        "## Reunião\n\n" +
+        "- Data: ${self.or_dash(r.data)}\n- Participantes: ${self.joined(r.participantes)}\n\n${r.resumo}\n\n" +
+        "### Encaminhamentos\n\n" + self.items(r?.encaminhamentos ?? []) +
+        self.decisions_section(adrs, rfcs)
+    }
+
+    rfc(r: any): string {
+        var d = r.data
+        return self.frontmatter([
+            ["id", r.id],
+            ["title", d.titulo],
+            ["status", d.status],
+            ["classification", d.classification],
+            ["owners", d.owners],
+            ["related_projects", d.related_projects],
+        ]) +
+        "# ${r.id} — ${d.titulo}\n\n" +
+        "## Motivação\n\n${d.motivacao}\n\n" +
+        "## Proposta\n\n${d.proposta}\n\n" +
+        "## Alternativas consideradas\n\n" + self.bullets((d?.alternativas ?? []).map((a) -> "**${a.alternativa}** — ${a.avaliacao}")) +
+        (if ((d?.questoes_abertas ?? []).is_empty()) "" else "## Questões abertas\n\n" + self.items(d.questoes_abertas))
+    }
+
+    // Artefatos relacionados: os que a propria ADR cita e os do catalogo
+    // que a materializam (com link para ele).
+    adr(a: any, artefatos: any[]): string {
+        var d = a.data
+        var m = d.mecanismo_conformidade
+        var proprios = (d?.artefatos_relacionados ?? []).map((x) -> "${x.nome} (${ComiteBody.tipo_label(x.tipo)})")
+        var catalogo = artefatos.filter((x) -> (x?.adr_ids ?? []).contains(a.id)).map((x) -> "[${x.nome}](../../artefatos/catalogo.md) — ${ComiteBody.tipo_label(x.tipo)}, ${ComiteBody.nivel_label(x.nivel_mecanismo)}, ${x.situacao.replace("_", " ")}")
+        var excecao = if ((m?.caminho_excecao ?? "").is_empty()) "" else "\n\n**Caminho de exceção:** ${m.caminho_excecao}"
+        return self.frontmatter([
+            ["id", a.id],
+            ["title", d.titulo],
+            ["status", d.status],
+            ["classification", d.classification],
+            ["strength", d.strength],
+            ["owners", d.owners],
+            ["related_projects", d.related_projects],
+        ]) +
+        "# ${a.id} — ${d.titulo}\n\n" +
+        "## Contexto\n\n${d.contexto}\n\n" +
+        "## Decisão\n\n${d.decisao}\n\n" +
+        "**Reversibilidade:** ${d.reversibilidade.custo_reversao} — ${d.reversibilidade.justificativa}\n\n" +
+        "## Consequências\n\n### Positivas\n\n" + self.items(d?.consequencias_positivas ?? []) +
+        "### Negativas\n\n" + self.items(d?.consequencias_negativas ?? []) +
+        "## Mecanismo de conformidade\n\n**Nível:** ${ComiteBody.nivel_label(m.nivel)}\n\n${m.descricao}${excecao}\n\n" +
+        "## Artefatos relacionados\n\n" + self.bullets(proprios + catalogo)
+    }
+
+    artefatos(artefatos: any[], adrs: any[]): string ->
+        "# Catálogo de artefatos executáveis\n\n" +
+        self.table(["Artefato", "Tipo", "Mecanismo", "Situação", "ADRs", "Responsável", "Localização"], artefatos.map((x) -> [
+            "**${x.nome}** — ${x.descricao}", ComiteBody.tipo_label(x.tipo), ComiteBody.nivel_label(x.nivel_mecanismo), x.situacao.replace("_", " "),
+            x.adr_ids.map((id) -> self.adr_link(id, adrs, "../decisoes/adr/")).join(", "), self.or_dash(x?.responsavel ?? ""), self.or_dash(x?.localizacao ?? ""),
+        ]))
+
+    tempo_producao(m: any, adrs: any[]): string {
+        var t = m.tempo_producao
+        var decisao = if (adrs.is_empty()) "—" else adrs.map((a) -> self.adr_link(a.id, adrs, "../decisoes/adr/")).join(", ")
+        return "# Tempo até Produção\n\n" +
+            self.table(["Demanda", "Decisão relacionada", "Data de abertura", "Data em produção", "Tempo em dias"], [[
+                "[${self.demanda_code()}](../demandas/${self.demanda_code()}.md)", decisao,
+                self.or_dash(t.data_abertura), self.or_dash(t.data_producao), self.or_dash(ComiteDates.days_between(t.data_abertura, t.data_producao)),
+            ]]) + (if (t.observacao.is_empty()) "" else "\n${t.observacao}\n")
+    }
+
+    adocao(m: any): string {
+        var a = m.adocao
+        return "# Adoção\n\n" +
+            self.table(["Período", "Percentual de decisões registradas", "Percentual de squads utilizando templates", "Observações"], [[
+                self.or_dash(a.periodo), self.or_dash(a.percentual_decisoes_registradas), self.or_dash(a.percentual_squads_templates), self.or_dash(a.observacoes),
+            ]])
+    }
+
+    indicadores(m: any, adrs: any[], artefatos: any[]): string ->
+        "# Indicadores\n\n" +
+        self.table(["Indicador", "Valor", "Observação"], (m?.indicadores ?? []).map((i) -> [i.indicador, self.or_dash(i.valor), self.or_dash(i.observacao)])) +
+        "\n## Artefatos materializados por padrão\n\n" +
+        self.table(["ADR", "Força", "Status", "Artefatos"], ComiteRules.materializados(adrs, artefatos).map((x) -> [self.adr_link(x.id, adrs, "../decisoes/adr/"), x.strength, x.status, "${x.quantidade}"]))
+
+    readme(titulo: string, entries: any[]): string ->
+        "# ${titulo}\n\n" + (if (entries.is_empty()) "Nenhum documento gerado ainda.\n" else
+            entries.map((e) -> "- [${e.texto}](${e.link})" + (if (e.extra.is_empty()) "" else " — ${e.extra}")).join("\n") + "\n")
+
+    internal decisions_section(adrs: any[], rfcs: any[]): string {
+        if (adrs.is_empty() && rfcs.is_empty()) return ""
+        var linhas = adrs.map((a) -> "[${a.id} — ${a.data.titulo}](../decisoes/adr/${a.folder}.md)") + rfcs.map((r) -> "[${r.id} — ${r.data.titulo}](../decisoes/rfc/${r.folder}.md)")
+        return "## Decisões e propostas\n\n" + self.bullets(linhas)
+    }
+
+    internal adr_link(id: string, adrs: any[], prefix: string): string {
+        var found = adrs.filter((a) -> a.id == id)
+        return if (found.is_empty()) id else "[${id}](${prefix}${found[0].folder}.md)"
+    }
+
+    // Frontmatter YAML: strings sempre entre aspas duplas (escapadas), listas
+    // em fluxo. Pares [chave, valor].
+    frontmatter(pairs: any[]): string ->
+        "---\n" + pairs.map((p) -> "${p[0]}: ${self.yaml(p[1])}").join("\n") + "\n---\n\n"
+
+    yaml(value: any): string {
+        if (type_of(value) == "array") return "[" + value.map((v) -> self.quote("${v}")).join(", ") + "]"
+        return self.quote("${value}")
+    }
+
+    internal quote(text: string): string ->
+        "\"" + text.replace("\\", "\\\\").replace("\"", "\\\"").replace("\n", " ") + "\""
+
+    internal items(items: any[]): string -> self.bullets(items.map((i) -> i.texto))
+
+    internal bullets(lines: string[]): string -> if (lines.is_empty()) "—\n\n" else Markdown.list(lines) + "\n\n"
+
+    // Celulas de tabela Markdown: "|" e quebras de linha quebrariam a linha.
+    internal table(headers: string[], rows: any[]): string {
+        if (rows.is_empty()) return "—\n"
+        var cell = (c) -> "${c}".replace("|", "\\|").replace("\n", " ")
+        return "| " + headers.join(" | ") + " |\n|" + headers.map((h) -> "---").join("|") + "|\n" +
+            rows.map((r) -> "| " + r.map(cell).join(" | ") + " |").join("\n") + "\n"
+    }
+
+    internal joined(items: string[]): string -> if (items.is_empty()) "—" else items.join(", ")
+    internal or_dash(text: string): string -> if (text.trim().is_empty()) "—" else text
+}
+
+test ComiteExportSpec {
+    describe frontmatter_quotes_strings_and_renders_lists_in_flow_style {
+        are_equal(
+            ComiteExport.frontmatter([["id", "ADR-0001"], ["title", "Usar \"gRPC\""], ["owners", ["Arquitetura", "SRE"]]]),
+            "---\nid: \"ADR-0001\"\ntitle: \"Usar \\\"gRPC\\\"\"\nowners: [\"Arquitetura\", \"SRE\"]\n---\n\n"
+        )
+    }
+
+    describe readme_lists_each_document_or_says_none_exists {
+        are_equal(ComiteExport.readme("ADRs", []), "# ADRs\n\nNenhum documento gerado ainda.\n")
+        are_equal(ComiteExport.readme("ADRs", [{link: "ADR-0001-a.md", texto: "ADR-0001 — A", extra: "DEVE · aprovada"}]), "# ADRs\n\n- [ADR-0001 — A](ADR-0001-a.md) — DEVE · aprovada\n")
+    }
+}

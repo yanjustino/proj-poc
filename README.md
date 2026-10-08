@@ -43,10 +43,13 @@ O Senpai organiza o trabalho por **Oportunidade**, **Feature** ou **História**,
 | Oportunidade | Brief → Atributos de qualidade → Requisitos → ADRs → DER / Modelo arquitetural → Diagramas → Backlog da solução (features e enablers) → Dependências → Histórias |
 | Feature | Brief → Requisitos → ADRs → DER / Modelo arquitetural → Diagramas → Detalhamento da feature ou enabler → Histórias |
 | História | Brief → Requisitos → ADRs → DER / Modelo arquitetural → Diagramas → Detalhamento da história |
+| Comitê de Arquitetura (WAR) | Demanda → RFCs → ADRs do comitê → Artefatos executáveis → Métricas |
 
 Em ambos os níveis a sequência é totalmente encadeada: cada artefato exige que seu predecessor direto já exista (brief antes de requisitos, requisitos antes de ADR, ADR antes de DER e do modelo arquitetural, modelo antes dos diagramas, e assim até o detalhamento final). A interface bloqueia a geração e indica qual predecessor falta antes de cada etapa.
 
 Como Delivery normalmente parte de um sistema existente, o brief e os requisitos devem descrever o que já existe hoje (comportamento, entidades, integrações) sempre que as fontes sustentarem isso — não apenas o que está sendo adicionado. Essa distinção alimenta o campo `mudanca` do detalhamento final e do DER.
+
+O **Comitê de Arquitetura (WAR)** tem fontes de outra natureza: as transcrições das reuniões do comitê. Os artefatos seguem a metodologia de governança do comitê. Cada ADR traz o nível de força (`DEVE`/`DEVERIA`/`PODE`) e um mecanismo de conformidade concreto, e cada ADR aprovada precisa de pelo menos um artefato executável que a materialize. Cada aprovação também atualiza um export em Markdown com frontmatter (`artifacts/export/comite-arquitetura/`), que o botão **Exportar Markdown** copia para o repositório de documentação do comitê.
 
 No backlog da solução, uma `feature_negocio` representa valor percebido diretamente por usuário ou stakeholder. Um `enabler` representa trabalho de exploração, arquitetura, infraestrutura ou conformidade que habilita entregas próximas. Ambos ocupam o mesmo nível e usam o mesmo mapa de dependências; histórias podem ser classificadas como `historia_usuario`, `historia_habilitadora` ou `spike`.
 
@@ -56,7 +59,7 @@ No backlog da solução, uma `feature_negocio` representa valor percebido direta
 flowchart LR
     UI[Frontend<br>Vite + JavaScript] --> APP[Aplicação desktop<br>Go + Wails]
     APP --> BRIDGE[mhl bridge<br>MCP local]
-    BRIDGE --> WF[Workflows MHL<br>Wiki · Discovery · Delivery]
+    BRIDGE --> WF[Workflows MHL<br>Wiki · Discovery · Delivery · Comitê]
     WF --> LLM[Devin CLI]
     WF --> DATA[(Dados locais<br>raw · wiki · artifacts · logs)]
     DATA --> APP
@@ -92,6 +95,7 @@ Projetos antigos que possuem somente HTML continuam funcionando; o leitor de con
 │   ├── wiki/             # ingestão, consulta, lint e HTML estático
 │   ├── discovery/        # pipeline de Oportunidade
 │   ├── delivery/         # pipelines de Feature e História
+│   ├── comite/           # pipeline do Comitê de Arquitetura (WAR) e export Markdown
 │   └── shared/           # agentes, schemas, renderização e utilitários
 ├── scripts/              # verificação de ambiente e builds
 └── assets/               # identidade visual e fontes de demonstração
