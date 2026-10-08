@@ -108,6 +108,12 @@ export function setToolbarAction(element) {
   els.tools.appendChild(element);
 }
 
+// prependToolbarAction adds `element` before the toolbar's current buttons
+// (showHtmlDoc's Editar/ver fonte) instead of replacing them.
+export function prependToolbarAction(element) {
+  els.tools.prepend(element);
+}
+
 export function showEmpty(message) {
   setHeader('', '');
   els.tools.innerHTML = '';

@@ -633,6 +633,9 @@ html[data-theme='light'] .combo-option.selected { color: var(--vermilion); }
    now (tertiary/small for tools like "Ver fonte"/expand, primary/small for
    the header action like "Gerar"), see reading-pane.js. */
 .doc-tools { display: flex; align-items: center; gap: 6px; flex: none; }
+/* The toolbar's own buttons (Regerar, Editar, ver fonte, Aprovar) sit in the
+   [data-rp-tools] span, out of .doc-tools' gap — space them the same way. */
+.doc-tools [data-rp-tools] { display: inline-flex; align-items: center; gap: 6px; }
 .doc-body { padding: 20px 24px; flex: 1; overflow: auto; }
 /* Persistent footer slot (reading-pane.js's setFooter/clearFooter) — a
    flex:none sibling of .doc-body, not part of its scrolling content, so
@@ -751,6 +754,8 @@ html[data-theme='light'] .combo-option.selected { color: var(--vermilion); }
 .run-composer.is-empty .composer-send:not(.busy),
 .composer-send:disabled:not(.busy) { background: transparent; color: var(--muted); opacity: .6; cursor: default; }
 .composer-send.busy { cursor: default; }
+.run-approve-action { display: inline-flex; align-items: center; gap: 6px; }
+.run-approve-action[hidden] { display: none; }
 .composer-send.busy .icon { animation: sidebar-reconnect-spin 1s linear infinite; }
 .run-composer-warning-wrap { display: flex; flex-direction: column; gap: 8px; }
 .run-composer-warning { display: flex; align-items: flex-start; gap: 10px; background: rgba(255,171,0, .12); border: 1px solid rgba(255,171,0, .35); border-radius: var(--radius-md); padding: 10px 12px; }

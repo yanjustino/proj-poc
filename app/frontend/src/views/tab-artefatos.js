@@ -20,7 +20,7 @@ import {
 import { sequenceFor, isReady, missingDeps, featureIdOf, featureTitleOf, computeStaleness, latestMtimeOf, staleHistoriaFeatureIds } from '../artifacts.js';
 import { createRunTracker } from '../run-tracker.js';
 import { inlineMermaid, hasMermaidDiagram } from '../mermaid-inline.js';
-import { beginCustom, buildDocFrame, showHtmlDoc, showEmpty, showAction, showLoading, setFooter, setToolbarAction } from '../reading-pane.js';
+import { beginCustom, buildDocFrame, showHtmlDoc, showEmpty, showAction, showLoading, setFooter, setToolbarAction, prependToolbarAction } from '../reading-pane.js';
 import { setActiveRun, getActiveRun, clearActiveRun } from '../active-runs.js';
 import { dotClass } from '../status.js';
 import { icon } from '../icons.js';
@@ -2232,38 +2232,44 @@ export async function renderArtefatosTab(container, project, { onChanged }) {
       wrap.appendChild(warning);
     }
 
+    // The composer is only for a change request (text required, recorded in
+    // the change history). Regenerating as is — no request — is its own
+    // "Regerar" button in the toolbar, next to Editar: it used to be this
+    // same composer sent empty, which nobody found.
     const composer = document.createElement('div');
     composer.className = 'run-composer';
     composer.innerHTML = `
-      <textarea class="run-feedback-input" rows="1" placeholder="Pedir uma mudança neste artefato (opcional)…"></textarea>
+      <textarea class="run-feedback-input" rows="1" placeholder="Pedir uma mudança neste artefato…"></textarea>
       <div class="run-composer-actions">
         <div class="composer-tools">
-          <span class="composer-chip static" data-mode title="Sem texto, regera a partir do contexto atual (wiki e artefatos anteriores)">${icon('refreshCw', 14)} <span data-mode-label>Regerar</span></span>
+          <span class="composer-chip static" title="A próxima geração considera o seu pedido">${icon('edit', 14)} Pedir mudança</span>
         </div>
-        ${sendButtonHtml({ attrs: 'data-submit', label: 'Regerar' })}
+        ${sendButtonHtml({ attrs: 'data-submit', label: 'Solicitar mudança' })}
       </div>
     `;
     const textarea = composer.querySelector('textarea');
     const button = composer.querySelector('[data-submit]');
-    const modeLabel = composer.querySelector('[data-mode-label]');
-    enhanceComposer(composer, { allowEmpty: true });
-    // Texto opcional: sem ele, é uma regeneração simples (como "Atualizar"),
-    // sem registrar diretiva no histórico de mudanças.
-    textarea.addEventListener('input', () => {
-      const label = textarea.value.trim() ? 'Solicitar mudança' : 'Regerar';
-      modeLabel.textContent = label;
-      button.title = label;
-      button.setAttribute('aria-label', label);
-    });
+    enhanceComposer(composer);
     button.addEventListener('click', () => {
       const text = textarea.value.trim();
+      if (!text) return;
       button.disabled = true;
       textarea.disabled = true;
       selectedKey = targetRow.key; // jump the view to the regeneration that's about to start
-      if (text) generate(targetRow, text);
-      else generate(targetRow);
+      generate(targetRow, text);
     });
     wrap.appendChild(composer);
+
+    const regenerate = document.createElement('button');
+    regenerate.className = 'button tertiary small';
+    regenerate.title = note ? `Gera outra versão a partir do contexto atual, sem pedido de mudança. ${note}` : 'Gera outra versão a partir do contexto atual, sem pedido de mudança';
+    regenerate.innerHTML = `${icon('refreshCw', 14)} Regerar`;
+    regenerate.addEventListener('click', () => {
+      regenerate.disabled = true;
+      selectedKey = targetRow.key;
+      generate(targetRow);
+    });
+    prependToolbarAction(regenerate);
 
     return wrap;
   }
@@ -2748,12 +2754,27 @@ export async function renderArtefatosTab(container, project, { onChanged }) {
     return true;
   }
 
+  // "Regerar" on a draft waiting for review: a brand-new generation, no
+  // change request. The paused run (and its draft) is retired best-effort,
+  // as approval does — CancelRun publishes no status, so nothing of it
+  // reaches the new run's tracker under the same key.
+  function regeneratePaused(row, key, pausedStatus) {
+    const previous = trackers.get(row.key);
+    trackers.delete(row.key);
+    previous?.dispose();
+    clearActiveRun(key);
+    cancelRun(pausedStatus.runId).catch(() => {});
+    selectedKey = row.key;
+    generate(row);
+  }
+
   function createArtifactTracker(row, key) {
     let tracker;
     tracker = createRunTracker({
       onCancel: () => onRunCancel(row, key),
       onUpdate: (status) => onRunUpdate(row, tracker, key, status),
       onApprove: (pausedStatus) => approvePendingDocument(row, tracker, key, pausedStatus),
+      onRegenerate: (pausedStatus) => regeneratePaused(row, key, pausedStatus),
       fillHeight: true,
     });
     return tracker;

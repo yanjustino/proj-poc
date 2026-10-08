@@ -58,7 +58,11 @@ export const STATE_LABEL = {
 // .run-tracker-fill instead of centering .run-tracker unconditionally,
 // since those other two hosts mount it inline among other content, where
 // stretching to fill height and centering would look broken.
-export function createRunTracker({ resumeArgs = { approved: true }, onCancel, onUpdate, onApprove, fillHeight = false } = {}) {
+// onRegenerate (optional): adds "Regerar" next to Aprovar — a new draft from
+// the current context, with no change request. A host-owned fresh run, like
+// onApprove: resuming the paused one without feedback only pauses it again
+// (ArtifactFlow's Gate), and fails outright if the workflow changed since.
+export function createRunTracker({ resumeArgs = { approved: true }, onCancel, onUpdate, onApprove, onRegenerate, fillHeight = false } = {}) {
   const element = document.createElement('div');
   element.className = 'run-tracker';
   // Kept as a second, separate root (not just a child of `element`) so a
@@ -85,7 +89,7 @@ export function createRunTracker({ resumeArgs = { approved: true }, onCancel, on
   // clicked button's own "…ing" label and disabling every control in the
   // composer (typing a new comment mid-request wouldn't be reflected in the
   // request already sent).
-  let busyAction = null; // null | 'approve' | 'regenerate' | 'cancel'
+  let busyAction = null; // null | 'approve' | 'regenerate' | 'fresh' | 'cancel'
   // Kept across re-renders (not just read from the DOM at submit time) so a
   // stray render() mid-typing — shouldn't happen while genuinely paused
   // (nothing pushes a new status until resumed), but cheap to be correct
@@ -387,12 +391,16 @@ export function createRunTracker({ resumeArgs = { approved: true }, onCancel, on
       `;
       enhanceComposer(composer);
       approveAction.hidden = false;
-      approveAction.innerHTML = `<button class="button primary small run-approve" ${busy ? 'disabled' : ''}>${busyAction === 'approve' ? 'Aplicando…' : 'Aprovar'}</button>`;
+      approveAction.innerHTML = `${onRegenerate ? `<button class="button tertiary small run-regenerate" title="Gera outra versão a partir do contexto atual, sem pedido de mudança" ${busy ? 'disabled' : ''}>${icon('refreshCw', 14)} ${busyAction === 'fresh' ? 'Regerando…' : 'Regerar'}</button>` : ''}<button class="button primary small run-approve" ${busy ? 'disabled' : ''}>${busyAction === 'approve' ? 'Aplicando…' : 'Aprovar'}</button>`;
     }
 
     const approveButton = approveAction.querySelector('.run-approve');
     if (approveButton) {
       approveButton.addEventListener('click', () => approve());
+    }
+    const regenerateButton = approveAction.querySelector('.run-regenerate');
+    if (regenerateButton) {
+      regenerateButton.addEventListener('click', () => regenerateFresh());
     }
 
     const feedbackInput = composer.querySelector('.run-feedback-input');
@@ -448,6 +456,22 @@ export function createRunTracker({ resumeArgs = { approved: true }, onCancel, on
         return;
       }
       await resumeAndWatch(s.runId, resumeArgs, (next) => (onUpdate || update)(next));
+    } catch (err) {
+      busyAction = null;
+      status = { ...s, state: 'failed', error: String(err) };
+      render();
+    }
+  }
+
+  // regenerateFresh: "Regerar"'s click handler. The host replaces this
+  // tracker with the new run's, so success needs no rendering here.
+  async function regenerateFresh() {
+    const s = status;
+    if (!s || s.state !== 'paused' || busyAction || !onRegenerate) return;
+    busyAction = 'fresh';
+    render();
+    try {
+      await onRegenerate(s);
     } catch (err) {
       busyAction = null;
       status = { ...s, state: 'failed', error: String(err) };
