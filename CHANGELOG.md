@@ -6,6 +6,15 @@ O formato segue o [Keep a Changelog](https://keepachangelog.com/pt-BR/1.1.0/). C
 
 ## [Não lançado]
 
+### 2026-10-09
+
+#### Alterado
+- `build-linux.sh` gera também `dist/senpai-linux-<arch>[-rhel].tar.gz`, que preserva a permissão de execução, no mesmo espírito do `.dmg` do macOS. O binário solto a perde quando é levado por Drive, download do navegador ou e-mail, e o Linux recusa abri-lo com "Permissão negada". Na máquina de destino: `tar -xzf senpai-linux-amd64.tar.gz && ./senpai-app`.
+
+#### Corrigido
+- Linux: um `mhl` já extraído que tivesse perdido a permissão de execução nunca era corrigido, porque o app só reescrevia o arquivo quando o conteúdo mudava, e o `mhl` falhava com "permission denied" em toda abertura. Agora a permissão é restaurada. Uma recusa de execução passa a explicar a causa: o arquivo sem permissão, ou a pasta montada com `noexec`, com a sugestão de usar `SENPAI_APPDATA_DIR`.
+- O ícone de "Reconectar" continuava girando, e o botão desabilitado, por até 20 s depois de uma troca de modelo ou de agente, até a próxima checagem de status. As trocas não acionam mais esse indicador. Durante um reconectar de verdade, o status mostra "Reconectando…" em vez do último status, verde, de um `mhl` que já foi parado.
+
 ### 2026-10-08
 
 #### Adicionado
@@ -20,15 +29,11 @@ O formato segue o [Keep a Changelog](https://keepachangelog.com/pt-BR/1.1.0/). C
   O indicador "Artefatos materializados por padrão" e o tempo até produção, em dias, são calculados por código.
 - Páginas `.html`/`.htm`/`.xhtml` salvas no disco ou no Drive sincronizado viram fonte: o arquivo é convertido em Markdown no envio, com o mesmo conversor das páginas baixadas por link (`app/html_source.go`), e gravado como `<nome>.html.md`. Antes, o arquivo era copiado como estava e a ingestão o recusava. Os cards **Página web** e **Transcrição** da aba Fontes aceitam esses arquivos.
 - Export Markdown do comitê: cada aprovação refaz `artifacts/export/comite-arquitetura/` no layout `demandas/`, `decisoes/adr/`, `decisoes/rfc/`, `artefatos/` e `metricas/`. Cada documento leva o frontmatter da metodologia (`id`/`code`, `status`, `classification`, `strength`, `owners`, `related_projects`, `decision_link`…) e cada pasta tem um `README.md` de índice. O botão **Exportar Markdown** da aba Artefatos copia a pasta para onde o usuário escolher (`ExportComiteMarkdown`).
+- `build-macos.sh` gera também `dist/darwin-arm64/senpai-app.dmg`, que traz o `.app`, um atalho para `/Applications` e um `LEIA-ME.txt` explicando como liberar o app no Gatekeeper (o app é só ad-hoc, sem notarização). É o `.dmg` que deve ser distribuído: o `.app` solto, copiado ou zipado por Teams, OneDrive ou e-mail, perde o bit de execução. O bundle passa a ser copiado com `ditto`, que preserva permissões, symlinks e assinatura.
 
 #### Alterado
 - Trocar o agente ou o modelo (Devin, Codex, Claude) não reinicia mais o `mhl`, e a troca é instantânea; antes, cada troca custava ~7 s, revalidando todos os workflows. O app grava a escolha em `.senpai-agent.json`, na pasta de dados, e o `mhl` lê esse arquivo a cada chamada de LLM (`AgentConfig`, `workflows/shared/agents/agent_config.mh`). As variáveis `SENPAI_*` continuam como fallback para o uso pela CLI. A troca de agente segue recusada com uma geração em andamento.
 - Na troca de agente, a lista de modelos do novo agente é carregada em paralelo com a troca, não depois dela.
-
-#### Corrigido
-- Linux: um `mhl` já extraído que tivesse perdido a permissão de execução nunca era corrigido, porque o app só reescrevia o arquivo quando o conteúdo mudava, e o `mhl` falhava com "permission denied" em toda abertura. Agora a permissão é restaurada. Uma recusa de execução passa a explicar a causa: o arquivo sem permissão, ou a pasta montada com `noexec`, com a sugestão de usar `SENPAI_APPDATA_DIR`.
-- `build-linux.sh` passa a gerar também `dist/senpai-linux-<arch>[-rhel].tar.gz`, que preserva a permissão de execução. O binário solto a perde quando é levado por Drive, download do navegador ou e-mail.
-- O ícone de "Reconectar" continuava girando, e o botão desabilitado, por até 20 s depois de uma troca de modelo ou de agente, até a próxima checagem de status. As trocas não acionam mais esse indicador. Durante um reconectar de verdade, o status mostra "Reconectando…" em vez do último status, verde, de um `mhl` que já foi parado.
 
 ### 2026-10-07
 
