@@ -25,6 +25,9 @@ O formato segue o [Keep a Changelog](https://keepachangelog.com/pt-BR/1.1.0/). C
 - Trocar o agente ou o modelo (Devin, Codex, Claude) não reinicia mais o `mhl`, e a troca é instantânea; antes, cada troca custava ~7 s, revalidando todos os workflows. O app grava a escolha em `.senpai-agent.json`, na pasta de dados, e o `mhl` lê esse arquivo a cada chamada de LLM (`AgentConfig`, `workflows/shared/agents/agent_config.mh`). As variáveis `SENPAI_*` continuam como fallback para o uso pela CLI. A troca de agente segue recusada com uma geração em andamento.
 - Na troca de agente, a lista de modelos do novo agente é carregada em paralelo com a troca, não depois dela.
 
+#### Corrigido
+- O ícone de "Reconectar" continuava girando, e o botão desabilitado, por até 20 s depois de uma troca de modelo ou de agente, até a próxima checagem de status. As trocas não acionam mais esse indicador. Durante um reconectar de verdade, o status mostra "Reconectando…" em vez do último status, verde, de um `mhl` que já foi parado.
+
 ### 2026-10-07
 
 #### Adicionado

@@ -223,9 +223,17 @@ export async function mountShell(root) {
   let mainStarted = false;
 
   function renderMcpStatus(status) {
-    const dot = status.ready ? 'done' : 'failed';
-    const plain = status.ready ? `${status.name || 'mhl'} ${status.version || ''}`.trim() : status.error || 'MCP indisponível';
-    const html = status.ready ? `<b>${escapeHtml(status.name || 'mhl')}</b> ${escapeHtml(status.version || '')}` : escapeHtml(plain);
+    // While "Reconectar" runs, the old mhl is already gone (stopped in
+    // milliseconds) and the new one takes ~7s to validate the workflows:
+    // showing the last status there read as "connected, but the button is
+    // still spinning".
+    const dot = reconnecting ? 'working' : status.ready ? 'done' : 'failed';
+    const plain = reconnecting
+      ? 'Reconectando…'
+      : status.ready
+        ? `${status.name || 'mhl'} ${status.version || ''}`.trim()
+        : status.error || 'MCP indisponível';
+    const html = status.ready && !reconnecting ? `<b>${escapeHtml(status.name || 'mhl')}</b> ${escapeHtml(status.version || '')}` : escapeHtml(plain);
     // Shown even when status.ready is true, not just on a detected failure —
     // real gap this closes: /healthz is a plain GET, and Go's own
     // net/http.Transport transparently retries a GET on a fresh connection
@@ -279,10 +287,9 @@ export async function mountShell(root) {
   }
   setInterval(refreshMcpStatus, MCP_STATUS_POLL_MS);
 
-  // Agent picker — changing it needs a fresh mhl process to take effect
-  // (SENPAI_AGENT is only read at mhl's own startup, see mhlbridge.Start),
-  // so this reuses the exact same reconnect + status-render path as the
-  // "Reconectar" button above rather than a separate one.
+  // Agent picker — switching agent or model only rewrites the config the
+  // workflows read on every LLM call (app/agent_config.go): no mhl restart,
+  // so neither touches the "Reconectar" spinner.
   //
   // MODEL_CUSTOM_VALUE is a synthetic <option> that reveals the free-text
   // input instead of applying anything itself — every backend accepts it:
@@ -349,7 +356,6 @@ export async function mountShell(root) {
     if (!picker || !id) return;
     modelSelectEl.disabled = true;
     modelCustomApplyEl.disabled = true;
-    reconnecting = true;
     try {
       const next = await picker.set(id, modelsById.get(id));
       renderMcpStatus(next);
@@ -357,7 +363,6 @@ export async function mountShell(root) {
       renderMcpStatus({ ready: false, error: String(err) });
       LogFrontendError(`setModel(${agentSelectEl.value}): failed: ${err && err.stack ? err.stack : err}`).catch(() => {});
     } finally {
-      reconnecting = false;
       modelSelectEl.disabled = false;
       modelCustomApplyEl.disabled = false;
     }
@@ -439,7 +444,6 @@ export async function mountShell(root) {
     const previous = await getAgent().catch(() => '');
     const chosen = agentSelectEl.value;
     agentSelectEl.disabled = true;
-    reconnecting = true;
     // The new agent's model list (Devin/Codex call their CLI, ~2s) loads
     // while SetAgent runs, not after it. Discarded if the switch is refused.
     const listing = MODEL_PICKERS[chosen]?.list();
@@ -467,7 +471,6 @@ export async function mountShell(root) {
       renderMcpStatus(await mcpStatus().catch((statusErr) => ({ ready: false, error: String(statusErr) })));
       LogFrontendError(`setAgent: failed: ${err && err.stack ? err.stack : err}`).catch(() => {});
     } finally {
-      reconnecting = false;
       agentSelectEl.disabled = false;
     }
   });
