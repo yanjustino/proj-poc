@@ -5,6 +5,7 @@ import (
 	"os"
 	"os/exec"
 	"path/filepath"
+	"runtime"
 	"strings"
 	"testing"
 	"time"
@@ -133,5 +134,30 @@ func TestEnsureVendoredPdftotext_ExtractsARunnableBinary(t *testing.T) {
 	}
 	if !strings.Contains(string(out), "Ola Senpai") {
 		t.Fatalf("expected the PDF text in the output, got: %q", out)
+	}
+}
+
+// TestExtractIfChanged_RestoresTheExecBitOfAnUnchangedBinary: same bytes on
+// disk but without the exec bit (a copied or restored config folder) must
+// not be skipped as "already extracted" — that left mhl failing with
+// "permission denied" on every launch.
+func TestExtractIfChanged_RestoresTheExecBitOfAnUnchangedBinary(t *testing.T) {
+	if runtime.GOOS == "windows" {
+		t.Skip("no exec bit on Windows")
+	}
+	dest := filepath.Join(t.TempDir(), "mhl")
+	content := []byte("#!/bin/sh\necho ok\n")
+	if err := os.WriteFile(dest, content, 0o644); err != nil {
+		t.Fatalf("write: %v", err)
+	}
+	if err := extractIfChanged(dest, content, 0o755); err != nil {
+		t.Fatalf("extractIfChanged: %v", err)
+	}
+	info, err := os.Stat(dest)
+	if err != nil {
+		t.Fatalf("stat: %v", err)
+	}
+	if info.Mode().Perm()&0o111 != 0o111 {
+		t.Fatalf("mode = %v, want the exec bits restored", info.Mode().Perm())
 	}
 }

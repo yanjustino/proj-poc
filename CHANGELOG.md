@@ -26,6 +26,8 @@ O formato segue o [Keep a Changelog](https://keepachangelog.com/pt-BR/1.1.0/). C
 - Na troca de agente, a lista de modelos do novo agente é carregada em paralelo com a troca, não depois dela.
 
 #### Corrigido
+- Linux: um `mhl` já extraído que tivesse perdido a permissão de execução nunca era corrigido, porque o app só reescrevia o arquivo quando o conteúdo mudava, e o `mhl` falhava com "permission denied" em toda abertura. Agora a permissão é restaurada. Uma recusa de execução passa a explicar a causa: o arquivo sem permissão, ou a pasta montada com `noexec`, com a sugestão de usar `SENPAI_APPDATA_DIR`.
+- `build-linux.sh` passa a gerar também `dist/senpai-linux-<arch>[-rhel].tar.gz`, que preserva a permissão de execução. O binário solto a perde quando é levado por Drive, download do navegador ou e-mail.
 - O ícone de "Reconectar" continuava girando, e o botão desabilitado, por até 20 s depois de uma troca de modelo ou de agente, até a próxima checagem de status. As trocas não acionam mais esse indicador. Durante um reconectar de verdade, o status mostra "Reconectando…" em vez do último status, verde, de um `mhl` que já foi parado.
 
 ### 2026-10-07

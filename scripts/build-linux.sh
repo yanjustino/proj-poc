@@ -29,6 +29,12 @@
 # Saída:
 #   dist/linux-<arch>/senpai-app         (debian)
 #   dist/linux-amd64-rhel/senpai-app     (rhel)
+#   dist/senpai-linux-<arch>[-rhel].tar.gz — o mesmo executável empacotado.
+#     É este que deve ir para a máquina Linux: Drive, download pelo
+#     navegador, e-mail e pastas compartilhadas descartam a permissão de
+#     execução de um binário solto ("Permissão negada" ao abrir), e o tar
+#     a preserva. Na máquina de destino:
+#       tar -xzf senpai-linux-amd64.tar.gz && ./senpai-app
 set -euo pipefail
 
 ROOT="$(CDPATH= cd -P -- "$(dirname -- "${BASH_SOURCE[0]}")/.." && pwd)"
@@ -247,7 +253,11 @@ mkdir -p "$DIST_DIR"
 cp "$built_bin" "$FINAL_BIN"
 chmod 755 "$FINAL_BIN"
 
+ARCHIVE="$ROOT/dist/$OUTPUT_NAME.tar.gz"
+tar -C "$DIST_DIR" -czf "$ARCHIVE" senpai-app
+
 step "build concluído"
 echo "executável: $FINAL_BIN"
+echo "pacote:     $ARCHIVE (leve este para a máquina Linux — preserva a permissão de execução)"
 echo "versão:     $APP_VERSION"
 echo "tamanho:    $(du -h "$FINAL_BIN" | cut -f1)"

@@ -21,7 +21,11 @@ const workflowsMarker = "work_item/work_item.mh"
 
 // extractIfChanged writes content to dest only if dest doesn't exist yet or
 // its content differs (compared by sha256, cheap relative to the I/O it
-// avoids) — repeated app starts don't rewrite unchanged vendored files.
+// avoids) — repeated app starts don't rewrite unchanged vendored files. An
+// unchanged file still gets perm back if it lost it: a copied or restored
+// config folder (or a sync tool) can drop the exec bit while keeping the
+// bytes, and skipping on content alone left mhl failing with "permission
+// denied" on every launch, with nothing ever repairing it.
 //
 // Writes a temp file and renames it over dest, never rewriting dest in
 // place: on macOS, overwriting an executable in place while a process
@@ -36,6 +40,9 @@ func extractIfChanged(dest string, content []byte, perm os.FileMode) error {
 	}
 	if existing, err := os.ReadFile(dest); err == nil {
 		if sha256.Sum256(existing) == sha256.Sum256(content) {
+			if info, err := os.Stat(dest); err == nil && info.Mode().Perm()&perm != perm {
+				return os.Chmod(dest, info.Mode().Perm()|perm)
+			}
 			return nil
 		}
 	}

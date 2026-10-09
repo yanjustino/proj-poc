@@ -19,6 +19,7 @@ import (
 	"errors"
 	"fmt"
 	"io"
+	"io/fs"
 	"log"
 	"net"
 	"net/http"
@@ -268,7 +269,7 @@ func Start(ctx context.Context, mhlPath, workflowsDir, stateDir, dataDir, codexC
 	setProcessGroup(cmd)
 
 	if err := cmd.Start(); err != nil {
-		return nil, fmt.Errorf("mhlbridge: start mhl: %w", err)
+		return nil, fmt.Errorf("mhlbridge: start mhl: %w%s", err, permissionHint(err, mhlPath))
 	}
 	// Windows: mhl (and every agent it spawns from now on) goes into a Job
 	// Object killed when this app's handle to it closes — on Stop(), but
@@ -891,4 +892,20 @@ func (w *logLineWriter) Write(p []byte) (int, error) {
 		}
 	}
 	return len(p), nil
+}
+
+// permissionHint explains an exec refused with "permission denied". The app
+// writes the binary with 0755 (and restores it, see extractIfChanged), so on
+// Linux what is left is usually the folder being on a filesystem mounted
+// noexec (a hardened /home, a shared folder of a VM, removable media) —
+// fixed by moving the app data with SENPAI_APPDATA_DIR.
+func permissionHint(err error, path string) string {
+	if !errors.Is(err, fs.ErrPermission) {
+		return ""
+	}
+	if info, statErr := os.Stat(path); statErr == nil && info.Mode().Perm()&0o111 == 0 {
+		return fmt.Sprintf(" — %s não tem permissão de execução (chmod +x)", path)
+	}
+	return fmt.Sprintf(" — %s tem permissão de execução, então a pasta provavelmente está num sistema de arquivos montado com noexec; "+
+		"aponte SENPAI_APPDATA_DIR para uma pasta que permita executar programas e abra o app de novo", path)
 }
