@@ -15,9 +15,14 @@ export tool Paths {
         return project_id
     }
 
+    // Recusa um SEGMENTO ".." (subir de pasta), nao a sequencia ".." em
+    // qualquer lugar: um nome como "Agende conforme a necessidade..docx.md"
+    // (frase terminada em ponto + extensao) e um arquivo legitimo e era
+    // recusado na ingestao. A barra invertida tambem conta como separador,
+    // porque no Windows ela tambem sobe de pasta.
     internal ensure_safe_relative(relative: string): string {
-        if (relative.contains("..")) fail("caminho relativo invalido (contem '..'): '" + relative + "'")
-        if (relative.starts_with("/")) fail("caminho relativo nao pode ser absoluto: '" + relative + "'")
+        if (relative.replace("\\", "/").split("/").contains("..")) fail("caminho relativo invalido (contem '..'): '" + relative + "'")
+        if (relative.starts_with("/") || relative.starts_with("\\")) fail("caminho relativo nao pode ser absoluto: '" + relative + "'")
         return relative
     }
 
@@ -98,5 +103,23 @@ test PathsSpec {
         } catch (err) {
             is_true(true)
         }
+    }
+
+    describe a_backslash_traversal_or_absolute_path_is_rejected_too {
+        for (var relative in ["..\\..\\etc\\passwd", "a\\..\\b", "..", "a/..", "/etc/passwd", "\\etc"]) {
+            var raised = ""
+            try { Paths.raw("wi_1", relative) } catch (err) { raised = "${err}" }
+            is_false(raised.is_empty())
+        }
+    }
+
+    // Regressao: "...a necessidade..docx.md" era recusado como traversal.
+    describe dots_inside_a_file_name_are_not_traversal {
+        are_equal(
+            Paths.raw("wi_1", "WAR - Novo pedido. Agende conforme a necessidade..docx.md"),
+            "projects/wi_1/raw/WAR - Novo pedido. Agende conforme a necessidade..docx.md"
+        )
+        are_equal(Paths.raw("wi_1", "versao...final.pdf"), "projects/wi_1/raw/versao...final.pdf")
+        are_equal(Paths.artifact("wi_1", "adr/..oculto.html"), "projects/wi_1/artifacts/adr/..oculto.html")
     }
 }
