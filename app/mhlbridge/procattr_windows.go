@@ -19,3 +19,7 @@ func setProcessGroup(cmd *exec.Cmd) {
 		HideWindow:    true,
 	}
 }
+
+// detachFromTerminal: no Windows nao ha terminal de controle nem SIGTTIN, e
+// loginShellPath nem e chamado (enrichedEnv retorna antes).
+func detachFromTerminal(*exec.Cmd) {}

@@ -25,6 +25,8 @@ func main() {
 		defer logFile.Close()
 	}
 	log.Printf("senpai version: %s", currentAppVersion())
+	logStartupEnvironment()
+	startMainLoopWatchdog()
 
 	// Create an instance of the app structure
 	app := NewApp()
@@ -40,8 +42,13 @@ func main() {
 			Assets: assets,
 		},
 		BackgroundColour: &options.RGBA{R: 255, G: 255, B: 255, A: 1},
-		OnStartup:        app.startup,
-		OnShutdown:       app.shutdown,
+		// O log interno do Wails vai para o app.log (diagnostics.go); num build
+		// de producao ele so registrava ERROR, e no stdout.
+		Logger:             wailsLogger{},
+		LogLevel:           wailsLogLevel(),
+		LogLevelProduction: wailsLogLevel(),
+		OnStartup:          app.startup,
+		OnShutdown:         app.shutdown,
 		Bind: []interface{}{
 			app,
 		},
@@ -58,6 +65,6 @@ func main() {
 	})
 
 	if err != nil {
-		println("Error:", err.Error())
+		log.Printf("wails.Run: %v", err)
 	}
 }

@@ -90,13 +90,29 @@ func loginShellPath(ctx context.Context) (string, bool) {
 	}
 	timeoutCtx, cancel := context.WithTimeout(ctx, 3*time.Second)
 	defer cancel()
-	cmd := exec.CommandContext(timeoutCtx, shell, "-ilc", `echo -n "$PATH"`)
+	cmd := loginShellCommand(timeoutCtx, shell)
+	began := time.Now()
+	log.Printf("mhlbridge: lendo o PATH do login shell (%s -ilc)", shell)
 	out, err := cmd.Output()
 	if err != nil {
+		log.Printf("mhlbridge: login shell falhou em %s: %v", time.Since(began).Round(time.Millisecond), err)
 		return "", false
 	}
+	log.Printf("mhlbridge: login shell respondeu em %s", time.Since(began).Round(time.Millisecond))
 	path := strings.TrimSpace(string(out))
 	return path, path != ""
+}
+
+// loginShellCommand: o comando de loginShellPath, isolado do terminal do app
+// (detachFromTerminal — um shell interativo com controle de jobs chegava a
+// parar o app inteiro). WaitDelay: um ~/.bashrc que deixe um processo em
+// segundo plano herdando o stdout (ssh-agent, gpg-agent, ...) faria Output()
+// esperar esse pipe fechar para sempre, mesmo depois do timeout matar o shell.
+func loginShellCommand(ctx context.Context, shell string) *exec.Cmd {
+	cmd := exec.CommandContext(ctx, shell, "-ilc", `echo -n "$PATH"`)
+	detachFromTerminal(cmd)
+	cmd.WaitDelay = time.Second
+	return cmd
 }
 
 // logAgentBinaries registra no app.log qual executável de cada CLI de agente

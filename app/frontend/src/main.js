@@ -31,6 +31,14 @@ window.addEventListener('unhandledrejection', (event) => {
   reportError('unhandled rejection', event.reason);
 });
 
+// No Linux (WebKitGTK) window.alert abre um pop-up nativo de verdade; o
+// texto dele tambem vai para o app.log, como o de ShowWarningDialog.
+const nativeAlert = window.alert.bind(window);
+window.alert = (message) => {
+  LogFrontendError(`alert: ${message}`).catch(() => {});
+  nativeAlert(message);
+};
+
 mountShell(document.getElementById('app')).catch((err) => {
   reportError('mountShell failed', err);
   document.getElementById('app').innerHTML =

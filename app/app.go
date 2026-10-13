@@ -435,6 +435,9 @@ func (a *App) SetAgent(agent string) (string, error) {
 // callers that need a rejection actually seen — not just logged or tucked
 // into a small status line easy to miss — call this instead.
 func (a *App) ShowWarningDialog(title, message string) {
+	// O texto do pop-up tambem vai para o app.log: o print da tela nem
+	// sempre chega junto com o relato.
+	log.Printf("dialog: %s: %s", title, message)
 	if _, err := runtime.MessageDialog(a.ctx, runtime.MessageDialogOptions{
 		Type:    runtime.WarningDialog,
 		Title:   title,
@@ -908,7 +911,19 @@ func setupFileLogging() (*os.File, error) {
 	if err != nil {
 		return nil, err
 	}
-	log.SetOutput(io.MultiWriter(os.Stderr, f))
+	// Um panic do Go (inclusive numa goroutine do Wails, antes de qualquer
+	// log nosso) escreve so no stderr: sem isto, uma falha na abertura
+	// fechava o app sem deixar rastro no app.log.
+	if err := debug.SetCrashOutput(f, debug.CrashOptions{}); err != nil {
+		log.Printf("could not route crash output to %s: %v", path, err)
+	}
+	// Com o fd 2 ja apontando para o arquivo (Linux, fora de um terminal), o
+	// MultiWriter escreveria cada linha duas vezes.
+	if redirectNativeStderr(f) {
+		log.SetOutput(f)
+	} else {
+		log.SetOutput(io.MultiWriter(os.Stderr, f))
+	}
 	log.Printf("logging to %s", path)
 	return f, nil
 }
