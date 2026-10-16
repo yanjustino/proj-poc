@@ -7,9 +7,7 @@ import { Fixture } from "../shared/core/fixture.mh"
 import { ArtifactFlow, Level } from "../artifact_flow/artifact_flow.mh"
 import { ComiteFixtures } from "comite_model.mh"
 
-// `mode` e do Delivery e `feature_id` do Discovery; fixados aqui so para
-// sair do contrato do Comite.
-workflow Comite = ArtifactFlow with { level: Level.comite, mode: "feature", feature_id: "" } {
+workflow Comite = ArtifactFlow with { level: Level.comite } {
     description: "Artefatos do Comite de Arquitetura (WAR) a partir das transcricoes das reunioes: demanda, rfc, decisoes (ADRs), artefatos (executaveis), metricas; cada aprovacao refaz o export Markdown em artifacts/export/comite-arquitetura/."
 }
 

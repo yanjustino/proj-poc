@@ -140,7 +140,7 @@ export async function renderWorkItemView(container, project, { initialTab = 'art
     for (const { key, status } of llmJobsForProject(project.id)) {
       if (status.runId) seenRunIds.add(status.runId);
       if (status.state === 'working' || status.state === 'queued') {
-        live.push({ state: status.state, artifact: status.vars?.artifact || key.slice(project.id.length + 1) });
+        live.push({ state: status.state, artifact: status.vars?.artifact || status.vars?.current_artifact || key.slice(project.id.length + 1) });
       }
     }
     const ingest = ingestQueueSnapshot(project.id);
