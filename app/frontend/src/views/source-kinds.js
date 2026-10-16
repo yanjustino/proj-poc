@@ -10,9 +10,10 @@
 // `extensions` must stay a subset of what RawExtract accepts
 // (workflows/shared/wiki/raw_extract.mh: plain_text_extensions + .pdf) —
 // a file the picker offers but the ingest rejects only fails later, mid-run.
-// The exceptions are OFFICE_EXTENSIONS and HTML_EXTENSIONS: AddRawFile
-// converts those to Markdown on upload (app/office_source.go,
-// app/html_source.go), so RawExtract only ever sees the .md.
+// The exceptions are OFFICE_EXTENSIONS, HTML_EXTENSIONS and
+// DRAWIO_EXTENSIONS: AddRawFile converts those to Markdown on upload
+// (app/office_source.go, app/html_source.go, app/drawio_source.go), so
+// RawExtract only ever sees the .md.
 const CODE_EXTENSIONS = [
   '.py', '.go', '.cs', '.java', '.kt', '.js', '.jsx', '.ts', '.tsx', '.rb', '.php', '.rs',
   '.swift', '.c', '.h', '.cpp', '.hpp', '.sh', '.xml', '.proto', '.graphql', '.tf',
@@ -20,6 +21,7 @@ const CODE_EXTENSIONS = [
 
 const OFFICE_EXTENSIONS = ['.docx', '.pptx', '.xlsx'];
 const HTML_EXTENSIONS = ['.html', '.htm', '.xhtml'];
+const DRAWIO_EXTENSIONS = ['.drawio', '.dio'];
 
 export const SOURCE_KINDS = [
   {
@@ -97,6 +99,21 @@ export const SOURCE_KINDS = [
       'Tabelas complexas podem perder a formatação na extração.',
     ],
     extensions: ['.pdf'],
+    actions: ['files'],
+  },
+  {
+    id: 'diagram',
+    icon: 'layers',
+    label: 'Diagrama (draw.io)',
+    wish: 'Quero inserir um diagrama',
+    teaser: 'Arquitetura, fluxos e integrações desenhados no draw.io.',
+    why: 'Um diagrama mostra o que o texto raramente diz de uma vez: quais componentes existem, como se agrupam e quem fala com quem — a wiki ganha as relações entre eles.',
+    tips: [
+      'Envie o arquivo .drawio (ou .dio) — não uma exportação em PNG ou PDF: só o arquivo original traz elementos e conexões.',
+      'Rotule os elementos e as setas: um componente sem nome entra só pelo tipo do ícone, e uma seta sem rótulo diz que há ligação, mas não o quê.',
+      'Cada página do diagrama vira uma seção; a wiki guarda também uma versão Mermaid do desenho. Cores e posições não entram.',
+    ],
+    extensions: DRAWIO_EXTENSIONS,
     actions: ['files'],
   },
   {
@@ -193,13 +210,14 @@ export function sourceKind(id) {
 // kindOfFile: best-effort kind for an existing raw/ file, by extension —
 // only drives the icon on the Fontes cards/table. Converted Office files are
 // "<name>.docx.md" (or "<name>.docx (2).md" when de-duplicated), local HTML
-// pages "<name>.html.md". Pasted text
+// pages "<name>.html.md", draw.io diagrams "<name>.drawio.md". Pasted text
 // is always .md, so a pasted transcript or note shows as Markdown; that's fine.
 export function kindOfFile(name) {
   const lower = name.toLowerCase();
   const ext = lower.includes('.') ? lower.slice(lower.lastIndexOf('.')) : '';
   if (OFFICE_EXTENSIONS.includes(ext) || /\.(docx|pptx|xlsx)( \(\d+\))?\.md$/.test(lower)) return sourceKind('office');
   if (HTML_EXTENSIONS.includes(ext) || /\.(html|htm|xhtml)( \(\d+\))?\.md$/.test(lower)) return sourceKind('web');
+  if (DRAWIO_EXTENSIONS.includes(ext) || /\.(drawio|dio)( \(\d+\))?\.md$/.test(lower)) return sourceKind('diagram');
   if (ext === '.pdf') return sourceKind('pdf');
   if (ext === '.md') return sourceKind('markdown');
   if (ext === '.txt') return sourceKind('transcript');

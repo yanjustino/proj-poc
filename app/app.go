@@ -1595,9 +1595,9 @@ func (a *App) SelectRawFilesFiltered(title string, label string, pattern string)
 // basename (de-duplicated if a file with that name already exists), and
 // returns the resulting basename — exactly the value a caller should put in
 // Wiki's `raw_paths: [...]` (Paths.raw only ever concatenates "raw/" + this
-// name; see workflows/shared/core/paths.mh). Office files (.docx/.pptx/.xlsx)
-// and local HTML pages (.html/.htm/.xhtml) are converted to Markdown instead
-// of copied, and saved as "<name>.md".
+// name; see workflows/shared/core/paths.mh). Office files (.docx/.pptx/.xlsx),
+// local HTML pages (.html/.htm/.xhtml) and draw.io diagrams (.drawio/.dio)
+// are converted to Markdown instead of copied, and saved as "<name>.md".
 func (a *App) AddRawFile(projectID string, sourcePath string) (string, error) {
 	rawDir, err := a.projectRootDir(projectID, "raw", []string{"raw"})
 	if err != nil {
@@ -1621,6 +1621,19 @@ func (a *App) AddRawFile(projectID string, sourcePath string) (string, error) {
 		dest := uniqueDestination(rawDir, base+".md")
 		if err := os.WriteFile(dest, body, 0o644); err != nil {
 			return "", fmt.Errorf("write converted office source: %w", err)
+		}
+		return filepath.Base(dest), nil
+	}
+
+	if isDrawioSource(base) {
+		// Same reason as Office: RawExtract never sees a .drawio (drawio_source.go).
+		body, err := convertDrawioSource(sourcePath)
+		if err != nil {
+			return "", err
+		}
+		dest := uniqueDestination(rawDir, base+".md")
+		if err := os.WriteFile(dest, body, 0o644); err != nil {
+			return "", fmt.Errorf("write converted drawio source: %w", err)
 		}
 		return filepath.Base(dest), nil
 	}

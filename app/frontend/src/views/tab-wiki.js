@@ -6,6 +6,7 @@ import { renderMarkdown } from '../markdown.js';
 import { createRunTracker } from '../run-tracker.js';
 import { showMarkdownDoc, showHtmlDoc, showEmpty, setFooter, beginCustom, setToolbarAction } from '../reading-pane.js';
 import { icon } from '../icons.js';
+import { hasMermaidDiagram, inlineMermaid } from '../mermaid-inline.js';
 import { sendButtonHtml, enhanceComposer } from '../composer.js';
 import { formatRelativeTime } from '../time-format.js';
 
@@ -230,7 +231,8 @@ export async function renderWikiTab(container, project) {
         // O .md é só para "ver markdown" — se faltar, a página abre sem o botão.
         readProjectFile(project.id, root, relative).catch(() => undefined),
       ]);
-      showHtmlDoc(label, html, { allowScripts: true, markdown });
+      // Uma pagina com diagrama (fonte draw.io) usa a lib mermaid embutida.
+      showHtmlDoc(label, html, { allowScripts: true, markdown, mermaid: hasMermaidDiagram(html), inlineMermaid });
     } catch {
       // wiki/html pode ainda não existir pra um work-item cuja wiki foi
       // ingerida antes de sync_html existir e cujo sync no mount (abaixo)

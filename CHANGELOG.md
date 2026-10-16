@@ -9,6 +9,13 @@ O formato segue o [Keep a Changelog](https://keepachangelog.com/pt-BR/1.1.0/). C
 ### 2026-10-16
 
 #### Adicionado
+- Fontes do tipo diagrama draw.io (`.drawio` e `.dio`), pelo novo tipo "Diagrama (draw.io)" do seletor de fontes. No envio, o arquivo é convertido para Markdown (`app/drawio_source.go`), como já acontece com Office e HTML. Cada página do diagrama vira uma seção com:
+  - os elementos, com rótulo sem HTML, o tipo lido do estilo (banco de dados, ator, ícones AWS/Azure/GCP…), dicas e propriedades personalizadas;
+  - os contêineres e swimlanes como lista aninhada;
+  - as conexões com os nomes já resolvidos (`API → Fila: publica`);
+  - os textos soltos do desenho.
+  
+  Páginas comprimidas pelo draw.io são descomprimidas. Um fluxograma Mermaid equivalente entra como trecho literal na página da fonte na wiki, e a aba Wiki passa a desenhar blocos ` ```mermaid `. Diagramas acima de 150 elementos ou 300 conexões ficam sem o Mermaid, mas mantêm as listas completas.
 - Anotações nas fontes: cada fonte da aba Fontes ganha a ação "Anotar", em que você registra imprecisões, contradições ou concepções equivocadas do texto dela e a versão correta. A anotação fica em `raw/.annotations.json` e prevalece sobre o texto da fonte na wiki:
   - numa fonte pendente, entra na ingestão: a síntese e os fatos já saem corrigidos, e cada fato que veio dela cita "(conforme anotação do usuário)";
   - numa fonte já ingerida, "Aplicar anotação" roda a nova ação `annotate` do workflow `Wiki`. Ela grava os fatos corrigidos e roda uma verificação que marca como "Superado por sources/<fonte>" os trechos que a anotação desmente, inclusive na síntese da própria fonte.
