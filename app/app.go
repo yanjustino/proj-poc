@@ -1791,6 +1791,10 @@ func (a *App) MarkRawIngested(projectID string, filename string) (string, error)
 	if err := writeIngestedRaw(rawDir, names); err != nil {
 		return "", err
 	}
+	// The ingest read the source's annotation (if any) into the wiki.
+	if err := markAnnotationApplied(rawDir, filename); err != nil {
+		return "", err
+	}
 	body, err := json.Marshal(names)
 	if err != nil {
 		return "", fmt.Errorf("encode ingested marker: %w", err)

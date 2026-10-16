@@ -14,6 +14,7 @@ ${catalog_content}
 
 Antes de listar uma entidade ou um conceito, procure-o nesta lista. Se o assunto já tem página — mesmo que a fonte use outro nome, uma sigla ou um nível de detalhe diferente —, use o título exatamente como aparece na lista e coloque em `aliases` o nome que a fonte usa. Crie um título novo só para um assunto que de fato não está na lista. Prefira títulos curtos e gerais ("Compliance regulatório") a títulos que juntam dois assuntos ("Compliance e auditoria") ou que repetem um detalhe ("SLA 99,9%" é um fato de "Alta disponibilidade", não uma página).
 
+${annotation_block}
 ## Conteúdo da fonte
 
 ${source_text}

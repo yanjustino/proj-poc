@@ -279,6 +279,19 @@ export async function markRawIngested(projectId, filename) {
   return parseJSON(await App.MarkRawIngested(projectId, filename), 'MarkRawIngested');
 }
 
+// Annotations: {filename: {text, updatedAt, applied}} — see app/source_annotations.go.
+export async function listRawAnnotations(projectId) {
+  return parseJSON(await App.ListRawAnnotations(projectId), 'ListRawAnnotations');
+}
+
+export async function setRawAnnotation(projectId, filename, text) {
+  return parseJSON(await App.SetRawAnnotation(projectId, filename, text), 'SetRawAnnotation');
+}
+
+export async function markRawAnnotationApplied(projectId, filename) {
+  return parseJSON(await App.MarkRawAnnotationApplied(projectId, filename), 'MarkRawAnnotationApplied');
+}
+
 // removeRawSource: {wasIngested, staleSources} — see app/wiki_rebuild.go.
 export async function removeRawSource(projectId, filename) {
   return parseJSON(await App.RemoveRawSource(projectId, filename), 'RemoveRawSource');

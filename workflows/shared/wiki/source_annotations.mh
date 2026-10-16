@@ -1,0 +1,114 @@
+// tool SourceAnnotations — anotacoes que o usuario faz sobre uma fonte
+// (correcoes de imprecisoes ou contradicoes do texto dela). O app grava
+// raw/.annotations.json (app/source_annotations.go); a wiki so le. A
+// anotacao entra no prompt do ingest/annotate e, por codigo (nunca pela
+// LLM), numa secao propria no fim da pagina da fonte — e o trecho que o lint
+// cita como `resolution_quote` ao marcar um fato como superado por ela.
+
+import { Paths } from "../core/paths.mh"
+import { Fixture } from "../core/fixture.mh"
+import { WikiAlerts } from "wiki_alerts.mh"
+import { RawExtract } from "raw_extract.mh"
+
+export tool SourceAnnotations {
+    heading(): string -> "## Anotações do usuário"
+
+    // Texto da anotacao de raw/<source_name> ("" quando nao ha).
+    text(project_id: string, source_name: string): string {
+        var path = Paths.raw(project_id, ".annotations.json")
+        if (!fs.exists(path)) return ""
+        var entry = json.parse(fs.read(path)).get(source_name, null)
+        return (entry?.text ?? "").trim()
+    }
+
+    // Bloco do prompt: vazio sem anotacao, para o prompt ficar igual ao de
+    // antes desta funcionalidade.
+    prompt_block(annotation: string): string {
+        if (annotation.trim().is_empty()) return ""
+        return "\n## Anotações do usuário sobre esta fonte\n\nO usuário revisou esta fonte e registrou as correções abaixo. Elas prevalecem sobre o texto da fonte: onde os dois divergem, use a versão da anotação, tanto na síntese quanto nos fatos de entidades e conceitos, e termine cada fato que vier dela com \"(conforme anotação do usuário)\". Nunca registre como fato o que a anotação diz estar errado. A anotação é copiada automaticamente para a página da fonte: não a reproduza na `source_summary`.\n\n" + self.quote(annotation) + "\n"
+    }
+
+    // Secao da pagina da fonte — sempre a ultima antes do bloco de alertas,
+    // para section_replaced achar o fim dela sem parser de markdown.
+    section(annotation: string, date: string): string {
+        if (annotation.trim().is_empty()) return ""
+        return "\n" + self.heading() + "\n\nAnotação registrada em " + date + ". Prevalece sobre o texto original desta fonte onde os dois divergem.\n\n" + self.quote(annotation) + "\n"
+    }
+
+    // A pagina com a secao de anotacao trocada por `section` (ou removida,
+    // com section vazia), mantendo os alertas da revisao no fim.
+    section_replaced(page: string, section: string): string {
+        var body = WikiAlerts.strip(page)
+        var marker = "\n" + self.heading() + "\n"
+        if (body.contains(marker)) body = body.split(marker)[0]
+        var tail = WikiAlerts.tail(page)
+        var out = body.trim() + "\n" + section
+        return if (tail.is_empty()) out else out.trim() + "\n\n" + tail
+    }
+
+    // annotate de uma fonte sem vinculo no indice: lista as paginas de fonte candidatas e o inicio do arquivo anotado,
+    // para a LLM apontar qual pagina veio dele.
+    unlinked_source_block(project_id: string, source_name: string, candidates: any[]): string {
+        var text = RawExtract.text(Paths.raw(project_id, source_name))
+        var excerpt = if (text.size() > 3000) text.substring(0, 3000) + "\n[…]" else text
+        return "Esta fonte foi ingerida antes de a wiki registrar de qual arquivo veio cada página de fonte. Primeiro identifique qual destas páginas é a dela, comparando com o início do arquivo, e devolva a referência em `source_page` (exatamente como na lista):\n\n" +
+            candidates.map((e) -> "- sources/" + e.slug + " — " + e.title + ": " + e.summary).join("\n") +
+            "\n\n### Início do arquivo " + source_name + "\n\n" + excerpt
+    }
+
+    // Texto livre do usuario: um titulo (#) no meio dele quebraria a regra
+    // "secao de anotacao e a ultima", entao os # iniciais saem.
+    internal quote(annotation: string): string ->
+        annotation.trim().split("\n").map((line) -> {
+            if (!line.starts_with("#")) return line
+            var l = line
+            while (l.starts_with("#")) l = l.substring(1, l.size())
+            return l.trim()
+        }).join("\n")
+}
+
+test SourceAnnotationsSpec {
+    describe unlinked_source_block_lists_the_candidates_and_the_start_of_the_file {
+        var id = Fixture.project("spec-test-source-annotations-unlinked")
+        dir.create(Paths.raw_dir(id))
+        fs.write(Paths.raw(id, "cnh.md"), "# CNH digital\n\nTexto da fonte.")
+        var block = SourceAnnotations.unlinked_source_block(id, "cnh.md", [{slug: "cnh-e", title: "CNH-e", summary: "carteira digital"}])
+        is_true(block.contains("- sources/cnh-e — CNH-e: carteira digital"))
+        is_true(block.contains("### Início do arquivo cnh.md\n\n# CNH digital"))
+        Fixture.drop(id)
+    }
+
+    describe text_reads_the_annotation_of_one_source {
+        var id = Fixture.project("spec-test-source-annotations")
+        dir.create(Paths.raw_dir(id))
+        are_equal(SourceAnnotations.text(id, "ata.md"), "")
+        fs.write(Paths.raw(id, ".annotations.json"), json.stringify({"ata.md": {text: "  O prazo é D+2, não D+1.  ", applied: false}}))
+        are_equal(SourceAnnotations.text(id, "ata.md"), "O prazo é D+2, não D+1.")
+        are_equal(SourceAnnotations.text(id, "outra.md"), "")
+        Fixture.drop(id)
+    }
+
+    describe prompt_block_is_empty_without_an_annotation {
+        are_equal(SourceAnnotations.prompt_block("  "), "")
+        is_true(SourceAnnotations.prompt_block("O prazo é D+2").contains("prevalecem sobre o texto da fonte"))
+    }
+
+    describe section_drops_heading_marks_from_the_user_text {
+        are_equal(
+            SourceAnnotations.section("## Errado\nO prazo é D+2", "2026-10-16"),
+            "\n## Anotações do usuário\n\nAnotação registrada em 2026-10-16. Prevalece sobre o texto original desta fonte onde os dois divergem.\n\nErrado\nO prazo é D+2\n"
+        )
+    }
+
+    describe section_replaced_swaps_the_old_section_and_keeps_the_alerts_last {
+        var page = "# Ata\n\nResumo.\n\n## Anotações do usuário\n\nvelha\n\n## Alertas da revisão\n\n- Contradição com sources/b: x\n"
+        are_equal(
+            SourceAnnotations.section_replaced(page, "\n## Anotações do usuário\n\nnova\n"),
+            "# Ata\n\nResumo.\n\n## Anotações do usuário\n\nnova\n\n## Alertas da revisão\n\n- Contradição com sources/b: x\n"
+        )
+    }
+
+    describe section_replaced_appends_to_a_page_without_annotation_or_alerts {
+        are_equal(SourceAnnotations.section_replaced("# Ata\n\nResumo.\n", "\n## Anotações do usuário\n\nnova\n"), "# Ata\n\nResumo.\n\n## Anotações do usuário\n\nnova\n")
+    }
+}

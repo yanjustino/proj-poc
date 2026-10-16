@@ -9,17 +9,20 @@ import {
   markRawIngested,
   removeRawSource,
   wikiStaleSources,
+  listRawAnnotations,
+  markRawAnnotationApplied,
 } from '../api.js';
 import { openConfirmModal } from './confirm-modal.js';
 import { openAddTextSourceModal } from './add-text-source-modal.js';
 import { openAddUrlSourceModal } from './add-url-source-modal.js';
 import { openAddRepoSourceModal } from './add-repo-source-modal.js';
+import { openAnnotateSourceModal } from './annotate-source-modal.js';
 import { openAddSourcePicker, kindCardHtml } from './add-source-picker.js';
 import { SOURCE_KINDS, kindOfFile, filePattern } from './source-kinds.js';
 import { createRunTracker } from '../run-tracker.js';
 import { icon } from '../icons.js';
 import { getActiveRun, clearActiveRun } from '../active-runs.js';
-import { enqueueIngest, ingestFailure, ingestQueueSnapshot, isQueuedOrRunning, subscribeIngestQueue } from '../ingest-queue.js';
+import { enqueueIngest, enqueueAnnotation, ingestFailure, ingestQueueSnapshot, isQueuedOrRunning, queuedAction, activeRunKey, subscribeIngestQueue } from '../ingest-queue.js';
 import { confirmRebuildWiki } from './rebuild-wiki.js';
 import { formatRelativeTime } from '../time-format.js';
 
@@ -54,6 +57,12 @@ import { formatRelativeTime } from '../time-format.js';
 // the wiki (pages don't record which source said what): the wiki is flagged
 // as carrying content from removed sources until the person rebuilds it
 // (rebuildWiki — see app/wiki_rebuild.go).
+//
+// A source can carry the person's annotation (annotate-source-modal.js):
+// corrections to inaccuracies or contradictions in its text, which win over
+// it in the wiki. A pending source takes it in when ingested; for one
+// already ingested, "Aplicar anotação" runs Wiki's annotate action through
+// the same queue (enqueueAnnotation).
 export async function renderFontesTab(container, project, { onChanged }) {
   // Flipped off by the dispose() this returns — guards a status callback
   // that outlives this mount from touching torn-down DOM.
@@ -120,6 +129,8 @@ export async function renderFontesTab(container, project, { onChanged }) {
   let ingestedNames = new Set();
   // Ingested sources removed since the last rebuild (raw/.wiki-stale.json).
   let staleSources = [];
+  // {filename: {text, updatedAt, applied}} — raw/.annotations.json.
+  let annotations = {};
   let activeFilter = 'all';
   // trackers: filename -> live tracker. Either the queue's current run
   // (mirrored from ingest-queue.js's status events, one tracker per mount)
@@ -130,8 +141,8 @@ export async function renderFontesTab(container, project, { onChanged }) {
   // Keyed by project + filename (not just filename) so this stays correct
   // even though active-runs.js's registry is a single app-wide map shared
   // by every work-item's Fontes tab.
-  function activeKey(name) {
-    return `${project.id}:raw:${name}`;
+  function activeKey(name, action = 'ingest') {
+    return activeRunKey(project.id, name, action);
   }
 
   await loadState();
@@ -192,6 +203,12 @@ export async function renderFontesTab(container, project, { onChanged }) {
       console.error('wikiStaleSources', err);
       staleSources = [];
     }
+    try {
+      annotations = await listRawAnnotations(project.id);
+    } catch (err) {
+      console.error('listRawAnnotations', err);
+      annotations = {};
+    }
     rawNodes = nodes;
     rawNames = nodes.map((node) => node.name);
     ingestedNames = new Set(ingestedList);
@@ -214,6 +231,56 @@ export async function renderFontesTab(container, project, { onChanged }) {
   // (a rebuild re-reads the ingested list it is working through).
   function canRemove(name) {
     return !isBusy(name) && !rebuildState();
+  }
+
+  // An annotation the wiki doesn't hold yet, on a source already in it.
+  function annotationPending(name) {
+    const annotation = annotations[name];
+    return Boolean(annotation && !annotation.applied && ingestedNames.has(name));
+  }
+
+  function canAnnotate(name) {
+    return !isBusy(name) && !rebuildState();
+  }
+
+  async function annotate(name) {
+    if (!canAnnotate(name)) return;
+    const ingested = ingestedNames.has(name);
+    const result = await openAnnotateSourceModal(project, name, { annotation: annotations[name] ?? null, ingested });
+    if (!result) return;
+    annotations = result.annotations;
+    if (result.apply) {
+      if (ingested) enqueueAnnotation(project.id, name);
+      else enqueueIngest(project.id, [name]);
+    }
+    render();
+  }
+
+  function annotateButtonHtml(name, className) {
+    if (!canAnnotate(name)) return '';
+    const label = annotations[name] ? 'Editar anotação' : 'Anotar fonte';
+    return `<button class="${className}" data-annotate-one="${escapeAttribute(name)}" title="${label}" aria-label="${label}: ${escapeAttribute(name)}">${icon('edit', 13)}</button>`;
+  }
+
+  // annotationBadgeHtml: whether the source carries an annotation, and if
+  // the wiki still lacks it; the text itself is the tooltip.
+  function annotationBadgeHtml(name) {
+    const annotation = annotations[name];
+    if (!annotation) return '';
+    const pending = annotationPending(name);
+    return `<span class="source-annotation-badge ${pending ? 'pending' : ''}" title="${escapeAttribute(annotation.text)}">${icon('edit', 11)}${pending ? 'Anotação pendente' : 'Anotada'}</span>`;
+  }
+
+  function bindRowActions() {
+    sourcesEl.querySelectorAll('[data-remove-one]').forEach((button) => {
+      button.addEventListener('click', () => confirmRemove(button.dataset.removeOne));
+    });
+    sourcesEl.querySelectorAll('[data-annotate-one]').forEach((button) => {
+      button.addEventListener('click', () => annotate(button.dataset.annotateOne));
+    });
+    sourcesEl.querySelectorAll('[data-apply-annotation]').forEach((button) => {
+      button.addEventListener('click', () => enqueueAnnotation(project.id, button.dataset.applyAnnotation));
+    });
   }
 
   function pendingNames() {
@@ -304,12 +371,6 @@ export async function renderFontesTab(container, project, { onChanged }) {
     onChanged();
   }
 
-  function bindRemoveButtons() {
-    sourcesEl.querySelectorAll('[data-remove-one]').forEach((button) => {
-      button.addEventListener('click', () => confirmRemove(button.dataset.removeOne));
-    });
-  }
-
   function removeButtonHtml(name, className) {
     if (!canRemove(name)) return '';
     return `<button class="${className}" data-remove-one="${escapeAttribute(name)}" title="Remover fonte" aria-label="Remover ${escapeAttribute(name)}">${icon('trash', 13)}</button>`;
@@ -343,7 +404,7 @@ export async function renderFontesTab(container, project, { onChanged }) {
       sourcesEl.appendChild(row);
       const tracker = trackers.get(name);
       if (tracker) {
-        row.innerHTML = sourceCardBody(name, 'Processando a fonte…', 'working');
+        row.innerHTML = sourceCardBody(name, queuedAction(project.id, name) === 'annotate' ? 'Aplicando a anotação…' : 'Processando a fonte…', 'working');
         row.appendChild(tracker.element);
         row.appendChild(tracker.composer);
       } else if (isQueuedOrRunning(project.id, name)) {
@@ -354,7 +415,7 @@ export async function renderFontesTab(container, project, { onChanged }) {
         if (ingestButton) ingestButton.addEventListener('click', () => enqueueIngest(project.id, [name]));
       }
     }
-    bindRemoveButtons();
+    bindRowActions();
   }
 
   // renderTable: the dense alternative to renderCards, same reasoning as
@@ -388,27 +449,37 @@ export async function renderFontesTab(container, project, { onChanged }) {
     sourcesEl.querySelectorAll('[data-ingest-one]').forEach((button) => {
       button.addEventListener('click', () => enqueueIngest(project.id, [button.dataset.ingestOne]));
     });
-    bindRemoveButtons();
+    bindRowActions();
   }
 
   function tableRowHtml(name) {
     const tracker = trackers.get(name);
     const queued = !tracker && isQueuedOrRunning(project.id, name);
     const ingested = ingestedNames.has(name);
-    const failure = !tracker && !queued && !ingested ? ingestFailure(project.id, name) : null;
-    const dot = tracker ? 'working' : queued ? 'queued' : ingested ? 'done' : failure ? 'failed' : '';
-    const statusText = tracker ? 'Processando…' : queued ? 'Na fila' : ingested ? 'Ingerido' : failure ? 'Falhou' : 'Pendente';
+    const annotating = queuedAction(project.id, name) === 'annotate';
+    // A failure on an ingested source is its annotation's (the queue only
+    // runs annotate for those).
+    const failure = !tracker && !queued ? ingestFailure(project.id, name) : null;
+    const pendingAnnotation = !tracker && !queued && annotationPending(name);
+    const dot = tracker ? 'working' : queued ? 'queued' : failure ? 'failed' : ingested ? 'done' : '';
+    const statusText = tracker
+      ? (annotating ? 'Aplicando anotação…' : 'Processando…')
+      : queued ? 'Na fila'
+        : failure ? (ingested ? 'Ingerido — anotação falhou' : 'Falhou')
+          : ingested ? 'Ingerido' : 'Pendente';
     const when = formatRelativeTime(modifiedAtOf(name));
     const canIngest = !tracker && !queued && !ingested;
     const rowTitle = failure ? [failure.summary, failure.detail].filter(Boolean).join('\n\n') : statusText;
     return `
       <tr class="data-row static ${failure ? 'failed' : ''}" title="${escapeAttribute(rowTitle)}">
         <td class="data-row-dot"><span class="status-dot ${dot}"></span></td>
-        <td class="data-row-name"><i>${icon(kindOfFile(name)?.icon || 'fileText', 14)}</i><span title="${escapeAttribute(name)}">${escapeHtml(name)}</span></td>
+        <td class="data-row-name"><i>${icon(kindOfFile(name)?.icon || 'fileText', 14)}</i><span title="${escapeAttribute(name)}">${escapeHtml(name)}</span>${annotationBadgeHtml(name)}</td>
         <td class="data-row-status">${escapeHtml(statusText)}${failure ? `<div class="data-row-error">${escapeHtml(failure.summary)}</div>` : ''}</td>
         <td class="data-row-when">${escapeHtml(when)}</td>
         <td class="data-row-actions">
           ${canIngest ? `<button data-ingest-one="${escapeAttribute(name)}">${failure ? 'Tentar novamente' : 'Ingerir →'}</button>` : ''}
+          ${pendingAnnotation && !rebuildState() ? `<button data-apply-annotation="${escapeAttribute(name)}">${failure ? 'Tentar novamente' : 'Aplicar anotação →'}</button>` : ''}
+          ${annotateButtonHtml(name, 'source-annotate')}
           ${removeButtonHtml(name, 'source-remove')}
         </td>
       </tr>
@@ -420,16 +491,20 @@ export async function renderFontesTab(container, project, { onChanged }) {
     return `
       <div class="source-card-kind"><i>${icon(kindOfFile(name)?.icon || 'fileText', 15)}</i><span>${escapeHtml(extension)}</span></div>
       <strong title="${escapeHtml(name)}">${escapeHtml(name)}</strong>
-      <p>${state === 'done' ? 'Disponível como contexto na wiki.' : state === 'failed' ? 'A última tentativa de ingestão falhou.' : 'Aguardando processamento para entrar no contexto.'}</p>
-      <footer><span class="status-dot ${state}"></span><span>${escapeHtml(status)}</span><span class="source-card-actions">${action}${state === 'working' || state === 'queued' ? '' : removeButtonHtml(name, 'source-card-remove')}</span></footer>
+      <p>${state === 'done' ? 'Disponível como contexto na wiki.' : state === 'failed' ? (ingestedNames.has(name) ? 'A última aplicação da anotação falhou.' : 'A última tentativa de ingestão falhou.') : 'Aguardando processamento para entrar no contexto.'}</p>
+      ${annotationBadgeHtml(name)}
+      <footer><span class="status-dot ${state}"></span><span>${escapeHtml(status)}</span><span class="source-card-actions">${action}${state === 'working' || state === 'queued' ? '' : annotateButtonHtml(name, 'source-card-annotate') + removeButtonHtml(name, 'source-card-remove')}</span></footer>
     `;
   }
 
   function rowBody(name) {
-    if (ingestedNames.has(name)) {
-      return sourceCardBody(name, 'Ingerido', 'done');
-    }
     const failure = ingestFailure(project.id, name);
+    if (ingestedNames.has(name)) {
+      const apply = annotationPending(name) && !rebuildState()
+        ? `<button class="source-card-action" data-apply-annotation="${escapeAttribute(name)}"${failure ? ` title="${escapeAttribute(failure.detail || failure.summary)}"` : ''}>${failure ? 'Tentar novamente' : 'Aplicar anotação →'}</button>`
+        : '';
+      return failure ? sourceCardBody(name, failure.summary, 'failed', apply) : sourceCardBody(name, 'Ingerido', 'done', apply);
+    }
     if (failure) {
       return sourceCardBody(
         name,
@@ -513,8 +588,10 @@ export async function renderFontesTab(container, project, { onChanged }) {
   // skipped: the queue already broadcasts that run's status to this mount.
   function reattachActiveRuns() {
     for (const name of rawNames) {
-      if (ingestedNames.has(name) || isQueuedOrRunning(project.id, name)) continue;
-      const key = activeKey(name);
+      if (isQueuedOrRunning(project.id, name)) continue;
+      // An ingested source can only be running its annotation.
+      const action = ingestedNames.has(name) ? 'annotate' : 'ingest';
+      const key = activeKey(name, action);
       const runId = getActiveRun(key);
       if (!runId) continue;
       const tracker = trackerFor(name);
@@ -527,7 +604,8 @@ export async function renderFontesTab(container, project, { onChanged }) {
         clearActiveRun(key);
         trackers.delete(name);
         tracker.dispose();
-        const done = status.state === 'completed' ? markRawIngested(project.id, name).catch((err) => console.error('markRawIngested', err)) : Promise.resolve();
+        const mark = action === 'annotate' ? markRawAnnotationApplied : markRawIngested;
+        const done = status.state === 'completed' ? mark(project.id, name).catch((err) => console.error(mark.name, err)) : Promise.resolve();
         done.finally(() => {
           if (!active) return;
           refresh().then(() => onChanged());

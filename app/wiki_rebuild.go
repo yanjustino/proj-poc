@@ -105,6 +105,9 @@ func (a *App) RemoveRawSource(projectID string, filename string) (string, error)
 	if err := os.Remove(path); err != nil {
 		return "", fmt.Errorf("remove raw source: %w", err)
 	}
+	if err := dropAnnotation(rawDir, filename); err != nil {
+		return "", err
+	}
 	result.StaleSources = stale
 	body, err := json.Marshal(result)
 	if err != nil {
@@ -162,6 +165,11 @@ func (a *App) ResetIngestedRaw(projectID string) (string, error) {
 		return "", err
 	}
 	if err := writeWikiStale(rawDir, []string{}); err != nil {
+		return "", err
+	}
+	// The wiki was emptied: each annotation is applied again by its
+	// source's re-ingest (MarkRawIngested).
+	if err := unapplyAnnotations(rawDir); err != nil {
 		return "", err
 	}
 	body, err := json.Marshal(toIngest)

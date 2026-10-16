@@ -14,6 +14,7 @@ import { Paths } from "../core/paths.mh"
 import { Slug } from "../core/slug.mh"
 import { Markdown } from "../core/markdown.mh"
 import { WikiAlerts } from "wiki_alerts.mh"
+import { SourceAnnotations } from "source_annotations.mh"
 
 export tool WikiPages {
     // natureza (ingest.schema.json) entra como uma linha logo apos o titulo,
@@ -24,8 +25,18 @@ export tool WikiPages {
     //
     // `literal` (LiteralBlocks.extract da fonte) entra intacto logo apos a
     // sintese: conteudo deterministico que a LLM resumiria e perderia.
-    write_source(project_id: string, slug: string, title: string, summary: string, natureza: string, snippets: any[] = [], literal: string = "") ->
-        fs.write(Paths.wiki(project_id, "sources/" + slug + ".md"), "# " + title + "\n\n" + self.natureza_line(natureza) + summary + "\n" + self.literal_section(literal) + self.snippets_section(snippets))
+    //
+    // `annotation` (SourceAnnotations) fecha a pagina: a correcao do usuario
+    // fica citavel pelo lint e visivel a todo artefato gerado da wiki.
+    write_source(project_id: string, slug: string, title: string, summary: string, natureza: string, snippets: any[] = [], literal: string = "", annotation: string = "") ->
+        fs.write(Paths.wiki(project_id, "sources/" + slug + ".md"), "# " + title + "\n\n" + self.natureza_line(natureza) + summary + "\n" + self.literal_section(literal) + self.snippets_section(snippets) + SourceAnnotations.section(annotation, time.format(time.now(), "yyyy-MM-dd")))
+
+    // Troca a secao de anotacao de uma pagina de fonte ja gravada (acao
+    // annotate), sem tocar no resto nem nos alertas da revisao.
+    write_source_annotation(project_id: string, slug: string, annotation: string) {
+        var path = Paths.wiki(project_id, "sources/" + slug + ".md")
+        fs.write(path, SourceAnnotations.section_replaced(fs.read(path), SourceAnnotations.section(annotation, time.format(time.now(), "yyyy-MM-dd"))))
+    }
 
     internal literal_section(literal: string): string ->
         if (literal.trim().is_empty()) "" else "\n" + literal.trim() + "\n"

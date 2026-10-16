@@ -1,4 +1,4 @@
-import { startAndWatch, isFullyTerminal, listIngestedRaw, markRawIngested, resetIngestedRaw } from './api.js';
+import { startAndWatch, isFullyTerminal, listIngestedRaw, markRawIngested, markRawAnnotationApplied, resetIngestedRaw } from './api.js';
 import { setActiveRun, clearActiveRun } from './active-runs.js';
 import { acquireLlmSlot } from './llm-queue.js';
 import { friendlyRunError } from './run-errors.js';
@@ -25,13 +25,19 @@ import { friendlyRunError } from './run-errors.js';
 // its original order, then one verification — and must outlive the tab that
 // started it. A rebuild is how an already-ingested source leaves the wiki
 // (see app/wiki_rebuild.go).
+//
+// Applying a source's annotation to the wiki (Wiki's "annotate" action, for a
+// source already ingested — see enqueueAnnotation) goes through this same
+// queue: it is one LLM-backed run per source like an ingest, and the Fontes
+// tab tracks it the same way. `actions` marks which queued/running names are
+// annotations; every other name is an ingest.
 
 // rebuild: null, or {phase: 'reset' | 'ingest' | 'lint', total, names} while rebuildWiki runs.
-const projects = new Map(); // projectId -> { queued: string[], running: {name, status} | null, draining: bool, listeners: Set, failures: Map, rebuild }
+const projects = new Map(); // projectId -> { queued: string[], running: {name, status} | null, draining: bool, listeners: Set, failures: Map, rebuild, actions: Map<name, 'annotate'> }
 
 function stateOf(projectId) {
   if (!projects.has(projectId)) {
-    projects.set(projectId, { queued: [], running: null, draining: false, listeners: new Set(), failures: new Map(), rebuild: null });
+    projects.set(projectId, { queued: [], running: null, draining: false, listeners: new Set(), failures: new Map(), rebuild: null, actions: new Map() });
   }
   return projects.get(projectId);
 }
@@ -71,6 +77,18 @@ export function ingestFailure(projectId, name) {
   return stateOf(projectId).failures.get(name) ?? null;
 }
 
+// queuedAction: 'annotate' or 'ingest' for a name this queue owns.
+export function queuedAction(projectId, name) {
+  return stateOf(projectId).actions.get(name) ?? 'ingest';
+}
+
+// activeRunKey: the active-runs.js key of a source's run — its own key for
+// an annotation, so a reattach after a restart knows which bookkeeping
+// (markRawIngested or markRawAnnotationApplied) the run's end calls for.
+export function activeRunKey(projectId, name, action = 'ingest') {
+  return action === 'annotate' ? `${projectId}:annotate:${name}` : `${projectId}:raw:${name}`;
+}
+
 export function subscribeIngestQueue(projectId, listener) {
   const state = stateOf(projectId);
   state.listeners.add(listener);
@@ -93,6 +111,20 @@ export function enqueueIngest(projectId, names) {
   drain(projectId);
 }
 
+// enqueueAnnotation applies the annotation of an already-ingested source to
+// the wiki (corrected facts + a verification that marks what it refutes as
+// superseded). Not during a rebuild: re-ingesting the source applies it.
+export function enqueueAnnotation(projectId, name) {
+  const state = stateOf(projectId);
+  if (state.rebuild) return;
+  if (state.running?.name === name || state.queued.includes(name)) return;
+  state.failures.delete(name);
+  state.actions.set(name, 'annotate');
+  state.queued.push(name);
+  notify(state, { type: 'queued' });
+  drain(projectId);
+}
+
 async function drain(projectId) {
   const state = stateOf(projectId);
   if (state.draining) return;
@@ -100,6 +132,10 @@ async function drain(projectId) {
   try {
     while (state.queued.length > 0) {
       const name = state.queued.shift();
+      if (state.actions.get(name) === 'annotate') {
+        await runOne(projectId, state, name, 'annotate');
+        continue;
+      }
       // Last line of defense against a duplicate LLM call: re-read the
       // server-side marker right before starting, not whatever a mount
       // loaded minutes ago. Costs one cheap file read per source; an ingest
@@ -197,8 +233,8 @@ async function finishRebuild(projectId, state) {
   }
 }
 
-async function runOne(projectId, state, name) {
-  const key = `${projectId}:raw:${name}`;
+async function runOne(projectId, state, name, action = 'ingest') {
+  const key = activeRunKey(projectId, name, action);
   state.running = { name, status: { runId: '', state: 'queued' } };
   notify(state, { type: 'status', name, status: state.running.status });
   // Ingest calls an LLM too — it shares llm-queue.js's cap with artifact
@@ -215,6 +251,7 @@ async function runOne(projectId, state, name) {
       release();
       clearActiveRun(key);
       state.running = null;
+      state.actions.delete(name);
       notify(state, { type: 'done', name, status });
       resolve();
     }
@@ -232,12 +269,13 @@ async function runOne(projectId, state, name) {
         finish(status);
         return;
       }
-      markRawIngested(projectId, name)
-        .catch((err) => console.error('markRawIngested', err))
+      const mark = action === 'annotate' ? markRawAnnotationApplied : markRawIngested;
+      mark(projectId, name)
+        .catch((err) => console.error(mark.name, err))
         .finally(() => finish(status));
     }
 
-    startAndWatch('Wiki', { project_id: projectId, action: 'ingest', raw_paths: [name] }, onUpdate).catch((err) => {
+    startAndWatch('Wiki', { project_id: projectId, action, raw_paths: [name] }, onUpdate).catch((err) => {
       state.failures.set(name, friendlyRunError(err.message || err));
       finish({ runId: '', state: 'failed', error: String(err) });
     });

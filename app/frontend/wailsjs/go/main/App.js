@@ -126,6 +126,10 @@ export function ListProjectRunLogs(arg1) {
   return window['go']['main']['App']['ListProjectRunLogs'](arg1);
 }
 
+export function ListRawAnnotations(arg1) {
+  return window['go']['main']['App']['ListRawAnnotations'](arg1);
+}
+
 export function ListRuns() {
   return window['go']['main']['App']['ListRuns']();
 }
@@ -144,6 +148,10 @@ export function LogFrontendError(arg1) {
 
 export function MCPStatus() {
   return window['go']['main']['App']['MCPStatus']();
+}
+
+export function MarkRawAnnotationApplied(arg1, arg2) {
+  return window['go']['main']['App']['MarkRawAnnotationApplied'](arg1, arg2);
 }
 
 export function MarkRawIngested(arg1, arg2) {
@@ -216,6 +224,10 @@ export function SetCodexModel(arg1) {
 
 export function SetDevinModel(arg1, arg2) {
   return window['go']['main']['App']['SetDevinModel'](arg1, arg2);
+}
+
+export function SetRawAnnotation(arg1, arg2, arg3) {
+  return window['go']['main']['App']['SetRawAnnotation'](arg1, arg2, arg3);
 }
 
 export function ShowWarningDialog(arg1, arg2) {

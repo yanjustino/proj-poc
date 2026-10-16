@@ -63,6 +63,8 @@ export function ListProjectDir(arg1:string,arg2:string,arg3:string):Promise<stri
 
 export function ListProjectRunLogs(arg1:string):Promise<string>;
 
+export function ListRawAnnotations(arg1:string):Promise<string>;
+
 export function ListRuns():Promise<string>;
 
 export function ListWorkflows():Promise<string>;
@@ -72,6 +74,8 @@ export function LocalProjects():Promise<string>;
 export function LogFrontendError(arg1:string):Promise<void>;
 
 export function MCPStatus():Promise<string>;
+
+export function MarkRawAnnotationApplied(arg1:string,arg2:string):Promise<string>;
 
 export function MarkRawIngested(arg1:string,arg2:string):Promise<string>;
 
@@ -108,6 +112,8 @@ export function SetClaudeModel(arg1:string):Promise<string>;
 export function SetCodexModel(arg1:string):Promise<string>;
 
 export function SetDevinModel(arg1:string,arg2:string):Promise<string>;
+
+export function SetRawAnnotation(arg1:string,arg2:string,arg3:string):Promise<string>;
 
 export function ShowWarningDialog(arg1:string,arg2:string):Promise<void>;
 

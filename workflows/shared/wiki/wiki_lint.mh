@@ -25,6 +25,7 @@ import { Fixture } from "../core/fixture.mh"
 import { Slug } from "../core/slug.mh"
 import { WikiAlerts } from "wiki_alerts.mh"
 import { WikiIndex } from "wiki_index.mh"
+import { SourceAnnotations } from "source_annotations.mh"
 
 export tool WikiLint {
     internal categories(): string[] -> ["sources", "entities", "concepts", "answers"]
@@ -47,6 +48,17 @@ export tool WikiLint {
         if (!self.valid_ref(project_id, ref)) return false
         var text = WikiAlerts.strip(fs.read(Paths.wiki(project_id, self.normalize_ref(ref) + ".md")))
         return WikiAlerts.squash(text).contains(WikiAlerts.squash(quote))
+    }
+
+    // O trecho está na seção "Anotações do usuário" da página — a única
+    // evidência que pode superar um trecho da própria página onde está (a
+    // correção que o usuário fez sobre o texto daquela fonte).
+    internal quote_in_annotation(project_id: string, ref: string, quote: string): bool {
+        if (quote.trim().is_empty() || !self.valid_ref(project_id, ref)) return false
+        var marker = "\n" + SourceAnnotations.heading() + "\n"
+        var text = WikiAlerts.strip(fs.read(Paths.wiki(project_id, self.normalize_ref(ref) + ".md")))
+        if (!text.contains(marker)) return false
+        return WikiAlerts.squash(text.split(marker)[1]).contains(WikiAlerts.squash(quote))
     }
 
     // Um trecho de evidência está superado quando uma alegação superada
@@ -125,9 +137,10 @@ export tool WikiLint {
         for (var s in report.stale_claims) {
             var page = self.normalize_ref(s.page)
             var newer = self.normalize_ref(s.superseded_by)
-            if (page != newer &&
-                self.quote_in_page(project_id, page, s.quote) &&
-                self.quote_in_page(project_id, newer, s?.resolution_quote ?? "")) {
+            var resolution = s?.resolution_quote ?? ""
+            var by_other_page = page != newer && self.quote_in_page(project_id, newer, resolution)
+            if ((by_other_page || self.quote_in_annotation(project_id, newer, resolution)) &&
+                self.quote_in_page(project_id, page, s.quote)) {
                 stale_claims += [{page, quote: s.quote, superseded_by: newer, resolution_quote: s.resolution_quote, description: s.description}]
                 alerts += [{
                     page,
@@ -286,6 +299,31 @@ export tool WikiLint {
 }
 
 test WikiLintSpec {
+    // A anotação do usuário supera fatos de outras páginas e também a
+    // síntese da própria fonte anotada; fora da anotação, uma página nunca
+    // supera a si mesma.
+    describe a_user_annotation_supersedes_facts_including_in_its_own_source_page {
+        var id = Fixture.project("spec-test-wiki-lint-annotation")
+        dir.create(Paths.wiki(id, "sources"))
+        dir.create(Paths.wiki(id, "concepts"))
+        fs.write(Paths.wiki(id, "sources/ata-1.md"), "# Ata 1\n\nO settlement acontece em D+1.\n\n## Anotações do usuário\n\nAnotação registrada em 2026-10-16.\n\nO settlement acontece em D+2.\n")
+        fs.write(Paths.wiki(id, "concepts/settlement.md"), "# Settlement\n\n## Fatos (2026-10-01)\n\n- Acontece em D+1\n")
+        var applied = WikiLint.apply(id, {
+            contradictions: [],
+            stale_claims: [
+                {page: "concepts/settlement", quote: "Acontece em D+1", superseded_by: "sources/ata-1", resolution_quote: "O settlement acontece em D+2.", description: "corrigido pela anotação"},
+                {page: "sources/ata-1", quote: "O settlement acontece em D+1.", superseded_by: "sources/ata-1", resolution_quote: "O settlement acontece em D+2.", description: "corrigido pela anotação"},
+                {page: "sources/ata-1", quote: "O settlement acontece em D+2.", superseded_by: "sources/ata-1", resolution_quote: "O settlement acontece em D+1.", description: "fora da anotação"}
+            ],
+            missing_concepts: [], orphan_pages: [], notes: ""
+        })
+        are_equal(applied.stale_claims.size(), 2)
+        are_equal(applied.discarded, 1)
+        is_true(fs.read(Paths.wiki(id, "concepts/settlement.md")).contains("- Superado por sources/ata-1: corrigido pela anotação"))
+        is_true(fs.read(Paths.wiki(id, "sources/ata-1.md")).contains("- Superado por sources/ata-1: corrigido pela anotação — trecho: “O settlement acontece em D+1.”"))
+        Fixture.drop(id)
+    }
+
     describe normalize_ref_accepts_the_shapes_a_llm_tends_to_emit {
         are_equal(WikiLint.normalize_ref("entities/a"), "entities/a")
         are_equal(WikiLint.normalize_ref("entities/a.md"), "entities/a")

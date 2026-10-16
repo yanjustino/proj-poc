@@ -9,23 +9,25 @@ import { RepoSnapshot } from "../shared/wiki/repo_snapshot.mh"
 import { LiteralBlocks } from "../shared/wiki/literal_blocks.mh"
 import { WikiContext } from "../shared/wiki/wiki_context.mh"
 import { WikiIndex } from "../shared/wiki/wiki_index.mh"
+import { SourceAnnotations } from "../shared/wiki/source_annotations.mh"
 import { WikiActions } from "actions.mh"
-import { IngestSchema, QuerySchema, LintSchema, ConceptSchema } from "schema_files.mh"
+import { IngestSchema, QuerySchema, LintSchema, ConceptSchema, AnnotateSchema } from "schema_files.mh"
 
-enum WikiAction { ingest, query, lint, sync_html, create_concept, snapshot_repo, reset }
+enum WikiAction { ingest, query, lint, sync_html, create_concept, snapshot_repo, reset, annotate }
 
 prompt WikiSchema() from "schema.prompt.md"
-prompt IngestInstruction(schema_conventions: prompt, source_name: string, source_text: string, catalog_content: string) from "prompts/ingest.prompt.md"
+prompt IngestInstruction(schema_conventions: prompt, source_name: string, source_text: string, catalog_content: string, annotation_block: string) from "prompts/ingest.prompt.md"
 prompt QueryInstruction(schema_conventions: prompt, question: string, wiki_content: string) from "prompts/query.prompt.md"
 prompt LintInstruction(schema_conventions: prompt, wiki_content: string) from "prompts/lint.prompt.md"
 prompt ConceptInstruction(schema_conventions: prompt, concept_title: string, concept_description: string, feedback_block: string, wiki_content: string) from "prompts/concept.prompt.md"
+prompt AnnotateInstruction(schema_conventions: prompt, source_block: string, source_name: string, annotation: string, wiki_content: string) from "prompts/annotate.prompt.md"
 
 workflow Wiki {
     description: "Ingestao, consulta e saneamento da wiki de um work-item (padrao wiki-llm.md)."
 
     input project_id: string
     input action: WikiAction
-    input raw_paths: string[] = []   // ingest: exatamente 1 elemento nesta versao (v1)
+    input raw_paths: string[] = []   // ingest/annotate: exatamente 1 elemento nesta versao (v1)
     input question: string = ""      // query
     input file_answer: bool = false  // query
     input buddy: bool = false        // ingest: true pausa pra revisao antes de gravar (Modo Buddy)
@@ -52,6 +54,12 @@ workflow Wiki {
     var pending_concept = null
     var concept_feedback = []
     var feedback_consumed = false
+    // annotate: a fonte anotada e o que o commit gravou, para o resultado
+    // final trazer os dois lados (correcao + verificacao).
+    var annotate_source = ""
+    var annotate_slug = ""
+    var annotate_text = ""
+    var annotation_result = null
 
     output: {
         action,
@@ -69,6 +77,7 @@ workflow Wiki {
         WikiAction.create_concept -> ConceptGenerate
         WikiAction.snapshot_repo -> SnapshotRepo
         WikiAction.reset -> Reset
+        WikiAction.annotate -> AnnotateGenerate
     }
 
     step Dispatch {
@@ -92,6 +101,9 @@ workflow Wiki {
         if (!fs.exists(abs_path)) fail("fonte nao encontrada em raw/: '" + source_name + "'")
 
         var source_text = RawExtract.text(abs_path)
+        // Uma anotacao do usuario feita antes do ingest (ou mantida num
+        // reprocessamento da wiki) ja entra corrigindo a extracao.
+        var annotation = SourceAnnotations.text(project_id, source_name)
         self.current_artifact = "ingest:" + source_name
 
         var response = Writer.generate(
@@ -99,7 +111,8 @@ workflow Wiki {
                 schema_conventions: WikiSchema(),
                 source_name:,
                 source_text:,
-                catalog_content: WikiIndex.catalog(project_id)
+                catalog_content: WikiIndex.catalog(project_id),
+                annotation_block: SourceAnnotations.prompt_block(annotation)
             ),
             schema_file: IngestSchema,
             project_id:,
@@ -112,6 +125,8 @@ workflow Wiki {
         // reproduz, so o le.
         var data = json.parse(raw)
         data["literal"] = LiteralBlocks.extract(source_text)
+        data["annotation"] = annotation
+        data["raw"] = source_name
         self.ingest_data = data
         goto IngestGate
     }
@@ -218,6 +233,91 @@ workflow Wiki {
         goto Done
     }
 
+    // annotate: o usuario anotou uma fonte ja ingerida (correcao de
+    // imprecisoes ou contradicoes do texto dela). Generate extrai da anotacao
+    // os fatos corrigidos; Commit grava a anotacao na pagina da fonte e os
+    // fatos nas paginas; Verify roda o lint, que marca como "Superado por"
+    // a fonte anotada os fatos antigos que ela desmente — e o mesmo lint de
+    // sempre, entao a proxima verificacao mantem esses alertas.
+    step AnnotateGenerate {
+        if (raw_paths.size() != 1) {
+            fail("annotate processa uma fonte por vez nesta versao (v1) — recebido ${raw_paths.size()} caminho(s)")
+        }
+        var source_name = raw_paths[0]
+        if (!fs.exists(Paths.raw(project_id, source_name))) fail("fonte nao encontrada em raw/: '" + source_name + "'")
+        var annotation = SourceAnnotations.text(project_id, source_name)
+        if (annotation.is_empty()) fail("a fonte '" + source_name + "' nao tem anotacao para aplicar")
+        var slug = WikiIndex.source_slug_of(project_id, source_name)
+        if (!slug.is_empty() && !fs.exists(Paths.wiki(project_id, "sources/" + slug + ".md"))) slug = ""
+        // Fonte ingerida antes de o indice guardar o arquivo de origem: a LLM
+        // aponta, entre as paginas de fonte sem vinculo, a que veio deste
+        // arquivo (pelo inicio do texto dele), e o codigo confere a escolha.
+        var candidates = if (slug.is_empty()) WikiIndex.unlinked_sources(project_id).filter((e) -> fs.exists(Paths.wiki(project_id, "sources/" + e.slug + ".md"))) else []
+        if (slug.is_empty() && candidates.is_empty()) {
+            fail("a pagina da wiki da fonte '" + source_name + "' nao foi encontrada — ingira a fonte (ou reprocesse a wiki) antes de aplicar a anotacao")
+        }
+        var source_block = if (!slug.is_empty()) "A página desta fonte na wiki é `sources/" + slug + "`: devolva-a em `source_page`."
+            else SourceAnnotations.unlinked_source_block(project_id, source_name, candidates)
+        self.annotate_source = source_name
+        self.annotate_text = annotation
+        self.current_artifact = "annotate:" + source_name
+
+        var response = Writer.generate(
+            prompt: AnnotateInstruction(
+                schema_conventions: WikiSchema(),
+                source_block:,
+                source_name:,
+                annotation:,
+                wiki_content: WikiContext.all_pages(project_id)
+            ),
+            schema_file: AnnotateSchema,
+            project_id:,
+            artifact: current_artifact
+        )
+        self.{tokens_in, tokens_out} = response
+        var data = json.parse(response.content)
+        if (slug.is_empty()) {
+            var picked = (data?.source_page ?? "").trim().replace("sources/", "").replace(".md", "")
+            if (!candidates.any((e) -> e.slug == picked)) {
+                fail("nao foi possivel identificar a pagina da wiki da fonte '" + source_name + "' (indicada: '" + (data?.source_page ?? "") + "') — reprocesse a wiki para aplicar a anotacao")
+            }
+            slug = picked
+            WikiIndex.link_source_raw(project_id, slug, source_name)
+        }
+        self.annotate_slug = slug
+        self.ingest_data = data
+        goto AnnotateCommit
+    }
+
+    step AnnotateCommit {
+        self.annotation_result = WikiActions.commit_annotation(project_id, annotate_slug, annotate_text, ingest_data)
+        goto AnnotateVerify
+    }
+
+    step AnnotateVerify {
+        var response = Writer.generate(
+            prompt: LintInstruction(
+                schema_conventions: WikiSchema(),
+                wiki_content: WikiContext.for_lint(project_id)
+            ),
+            schema_file: LintSchema,
+            project_id:,
+            artifact: "lint"
+        )
+        self.tokens_in = tokens_in + response.tokens_in
+        self.tokens_out = tokens_out + response.tokens_out
+        var lint = WikiActions.record_lint(project_id, json.parse(response.content))
+        self.wiki_result = {
+            source: annotate_source,
+            source_slug: annotation_result.source_slug,
+            entities_touched: annotation_result.entities_touched,
+            concepts_touched: annotation_result.concepts_touched,
+            superseded: lint.stale_claims.filter((c) -> c.superseded_by == "sources/" + annotate_slug).size(),
+            lint,
+        }
+        goto Done
+    }
+
     // create_concept: Generate -> Gate (pausa no Modo Buddy) -> Commit, como
     // o ingest. A LLM so recebe o conteudo da wiki: a pagina nasce do que as
     // paginas ja dizem, cada fato citando a de origem.
@@ -276,7 +376,7 @@ test WikiWorkflowSpec {
     describe rejects_an_unknown_action_before_running {
         var raised = ""
         try { Wiki.run(inputs: {project_id: "spec-test-project", action: "bogus"}) } catch (e) { raised = "${e}" }
-        is_true(raised.contains("\"bogus\" is not a variant of enum WikiAction (use ingest | query | lint | sync_html | create_concept | snapshot_repo | reset)"))
+        is_true(raised.contains("\"bogus\" is not a variant of enum WikiAction (use ingest | query | lint | sync_html | create_concept | snapshot_repo | reset | annotate)"))
     }
 
     describe rejects_an_invalid_project_id_before_touching_anything {
@@ -310,6 +410,29 @@ test WikiWorkflowSpec {
         var run = Wiki.run(inputs: {project_id: "spec-test-project", action: "ingest", raw_paths: ["nao-existe.md"]})
         is_false(run.ok)
         is_true(run.error.contains("fonte nao encontrada"))
+    }
+
+    describe annotate_of_a_source_without_annotation_fails_without_calling_the_llm {
+        var id = Fixture.project("spec-test-wiki-annotate-empty")
+        dir.create(Paths.raw_dir(id))
+        fs.write(Paths.raw(id, "ata.md"), "# Ata\n")
+        var run = Wiki.run(inputs: {project_id: id, action: "annotate", raw_paths: ["ata.md"]})
+        is_false(run.ok)
+        is_true(run.error.contains("nao tem anotacao"))
+        Fixture.drop(id)
+    }
+
+    // Uma fonte ingerida antes de o indice guardar o arquivo de origem nao
+    // tem pagina conhecida: o caminho e reprocessar a wiki.
+    describe annotate_of_a_source_without_a_known_wiki_page_asks_for_a_rebuild {
+        var id = Fixture.project("spec-test-wiki-annotate-no-page")
+        dir.create(Paths.raw_dir(id))
+        fs.write(Paths.raw(id, "ata.md"), "# Ata\n")
+        fs.write(Paths.raw(id, ".annotations.json"), json.stringify({"ata.md": {text: "O prazo é D+2.", applied: false}}))
+        var run = Wiki.run(inputs: {project_id: id, action: "annotate", raw_paths: ["ata.md"]})
+        is_false(run.ok)
+        is_true(run.error.contains("ingira a fonte (ou reprocesse a wiki)"))
+        Fixture.drop(id)
     }
 
     describe create_concept_rejects_an_empty_title_before_calling_the_llm {

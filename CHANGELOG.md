@@ -6,6 +6,15 @@ O formato segue o [Keep a Changelog](https://keepachangelog.com/pt-BR/1.1.0/). C
 
 ## [Não lançado]
 
+### 2026-10-16
+
+#### Adicionado
+- Anotações nas fontes: cada fonte da aba Fontes ganha a ação "Anotar", em que você registra imprecisões, contradições ou concepções equivocadas do texto dela e a versão correta. A anotação fica em `raw/.annotations.json` e prevalece sobre o texto da fonte na wiki:
+  - numa fonte pendente, entra na ingestão: a síntese e os fatos já saem corrigidos, e cada fato que veio dela cita "(conforme anotação do usuário)";
+  - numa fonte já ingerida, "Aplicar anotação" roda a nova ação `annotate` do workflow `Wiki`. Ela grava os fatos corrigidos e roda uma verificação que marca como "Superado por sources/<fonte>" os trechos que a anotação desmente, inclusive na síntese da própria fonte.
+  
+  A página da fonte termina com a seção "Anotações do usuário", gravada por código. Um reprocessamento da wiki reaplica as anotações. O índice da wiki passa a guardar de qual arquivo de `raw/` veio cada página de fonte. Para uma fonte ingerida antes desta versão, a própria `annotate` pede à LLM que aponte qual página de fonte sem vínculo é a dela, comparando com o início do arquivo, confere a escolha e grava o vínculo.
+
 ### 2026-10-09
 
 #### Alterado

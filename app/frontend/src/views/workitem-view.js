@@ -414,6 +414,7 @@ function stageArtifactLabel(artifact) {
   if (!artifact) return null;
   if (artifact.startsWith('ingest:')) return `Ingestão: ${artifact.slice(7)}`;
   if (artifact.startsWith('concept:')) return `Conceito: ${artifact.slice(8)}`;
+  if (artifact.startsWith('annotate:')) return `Anotação: ${artifact.slice(9)}`;
   if (artifact === 'lint' || artifact === 'wiki-lint') return 'Verificação da wiki';
   if (artifact === 'query' || artifact === 'wiki-query') return 'Pergunta à wiki';
   return artifact;
