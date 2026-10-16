@@ -923,6 +923,10 @@ label.check input { accent-color: var(--blue); width: 15px; height: 15px; }
 .modal-actions { display: flex; justify-content: flex-end; gap: 8px; margin-top: 18px; }
 .modal-error { color: var(--red); font-size: 11px; margin-top: 8px; }
 .modal-hint { color: var(--muted); font-size: 11px; line-height: 1.4; margin: 10px 0 0; }
+.delete-confirm-label { display: flex !important; align-items: center; gap: 4px; flex-wrap: wrap; }
+.delete-confirm-label strong { text-transform: none; letter-spacing: 0; }
+.delete-confirm-copy { width: 22px; height: 22px; }
+.delete-confirm-copy:hover { color: var(--ink); background: var(--surface-2); }
 .modal-subtitle { margin: -8px 0 4px; color: var(--muted); font: 500 11px var(--mono); overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
 .modal-actions .danger-text { margin-right: auto; color: var(--red); }
 

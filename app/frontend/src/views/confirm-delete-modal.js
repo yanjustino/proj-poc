@@ -1,4 +1,5 @@
 import { deleteProject } from '../api.js';
+import { icon } from '../icons.js';
 
 // openConfirmDeleteModal renders a confirmation modal into document.body and
 // resolves true once the project was actually deleted (App.DeleteProject
@@ -6,7 +7,8 @@ import { deleteProject } from '../api.js';
 // is the only prompt standing between a click and os.RemoveAll on the Go
 // side (see app/app.go's DeleteProject) — so the confirm button requires
 // typing the project's exact name back, same discipline GitHub uses for
-// "delete repository".
+// "delete repository". The copy button next to the name only fills the
+// clipboard: pasting it is still a deliberate step.
 export function openConfirmDeleteModal(project) {
   return new Promise((resolve) => {
     const backdrop = document.createElement('div');
@@ -15,7 +17,7 @@ export function openConfirmDeleteModal(project) {
       <div class="modal">
         <h2>Excluir work-item</h2>
         <p>Isso apaga permanentemente <strong>${escapeHtml(project.name)}</strong> — fontes, wiki e artefatos. Essa ação não pode ser desfeita.</p>
-        <label for="wi-delete-confirm">Digite <strong>${escapeHtml(project.name)}</strong> para confirmar</label>
+        <label for="wi-delete-confirm" class="delete-confirm-label">Digite <strong>${escapeHtml(project.name)}</strong> para confirmar <button type="button" class="icon-btn delete-confirm-copy" data-copy-name title="Copiar o nome" aria-label="Copiar o nome do work-item">${icon('copy', 13)}</button></label>
         <input id="wi-delete-confirm" type="text" autofocus autocomplete="off" />
         <div class="modal-error" data-error hidden></div>
         <div class="modal-actions">
@@ -35,6 +37,26 @@ export function openConfirmDeleteModal(project) {
       if (event.target === backdrop) close(false);
     });
     backdrop.querySelector('[data-cancel]').addEventListener('click', () => close(false));
+
+    const copyButton = backdrop.querySelector('[data-copy-name]');
+    copyButton.addEventListener('click', (event) => {
+      // Inside the <label>: without this, the click also focuses the input.
+      event.preventDefault();
+      navigator.clipboard
+        .writeText(project.name)
+        .then(() => {
+          copyButton.innerHTML = icon('checkCircle', 13);
+          copyButton.title = 'Copiado!';
+          setTimeout(() => {
+            copyButton.innerHTML = icon('copy', 13);
+            copyButton.title = 'Copiar o nome';
+          }, 1500);
+          input.focus();
+        })
+        .catch(() => {
+          // Sem permissão de clipboard: o nome continua visível para digitar.
+        });
+    });
 
     const input = backdrop.querySelector('#wi-delete-confirm');
     const submit = backdrop.querySelector('[data-submit]');
