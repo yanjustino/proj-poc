@@ -18,7 +18,7 @@ import {
   startAndWatch,
   watchExistingRun,
 } from '../api.js';
-import { sequenceFor, workflowFor, isReady, missingDeps, featureIdOf, featureTitleOf, computeStaleness, latestMtimeOf, staleHistoriaFeatureIds } from '../artifacts.js';
+import { sequenceFor, workflowFor, isReady, missingDeps, featureIdOf, featureTitleOf, computeStaleness, latestMtimeOf, staleHistoriaFeatureIds, BACKLOG_CATEGORIES } from '../artifacts.js';
 import { createRunTracker } from '../run-tracker.js';
 import { inlineMermaid, hasMermaidDiagram } from '../mermaid-inline.js';
 import { beginCustom, buildDocFrame, showHtmlDoc, showEmpty, showAction, showLoading, setFooter, setToolbarAction, prependToolbarAction } from '../reading-pane.js';
@@ -215,7 +215,14 @@ function codedHistoriaTitle(featureFolderName, historiaFolderName) {
 // persists across an app restart too (active-runs.js), not just a remount —
 // mhl_run_list itself can't be used to rediscover it (session-scoped), but
 // mhl_run_status can, by runId alone, once the registry hands one over.
-export async function renderArtefatosTab(container, project, { onChanged }) {
+// `scope` splits the work-item's documents between two tabs mounted from
+// this same function: 'backlog' (BACKLOG_CATEGORIES — features, dependency
+// map, histórias, planos) and 'artefatos' (everything else). Only what is
+// listed is scoped (scopedSequence: rows, category filters, the first
+// selection, the batch-regeneration reattach); staleness, dependencies,
+// downstream warnings and rowForKey keep the whole `sequence`, so a feature
+// still reads "Desatualizado" when an ADR in the other tab changes.
+export async function renderArtefatosTab(container, project, { onChanged, scope = 'artefatos' }) {
   // A generation started here keeps running on the backend regardless of
   // what the user does in the UI (see reattachActiveRuns' comment) — its
   // startAndWatch/watchExistingRun onUpdate callback below outlives this
@@ -230,18 +237,20 @@ export async function renderArtefatosTab(container, project, { onChanged }) {
   let active = true;
   const sequence = sequenceFor(project);
   const workflow = workflowFor(project);
+  const isBacklog = scope === 'backlog';
+  const scopedSequence = sequence.filter((entry) => BACKLOG_CATEGORIES.has(entry.category) === isBacklog);
   // Fixed for the lifetime of this mount (sequenceFor's own order — Brief/
   // Contexto first, Entrega/Features last), unlike doneNames/collectionChildren
   // below: category is a static property of each sequence entry, not
   // something that depends on what's actually been generated yet, so the
   // category filter's own option list never needs to be recomputed.
-  const categories = [...new Set(sequence.map((entry) => entry.category))];
+  const categories = [...new Set(scopedSequence.map((entry) => entry.category))];
 
   container.innerHTML = `
     <div class="artifact-map-head">
       <div>
-        <div class="artifact-map-title"><h2>Mapa de artefatos</h2><span data-artifact-count>0 itens</span></div>
-        <p>Explore, gere e revise os documentos deste work-item.</p>
+        <div class="artifact-map-title"><h2>${isBacklog ? 'Backlog' : 'Mapa de artefatos'}</h2><span data-artifact-count>0 itens</span></div>
+        <p>${isBacklog ? 'Gere, revise e aprove os itens do backlog e as histórias deste work-item.' : 'Explore, gere e revise os documentos deste work-item.'}</p>
       </div>
       <div class="artifact-map-controls">
         <span class="dor-summary" data-dor-summary hidden></span>
@@ -274,7 +283,10 @@ export async function renderArtefatosTab(container, project, { onChanged }) {
   const exportAllButton = container.querySelector('[data-export-all]');
   const handoffButton = container.querySelector('[data-handoff]');
   const exportComiteButton = container.querySelector('[data-export-comite]');
-  exportComiteButton.hidden = workflow !== 'Comite';
+  // Handoff and DoR belong to the backlog (they are about histórias);
+  // exports of the whole project stay in Artefatos.
+  exportComiteButton.hidden = isBacklog || workflow !== 'Comite';
+  exportAllButton.hidden = isBacklog;
   const dorSummaryEl = container.querySelector('[data-dor-summary]');
   const exportStatusEl = container.querySelector('[data-export-status]');
   const viewButtons = [...container.querySelectorAll('[data-view]')];
@@ -400,7 +412,7 @@ export async function renderArtefatosTab(container, project, { onChanged }) {
   // within one mount it only updates when the underlying timestamp itself
   // does (a real new generation — see whenLabelFor below).
   const relativeTimeCache = new Map(); // key -> { ms, text }
-  let selectedKey = sequence[0]?.artifact ?? null;
+  let selectedKey = scopedSequence[0]?.artifact ?? null;
   let activeFilter = 'all';
   let activeCategory = 'all';
 
@@ -408,6 +420,8 @@ export async function renderArtefatosTab(container, project, { onChanged }) {
   // Entidades/Conceitos, .collection-filter) — one pill button per category,
   // built once here since (unlike Wiki's tabs) the category list is static
   // for this mount, not something that grows as content gets generated.
+  // A single category (Discovery's backlog) needs no filter at all.
+  categoryFiltersEl.hidden = categories.length < 2;
   categoryFiltersEl.innerHTML = ['all', ...categories]
     .map((c) => `<button class="artifact-filter ${c === 'all' ? 'active' : ''}" data-category="${escapeAttribute(c)}">${c === 'all' ? 'Todas' : escapeHtml(c)}</button>`)
     .join('');
@@ -672,7 +686,7 @@ export async function renderArtefatosTab(container, project, { onChanged }) {
 
   function rowsToRender() {
     const rows = [];
-    for (const entry of sequence) {
+    for (const entry of scopedSequence) {
       if (entry.artifact === 'historias' && project.level === 'discovery') continue;
       if (entry.collectionKind && doneNames.has(entry.artifact) && !hasActiveGroupRegeneration(entry.artifact)) {
         // Discovery's features are collected as blocks (feature + its nested
@@ -1099,7 +1113,7 @@ export async function renderArtefatosTab(container, project, { onChanged }) {
   }
 
   function updateHandoffControls() {
-    const stories = [...readiness.values()];
+    const stories = isBacklog ? [...readiness.values()] : [];
     handoffButton.hidden = stories.length === 0;
     dorSummaryEl.hidden = stories.length === 0;
     const prontas = stories.filter((s) => s.status !== 'nao_pronta').length;
@@ -2878,7 +2892,18 @@ export async function renderArtefatosTab(container, project, { onChanged }) {
   // belongs to — including rows rowsToRender() doesn't offer right now: a
   // collection's group row while it regenerates as a batch, or a feature's
   // "Histórias" row before its tracker exists.
+  // A run of the other tab's scope (see renderArtefatosTab's `scope`) is
+  // that tab's to follow: null here.
   function rowForKey(key) {
+    const row = anyRowForKey(key);
+    return row && inScope(row) ? row : null;
+  }
+
+  function inScope(row) {
+    return BACKLOG_CATEGORIES.has(row.category) === isBacklog;
+  }
+
+  function anyRowForKey(key) {
     const prefix = `${project.id}:`;
     if (!key.startsWith(prefix)) return null;
     const rowKey = key.slice(prefix.length);
@@ -2957,7 +2982,7 @@ export async function renderArtefatosTab(container, project, { onChanged }) {
     // pass first, against every collectionKind entry's own group-level row
     // directly, means by the time the loop below calls rowsToRender() the
     // collection is already correctly un-expanded back to its group row.
-    for (const entry of sequence) {
+    for (const entry of scopedSequence) {
       if (!entry.collectionKind || !doneNames.has(entry.artifact)) continue;
       reattach({ key: entry.artifact, label: labelFor(entry.artifact), entry, category: entry.category });
     }
@@ -2970,8 +2995,10 @@ export async function renderArtefatosTab(container, project, { onChanged }) {
     // their tracker exists, so the loop above never sees them on a fresh
     // mount — look each one up explicitly (after that loop, so none is
     // reattached twice).
-    for (const featureRow of featureRowsForHistorias()) {
-      reattach(historiasRowFor(featureRow));
+    if (isBacklog) {
+      for (const featureRow of featureRowsForHistorias()) {
+        reattach(historiasRowFor(featureRow));
+      }
     }
     // Same for a plan still being generated (its row only renders once a
     // tracker exists) — skipping plans the loop above already reattached.

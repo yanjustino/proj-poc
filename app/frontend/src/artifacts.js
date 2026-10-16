@@ -136,6 +136,31 @@ export function sequenceFor(project) {
     }));
 }
 
+// BACKLOG_CATEGORIES: the sequence categories the work-item's Backlog tab
+// shows (tab-artefatos.js mounted with scope 'backlog') — Discovery's
+// features + dependency map + per-feature histórias/planos, Delivery's final
+// feature/história + its histórias/planos. Everything else stays in
+// Artefatos. Comitê has none, so it gets no Backlog tab.
+export const BACKLOG_CATEGORIES = new Set(['Backlog da solução', 'Entrega']);
+
+export function hasBacklog(project) {
+  return sequenceFor(project).some((entry) => BACKLOG_CATEGORIES.has(entry.category));
+}
+
+// isBacklogArtifact: whether a run's `artifact` (runTargetArgs in
+// tab-artefatos.js — "features", "historias", "plano", "feature"…, or a row
+// key) belongs
+// to the Backlog tab, so the work-item summary can open the right tab.
+export function isBacklogArtifact(project, artifact) {
+  if (!artifact) return false;
+  // Row keys too ("features-item:x", "historias:feat", "historia-item:…",
+  // "plano:…") — llm-queue.js reports a job by its row key.
+  const base = artifact.split(':')[0].replace(/-item$/, '');
+  if (['plano', 'historia', 'historias'].includes(base)) return true;
+  const entry = sequenceFor(project).find((e) => e.artifact === base);
+  return Boolean(entry && BACKLOG_CATEGORIES.has(entry.category));
+}
+
 // isReady says whether every dependency of `entry` already has a generated
 // file, given the set of artifact names already present (`doneNames`, e.g.
 // {"brief","requisitos"}).

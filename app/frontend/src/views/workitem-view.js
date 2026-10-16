@@ -1,5 +1,5 @@
 import { listProjectDir, workItemUsage, workItemProductivity, listIngestedRaw, getRunStatus } from '../api.js';
-import { computeCategoryProgress } from '../artifacts.js';
+import { computeCategoryProgress, hasBacklog, isBacklogArtifact } from '../artifacts.js';
 import { renderFontesTab } from './tab-fontes.js';
 import { renderWikiTab } from './tab-wiki.js';
 import { renderArtefatosTab } from './tab-artefatos.js';
@@ -110,6 +110,7 @@ export async function renderWorkItemView(container, project, { initialTab = 'art
       <button class="tab-btn" data-tab="fontes">Fontes</button>
       <button class="tab-btn" data-tab="wiki">Wiki</button>
       <button class="tab-btn" data-tab="artefatos">Artefatos</button>
+      ${hasBacklog(project) ? '<button class="tab-btn" data-tab="backlog">Backlog</button>' : ''}
       <button class="tab-btn" data-tab="mudancas">Mudanças</button>
       <button class="tab-btn" data-tab="logs">Logs</button>
     </div>
@@ -167,7 +168,7 @@ export async function renderWorkItemView(container, project, { initialTab = 'art
     const paused = live.filter((s) => s.state === 'paused');
     const working = live.filter((s) => s.state === 'working');
     const group = paused.length ? paused : working.length ? working : live;
-    return { state: group[0].state, count: group.length, artifact: stageArtifactLabel(group[0].artifact) };
+    return { state: group[0].state, count: group.length, artifact: stageArtifactLabel(group[0].artifact), tab: stageTab(project, group[0].artifact) };
   }
 
   // The stage card on its own: refreshed live (queue notifications plus a
@@ -180,6 +181,7 @@ export async function renderWorkItemView(container, project, { initialTab = 'art
     const { label, sub } = stageText(stage);
     card.className = `summary-card summary-card-progress summary-card-clickable ${stage.state ? `summary-card-stage-${dotClass(stage.state)}` : ''}`;
     card.querySelector('[data-stage-head]').innerHTML = `<b>${escapeHtml(label)}</b><span>${escapeHtml(sub)}</span>`;
+    card.dataset.tab = stage.tab || 'artefatos';
   }
 
   let stageTimer = null;
@@ -307,7 +309,7 @@ export async function renderWorkItemView(container, project, { initialTab = 'art
             .join('')}
         </div>
       </div>
-      <div class="summary-card summary-card-progress summary-card-clickable ${stage.state ? `summary-card-stage-${dotClass(stage.state)}` : ''}" data-goto-artefatos title="Ver na aba Artefatos">
+      <div class="summary-card summary-card-progress summary-card-clickable ${stage.state ? `summary-card-stage-${dotClass(stage.state)}` : ''}" data-goto-artefatos data-tab="${stage.tab || 'artefatos'}" title="Ver o andamento">
         <div class="summary-progress-head">
           <span class="summary-icon">${icon('clock', 16)}</span>
           <div data-stage-head><b>${escapeHtml(stageLabel)}</b><span>${escapeHtml(stageSub)}</span></div>
@@ -342,7 +344,7 @@ export async function renderWorkItemView(container, project, { initialTab = 'art
     `;
 
     const stageCard = summaryEl.querySelector('[data-goto-artefatos]');
-    if (stageCard) stageCard.addEventListener('click', () => showTab('artefatos'));
+    if (stageCard) stageCard.addEventListener('click', () => showTab(stageCard.dataset.tab || 'artefatos'));
   }
 
   // A tab (Artefatos or Wiki) may leave background work running past its
@@ -369,6 +371,8 @@ export async function renderWorkItemView(container, project, { initialTab = 'art
     } else if (tab === 'mudancas') {
       showEmptyReadingPane('A aba Mudanças não usa a coluna de leitura — o histórico de pedidos fica aqui ao lado.');
       disposeTab = await renderMudancasTab(tabContent, project);
+    } else if (tab === 'backlog') {
+      disposeTab = await renderArtefatosTab(tabContent, project, { ...handlers, scope: 'backlog' });
     } else {
       disposeTab = await renderArtefatosTab(tabContent, project, handlers);
     }
@@ -407,6 +411,15 @@ function stageText(stage) {
   const sub = STATE_LABEL[stage.state] || stage.state;
   if (stage.count > 1) return { label: `${stage.count} execuções`, sub };
   return { label: stage.artifact || sub, sub };
+}
+
+// stageTab: the tab where a running stage can be followed — sources and
+// annotations in Fontes, wiki work in Wiki, backlog items in Backlog.
+function stageTab(project, artifact) {
+  if (!artifact) return 'artefatos';
+  if (artifact.startsWith('ingest:') || artifact.startsWith('annotate:')) return 'fontes';
+  if (artifact.startsWith('concept:') || ['lint', 'wiki-lint', 'query', 'wiki-query'].includes(artifact)) return 'wiki';
+  return isBacklogArtifact(project, artifact) ? 'backlog' : 'artefatos';
 }
 
 // Run names as people read them: "ingest:ata.pdf" → "Ingestão: ata.pdf".

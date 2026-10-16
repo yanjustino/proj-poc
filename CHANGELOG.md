@@ -8,6 +8,15 @@ O formato segue o [Keep a Changelog](https://keepachangelog.com/pt-BR/1.1.0/). C
 
 ### 2026-10-16
 
+#### Alterado
+- Os itens de backlog saíram da aba Artefatos para uma aba própria, "Backlog", entre Artefatos e Mudanças:
+  - no Discovery: features, mapa de dependências, e histórias e planos de cada feature;
+  - no Delivery: a feature ou história final, as histórias e os planos.
+  
+  O Comitê não tem backlog e não ganha a aba. As duas abas são a mesma tela com escopos diferentes. Por isso, um item do backlog continua aparecendo como "Desatualizado" quando um artefato da outra aba muda, e o "Pacote de handoff" e o resumo de DoR ficam no Backlog. O cartão de andamento do topo abre a aba onde está o que está rodando: Fontes, Wiki, Artefatos ou Backlog.
+- "Quero inserir uma transcrição" passa a aceitar `.docx`, convertido no envio como os demais documentos Word.
+- O modal de exclusão de work-item ganhou um botão para copiar o nome a ser digitado.
+
 #### Adicionado
 - Fontes do tipo diagrama draw.io (`.drawio` e `.dio`), pelo novo tipo "Diagrama (draw.io)" do seletor de fontes. No envio, o arquivo é convertido para Markdown (`app/drawio_source.go`), como já acontece com Office e HTML. Cada página do diagrama vira uma seção com:
   - os elementos, com rótulo sem HTML, o tipo lido do estilo (banco de dados, ator, ícones AWS/Azure/GCP…), dicas e propriedades personalizadas;
