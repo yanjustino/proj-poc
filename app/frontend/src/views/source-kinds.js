@@ -74,9 +74,9 @@ export const SOURCE_KINDS = [
       'Mantenha o nome de quem fala em cada trecho — ajuda a separar pedido de opinião.',
       'Corte conversa fiada e trechos fora de pauta; ruído vira custo de tokens.',
       'Legendas .vtt/.srt: salve como .txt antes de enviar.',
-      'Transcrição exportada como página .html (ex.: salva do navegador ou do Drive) também serve: é convertida em texto no envio.',
+      'Transcrição em Word (.docx, ex.: a exportada pelo Teams) ou como página .html (salva do navegador ou do Drive) também serve: é convertida em texto no envio.',
     ],
-    extensions: ['.txt', '.md', ...HTML_EXTENSIONS],
+    extensions: ['.txt', '.md', '.docx', ...HTML_EXTENSIONS],
     actions: ['paste', 'files'],
     paste: {
       heading: 'Colar transcrição',
