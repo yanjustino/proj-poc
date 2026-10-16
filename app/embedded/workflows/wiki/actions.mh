@@ -16,17 +16,23 @@ export type IngestResult = {
 
 export type ConceptResult = {slug: string, title: string, facts_added: number}
 
+export type AnnotationResult = {
+    source_slug: string, entities_touched: number, concepts_touched: number
+}
+
 export tool WikiActions {
     commit_ingest(project_id: string, data: any): IngestResult {
         var source_slug = Slug.from_title(data.source_title)
         // `?? []`: um ingest pausado no Modo Buddy antes de code_snippets
         // existir retoma com o ingest_data antigo.
-        WikiPages.write_source(project_id, source_slug, data.source_title, data.source_summary, data.natureza, data?.code_snippets ?? [], data?.literal ?? "")
+        // `annotation` e `raw` vem do workflow, nao da LLM (ver IngestGenerate).
+        WikiPages.write_source(project_id, source_slug, data.source_title, data.source_summary, data.natureza, data?.code_snippets ?? [], data?.literal ?? "", data?.annotation ?? "")
         WikiIndex.upsert_source(project_id, {
             slug: source_slug,
             title: data.source_title,
             summary: data.index_summary,
-            natureza: data.natureza
+            natureza: data.natureza,
+            raw: data?.raw ?? ""
         })
 
         for (var entity in data.entities) self.upsert_fact(project_id, "entities", entity)
@@ -36,6 +42,23 @@ export tool WikiActions {
         WikiHtmlExport.sync(project_id)
         return {
             source_title: data.source_title,
+            source_slug,
+            entities_touched: data.entities.size(),
+            concepts_touched: data.concepts.size()
+        }
+    }
+
+    // Anotacao do usuario sobre uma fonte ja ingerida (acao annotate): troca
+    // a secao de anotacao da pagina da fonte e grava os fatos corrigidos que
+    // a LLM extraiu dela. Os fatos antigos que ela desmente ficam onde estao
+    // — o lint que o workflow roda em seguida os marca como superados.
+    commit_annotation(project_id: string, source_slug: string, annotation: string, data: any): AnnotationResult {
+        WikiPages.write_source_annotation(project_id, source_slug, annotation)
+        for (var entity in data.entities) self.upsert_fact(project_id, "entities", entity)
+        for (var concept in data.concepts) self.upsert_fact(project_id, "concepts", concept)
+        self.log(project_id, "annotate", "sources/" + source_slug)
+        WikiHtmlExport.sync(project_id)
+        return {
             source_slug,
             entities_touched: data.entities.size(),
             concepts_touched: data.concepts.size()
@@ -222,6 +245,55 @@ test WikiActionsSpec {
         is_true(page.contains("- Será mobile"))
         is_true(page.contains("- Decidido: será webapp"))
         is_true(page.trim().ends_with("- Contradição com sources/ata-2: mobile × webapp"))
+        Fixture.drop(id)
+    }
+
+    // A anotacao do usuario fecha a pagina da fonte e o indice guarda de qual
+    // arquivo de raw/ ela veio — e assim que annotate acha a pagina depois.
+    describe ingest_writes_the_user_annotation_and_the_raw_name_of_the_source {
+        var id = Fixture.project("spec-test-wiki-ingest-annotation")
+        dir.create(Paths.wiki(id, "sources"))
+        dir.create(Paths.wiki(id, "entities"))
+        dir.create(Paths.wiki(id, "concepts"))
+        WikiActions.commit_ingest(id, {
+            source_title: "Ata 1", source_summary: "Resumo 1", natureza: "pedido_novo", index_summary: "ata 1",
+            code_snippets: [], entities: [], concepts: [],
+            annotation: "O prazo é D+2, não D+1.", raw: "ata-1.md"
+        })
+        var page = fs.read(Paths.wiki(id, "sources/ata-1.md"))
+        is_true(page.contains("Resumo 1\n\n## Anotações do usuário\n\n"))
+        is_true(page.trim().ends_with("O prazo é D+2, não D+1."))
+        are_equal(WikiIndex.source_slug_of(id, "ata-1.md"), "ata-1")
+        are_equal(WikiIndex.source_slug_of(id, "outra.md"), "")
+        Fixture.drop(id)
+    }
+
+    // Anotar uma fonte ja ingerida: a secao da fonte e trocada (nao
+    // empilhada), os alertas ficam no fim e o fato corrigido entra na pagina.
+    describe commit_annotation_replaces_the_annotation_and_adds_the_corrected_facts {
+        var id = Fixture.project("spec-test-wiki-commit-annotation")
+        dir.create(Paths.wiki(id, "sources"))
+        dir.create(Paths.wiki(id, "entities"))
+        dir.create(Paths.wiki(id, "concepts"))
+        WikiActions.commit_ingest(id, {
+            source_title: "Ata 1", source_summary: "Resumo 1", natureza: "pedido_novo", index_summary: "ata 1",
+            code_snippets: [], entities: [],
+            concepts: [{title: "Settlement", aliases: [], facts: ["Acontece em D+1"]}],
+            annotation: "velha", raw: "ata-1.md"
+        })
+        var source_path = Paths.wiki(id, "sources/ata-1.md")
+        fs.write(source_path, fs.read(source_path) + "\n## Alertas da revisão\n\n- Contradição com sources/b: x\n")
+        var r = WikiActions.commit_annotation(id, "ata-1", "O settlement é D+2.", {
+            entities: [],
+            concepts: [{title: "Settlement", aliases: [], facts: ["Acontece em D+2 (conforme anotação do usuário em sources/ata-1)"]}]
+        })
+        are_equal(r.concepts_touched, 1)
+        var page = fs.read(source_path)
+        is_false(page.contains("velha"))
+        is_true(page.contains("O settlement é D+2."))
+        is_true(page.trim().ends_with("- Contradição com sources/b: x"))
+        is_true(fs.read(Paths.wiki(id, "concepts/settlement.md")).contains("- Acontece em D+2 (conforme anotação do usuário em sources/ata-1)"))
+        is_true(fs.read(Paths.wiki(id, "html/sources/ata-1.html")).contains("O settlement é D+2."))
         Fixture.drop(id)
     }
 

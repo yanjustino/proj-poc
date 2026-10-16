@@ -38,12 +38,6 @@ export tool DeliveryKinds {
     scope(artifact: DeliveryArtifact, historia_id: string): string -> if (artifact == DeliveryArtifact.plano) historia_id else ""
 }
 
-// Delivery nao gera atributos de qualidade: este texto fixo ocupa o lugar
-// deles nas instrucoes compartilhadas com o Discovery.
-tool NoAtributos {
-    text(): string -> "(não se aplica neste nível — Delivery não gera atributos de qualidade; considere apenas requisitos)"
-}
-
 // Os artefatos finais derivam do que ja foi sintetizado, nao da wiki bruta.
 prompt FeatureInstruction(
     schema_conventions: prompt,
@@ -71,6 +65,10 @@ schema HistoriaSchema from "schemas/historia.schema.json"
 // historia -> historias. historias e plano recebem o contexto recortado pelo
 // que o item cita, com texto fixo no lugar do que nao foi gerado.
 export tool DeliveryDrafts {
+    // Delivery nao gera atributos de qualidade: este texto fixo ocupa o lugar
+    // deles nas instrucoes compartilhadas com o Discovery.
+    const NO_ATRIBUTOS = "(não se aplica neste nível — Delivery não gera atributos de qualidade; considere apenas requisitos)"
+
     of(kind: DeliveryArtifact, project_id: string, mode: DeliveryMode, historia_id: string, autorrevisao: bool): Draft -> match kind {
         DeliveryArtifact.brief      -> self.brief(project_id)
         DeliveryArtifact.requisitos -> self.requisitos(project_id)
@@ -91,23 +89,23 @@ export tool DeliveryDrafts {
 
     internal adr(project_id: string): Draft {
         Require.artifact(project_id, "brief", "adr")
-        return CommonDrafts.adr(project_id, Require.artifact(project_id, "requisitos", "adr"), NoAtributos.text())
+        return CommonDrafts.adr(project_id, Require.artifact(project_id, "requisitos", "adr"), NO_ATRIBUTOS)
     }
 
     internal der(project_id: string, autorrevisao: bool): Draft {
         var requisitos = Require.artifact(project_id, "requisitos", "der")
-        return CommonDrafts.der(project_id, autorrevisao, requisitos, NoAtributos.text(), Require.adr(project_id, "der"))
+        return CommonDrafts.der(project_id, autorrevisao, requisitos, NO_ATRIBUTOS, Require.adr(project_id, "der"))
     }
 
     internal modelo(project_id: string, autorrevisao: bool): Draft {
         var requisitos = Require.artifact(project_id, "requisitos", "modelo")
-        return CommonDrafts.modelo(project_id, autorrevisao, requisitos, NoAtributos.text(), Require.adr(project_id, "modelo"))
+        return CommonDrafts.modelo(project_id, autorrevisao, requisitos, NO_ATRIBUTOS, Require.adr(project_id, "modelo"))
     }
 
     internal diagramas(project_id: string, autorrevisao: bool): Draft {
         var requisitos = Require.artifact(project_id, "requisitos", "diagramas")
         var adr = Require.adr(project_id, "diagramas")
-        return CommonDrafts.diagramas(project_id, autorrevisao, requisitos, NoAtributos.text(), adr, Require.artifact(project_id, "modelo", "diagramas"))
+        return CommonDrafts.diagramas(project_id, autorrevisao, requisitos, NO_ATRIBUTOS, adr, Require.artifact(project_id, "modelo", "diagramas"))
     }
 
     // O artefato final exige todos os predecessores.
@@ -161,7 +159,7 @@ export tool DeliveryDrafts {
 
     internal tech(project_id: string, refs: string[]): TechContext -> {
         requisitos: ContextSlice.requisitos(project_id, refs),
-        atributos: NoAtributos.text(),
+        atributos: NO_ATRIBUTOS,
         adr: Require.optional(ContextSlice.adrs(project_id, refs), "este projeto"),
         der: Require.optional(Context.artifact(project_id, "der.html"), "este projeto"),
         diagramas: Require.optional(ContextSlice.diagramas(project_id, refs), "este projeto"),

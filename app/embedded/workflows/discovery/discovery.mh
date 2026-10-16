@@ -7,8 +7,7 @@ import { Fixture } from "../shared/core/fixture.mh"
 import { ArtifactFlow, Level } from "../artifact_flow/artifact_flow.mh"
 import { DiscoveryCommits } from "discovery_artifacts.mh"
 
-// `mode` e do Delivery; fixado aqui so para sair do contrato do Discovery.
-workflow Discovery = ArtifactFlow with { level: Level.discovery, mode: "feature" } {
+workflow Discovery = ArtifactFlow with { level: Level.discovery } {
     description: "Artefatos de nivel Oportunidade: brief, atributos, requisitos, adr, der, modelo (arquitetural), diagramas, features (com o mapa de dependencias), historias, plano."
 }
 
@@ -90,6 +89,7 @@ test DiscoveryWorkflowSpec {
         is_true(run.ok)
         are_equal(run.executed, ["Dispatch", "Commit"])
         are_equal(run.vars.result.artifact, "features")
+        are_equal("${run.output.artifact}", "features")
         is_true(fs.read(Paths.artifact(id, "dependencias.html")).contains("3 → 4 tokens"))
         Fixture.drop(id)
     }

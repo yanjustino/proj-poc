@@ -12,9 +12,30 @@ import { Fixture } from "../core/fixture.mh"
 export tool WikiIndex {
     // So a fonte carrega `natureza` (ingest.schema.json); por isso
     // render_section le o campo com `?? ""`. Entidades e conceitos entram por
-    // WikiActions.upsert_fact.
-    upsert_source(project_id: string, entry: {slug: string, title: string, summary: string, natureza: string}) ->
+    // WikiActions.upsert_fact. `raw` e o arquivo de raw/ que gerou a pagina —
+    // a acao annotate o usa para achar a pagina da fonte anotada.
+    upsert_source(project_id: string, entry: {slug: string, title: string, summary: string, natureza: string, raw: string}) ->
         self.upsert(project_id, "sources", entry)
+
+    // Fontes do indice sem `raw` — ingeridas antes de o indice guardar o
+    // arquivo de origem. A acao annotate pede a LLM que aponte qual delas e
+    // a fonte anotada, e grava o vinculo (link_source_raw).
+    unlinked_sources(project_id: string): any[] ->
+        self.load(project_id).get("sources", []).filter((e) -> (e?.raw ?? "").is_empty())
+
+    link_source_raw(project_id: string, slug: string, raw_name: string) {
+        var state = self.load(project_id)
+        state["sources"] = state.get("sources", []).map((e) -> {
+            if (e.slug == slug) e["raw"] = raw_name
+            return e
+        })
+        self.save(project_id, state)
+    }
+
+    // Slug da pagina gerada por raw/<raw_name> ("" se a fonte nao foi
+    // ingerida, ou foi antes de o indice guardar `raw`).
+    source_slug_of(project_id: string, raw_name: string): string ->
+        self.load(project_id).get("sources", []).find((e) -> (e?.raw ?? "") == raw_name)?.slug ?? ""
 
     upsert_answer(project_id: string, entry: {slug: string, title: string, summary: string}) ->
         self.upsert(project_id, "answers", entry)
@@ -163,6 +184,20 @@ test WikiIndexSpec {
         dir.create(Paths.wiki_dir(id))
         WikiIndex.upsert(id, "concepts", {slug: "compliance-regulatorio", title: "Compliance regulatório", summary: "x", aliases: ["Conformidade"]})
         are_equal(WikiIndex.catalog(id), "### Conceitos\n\n- Compliance regulatório (também: Conformidade)\n\n")
+        Fixture.drop(id)
+    }
+
+    // Fonte ingerida antes do campo `raw`: aparece como sem vinculo ate a
+    // acao annotate gravar de qual arquivo de raw/ ela veio.
+    describe link_source_raw_ties_an_old_source_page_to_its_raw_file {
+        var id = Fixture.project("spec-test-wiki-index-link-raw")
+        dir.create(Paths.wiki_dir(id))
+        WikiIndex.upsert_source(id, {slug: "ata-1", title: "Ata 1", summary: "ata", natureza: "", raw: ""})
+        WikiIndex.upsert_source(id, {slug: "ata-2", title: "Ata 2", summary: "ata", natureza: "", raw: "ata-2.md"})
+        are_equal(WikiIndex.unlinked_sources(id).map((e) -> e.slug), ["ata-1"])
+        WikiIndex.link_source_raw(id, "ata-1", "ata-1.pdf")
+        are_equal(WikiIndex.source_slug_of(id, "ata-1.pdf"), "ata-1")
+        is_true(WikiIndex.unlinked_sources(id).is_empty())
         Fixture.drop(id)
     }
 

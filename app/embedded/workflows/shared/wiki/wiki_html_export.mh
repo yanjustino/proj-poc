@@ -196,6 +196,9 @@ export tool WikiHtmlExport {
         var code = block.substring(opening.size() + 1, block.size())
         if (code.ends_with("\n" + fence)) code = code.substring(0, code.size() - fence.size() - 1)
         else if (code == fence) code = ""
+        // Um bloco mermaid (o diagrama de uma fonte draw.io, por ex.) vira
+        // diagrama: mermaid_script carrega a lib; sem ela, fica o codigo.
+        if (lang == "mermaid") return "<pre class=\"mermaid\">" + html.escape(code) + "</pre>"
         var attr = if (lang.is_empty()) "" else " class=\"language-" + html.escape(lang) + "\""
         return "<pre><code" + attr + ">" + html.escape(code) + "</code></pre>"
     }
@@ -343,6 +346,13 @@ export tool WikiHtmlExport {
         </script>
         """
 
+    // Mesmo <script> relativo dos artefatos de diagrama: a aba Wiki troca-o
+    // pela lib embutida no app (mermaid-inline.js); um arquivo aberto fora
+    // do app, sem assets/, mostra o codigo do diagrama.
+    internal mermaid_script(body_html: string): string ->
+        if (!body_html.contains("<pre class=\"mermaid\">")) ""
+        else "<script src=\"../assets/mermaid.min.js\"></script>\n<script>if (window.mermaid) mermaid.initialize({ startOnLoad: true });</script>"
+
     // --- shells HTML (auto-contidos: CSS inline, sem asset externo) ---
 
     internal render_page(item: any, catalog: any[]): string {
@@ -369,6 +379,7 @@ export tool WikiHtmlExport {
         ${self.render_related(item, catalog)}
         </div>
         ${self.nav_script(item.dir + "/" + item.slug + ".html")}
+        ${self.mermaid_script(body_html)}
         </body>
         </html>
         """
@@ -589,6 +600,15 @@ test WikiHtmlExportSpec {
     describe md_to_html_renders_heading_paragraph_and_list_blocks {
         var html_out = WikiHtmlExport.md_to_html("# Título\n\nUm resumo.\n\n## Fatos (2026-01-01)\n\n- fato um\n- fato dois")
         are_equal(html_out, "<h1>Título</h1>\n<p>Um resumo.</p>\n<h2>Fatos (2026-01-01)</h2>\n<ul><li>fato um</li><li>fato dois</li></ul>")
+    }
+
+    // O diagrama de uma fonte draw.io: vira <pre class="mermaid"> e so uma
+    // pagina com ele carrega a lib.
+    describe a_mermaid_block_renders_as_a_diagram_and_loads_the_library {
+        var body = WikiHtmlExport.md_to_html("```mermaid\nflowchart LR\n  n1[\"A\"] --> n2\n```")
+        are_equal(body, "<pre class=\"mermaid\">flowchart LR\n  n1[&#34;A&#34;] --&gt; n2</pre>")
+        is_true(WikiHtmlExport.mermaid_script(body).contains("../assets/mermaid.min.js"))
+        are_equal(WikiHtmlExport.mermaid_script("<p>sem diagrama</p>"), "")
     }
 
     describe md_to_html_keeps_a_fenced_code_block_with_a_blank_line_intact {

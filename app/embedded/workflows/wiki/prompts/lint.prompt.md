@@ -8,6 +8,12 @@ Contradições resolvidas:
 - Se decide, reporte cada lado vencido em `stale_claims` (`superseded_by` = a página que decide, `resolution_quote` = o trecho dela que decide). Pode reportar a contradição também, com os dois lados originais: o passo determinístico a fecha sozinho quando os lados vencidos estão em `stale_claims`.
 - Uma contradição que nenhuma página mais nova decide continua sendo contradição.
 
+Anotações do usuário:
+
+- Uma página de fonte pode terminar com uma seção `## Anotações do usuário`: é a correção que o próprio usuário fez sobre aquela fonte, apontando imprecisões, contradições ou concepções equivocadas. Ela prevalece sobre o texto de qualquer página, inclusive mais nova, e independe das datas.
+- Todo trecho de qualquer página (a própria fonte anotada, entidades, conceitos, respostas) que a anotação desmente vai em `stale_claims`, com `superseded_by` = a página da fonte anotada e `resolution_quote` = o trecho literal da anotação que o corrige.
+- Uma contradição em que a anotação decide um dos lados está resolvida: reporte o lado vencido em `stale_claims` como acima.
+
 Conceitos sem página — só sugira um conceito que atenda a TODOS os critérios:
 
 - É específico do domínio ou deste work-item: uma regra de negócio, um processo, um termo técnico, financeiro ou regulatório (ex.: "Settlement", "Batch diário", "Marcação a mercado", "Suitability").
