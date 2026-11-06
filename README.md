@@ -1,5 +1,5 @@
 <p align="center">
-  <img src="assets/SENPAI_REFINER_Senpai_Kohai_Brand_Kit/01_Logo_Principal/SENPAI_REFINER_Senpai_Kohai_Transparent.png" alt="Senpai Refiner" width="420">
+  <img src="SENPAI_REFINER_Senpai_Kohai_Transparent.png" alt="Senpai Refiner" width="420">
 </p>
 
 # Senpai Refiner
