@@ -10,7 +10,7 @@ import (
 	"github.com/wailsapp/wails/v2/pkg/options/mac"
 )
 
-//go:embed all:frontend/dist
+//go:embed frontend/index.html frontend/src frontend/vendor frontend/wailsjs
 var assets embed.FS
 
 func main() {
@@ -39,7 +39,8 @@ func main() {
 		MinWidth:  960,
 		MinHeight: 640,
 		AssetServer: &assetserver.Options{
-			Assets: assets,
+			Assets:  assets,
+			Handler: frontendFallbackAssets(),
 		},
 		BackgroundColour: &options.RGBA{R: 255, G: 255, B: 255, A: 1},
 		// O log interno do Wails vai para o app.log (diagnostics.go); num build

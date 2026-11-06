@@ -57,7 +57,7 @@ No backlog da solução, uma `feature_negocio` representa valor percebido direta
 
 ```mermaid
 flowchart LR
-    UI[Frontend<br>Vite + JavaScript] --> APP[Aplicação desktop<br>Go + Wails]
+    UI[Frontend<br>JavaScript] --> APP[Aplicação desktop<br>Go + Wails]
     APP --> BRIDGE[mhl bridge<br>MCP local]
     BRIDGE --> WF[Workflows MHL<br>Wiki · Discovery · Delivery · Comitê]
     WF --> LLM[Devin CLI]
@@ -88,7 +88,7 @@ Projetos antigos que possuem somente HTML continuam funcionando; o leitor de con
 ```text
 .
 ├── app/                  # aplicação Go/Wails
-│   ├── frontend/         # interface Vite em JavaScript
+│   ├── frontend/         # interface em JavaScript, sem npm nem etapa de build
 │   ├── mhlbridge/        # cliente e ciclo de vida do servidor MCP local
 │   └── embedded/         # runtime MHL, workflows e assets embarcados
 ├── workflows/            # workflows MHL usados em desenvolvimento
@@ -106,7 +106,6 @@ Projetos antigos que possuem somente HTML continuam funcionando; o leitor de con
 Para executar e desenvolver o projeto:
 
 - Go `1.26` ou compatível com [app/go.mod](app/go.mod).
-- Node.js e npm.
 - Wails v2 CLI compatível com a versão do módulo Go.
 - Devin CLI instalado e autenticado.
 - MHL CLI para alterar, validar ou testar os workflows.
@@ -130,13 +129,6 @@ devin auth login --force-manual-token-flow
 ```
 
 ## Desenvolvimento local
-
-Instale as dependências do frontend:
-
-```bash
-cd app/frontend
-npm install
-```
 
 Inicie o aplicativo com hot reload:
 
@@ -169,13 +161,7 @@ go test ./...
 go vet ./...
 ```
 
-Depois de alterar o frontend:
-
-```bash
-cd app/frontend
-npm run lint
-npm run build
-```
+O frontend não tem etapa de build: o navegador carrega os módulos de `app/frontend/src/` direto, e `go test ./...` confere se todos os imports existem. As bibliotecas de terceiros ficam em [app/frontend/vendor/](app/frontend/vendor/).
 
 ## Build
 

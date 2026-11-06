@@ -29,7 +29,6 @@ check_command() {
 check_command devin
 check_command mhl
 check_command go
-check_command npm
 
 if command -v devin >/dev/null 2>&1; then
   devin version

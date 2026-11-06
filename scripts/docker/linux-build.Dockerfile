@@ -24,13 +24,6 @@ RUN apt-get update && apt-get install -y --no-install-recommends \
       libwebkit2gtk-4.1-dev \
     && rm -rf /var/lib/apt/lists/*
 
-# bookworm's own apt Node is too old for Vite 7 (needs Node 20.19+/22.12+) —
-# NodeSource's own setup script is the simplest reliable way to get a
-# current LTS instead of hand-rolling the apt repo pin ourselves.
-RUN curl -fsSL https://deb.nodesource.com/setup_22.x | bash - \
-    && apt-get install -y --no-install-recommends nodejs \
-    && rm -rf /var/lib/apt/lists/*
-
 # GOBIN=/usr/local/bin (not the default $GOPATH/bin) just to keep `wails`
 # somewhere unambiguous on PATH regardless of $HOME/$GOPATH at run time.
 ENV GOBIN=/usr/local/bin

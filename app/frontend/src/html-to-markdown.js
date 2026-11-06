@@ -2,8 +2,8 @@
 // reading pane's "ver markdown" toggle — artifacts are rendered from JSON,
 // so there's no .md on disk to show like the wiki has. Display only: the
 // result is never written back anywhere.
-import TurndownService from 'turndown';
-import { gfm } from 'turndown-plugin-gfm';
+import TurndownService from '../vendor/turndown.browser.es.js';
+import { gfm } from '../vendor/turndown-plugin-gfm.browser.es.js';
 
 let service = null;
 

@@ -1,4 +1,4 @@
-import { LogFrontendError } from '../wailsjs/go/main/App';
+import { LogFrontendError } from '../wailsjs/go/main/App.js';
 
 // TEMPORARIO — diagnostico de "projeto demorando para carregar". Cada fase
 // do carregamento de um work-item vai para o app.log como

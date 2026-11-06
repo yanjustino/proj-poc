@@ -107,8 +107,8 @@ if [ "$(go env GOHOSTOS)" != "linux" ] && [ "${SENPAI_IN_DOCKER:-}" != "1" ]; th
   # inteira roda na arquitetura do alvo — amd64 emulado via Rosetta/QEMU do
   # Docker Desktop num host Apple Silicon, arm64 nativo — e o gcc que ela
   # instala já nasce nativo pro alvo, sem toolchain cruzado. Imagem e
-  # volumes levam a arquitetura no nome: node_modules (rollup nativo) e o
-  # cache do Go de uma arquitetura não servem pra outra.
+  # volumes levam a arquitetura no nome: o cache do Go de uma arquitetura não
+  # serve pra outra.
   docker build -q --platform "linux/$ARCH" -t "senpai-linux-build-$docker_id" -f "$ROOT/scripts/docker/$dockerfile" "$ROOT/scripts/docker" >/dev/null
 
   step "compilando dentro do container"
@@ -116,27 +116,10 @@ if [ "$(go env GOHOSTOS)" != "linux" ] && [ "${SENPAI_IN_DOCKER:-}" != "1" ]; th
   # mais simples e sem a pegadinha de permissão que --user teria com volumes
   # nomeados recém-criados (Docker cria o ponto de montagem como root; um
   # usuário não-root não consegue necessariamente escrever nele na primeira
-  # vez). Os volumes de cache do Go/npm (gomod/gocache/npm) são só pra
-  # sobreviver entre execuções (sem eles, toda run baixaria os módulos Go e
-  # pacotes npm de novo) — sempre usados pelo mesmo root, então nunca têm
-  # dono incompatível entre uma run e a próxima. O node_modules tem um
-  # volume À PARTE (não é só cache) por um motivo real, medido: com
-  # node_modules vindo do bind mount do host (instalado no macOS,
-  # darwin-arm64), o `npm install` de dentro do container via reaproveitar
-  # esse node_modules em vez de reinstalar do zero — e como o
-  # @rollup/rollup-<plataforma> é uma dependência opcional resolvida por
-  # plataforma, o pacote nativo pra Linux nunca era baixado, e o build
-  # quebrava com "Cannot find module @rollup/rollup-linux-arm64-gnu" (bug
-  # conhecido do npm, https://github.com/npm/cli/issues/4828). Um volume
-  # nomeado À PARTE nesse caminho específico "esconde" o node_modules do
-  # host só ali, então o npm de dentro do container sempre parte limpo e
-  # instala a variante nativa do Linux de verdade — e ainda fica em cache
-  # (mesmo raciocínio dos outros) pras próximas execuções. O `npm ci`
-  # explícito antes do build (não deixar o próprio `wails build` decidir
-  # se instala) existe porque o Wails só roda `npm install` quando
-  # node_modules/ NÃO existe — e um volume nomeado recém-criado já existe
-  # como pasta (vazia), então sem isso o Wails pulava a instalação e a
-  # build quebrava direto com "vite: not found". As 3 pastas do repositório
+  # vez). Os volumes de cache do Go (gomod/gocache) são só pra sobreviver
+  # entre execuções (sem eles, toda run baixaria os módulos Go de novo) —
+  # sempre usados pelo mesmo root, então nunca têm dono incompatível entre
+  # uma run e a próxima. As 3 pastas do repositório
   # que o build de fato escreve (bind mount, não volume) — dist/, app/build/
   # e app/embedded/ (via sync.sh) — precisam do dono corrigido de volta pro
   # host no final, daí o chown encadeado abaixo. Deliberadamente NÃO um
@@ -154,11 +137,9 @@ if [ "$(go env GOHOSTOS)" != "linux" ] && [ "${SENPAI_IN_DOCKER:-}" != "1" ]; th
     -v "$ROOT:/workspace" \
     -v senpai-linux-build-gomod:/go/pkg/mod \
     -v "senpai-linux-build-gocache-$docker_id:/root/.cache/go-build" \
-    -v senpai-linux-build-npm:/root/.npm \
-    -v "senpai-linux-build-node-modules-$docker_id:/workspace/app/frontend/node_modules" \
     -w /workspace \
     "senpai-linux-build-$docker_id" \
-    bash -c '(cd app/frontend && npm ci) && bash scripts/build-linux.sh "$@" && chown -R '"$(id -u):$(id -g)"' dist app/build app/embedded' bash $extra_arg
+    bash -c 'bash scripts/build-linux.sh "$@" && chown -R '"$(id -u):$(id -g)"' dist app/build app/embedded' bash $extra_arg
 fi
 
 if [ "$(go env GOHOSTOS)" != "linux" ]; then

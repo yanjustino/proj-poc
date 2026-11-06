@@ -1,5 +1,4 @@
-import './style.css';
-import { LogFrontendError } from '../wailsjs/go/main/App';
+import { LogFrontendError } from '../wailsjs/go/main/App.js';
 import { mountShell } from './views/shell.js';
 import { initZoom } from './zoom.js';
 

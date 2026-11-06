@@ -98,10 +98,9 @@ release build.
 
 ## `assets/mermaid.min.js`
 
-The mermaid UMD bundle the frontend already depends on
-(`app/frontend/node_modules/mermaid/dist/mermaid.min.js`) — copied here so
-`ensureArtifactMermaidAsset` can seed `projects/<id>/artifacts/assets/
-mermaid.min.js` for every project, letting a diagram/DER artifact render
-when its `.html` is opened outside the app (no running Senpai, no network).
-Refreshed by `./sync.sh` whenever the frontend's `mermaid` dependency is
-bumped.
+The mermaid UMD bundle, and its source of truth in this repository.
+`ensureArtifactMermaidAsset` seeds `projects/<id>/artifacts/assets/
+mermaid.min.js` from it for every project, letting a diagram/DER artifact
+render when its `.html` is opened outside the app (no running Senpai, no
+network). The frontend's own previews get it at `/embedded/mermaid.min.js`.
+`app/frontend/vendor/README.md` says how to update it.

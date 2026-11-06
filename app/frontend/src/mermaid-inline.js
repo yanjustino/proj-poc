@@ -3,10 +3,10 @@
 // resolves once Fase 7 vendors that asset next to the packaged artifact.
 // Until then, previewing a diagram inside this app's own webview would show
 // raw Mermaid source instead of a rendered diagram. This module inlines the
-// same mermaid build this frontend already depends on (bundled into the
-// app itself via Vite's `?raw` import — not the Fase 7 vendoring story,
-// which is about the artifact file itself when opened outside the app).
-import mermaidSource from 'mermaid/dist/mermaid.min.js?raw';
+// same mermaid build the app embeds in app/embedded/assets, served to this
+// page by the Go side (frontendFallbackAssets) — not the Fase 7 vendoring
+// story, which is about the artifact file itself when opened outside the app.
+const mermaidSource = await fetch('/embedded/mermaid.min.js').then((response) => response.text());
 
 // Different artifact templates sit at different folder depths (DER at
 // artifacts/der.html uses "./assets/…"; a C4 diagram at

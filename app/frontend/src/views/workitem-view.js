@@ -16,7 +16,7 @@ import { dotClass } from '../status.js';
 import { icon } from '../icons.js';
 import { summarizeCost } from '../cost.js';
 import { formatDurationShort, formatRelativeTime } from '../time-format.js';
-import { LogFrontendError } from '../../wailsjs/go/main/App';
+import { LogFrontendError } from '../../wailsjs/go/main/App.js';
 
 const LEVEL_LABEL = { discovery: 'Oportunidade · Discovery', delivery: 'Feature/Enabler/História · Delivery', comite: 'Comitê de Arquitetura (WAR)' };
 

@@ -2,7 +2,7 @@
 // one place left in the product that's still Markdown — every artifact
 // already renders straight to HTML (§3.4 of the plan). `marked` is the only
 // client-side rendering this app needs.
-import { marked } from 'marked';
+import { marked } from '../vendor/marked.esm.js';
 
 marked.setOptions({ breaks: true });
 

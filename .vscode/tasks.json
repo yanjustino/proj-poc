@@ -25,17 +25,6 @@
             "problemMatcher": []
         },
         {
-            "label": "build frontend",
-            "type": "shell",
-            "command": "npm run build",
-            "options": {
-                "cwd": "${workspaceFolder}/app/frontend"
-            },
-            "dependsOn": ["sync vendored mhl binary"],
-            "dependsOrder": "sequence",
-            "problemMatcher": []
-        },
-        {
             // Builds the real .app bundle (not a bare `go build` binary) in
             // debug mode and re-signs it. A raw unbundled binary has no
             // NSBundle identity, which makes macOS silently no-op native

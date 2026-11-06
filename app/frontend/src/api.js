@@ -3,8 +3,8 @@
 // is parsing that string into a real object and giving the run-lifecycle
 // dance (StartRun -> EventsOn -> WatchRun -> ResumeRun) a single, correct
 // place to live instead of re-deriving it in every view.
-import * as App from '../wailsjs/go/main/App';
-import { EventsOn } from '../wailsjs/runtime/runtime';
+import * as App from '../wailsjs/go/main/App.js';
+import { EventsOn } from '../wailsjs/runtime/runtime.js';
 
 function parseJSON(raw, context) {
   try {

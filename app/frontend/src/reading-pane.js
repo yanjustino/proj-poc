@@ -7,10 +7,11 @@
 // reads something, and keeps "where does the document go" consistent
 // regardless of which tab is active.
 import { icon } from './icons.js';
-import { OpenHTMLInBrowser } from '../wailsjs/go/main/App';
+import { OpenHTMLInBrowser } from '../wailsjs/go/main/App.js';
 import { inlineMermaidStandalone } from './mermaid-inline.js';
 import { htmlToMarkdown } from './html-to-markdown.js';
-import artifactShellTemplate from '../../../workflows/shared/artifacts/page_shell.prompt.md?raw';
+
+const artifactShellTemplate = await fetch('/embedded/page_shell.prompt.md').then((response) => response.text());
 
 let els = null;
 let fullscreenTarget = null;
@@ -267,8 +268,9 @@ function widenReadingWidth(html) {
 // <style> block is a frozen copy of page_shell.prompt.md from whenever it
 // was generated, so a visual refresh of that template would otherwise only
 // reach artifacts regenerated afterwards. Swap the stored block for the
-// template's current one at render time — read straight from the workflow
-// file (Vite ?raw), so there's a single source of truth for the CSS.
+// template's current one at render time — read from the copy of the workflow
+// file the app embeds (frontendFallbackAssets, refreshed by sync.sh), so
+// there's a single source of truth for the CSS.
 // Only PageShell output carries the `<div class="meta">` footer, which is
 // what keeps the wiki's own exported pages (also shown via showHtmlDoc) out
 // of this. `rawHtml` on disk (and "Ver fonte") is left untouched.

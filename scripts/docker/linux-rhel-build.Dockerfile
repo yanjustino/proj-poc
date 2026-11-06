@@ -15,11 +15,9 @@
 FROM rockylinux:8
 
 RUN dnf -y install dnf-plugins-core \
-    && dnf -y module enable nodejs:22 \
     && dnf -y install \
       gcc gcc-c++ make pkgconf-pkg-config git tar xz curl ca-certificates \
       gtk3-devel webkit2gtk3-devel \
-      nodejs npm \
     && dnf clean all
 
 ARG GO_VERSION=1.26.8

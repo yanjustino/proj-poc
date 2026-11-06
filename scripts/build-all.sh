@@ -1,6 +1,6 @@
 #!/usr/bin/env bash
 # One-shot dev build: refreshes mhl from its own source tree, re-vendors it
-# (+ workflows/mermaid, via app/embedded/sync.sh) into app/embedded/, then
+# (+ workflows, via app/embedded/sync.sh) into app/embedded/, then
 # builds the Senpai app bundle. This is a local dev convenience script tied
 # to this machine's checkout layout (MHL_RUNTIME_DIR below) — not meant for
 # CI or another dev's machine as-is; see app/embedded/README.md for the
@@ -70,7 +70,7 @@ for platform_dir in linux-amd64 linux-arm64 darwin-arm64 windows-amd64; do
   rsync -a --delete "$MHL_RUNTIME_DIR/dist/$platform_dir/" "$ROOT/dist/$platform_dir/"
 done
 
-step "app/embedded: sync bin/workflows/mermaid from dist/ and workflows/"
+step "app/embedded: sync bin/workflows from dist/ and workflows/"
 "$ROOT/app/embedded/sync.sh" "$ROOT/dist"
 
 step "senpai-app: go build sanity check"

@@ -1,10 +1,9 @@
 #!/usr/bin/env bash
 # Refreshes everything under app/embedded/ from its source of truth elsewhere
-# on disk — run before a release build whenever workflows/ changed, the
-# frontend's mermaid dependency was bumped, or a fresh mhl was built into
-# dist/. Each section is independent and soft-fails on its own (a missing
-# mermaid bundle or an incomplete dist/ doesn't stop the others), but the
-# script still exits non-zero overall if any *required* platform binary
+# on disk — run before a release build whenever workflows/ changed or a
+# fresh mhl was built into dist/. Each section is independent and soft-fails
+# on its own (an incomplete dist/ doesn't stop the others), but the script
+# still exits non-zero overall if any *required* platform binary
 # could not be refreshed, so a release build never silently ships a stale
 # mhl.
 #
@@ -57,14 +56,6 @@ is_required() {
 rm -rf workflows
 cp -R ../../workflows ./workflows
 echo "synced workflows/ -> app/embedded/workflows/"
-
-mermaid_src="../frontend/node_modules/mermaid/dist/mermaid.min.js"
-if [ -f "$mermaid_src" ]; then
-  cp "$mermaid_src" assets/mermaid.min.js
-  echo "synced $mermaid_src -> app/embedded/assets/mermaid.min.js"
-else
-  echo "warning: $mermaid_src not found (run npm install in app/frontend first) — assets/mermaid.min.js left unchanged" >&2
-fi
 
 # goos-goarch:dist-binary-name:embedded-name — the 4 platforms
 # embedded_mhl_<goos>_<goarch>.go actually embeds today (darwin/amd64 has no

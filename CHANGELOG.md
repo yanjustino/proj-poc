@@ -6,6 +6,11 @@ O formato segue o [Keep a Changelog](https://keepachangelog.com/pt-BR/1.1.0/). C
 
 ## [Não lançado]
 
+### 2026-11-06
+
+#### Alterado
+- O frontend deixou de depender de npm, Node.js e Vite: o aplicativo embarca os módulos JavaScript direto, e as bibliotecas de terceiros ficam em `app/frontend/vendor/`. O build passa a funcionar em ambientes que bloqueiam pacotes npm. O ESLint saiu junto, e atualizar essas bibliotecas passa a ser manual.
+
 ### 2026-10-16
 
 #### Alterado

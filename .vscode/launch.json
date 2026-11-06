@@ -30,7 +30,7 @@
             "program": "${workspaceFolder}/app",
             "cwd": "${workspaceFolder}/app",
             "buildFlags": "-tags dev",
-            "preLaunchTask": "build frontend"
+            "preLaunchTask": "sync vendored mhl binary"
         }
     ]
 }

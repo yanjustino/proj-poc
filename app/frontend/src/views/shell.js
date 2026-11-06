@@ -1,4 +1,4 @@
-import { ToggleMaximise, LogFrontendError } from '../../wailsjs/go/main/App';
+import { ToggleMaximise, LogFrontendError } from '../../wailsjs/go/main/App.js';
 import {
   workItemList,
   localProjectList,
@@ -35,7 +35,8 @@ import { mountReadingPane } from '../reading-pane.js';
 import { icon } from '../icons.js';
 import { getPaneWidth, setPaneWidth } from '../preferences.js';
 import { visualScale, subscribeZoom } from '../zoom.js';
-import brandSymbol from '../assets/images/senpai-symbol.png';
+
+const brandSymbol = new URL('../assets/images/senpai-symbol.png', import.meta.url).href;
 
 const LEVEL_SHORT = { discovery: 'Discovery', delivery: 'Delivery', comite: 'Comitê WAR' };
 
